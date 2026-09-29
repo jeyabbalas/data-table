@@ -422,7 +422,9 @@ when assembling a custom container shell.
 function createDataTable(options: CreateDataTableOptions): Promise<DataTable>;
 ```
 
-Source: `src/DataTable.ts`. Validates options, initializes a `WorkerBridge`, builds `TableState`/`StateActions`, mounts the UI into `options.container`, wires events/persistence/presets/undo-redo, and resolves once UI is mounted. If `options.source` is provided, the initial load begins asynchronously (not awaited by the returned promise — subscribe to `loadComplete` or `loadError` to observe it).
+Source: `src/DataTable.ts`. Validates options, initializes a `WorkerBridge`, builds `TableState`/`StateActions`, mounts the UI into `options.container`, wires events/persistence/presets/undo-redo, and emits `ready`. Without `options.source` it then resolves. With it, it loads the source and resolves once that load is done: the data loaded, any saved session restored, and the first fetches of its rows and of the charts in view settled. Those fetches are awaited but not required: one that fails is logged, and the table resolves with placeholder rows or a blank chart.
+
+If that load fails, the promise rejects with the load's error (a `DataTableError`, usually `LoadError`; see [troubleshooting](./troubleshooting.md)). What was built is not torn down first: the UI stays mounted in `container`, and a worker or session store the table created stays open. The initial load's `loadStart` / `loadComplete` / `loadError` events fire before the promise settles, where no listener can see them; only `ready` is replayed to later subscribers. To observe the initial load, or to keep a handle on the table when it fails, omit `source`, subscribe, then `await table.loadData(source, { tableName, sourceFormat, sourceOptions })`: `options.tableName` and `options.sourceFormat` apply to `source` only, and a load without a `tableName` gets a generated one, so no saved session is restored.
 
 ---
 
@@ -442,12 +444,12 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 
 ### Data
 
-| Field           | Type                                    | Required? | Default        | Description                                                           |
-| --------------- | --------------------------------------- | --------- | -------------- | --------------------------------------------------------------------- |
-| `source`        | `File \| string \| ArrayBuffer \| Blob` | no        | —              | Initial data source. If omitted, call `table.loadData(source)` later. |
-| `sourceFormat`  | `DataFormat`                            | no        | auto-detect    | Override format when the URL/filename doesn't encode it.              |
-| `sourceOptions` | `SourceOptions`                         | no        | detected       | How `source` is read, per format. See `SourceOptions`.                |
-| `tableName`     | `string`                                | no        | auto-generated | DuckDB-side table name.                                               |
+| Field           | Type                                    | Required? | Default        | Description                                                                                                                                                                                                    |
+| --------------- | --------------------------------------- | --------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`        | `File \| string \| ArrayBuffer \| Blob` | no        | —              | Initial data source. If omitted, call `table.loadData(source, { tableName, sourceFormat, sourceOptions })` later.                                                                                              |
+| `sourceFormat`  | `DataFormat`                            | no        | auto-detect    | Override format when the URL/filename doesn't encode it. Applies to `source` only.                                                                                                                             |
+| `sourceOptions` | `SourceOptions`                         | no        | detected       | How `source` is read, per format. See `SourceOptions`. Applies to `source` only.                                                                                                                               |
+| `tableName`     | `string`                                | no        | auto-generated | DuckDB-side table name for `source`, and the key its saved session is stored under. Applies to `source` only: pass it to a later `loadData()` too, or that load gets a generated name and restores no session. |
 
 ### Features (all default to `true`)
 

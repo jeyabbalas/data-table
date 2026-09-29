@@ -13,8 +13,13 @@ Defined in: [DataTable.ts:456](https://github.com/jeyabbalas/data-table/blob/c94
 Create a fully-wired data table mounted in `container`.
 
 Awaits worker initialization before returning so the caller can immediately
-`loadData()` or rely on `state.schema` being populated (if `source` was
-provided).
+`loadData()`. With `source`, it also awaits that first load, and the first
+fetches of its rows and of the charts in view, so `state.schema` is
+populated on return. Those fetches are awaited, not required: one that
+fails is logged and leaves placeholders. If the load fails, the promise
+rejects with its error and the table, already mounted, is not torn down:
+omit `source` and call `loadData(source, { tableName, sourceFormat, sourceOptions })` to
+keep a handle on it.
 
 ## Parameters
 

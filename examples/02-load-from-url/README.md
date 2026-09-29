@@ -28,4 +28,4 @@ npm run dev
 
 ## Why listeners are wired before `loadData`
 
-`createDataTable({ source })` awaits the first load **internally** (`src/DataTable.ts`), so any listener attached after `await createDataTable(...)` resolves would miss every single `loadStart` / `loadProgress` / `loadComplete` tick for that initial load. This example constructs the table without `source`, attaches listeners, then calls `table.loadData(url)` — the same pattern you use for subsequent reloads.
+`createDataTable({ source })` awaits the first load **internally** (`src/DataTable.ts`), so any listener attached after `await createDataTable(...)` resolves would miss every single `loadStart` / `loadProgress` / `loadComplete` tick for that initial load. This example constructs the table without `source`, attaches listeners, then calls `table.loadData(url, { tableName, sourceFormat, sourceOptions })` — the same pattern you use for subsequent reloads. The load takes its own `tableName`: the one given to `createDataTable` applies only to its `source`.

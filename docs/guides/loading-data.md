@@ -33,9 +33,10 @@ const table = await createDataTable({
 });
 ```
 
-`source` accepts `File | string | ArrayBuffer | Blob`. When `source` is a
-string starting with `http`, the library fetches it; otherwise it treats the
-string as raw data.
+`source` accepts `File | string | ArrayBuffer | Blob`. A string that looks
+like a URL or a path is fetched; multi-line text, or text starting with `[` or
+`{`, is loaded as inline data; any other string is rejected (see
+[Raw `string`](#raw-string)).
 
 ## Source types
 
@@ -49,7 +50,12 @@ System Access API.
   the way to load large files; see [Large Parquet files](#large-parquet-files).
 - **CSV / JSON** — read with `file.text()`.
 
-### URL (`string` starting with `http`)
+### URL or path (`string`)
+
+A string is a URL when it starts with a scheme (`https:`, `http:`, `file:`,
+`data:`, `blob:`, …), `//`, `/`, `./` or `../`. Relative ones resolve against
+`window.location.href`, so a `<base href>` on the page does not apply to them.
+A bare file name such as `'data.csv'` is not a URL; write `'./data.csv'`.
 
 Fetched with the platform `fetch()` — cross-origin URLs must send the
 appropriate CORS headers. A non-2xx response throws `LoadError` with
@@ -71,20 +77,23 @@ A Parquet `Blob` is read from disk like a `File`. Without `sourceFormat`, a
 
 ### Raw `string`
 
-Any `string` that doesn't start with `http` is treated as raw data.
-Content sniffing looks at the first non-whitespace character — `[` or `{`
-means JSON; anything else is CSV.
+A string that is not a URL is loaded as inline data when it spans more than
+one line, or when its first non-whitespace character is `[` or `{`. That
+character also picks the format: `[` or `{` means JSON, anything else CSV.
+Any other string, a single line such as `'sample.csv'` or `'a,b'`, rejects
+with `LoadError` code `SOURCE_AMBIGUOUS` instead of being parsed as a
+one-line CSV.
 
 ## Format detection
 
 Detection order:
 
-| Source        | Signal used                                               |
-| ------------- | --------------------------------------------------------- |
-| `File`        | File extension (`.csv` / `.json` / `.parquet`)            |
-| URL           | `URL(source).pathname` extension                          |
-| `ArrayBuffer` | Assumed Parquet                                           |
-| Raw string    | First non-whitespace character — `[`/`{` → JSON, else CSV |
+| Source                       | Signal used                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| `File`                       | File extension (`.csv` / `.json` / `.parquet`)            |
+| URL                          | `URL(source).pathname` extension                          |
+| `ArrayBuffer`, `Blob`        | Assumed Parquet                                           |
+| Inline string (raw `string`) | First non-whitespace character — `[`/`{` → JSON, else CSV |
 
 An unknown extension falls back to CSV. Override detection with `sourceFormat`
 in `createDataTable`, or the `format` option in `loadData`:
@@ -204,12 +213,10 @@ table.on('loadError', ({ error }) => {
 });
 ```
 
-Stages progress roughly `reading → parsing → indexing → analyzing`, but not
-every source emits every stage (a small CSV may skip straight to `analyzing`).
-
-`ProgressInfo` carries enough data to format your own strings:
-`loaded` / `total` (bytes when known), `percent` (0–1 or `undefined`),
-`stage`, and an optional `estimatedRemaining` in milliseconds.
+The worker reports three stages for every source: `reading` at 0%, `parsing`
+at 25% and `indexing` at 90%; `loadComplete` marks the end. `percent` runs
+0–100 and is always set. The `analyzing` stage is never reported, and the
+optional `loaded`, `total` and `estimatedRemaining` fields are left out.
 
 ## Replacing the dataset
 
@@ -400,12 +407,12 @@ for a runnable demo.
 
 - **`ArrayBuffer` defaults to Parquet.** Pass `sourceFormat` if it's anything else.
 - **Large Parquet files need a `File`, `Blob`, or URL.** An `ArrayBuffer` is copied into DuckDB's memory whole, next to the table. A load that will not fit rejects with `LOAD_MEMORY_EXCEEDED`; see [Large Parquet files](#large-parquet-files).
-- **URL must start with `http`.** Relative URLs, `file://`, and `data:` URLs are _not_ auto-fetched — read them yourself and pass the bytes.
+- **A bare file name is not a URL.** `'data.csv'` rejects with `SOURCE_AMBIGUOUS`; write `'./data.csv'` or `'/data.csv'`. Relative URLs resolve against `window.location.href`, not the page's `<base href>`. A `file:` URL is fetched like any other, which browsers refuse from a web page; pass the `File` instead.
 - **CORS and redirects.** `fetch()` uses default redirect handling and CORS enforcement. For cross-origin loads, the server must send `Access-Control-Allow-Origin`.
 - **Reloading doesn't reset columns.** If the new dataset has a different schema, old column visibility/width settings may dangle until the session is cleared. Call `table.clearSession()` before a schema change.
 - **Source must not contain a column named `__rowid__`.** That name is reserved for the synthetic row id. The loader throws `LoadError('RESERVED_COLUMN_NAME')` rather than silently rename or overwrite.
 - **Peak memory during a large swap.** `loadData()` drops the previous DuckDB base table after the new one is live (or replaces it atomically when the `tableName` matches), so the catalog stays clean across reloads. While the new load is in flight, both buffers coexist briefly — for very large dataset swaps where peak main-thread memory matters, `destroy()` + recreate releases the previous buffers earlier.
-- **Progress isn't always byte-exact.** DuckDB's parse stage reports row counts once schema is known; bytes are estimated from the fetch `Content-Length` when available.
+- **Progress is coarse.** There is one report per stage (`reading` 0%, `parsing` 25%, `indexing` 90%) and no byte or row counts, so a large file stays at 25% for most of its load.
 
 ## Related
 

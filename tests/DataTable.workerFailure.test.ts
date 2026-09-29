@@ -188,6 +188,10 @@ describe('a table whose worker fails', () => {
     chart.fail(chartError(root));
     chart.fail(chartError(laterCall(root)));
     chart.fail(laterCall(root));
+    // A fetch in flight when the worker failed is rejected with the failure
+    // itself, which some charts pass on as it is. The table reports a copy
+    // of a chart's error, whose own chain does not reach the failure.
+    chart.fail(root);
 
     expect(errors).toEqual([{ error: root, source: 'query' }]);
   });
@@ -257,7 +261,13 @@ describe('a table whose worker fails', () => {
     chart.fail(chartError(root));
     chart.fail(chartError(laterCall(root)));
 
-    expect(errors).toEqual([{ error: first, source: 'visualization' }]);
+    // The table reports a copy of a chart's error, with the column added.
+    expect(errors).toEqual([
+      {
+        error: expect.objectContaining({ code: first.code, cause: first.cause }),
+        source: 'visualization',
+      },
+    ]);
   });
 
   it('stops listening once destroyed', async () => {

@@ -1344,6 +1344,12 @@ Bold label prefix for a histogram bin/brush selection detail line.
 
 Bold label prefix for a single selected category detail line.
 
+##### statistics.chartFailed?
+
+> `optional` **chartFailed?**: `string`
+
+Stats-slot line for a column whose chart's data failed to load.
+
 ##### statistics.filteredRowCount?
 
 > `optional` **filteredRowCount?**: `object`

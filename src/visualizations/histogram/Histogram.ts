@@ -279,9 +279,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         columnName: this.column.name,
         stage: 'fetch',
       });
-      this.data = null;
-      this.backgroundData = null;
-      this.render();
+      this.showFetchFailed();
     }
   }
 

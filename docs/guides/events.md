@@ -143,8 +143,15 @@ table.on('error', ({ error, source }) => {
 ```
 
 `source` values: `'load' | 'query' | 'export' | 'persistence' |
-'visualization' | 'sql-validation' | 'derived-column' | 'listener' |
-'unknown'`.
+'visualization' | 'stats-panel' | 'sql-validation' | 'derived-column' |
+'listener' | 'unknown'`.
+
+A `'visualization'` error names its column in `error.details.column`, and,
+when the chart reported it, the stage that failed in `error.details.stage`:
+`'fetch'` for a built-in chart's query, `'filter'` for a custom chart's
+`fetchData()` that threw during a filter update, or whatever a custom chart
+reports itself. A `'stats-panel'` error names its column and `phase` the same
+way.
 
 A DuckDB worker that fails is reported once per table, as it happens: an
 `error` event whose `error.code` is `WORKER_CRASHED`, with `source: 'query'`.

@@ -342,5 +342,6 @@ export const frenchMessages: DeepPartial<Strings> = {
     uniqueCount: (count) => `${count.toLocaleString()} unique`,
     uniquePercent: (count, pct) => `${count.toLocaleString()} unique (${pct} %)`,
     separator: ' · ',
+    chartFailed: 'Échec du chargement',
   },
 };

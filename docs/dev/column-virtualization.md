@@ -422,7 +422,7 @@ panels and charts right across a trackpad sweep.
   for a fetch that returned no values and no nulls; one whose fetch fails draws nothing, as value
   counts do. A browser test counts the "No data" draws at load and in two sideways sweeps: about
   45 to 55 on main, in each of 10 runs, and none with the fix.
-- **Found in review of #152, not fixed (pre-existing).**
+- **Found in review of #152 (pre-existing), since fixed.**
   - A histogram whose refetch fails keeps the detail of the bar under the pointer, or of its
     brush or selection, in the stats slot: the emitters that would replace it return early
     without data, so moving over the blank chart or leaving it changes nothing. Its hover state
@@ -432,7 +432,10 @@ panels and charts right across a trackpad sweep.
     both showed "No data"). The `error` event does not say which column failed:
     `createVizForColumn` drops the `columnName` the chart reports, and only the unfiltered fetch
     helpers put the column on the error. Fix: pass the column through, and consider marking a
-    failed chart's container.
+    failed chart's container. Both fixed as proposed, value counts too. A failed chart marks its
+    canvas `data-fetch-failed`, and its slot drops the stats and detail it reported before and
+    says `statistics.chartFailed` until the chart reports stats again; a failure of a superseded
+    refetch, or of a destroyed chart, leaves the slot alone.
 - **2026-09-27, the Step 4 Chrome pass, 50K and 200K × 1,000 Parquet, on #145.** Stats panels
   followed the mounted columns frame by frame, unlike charts. Adding a derived column with +
   from the far left smooth-scrolls to it, which mounts nearly every column on the way: 533

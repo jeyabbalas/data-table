@@ -658,9 +658,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // bridge failed with, the deepest one whose code is `WORKER_CRASHED`. A new
   // worker's failure is a new error, and is reported in its turn.
   const reportedFailures = new WeakSet<object>();
-  const emitError = (payload: TableEvents['error']): void => {
+  // `origin` is the error the event's error was made from, when that is a
+  // copy (a chart's, with its column added), whose `cause` chain would
+  // skip the error it copies.
+  const emitError = (payload: TableEvents['error'], origin: unknown = payload.error): void => {
     let failure: object | null = null;
-    let link: unknown = payload.error;
+    let link: unknown = origin;
     for (let depth = 0; depth < 8 && typeof link === 'object' && link !== null; depth++) {
       if (reportedFailures.has(link)) return;
       if ((link as { code?: unknown }).code === 'WORKER_CRASHED') failure = link;
@@ -732,6 +735,41 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     emitError({ error: typed, source: 'stats-panel' });
   };
 
+  /**
+   * A chart's error with the column it came from on its `details`, and the
+   * stage that failed when the chart says, as stats-panel errors carry
+   * theirs: only some of the charts' queries name the column themselves. A
+   * copy, as a chart can pass on an error it did not make, which other
+   * charts may be passing on too. A native error, so that it logs, clones
+   * and reads as one, of the same class and with the same message, code,
+   * cause and stack.
+   */
+  const withChartContext = (
+    err: DataTableError,
+    column: string,
+    stage?: 'fetch' | 'render' | 'filter',
+  ): DataTableError => {
+    const copy =
+      'cause' in err ? new Error(err.message, { cause: err.cause }) : new Error(err.message);
+    Object.setPrototypeOf(copy, Object.getPrototypeOf(err) as object);
+    const own: PropertyDescriptorMap = Object.getOwnPropertyDescriptors(err);
+    delete own.message;
+    delete own.cause;
+    Object.defineProperties(copy, {
+      ...own,
+      // An engine can keep `stack` as an accessor that reads only the error
+      // it was made for.
+      stack: { value: err.stack, writable: true, configurable: true },
+      details: {
+        value: { ...(err.details ?? {}), column, ...(stage ? { stage } : {}) },
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      },
+    });
+    return copy as DataTableError;
+  };
+
   /** Drop a column's interactions from the Escape stack (on filter removal). */
   const clearVisualizationState = (column: string): void => {
     interactionManager?.clearColumn(column);
@@ -776,6 +814,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // Per column with a live chart, draws the chart's stats into the stats
   // slot, for a slot a panel was to take and did not.
   const chartStatsRenderers = new Map<string, () => void>();
+
+  // Per column whose live chart has no stats of its own to show, redraws
+  // its slot: after a fetch of the chart failed, and for a chart that does
+  // not report stats each time a fetch lands until it has. The slot shows
+  // the table-wide count, which `refreshNonVizStats` keeps current. A chart
+  // that does report them each time, as the built-in ones do, shows its own
+  // count once its first fetch lands.
+  const chartsWithoutStats = new Map<string, () => void>();
 
   // Columns whose custom stats panel threw while being built. As with a chart
   // that throws, the same header on the same relation would throw again, so
@@ -835,6 +881,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     // dropped while interaction text is showing.
     let lastStats: ColumnStatsData | null = null;
     let detailHtml: string | null = null;
+    // Whether the chart has reported stats, and whether a fetch of it failed
+    // since it last did: the slot says so, in text. Read only while there
+    // are no stats, which the chart's stats leave only by a fetch failing.
+    let reportedStats = false;
+    let fetchFailed = false;
 
     const renderStatsSlot = (): void => {
       const prefix = opts.classPrefix ?? 'dt';
@@ -847,7 +898,11 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         statsEl.innerHTML = `${line1}<br>${detailHtml}`;
         return;
       }
-      const line2 = lastStats ? formatStatsLine2(lastStats, column.type, messages) : '';
+      const line2 = lastStats
+        ? formatStatsLine2(lastStats, column.type, messages)
+        : fetchFailed
+          ? escapeHtml(messages.statistics.chartFailed)
+          : '';
       statsEl.innerHTML = line2
         ? `${line1}<br><span class="${prefix}-stats-line2">${line2}</span>`
         : line1;
@@ -863,6 +918,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       tableContainer.getColumnWindow().mountedColumns.get().includes(column.name);
     // Only write the placeholder fallback when there's no panel taking the slot.
     if (!panelOf() && !panelComing()) renderStatsSlot();
+    const refreshSlotWithoutStats = (): void => {
+      if (!panelOf() && !panelComing()) renderStatsSlot();
+    };
 
     let viz: VisualizationType | undefined;
     const vizOptions = {
@@ -876,6 +934,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       onDefaultStatsChange: (stats: ColumnStatsData) => {
         latestStats.set(column.name, stats);
         lastStats = stats;
+        reportedStats = true;
+        chartsWithoutStats.delete(column.name);
         const panel = panelOf();
         if (panel) {
           try {
@@ -913,8 +973,53 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         if (hasSelection) interactionManager?.pushSelection(colName, viz);
         else interactionManager?.removeColumn(colName);
       },
-      onError: (err: DataTableError) => {
-        emitError({ error: err, source: 'visualization' });
+      onError: (
+        err: DataTableError,
+        // Optional here, though the type requires it: a chart written in
+        // plain JavaScript may leave it out.
+        context?: {
+          columnName?: string;
+          stage: 'fetch' | 'render' | 'filter';
+          superseded?: boolean;
+        },
+      ) => {
+        // A fetch that failed leaves the chart nothing to describe: the
+        // stats and the detail it reported before are for the filters then.
+        // Not so for a refetch a newer one superseded, or a chart already
+        // destroyed, whose column's slot may be its successor's.
+        if (context?.stage !== 'render' && !context?.superseded && !viz?.isDestroyed()) {
+          lastStats = null;
+          detailHtml = null;
+          latestStats.delete(column.name);
+          latestDetail.delete(column.name);
+          chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
+          // The slot says the chart failed until it reports stats again, so
+          // only for a chart that reports them: one that has before, or that
+          // says it does each time a fetch lands, as the built-in charts do.
+          if (reportedStats || viz?.reportsDefaultStats) fetchFailed = true;
+          const panel = panelOf();
+          if (panel) {
+            try {
+              panel.update(null);
+            } catch (panelErr) {
+              emitStatsPanelError(panelErr, column.name, 'update');
+            }
+            try {
+              panel.setHoverStats(null);
+            } catch (panelErr) {
+              emitStatsPanelError(panelErr, column.name, 'hover');
+            }
+          } else if (!panelComing()) {
+            renderStatsSlot();
+          }
+        }
+        emitError(
+          {
+            error: withChartContext(err, context?.columnName ?? column.name, context?.stage),
+            source: 'visualization',
+          },
+          err,
+        );
       },
     };
 
@@ -922,11 +1027,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     if (!created) return null;
     viz = created as VisualizationType;
     chartStatsRenderers.set(column.name, renderStatsSlot);
+    if (!created.reportsDefaultStats) chartsWithoutStats.set(column.name, refreshSlotWithoutStats);
     // Once the chart is gone, its stats must not linger: a panel goes back
     // to its initial state, and the default slot to the table-wide count,
     // which `refreshNonVizStats` keeps current from then on.
     statsSlotResets.set(created, () => {
       chartStatsRenderers.delete(column.name);
+      chartsWithoutStats.delete(column.name);
       if (destroyed) return;
       latestStats.delete(column.name);
       latestDetail.delete(column.name);
@@ -960,7 +1067,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         // A hidden or removed column leaves the Escape stack, as its chart
         // would when the header row is rebuilt without it.
         onColumnRemoved: (columnName) => interactionManager?.removeColumn(columnName),
-        onError: (err) => {
+        onError: (err, columnName) => {
           const typed =
             err instanceof DataTableError
               ? err
@@ -968,7 +1075,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
                   code: 'INVARIANT',
                   cause: err,
                 });
-          emitError({ error: typed, source: 'visualization' });
+          emitError({ error: withChartContext(typed, columnName), source: 'visualization' }, typed);
         },
       },
       getRoot: () => tableContainer.getElement().querySelector(headerScrollSelector),
@@ -1412,6 +1519,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (
         vizController ? vizController.hasLiveViz(column.name) : vizRegistry.isApplicable(column)
       ) {
+        // A live chart without stats of its own shows the table-wide count
+        // too.
+        chartsWithoutStats.get(column.name)?.();
         continue;
       }
       // Panel-owned slot? Skip — except when the panel destroyed itself

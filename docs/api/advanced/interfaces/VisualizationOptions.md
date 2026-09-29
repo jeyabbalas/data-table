@@ -120,8 +120,10 @@ Defined in: [visualizations/BaseVisualization.ts:125](https://github.com/jeyabba
 
 Callback invoked when the visualization fails to fetch, render, or
 update filters. Receives a typed [DataTableError](../../index/classes/DataTableError.md) and a context
-describing which stage failed. The facade routes these to the
-`error` event with `source: 'visualization'`.
+describing which stage failed. `superseded` is set on a filter update
+that failed after a newer one had started, which is what the chart will
+show. The facade routes these to the `error` event with
+`source: 'visualization'`.
 
 #### Parameters
 
@@ -138,6 +140,10 @@ describing which stage failed. The facade routes these to the
 ###### stage
 
 `"fetch"` \| `"render"` \| `"filter"`
+
+###### superseded?
+
+`boolean`
 
 #### Returns
 

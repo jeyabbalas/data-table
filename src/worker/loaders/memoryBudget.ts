@@ -18,6 +18,10 @@
  *
  * Loads that would not fit at all throw `LOAD_MEMORY_EXCEEDED` up front.
  *
+ * Nested columns (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) are sized from
+ * the columns DuckDB stores for them, which {@link storageColumns} reads
+ * off the type, with list lengths and text lengths from the same sample.
+ *
  * The costs below were measured on DuckDB 1.5.4 (duckdb-wasm 1.33.1-dev57);
  * see docs/dev/memory-envelope.md. `memoryBudget.duckdb.test.ts` checks the
  * table estimate against DuckDB's own accounting, so a DuckDB upgrade that
@@ -25,7 +29,7 @@
  */
 
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { isNestedSqlType } from '../../core/duckdbType';
+import { dataTypeOf, parseDuckDBType, type DuckDBTypeNode } from '../../core/duckdbType';
 import { quoteIdentifier } from './common';
 
 const MiB = 2 ** 20;
@@ -44,15 +48,35 @@ const ROW_GROUP_ROWS = 122_880;
  * once it fills.
  */
 const VECTOR_ROWS = 2048;
-/** Bytes per value in the first segment of a text or nested column. */
+/**
+ * Bytes per value in the first segment of a text column or of a LIST's
+ * offsets. DuckDB sizes that segment for one vector of its in-memory
+ * values, 16-byte `string_t` and `list_entry_t`, whatever it then stores
+ * per value.
+ */
 const REFERENCE_SLOT_BYTES = 16;
-/** A column's first validity segment: one bit per row, for 16,384 rows. */
+/** A column's first validity segment: one bit per value, for 16,384 values. */
 const HEAD_VALIDITY_BYTES = 2048;
 /**
  * Bookkeeping per column of the first row group, beyond its segments.
- * Measured at about 4 KiB.
+ * Measured at about 4 KiB: what the Parquet reader's file cache keeps per
+ * column chunk it read, so a nested column pays it per leaf.
  */
 const HEAD_OVERHEAD_BYTES = 4 * 1024;
+/**
+ * Bytes DuckDB stores per row of a LIST or MAP: the end offset of the row's
+ * items in its child column. The first segment holds 4,096 of them (one
+ * vector of 16-byte slots).
+ */
+const LIST_OFFSET_BYTES = 8;
+/**
+ * Items assumed per list or map the length sample does not measure: lists
+ * and maps inside another list, map or array, and all of them when the
+ * sample fails.
+ */
+const DEFAULT_LIST_ITEMS = 4;
+/** Bytes assumed per text value when the sample does not measure them. */
+const DEFAULT_TEXT_LENGTH = 8;
 /**
  * Most scan memory DuckDB holds per column while it decodes a Parquet file.
  * Measured at 0.64–0.92 MiB for column chunks of about 1 MiB; the top of
@@ -69,23 +93,36 @@ const SCAN_BASE_BYTES = 384 * 1024;
 const LOAD_BASE_BYTES = 64 * MiB;
 /** Share of DuckDB's free memory a new table may take; the rest is for queries. */
 const TABLE_SHARE = 0.95;
-/** Rows sampled to measure average text length. */
+/** Rows sampled to measure average text and list lengths. */
 const LENGTH_SAMPLE_ROWS = 2048;
 
-/** Value width assumed for nested types, whose size depends on their contents. */
-const NESTED_VALUE_BYTES = 40;
-
-const TEXT_TYPE = /^(VARCHAR|BLOB|BIT|JSON)\b/;
+/** Scalar types stored as text (a 4-byte offset plus their bytes), measured with `strlen`. */
+const STRING_NAMES = new Set(['VARCHAR', 'CHAR', 'BPCHAR', 'TEXT', 'STRING']);
+/** Scalar types stored as text, measured with `octet_length`. */
+const BINARY_NAMES = new Set(['BLOB', 'BYTEA', 'BINARY', 'VARBINARY', 'BIT', 'BITSTRING']);
 
 /**
- * Bytes one value of `columnType` takes in a DuckDB column segment. Text is a
- * 4-byte offset plus its bytes, with `averageLength` the mean byte length;
- * other types ignore it.
+ * How to measure a value of `node` in bytes, if DuckDB stores it as text (a
+ * VARCHAR, BLOB, BIT or JSON): SQL for the length of `value`. Null for
+ * every other type, lists and structs of text included. `strlen` counts
+ * bytes, like `octet_length` does for binary types.
  */
-export function valueWidth(columnType: string, averageLength = 8): number {
-  const type = columnType.trim().toUpperCase();
-  if (isNestedSqlType(type)) return NESTED_VALUE_BYTES;
-  if (TEXT_TYPE.test(type)) return 4 + Math.max(0, averageLength);
+function textLength(node: DuckDBTypeNode): ((value: string) => string) | null {
+  // Text is cast to VARCHAR first, which costs nothing for a VARCHAR: a
+  // JSON value read from Parquet has no `strlen` (a Binder error) until the
+  // json extension has loaded, and nothing loads it before a Parquet load.
+  if (node.kind === 'json' || (node.kind === 'scalar' && STRING_NAMES.has(node.name))) {
+    return (value) => `strlen(CAST(${value} AS VARCHAR))`;
+  }
+  if (node.kind === 'scalar' && BINARY_NAMES.has(node.name)) {
+    return (value) => `octet_length(${value})`;
+  }
+  return null;
+}
+
+/** Bytes one value of a fixed-size scalar type takes. */
+function scalarWidth(sqlType: string): number {
+  const type = sqlType.trim().toUpperCase();
   const decimal = /^DECIMAL\((\d+)/.exec(type);
   if (decimal) return Number(decimal[1]) > 18 ? 16 : 8;
   if (/^(BOOLEAN|U?TINYINT)$/.test(type)) return 1;
@@ -96,46 +133,260 @@ export function valueWidth(columnType: string, averageLength = 8): number {
 }
 
 /**
+ * One of the columns DuckDB stores for a table column: its values in
+ * segments, and a validity mask in segments of its own. A scalar column is
+ * one. A nested column is a tree of them (DuckDB's `ColumnData`), which
+ * {@link storageColumns} lists:
+ *
+ * - LIST: an 8-byte offset per row, and a child column of the rows' items.
+ * - ARRAY: a validity mask only, and a child column of `size` items per row.
+ * - STRUCT: a validity mask only, and a column per field.
+ * - MAP: a LIST of `STRUCT(key, value)`.
+ * - UNION: a STRUCT of a UTINYINT tag and a column per member, each holding
+ *   a value (NULL unless the tag picks it) for every row.
+ * - VARIANT: a STRUCT of four columns; see {@link VariantLengths}.
+ *
+ * Measured with duckdb_memory() on tables of 1 to 200,000 rows: INTEGER[],
+ * VARCHAR[], JSON[], INTEGER[][], FLOAT[] and FLOAT[768], STRUCT(x DOUBLE,
+ * y DOUBLE, tier VARCHAR), STRUCT(id INTEGER, tags VARCHAR[]), a LIST of
+ * STRUCT, MAP(VARCHAR, INTEGER), UNION(i INTEGER, s VARCHAR) and VARIANT
+ * take exactly what these columns predict, to the block, given the true
+ * lengths of their lists and text.
+ */
+export interface StorageColumn {
+  /** Values it holds per table row: 1, or the items of the lists above it. */
+  readonly perRow: number;
+  /** Bytes per value in its data segments; 0 for a column with a validity mask only. */
+  readonly width: number;
+  /** Bytes of its first data segment in a new table: one vector of slots, at most a block. */
+  readonly headBytes: number;
+  /** A leaf of the type, which a Parquet file keeps as a column chunk of its own. */
+  readonly leaf: boolean;
+}
+
+/**
+ * A VARIANT value as its DuckDB text (`CAST(v AS VARCHAR)`) shows it,
+ * averaged per value: the text's length, and its nodes (values, arrays and
+ * objects alike), counted as 1 + its commas + its `[` and `{`.
+ *
+ * DuckDB stores a VARIANT as a STRUCT of its object keys (a VARCHAR list),
+ * the children of its arrays and objects (a list of two UINTEGER indexes),
+ * its values (a list of a UTINYINT type and a UINTEGER offset) and its data
+ * (a BLOB), under a validity mask of its own: 13 columns, so one row takes
+ * 212 KiB of first segments (measured). Counted from the text, every node
+ * but the first is a child with a key (an 8-byte key is assumed), and the
+ * data is the text plus 8 bytes per node. Against duckdb_memory() for
+ * 200,000 VARIANTs read from Parquet, that errs high: 1.0× for integers
+ * and long strings, 1.2× for doubles, 1.6–1.7× for arrays of numbers and
+ * for objects.
+ */
+export interface VariantLengths {
+  readonly length: number;
+  readonly nodes: number;
+}
+
+/** A VARIANT the sample did not measure: a small document. */
+const DEFAULT_VARIANT: VariantLengths = { length: 64, nodes: 4 };
+/** Bytes assumed per object key in a VARIANT's key list. */
+const VARIANT_KEY_BYTES = 8;
+/** Data bytes per VARIANT node beyond its text: a number's 8-byte value. */
+const VARIANT_NODE_DATA_BYTES = 8;
+
+/**
+ * What the length sample measured about a nested column's values. The text
+ * values inside it take `averageLength` (see {@link valueWidth}).
+ */
+export interface NestedLengths {
+  /**
+   * Average items per list or map at the column's outermost level of lists:
+   * the column itself, or a list or map reached through struct fields and
+   * union members. Lists and maps inside those hold
+   * {@link DEFAULT_LIST_ITEMS} (4) items each.
+   */
+  readonly items?: number;
+  /** VARIANT values inside, and values of a type the parser cannot read. */
+  readonly variant?: VariantLengths;
+}
+
+/**
+ * The columns DuckDB stores for a table column of `columnType` (see
+ * {@link StorageColumn}). Text values take `averageLength` bytes plus a
+ * 4-byte offset wherever they sit; lists and maps take the items in
+ * `lengths`, or {@link DEFAULT_LIST_ITEMS} (4) where it has none.
+ */
+export function storageColumns(
+  columnType: string,
+  averageLength = DEFAULT_TEXT_LENGTH,
+  lengths: NestedLengths = {},
+): StorageColumn[] {
+  const columns: StorageColumn[] = [];
+  const add = (perRow: number, width: number, slot: number, leaf = true): void => {
+    columns.push({ perRow, width, headBytes: Math.min(BLOCK_BYTES, VECTOR_ROWS * slot), leaf });
+  };
+  const mask = (perRow: number): void => add(perRow, 0, 0, false);
+  const offsets = (perRow: number): void =>
+    add(perRow, LIST_OFFSET_BYTES, REFERENCE_SLOT_BYTES, false);
+  const text = (perRow: number, length: number): void =>
+    add(perRow, 4 + Math.max(0, length), REFERENCE_SLOT_BYTES);
+  const scalar = (perRow: number, sqlType: string): void => {
+    const width = scalarWidth(sqlType);
+    add(perRow, width, width);
+  };
+
+  const variant = (perRow: number): void => {
+    const { length, nodes } = lengths.variant ?? DEFAULT_VARIANT;
+    const children = Math.max(0, nodes - 1);
+    mask(perRow); // the VARIANT
+    mask(perRow); // its STRUCT
+    offsets(perRow); // keys: VARCHAR[]
+    text(perRow * children, VARIANT_KEY_BYTES);
+    offsets(perRow); // children: STRUCT(keys_index UINTEGER, values_index UINTEGER)[]
+    mask(perRow * children);
+    add(perRow * children, 4, 4);
+    add(perRow * children, 4, 4);
+    offsets(perRow); // values: STRUCT(type_id UTINYINT, byte_offset UINTEGER)[]
+    mask(perRow * nodes);
+    add(perRow * nodes, 1, 1);
+    add(perRow * nodes, 4, 4);
+    text(perRow, length + VARIANT_NODE_DATA_BYTES * nodes); // data: BLOB
+  };
+
+  // `outermost`: no list, map or array encloses the node.
+  const visit = (node: DuckDBTypeNode, perRow: number, outermost: boolean): void => {
+    switch (node.kind) {
+      case 'scalar':
+      case 'json':
+        if (textLength(node)) text(perRow, averageLength);
+        else scalar(perRow, node.sqlType);
+        return;
+      case 'list':
+      case 'map': {
+        const items = outermost ? (lengths.items ?? DEFAULT_LIST_ITEMS) : DEFAULT_LIST_ITEMS;
+        offsets(perRow);
+        if (node.kind === 'list') {
+          visit(node.element, perRow * items, false);
+          return;
+        }
+        mask(perRow * items); // each entry's STRUCT(key, value)
+        visit(node.key, perRow * items, false);
+        visit(node.value, perRow * items, false);
+        return;
+      }
+      case 'array':
+        mask(perRow);
+        visit(node.element, perRow * node.size, false);
+        return;
+      case 'struct':
+        mask(perRow);
+        for (const field of node.fields) visit(field.type, perRow, outermost);
+        return;
+      case 'union':
+        mask(perRow);
+        add(perRow, 1, 1); // the tag
+        for (const member of node.members) visit(member.type, perRow, outermost);
+        return;
+      case 'variant':
+        variant(perRow);
+        return;
+      case 'unknown':
+        // Text the parser cannot read: sized like a VARIANT if it looks nested.
+        if (dataTypeOf(node) === 'nested') variant(perRow);
+        else scalar(perRow, node.sqlType);
+        return;
+    }
+  };
+  visit(parseDuckDBType(columnType), 1, true);
+  return columns;
+}
+
+/**
+ * Bytes one value of `columnType` takes in DuckDB's column segments,
+ * validity masks aside: the sum over the columns that store it (see
+ * {@link storageColumns}). Text is a 4-byte offset plus its bytes, with
+ * `averageLength` the mean byte length, inside nested values too; a LIST
+ * adds an 8-byte offset to its items, an ARRAY `size` items, a STRUCT its
+ * fields, a MAP its entries' keys and values, a UNION a tag byte and every
+ * member. A `FLOAT[768]` embedding is 3,072 bytes.
+ */
+export function valueWidth(
+  columnType: string,
+  averageLength = DEFAULT_TEXT_LENGTH,
+  lengths?: NestedLengths,
+): number {
+  return storageColumns(columnType, averageLength, lengths).reduce(
+    (sum, column) => sum + column.perRow * column.width,
+    0,
+  );
+}
+
+/**
  * Bytes of a column's first segment, sized for one vector of values. Text
- * and nested columns hold 16-byte references there, however long their
- * values; other types hold `width`-byte values.
+ * columns hold 16-byte references there, however long their values; other
+ * scalars hold `width`-byte values. A nested column's is that of its
+ * outermost storage column: a LIST's or MAP's offsets (16-byte slots), or
+ * none for a STRUCT, ARRAY, UNION or VARIANT, whose outermost column is a
+ * validity mask.
  */
 export function firstSegmentBytes(columnType: string, width: number): number {
-  const type = columnType.trim().toUpperCase();
-  const slot = isNestedSqlType(type) || TEXT_TYPE.test(type) ? REFERENCE_SLOT_BYTES : width;
+  const node = parseDuckDBType(columnType);
+  if (dataTypeOf(node) === 'nested') return storageColumns(columnType)[0]!.headBytes;
+  const slot = textLength(node) ? REFERENCE_SLOT_BYTES : width;
   return Math.min(BLOCK_BYTES, VECTOR_ROWS * slot);
 }
 
 /**
- * Size of an in-memory DuckDB table with `rows` rows and columns of the
- * given value widths. Each column of each 122,880-row row group takes whole
- * 256 KiB blocks for its values, plus one block for its validity mask. The
- * first row group is the exception: there each column starts with a
- * one-vector segment (`headBytes`, by default 2,048 values of its width)
- * and a 2 KiB validity segment, and takes whole blocks only as those fill.
- * This matches DuckDB's own accounting to within a few percent from one row
- * to millions. A flat per-cell cost is a third low for short, wide tables,
- * and whole blocks alone are many times too high for tables of a few
- * thousand rows.
+ * Size of an in-memory DuckDB table with `rows` rows and scalar columns of
+ * the given value widths; see {@link estimateStorageBytes}. `headBytes`
+ * gives each column's first segment, by default 2,048 values of its width.
  */
 export function estimateTableBytes(rows: number, widths: number[], headBytes?: number[]): number {
+  return estimateStorageBytes(
+    rows,
+    widths.map((width, i) => ({
+      perRow: 1,
+      width,
+      headBytes: headBytes?.[i] ?? Math.min(BLOCK_BYTES, VECTOR_ROWS * width),
+      leaf: true,
+    })),
+  );
+}
+
+/**
+ * Size of an in-memory DuckDB table with `rows` rows, from the columns it
+ * stores (see {@link storageColumns}). Each storage column of each
+ * 122,880-row row group takes whole 256 KiB blocks for its values and for
+ * its validity mask, at least one of each, even for a child column with no
+ * items in the group. The first row group is the exception: there each
+ * starts with a one-vector segment (`headBytes`) and a 2 KiB validity
+ * segment, and takes whole blocks only as those fill. A list's child
+ * column holds every item of the group's rows, so a `FLOAT[768]` column
+ * fills 1,440 blocks per row group. This matches DuckDB's own accounting
+ * to within a few percent from one row to millions. A flat per-cell cost
+ * is a third low for short, wide tables, and whole blocks alone are many
+ * times too high for tables of a few thousand rows.
+ */
+export function estimateStorageBytes(rows: number, columns: readonly StorageColumn[]): number {
   if (rows <= 0) return 0;
   const firstGroupRows = Math.min(rows, ROW_GROUP_ROWS);
   const laterRows = rows - firstGroupRows;
   const fullGroups = Math.floor(laterRows / ROW_GROUP_ROWS);
   const lastGroupRows = laterRows % ROW_GROUP_ROWS;
-  const blocks = (bytes: number): number => Math.ceil(bytes / BLOCK_BYTES) * BLOCK_BYTES;
-  const group = (groupRows: number, width: number): number =>
-    blocks(groupRows * width) + BLOCK_BYTES;
+  const blocks = (bytes: number): number =>
+    Math.ceil(Math.max(0, bytes) / BLOCK_BYTES) * BLOCK_BYTES;
   let total = 0;
-  widths.forEach((width, i) => {
-    const head = headBytes?.[i] ?? Math.min(BLOCK_BYTES, VECTOR_ROWS * width);
-    total += head + blocks(Math.max(0, firstGroupRows * width - head));
-    total += HEAD_VALIDITY_BYTES + (firstGroupRows > HEAD_VALIDITY_BYTES * 8 ? BLOCK_BYTES : 0);
-    total += HEAD_OVERHEAD_BYTES;
-    total += fullGroups * group(ROW_GROUP_ROWS, width);
-    if (lastGroupRows > 0) total += group(lastGroupRows, width);
-  });
+  for (const { perRow, width, headBytes, leaf } of columns) {
+    const group = (groupRows: number): number => {
+      const values = groupRows * perRow;
+      const data = width > 0 ? Math.max(BLOCK_BYTES, blocks(values * width)) : 0;
+      return data + Math.max(BLOCK_BYTES, blocks(values / 8));
+    };
+    const values = firstGroupRows * perRow;
+    if (width > 0) total += headBytes + blocks(values * width - headBytes);
+    total += HEAD_VALIDITY_BYTES + blocks(values / 8 - HEAD_VALIDITY_BYTES);
+    if (leaf) total += HEAD_OVERHEAD_BYTES;
+    total += fullGroups * group(ROW_GROUP_ROWS);
+    if (lastGroupRows > 0) total += group(lastGroupRows);
+  }
   return total;
 }
 
@@ -338,9 +589,182 @@ async function leafColumnIds(
 }
 
 /**
+ * Probes a length sample may hold. Past this, nested columns keep the
+ * default lengths rather than make the sample's SQL grow with the schema.
+ */
+const MAX_LENGTH_PROBES = 2000;
+/** The lambda parameter in a probe's `list_transform`. */
+const PROBE_ITEM = '__dt_item';
+
+type ProbeKind =
+  'items' | 'textBytes' | 'textValues' | 'variantLength' | 'variantNodes' | 'variantValues';
+
+/** Per-row SQL over one nested column, which the sample sums. */
+interface LengthProbe {
+  kind: ProbeKind;
+  sql: string;
+}
+
+/** A nested column's lengths as sampled, with the average length of its text values. */
+interface NestedSample {
+  averageLength?: number;
+  lengths: NestedLengths;
+}
+
+function sqlString(text: string): string {
+  return `'${text.replace(/'/g, "''")}'`;
+}
+
+/**
+ * The probes that measure a nested column's {@link NestedLengths} and text:
+ * the items of each list and map at its outermost level of lists, and the
+ * bytes of the text and VARIANT values reached through struct fields, union
+ * members and those items. Lists, maps and arrays deeper down are not
+ * entered: their items take the defaults, and their text the average of
+ * the text reached. A NULL value counts as empty, as DuckDB stores it.
+ */
+function lengthProbes(column: string, type: DuckDBTypeNode): LengthProbe[] {
+  const probes: LengthProbe[] = [];
+  /**
+   * @param value - SQL for the node's value: a column, a field of one, or
+   *   PROBE_ITEM inside `outer`.
+   * @param outer - The outermost list holding the node (SQL for the list,
+   *   and for its items per row), or null outside any.
+   */
+  const visit = (
+    node: DuckDBTypeNode,
+    value: string,
+    outer: { list: string; items: string } | null,
+  ): void => {
+    // `perValue` summed over the row: over its list's items, if any.
+    const perRow = (perValue: string): string =>
+      outer
+        ? `coalesce(list_sum(list_transform(${outer.list}, lambda ${PROBE_ITEM}: ${perValue})), 0)`
+        : perValue;
+    const values = outer ? outer.items : '1';
+    const length = textLength(node);
+    if (length) {
+      probes.push(
+        { kind: 'textBytes', sql: perRow(`coalesce(${length(value)}, 0)`) },
+        { kind: 'textValues', sql: values },
+      );
+      return;
+    }
+    switch (node.kind) {
+      case 'struct':
+        node.fields.forEach((field, i) => {
+          visit(field.type, `struct_extract_at(${value}, ${i + 1})`, outer);
+        });
+        return;
+      case 'union':
+        for (const member of node.members) {
+          visit(member.type, `union_extract(${value}, ${sqlString(member.tag)})`, outer);
+        }
+        return;
+      case 'array':
+        if (!outer) visit(node.element, PROBE_ITEM, { list: value, items: String(node.size) });
+        return;
+      case 'list':
+      case 'map': {
+        if (outer) return;
+        const items = `coalesce(${node.kind === 'list' ? 'len' : 'cardinality'}(${value}), 0)`;
+        probes.push({ kind: 'items', sql: items });
+        if (node.kind === 'list') {
+          visit(node.element, PROBE_ITEM, { list: value, items });
+        } else {
+          visit(node.key, PROBE_ITEM, { list: `map_keys(${value})`, items });
+          visit(node.value, PROBE_ITEM, { list: `map_values(${value})`, items });
+        }
+        return;
+      }
+      case 'variant':
+      case 'unknown': {
+        const text = `CAST(${value} AS VARCHAR)`;
+        const removed = (rest: string): string => `strlen(${text}) - strlen(${rest})`;
+        const nodes = `1 + ${removed(`replace(${text}, ',', '')`)} + ${removed(
+          `replace(replace(${text}, '[', ''), '{', '')`,
+        )}`;
+        probes.push(
+          { kind: 'variantLength', sql: perRow(`coalesce(strlen(${text}), 0)`) },
+          { kind: 'variantNodes', sql: perRow(`coalesce(${nodes}, 0)`) },
+          { kind: 'variantValues', sql: values },
+        );
+        return;
+      }
+      default:
+        return;
+    }
+  };
+  visit(type, quoteIdentifier(column), null);
+  return probes;
+}
+
+/**
+ * Measure the nested columns' lengths from the first
+ * {@link LENGTH_SAMPLE_ROWS} rows. Best effort, like the text sample: a
+ * column the sample leaves out, or a sample that fails, keeps the defaults.
+ */
+async function sampleNestedLengths(
+  conn: AsyncDuckDBConnection,
+  fileName: string,
+  columns: readonly { name: string; node: DuckDBTypeNode }[],
+): Promise<Map<string, NestedSample>> {
+  const sampled = new Map<string, NestedSample>();
+  const probed: { name: string; probes: LengthProbe[]; first: number }[] = [];
+  let count = 0;
+  for (const { name, node } of columns) {
+    const probes = lengthProbes(name, node);
+    if (probes.length === 0 || count + probes.length > MAX_LENGTH_PROBES) continue;
+    probed.push({ name, probes, first: count });
+    count += probes.length;
+  }
+  if (probed.length === 0) return sampled;
+
+  try {
+    const sums = probed.flatMap(({ probes, first }) =>
+      probes.map((probe, i) => `CAST(sum(${probe.sql}) AS DOUBLE) AS "${first + i}"`),
+    );
+    const [sample] = await queryRows(
+      conn,
+      `SELECT count(*) AS n, ${sums.join(', ')}
+       FROM (SELECT ${probed.map((c) => quoteIdentifier(c.name)).join(', ')}
+             FROM read_parquet('${fileName}') LIMIT ${LENGTH_SAMPLE_ROWS})`,
+    );
+    const rows = Number(sample?.['n'] ?? 0);
+    if (!sample || rows <= 0) return sampled;
+    for (const { name, probes, first } of probed) {
+      const total = (kind: ProbeKind): number =>
+        probes.reduce(
+          (sum, probe, i) =>
+            probe.kind === kind ? sum + Number(sample[String(first + i)] ?? 0) : sum,
+          0,
+        );
+      const lists = probes.filter((probe) => probe.kind === 'items').length;
+      const textValues = total('textValues');
+      const variantValues = total('variantValues');
+      const lengths: { items?: number; variant?: VariantLengths } = {};
+      if (lists > 0) lengths.items = total('items') / (lists * rows);
+      if (variantValues > 0) {
+        lengths.variant = {
+          length: total('variantLength') / variantValues,
+          nodes: total('variantNodes') / variantValues,
+        };
+      }
+      sampled.set(
+        name,
+        textValues > 0 ? { lengths, averageLength: total('textBytes') / textValues } : { lengths },
+      );
+    }
+  } catch {
+    // Keep the default lengths.
+  }
+  return sampled;
+}
+
+/**
  * Estimate the loaded size of `fileName` projected to `describeRows` (the
  * DESCRIBE of the load's SELECT, without `__rowid__`). Reads the footer and
- * the first {@link LENGTH_SAMPLE_ROWS} rows of text columns only.
+ * the first {@link LENGTH_SAMPLE_ROWS} rows of text and nested columns only.
  *
  * @param projection - The top-level columns a projection loads, if it does:
  *   the scan and prefetch estimates then count only theirs, as DuckDB reads
@@ -378,11 +802,17 @@ export async function measureParquetFootprint(
   );
   const rows = Number(file?.['num_rows'] ?? 0);
 
-  const columns = describeRows.map((row) => ({
-    name: String(row['column_name']),
-    type: String(row['column_type']),
-  }));
-  const textColumns = columns.filter((c) => /^(VARCHAR|BLOB|BIT|JSON)\b/i.test(c.type));
+  const columns = describeRows.map((row) => {
+    const type = String(row['column_type']);
+    return { name: String(row['column_name']), type, node: parseDuckDBType(type) };
+  });
+  // Top-level text columns only: text inside a list or struct is measured
+  // with the nested columns, and `strlen` of a VARCHAR[] is a Binder error
+  // that would fail this whole sample.
+  const textColumns = columns.flatMap((c) => {
+    const length = textLength(c.node);
+    return length ? [{ ...c, length }] : [];
+  });
   const averageLength = new Map<string, number>();
   if (rows > 0 && textColumns.length > 0) {
     // Best effort: the sample decodes each text column's first page, which
@@ -393,11 +823,7 @@ export async function measureParquetFootprint(
       const [sample] = await queryRows(
         conn,
         `SELECT ${textColumns
-          .map((c, i) => {
-            // strlen counts bytes, like octet_length does for binary types.
-            const length = /^(VARCHAR|JSON)\b/i.test(c.type) ? 'strlen' : 'octet_length';
-            return `avg(${length}(${quoteIdentifier(c.name)})) AS "${i}"`;
-          })
+          .map((c, i) => `avg(${c.length(quoteIdentifier(c.name))}) AS "${i}"`)
           .join(', ')}
          FROM (SELECT ${textColumns.map((c) => quoteIdentifier(c.name)).join(', ')}
                FROM read_parquet('${fileName}') LIMIT ${LENGTH_SAMPLE_ROWS})`,
@@ -407,23 +833,36 @@ export async function measureParquetFootprint(
       // Keep the default lengths.
     }
   }
+  // A separate sample, so that either can fail without the other.
+  const nestedColumns = columns.filter((c) => dataTypeOf(c.node) === 'nested');
+  const nested =
+    rows > 0 && nestedColumns.length > 0
+      ? await sampleNestedLengths(conn, fileName, nestedColumns)
+      : new Map<string, NestedSample>();
 
-  const types = ['BIGINT', ...columns.map((c) => c.type)]; // __rowid__ first
-  const widths = types.map((type, i) =>
-    valueWidth(type, i === 0 ? undefined : averageLength.get(columns[i - 1]!.name)),
-  );
-  const heads = types.map((type, i) => firstSegmentBytes(type, widths[i]!));
+  const storage = [
+    ...storageColumns('BIGINT'), // __rowid__
+    ...columns.flatMap((c) => {
+      const sampled = nested.get(c.name);
+      return storageColumns(
+        c.type,
+        averageLength.get(c.name) ?? sampled?.averageLength,
+        sampled?.lengths,
+      );
+    }),
+  ];
 
   // Columns without a chunk (__rowid__, or every column of a file with no
   // row groups) have nothing to decode, and cost only the base.
+  const tableColumns = columns.length + 1;
   const scanBytes =
     chunks.reduce((sum, chunk) => sum + scanBytesPerColumn(Number(chunk['bytes'] ?? 0)), 0) +
-    Math.max(0, types.length - chunks.length) * SCAN_BASE_BYTES;
+    Math.max(0, tableColumns - chunks.length) * SCAN_BASE_BYTES;
 
   return {
     rows,
-    columns: types.length,
-    tableBytes: estimateTableBytes(rows, widths, heads),
+    columns: tableColumns,
+    tableBytes: estimateStorageBytes(rows, storage),
     scanBytes,
     largestRowGroupBytes: Number(rowGroup?.['bytes'] ?? 0),
     fileBytes: Number(file?.['file_size_bytes'] ?? 0),

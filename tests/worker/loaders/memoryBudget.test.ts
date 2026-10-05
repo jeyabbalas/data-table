@@ -7,15 +7,18 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  estimateStorageBytes,
   estimateTableBytes,
   firstSegmentBytes,
   fitParquetRead,
   isOutOfMemoryError,
   measureParquetFootprint,
   memoryExceededError,
+  type NestedLengths,
   parseMemorySize,
   planParquetRead,
   scanBytesPerColumn,
+  storageColumns,
   type MemoryBudget,
   type ParquetFootprint,
   valueWidth,
@@ -46,12 +49,173 @@ describe('valueWidth', () => {
   it('sizes text as an offset plus its average length', () => {
     expect(valueWidth('VARCHAR', 30)).toBe(34);
     expect(valueWidth('BLOB', 100)).toBe(104);
+    expect(valueWidth('JSON', 50)).toBe(54);
   });
 
-  it('gives nested types a flat width', () => {
-    expect(valueWidth('BIGINT[]')).toBe(40);
-    expect(valueWidth('STRUCT(a INTEGER, b DOUBLE)')).toBe(40);
-    expect(valueWidth('MAP(VARCHAR, INTEGER)')).toBe(40);
+  describe('nested types, from the columns DuckDB stores for them', () => {
+    it('sizes a FLOAT[768] embedding at about 3 KB a row', () => {
+      // An ARRAY: 768 floats, and no offsets.
+      expect(valueWidth('FLOAT[768]')).toBe(768 * 4);
+      // A Parquet file returns it as a LIST, which adds an 8-byte offset.
+      expect(valueWidth('FLOAT[]', 8, { items: 768 })).toBe(8 + 768 * 4);
+    });
+
+    it('sizes a list as an offset plus its items', () => {
+      expect(valueWidth('INTEGER[]', 8, { items: 2.5 })).toBe(8 + 2.5 * 4);
+      // Text items are an offset plus their bytes, at the column's average length.
+      expect(valueWidth('VARCHAR[]', 5, { items: 3 })).toBe(8 + 3 * (4 + 5));
+      expect(valueWidth('JSON[]', 30, { items: 2 })).toBe(8 + 2 * (4 + 30));
+      // Unmeasured, a list holds 4 items.
+      expect(valueWidth('INTEGER[]')).toBe(8 + 4 * 4);
+    });
+
+    it('sizes a struct as its fields', () => {
+      expect(valueWidth('STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 6)).toBe(8 + 8 + (4 + 6));
+      expect(valueWidth('STRUCT(a STRUCT(b SMALLINT, c BOOLEAN), d DATE)')).toBe(2 + 1 + 4);
+    });
+
+    it('sizes a map as an offset plus its entries', () => {
+      expect(valueWidth('MAP(VARCHAR, INTEGER)', 4, { items: 3 })).toBe(8 + 3 * (4 + 4 + 4));
+    });
+
+    it('sizes a union as a tag byte plus every member', () => {
+      // Every member holds a value for every row, NULL unless the tag picks it.
+      expect(valueWidth('UNION(i INTEGER, s VARCHAR)', 3)).toBe(1 + 4 + (4 + 3));
+    });
+
+    it('assumes 4 items in every list below the outermost', () => {
+      expect(valueWidth('INTEGER[][]', 8, { items: 2 })).toBe(8 + 2 * (8 + 4 * 4));
+      expect(valueWidth('TINYINT[][][]', 8, { items: 1 })).toBe(8 + (8 + 4 * (8 + 4 * 1)));
+      expect(valueWidth('MAP(DATE, INTEGER[])', 8, { items: 3 })).toBe(8 + 3 * (4 + 8 + 4 * 4));
+      // Inside an array too: the array's size counts, the list holds 4.
+      expect(valueWidth('INTEGER[][3]')).toBe(3 * (8 + 4 * 4));
+      // A list reached through struct fields is still at the outermost level.
+      expect(valueWidth('STRUCT(id INTEGER, tags VARCHAR[])', 2, { items: 3 })).toBe(
+        4 + 8 + 3 * (4 + 2),
+      );
+      expect(valueWidth('STRUCT("name" VARCHAR, langs VARCHAR[])[]', 5, { items: 2 })).toBe(
+        8 + 2 * (4 + 5 + 8 + 4 * (4 + 5)),
+      );
+    });
+
+    it('sizes a VARIANT from its text', () => {
+      // Three list offsets and a data offset per row; per node a type and
+      // data offset (5 bytes), and the text plus 8 bytes of data; per node
+      // but the first, a child entry (8) and an 8-byte key with its offset.
+      const variant = (length: number, nodes: number) =>
+        24 + 4 + length + 8 * nodes + 5 * nodes + (8 + 12) * (nodes - 1);
+      expect(valueWidth('VARIANT', 8, { variant: { length: 40, nodes: 7 } })).toBe(variant(40, 7));
+      expect(valueWidth('VARIANT', 8, { variant: { length: 5, nodes: 1 } })).toBe(variant(5, 1));
+      // Unmeasured: a 64-character document of 4 nodes.
+      expect(valueWidth('VARIANT')).toBe(variant(64, 4));
+      expect(valueWidth('STRUCT(v VARIANT)')).toBe(variant(64, 4));
+    });
+  });
+});
+
+describe('storageColumns', () => {
+  const mask = (perRow: number) => ({ perRow, width: 0, headBytes: 0, leaf: false });
+
+  it('lists a struct as a validity mask over a column per field', () => {
+    expect(storageColumns('STRUCT(x DOUBLE, tier VARCHAR)', 6)).toEqual([
+      mask(1),
+      { perRow: 1, width: 8, headBytes: 2048 * 8, leaf: true },
+      // Text starts with a vector of 16-byte string slots.
+      { perRow: 1, width: 10, headBytes: 2048 * 16, leaf: true },
+    ]);
+  });
+
+  it('lists a list as its offsets and a child column of its items', () => {
+    // The offsets start with a vector of 16-byte list entries: 4,096 offsets.
+    expect(storageColumns('INTEGER[]', 8, { items: 5 })).toEqual([
+      { perRow: 1, width: 8, headBytes: 2048 * 16, leaf: false },
+      { perRow: 5, width: 4, headBytes: 2048 * 4, leaf: true },
+    ]);
+    expect(storageColumns('FLOAT[768]')).toEqual([
+      mask(1),
+      { perRow: 768, width: 4, headBytes: 2048 * 4, leaf: true },
+    ]);
+  });
+
+  it('lists a map as a list of key-value structs, and a union as a tagged struct', () => {
+    expect(storageColumns('MAP(VARCHAR, INTEGER)', 4, { items: 3 })).toEqual([
+      { perRow: 1, width: 8, headBytes: 2048 * 16, leaf: false },
+      mask(3),
+      { perRow: 3, width: 8, headBytes: 2048 * 16, leaf: true },
+      { perRow: 3, width: 4, headBytes: 2048 * 4, leaf: true },
+    ]);
+    expect(storageColumns('UNION(i INTEGER, s VARCHAR)', 3)).toEqual([
+      mask(1),
+      { perRow: 1, width: 1, headBytes: 2048, leaf: true },
+      { perRow: 1, width: 4, headBytes: 2048 * 4, leaf: true },
+      { perRow: 1, width: 7, headBytes: 2048 * 16, leaf: true },
+    ]);
+  });
+
+  it('lists a VARIANT as the 13 columns DuckDB keeps for it', () => {
+    expect(storageColumns('VARIANT')).toHaveLength(13);
+  });
+
+  it('lists a scalar as one column', () => {
+    expect(storageColumns('DECIMAL(38,2)')).toEqual([
+      { perRow: 1, width: 16, headBytes: 2048 * 16, leaf: true },
+    ]);
+  });
+});
+
+describe('estimateStorageBytes', () => {
+  /** Lists of 0–8 items, `range % 9`, over `rows` rows: their average length. */
+  const nineCycle = (rows: number) => {
+    let items = 0;
+    for (let row = 0; row < rows; row++) items += row % 9;
+    return items / rows;
+  };
+
+  // DuckDB's segments for one nested column: duckdb_memory()'s IN_MEMORY_TABLE
+  // growth for a table of the column, less that for a table of its __rowid__
+  // alone (DuckDB 1.5.4). Every column of the tree has a one-vector first
+  // segment, a 2 KiB first validity segment, and whole blocks after them.
+  // The per-leaf bookkeeping is the Parquet reader's, so it is left out.
+  it.each<[string, number, NestedLengths, number, number]>([
+    ['STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 16 / 3, {}, 1, 72],
+    ['STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 16 / 3, {}, 2048, 72],
+    ['STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 16 / 3, {}, 20_000, 1864],
+    ['STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 16 / 3, {}, 200_000, 7752],
+    ['INTEGER[]', 8, { items: nineCycle(1) }, 1, 44],
+    ['INTEGER[]', 8, { items: nineCycle(2048) }, 2048, 300],
+    ['INTEGER[]', 8, { items: nineCycle(4096) }, 4096, 300],
+    ['INTEGER[]', 8, { items: nineCycle(4097) }, 4097, 556],
+    ['INTEGER[]', 8, { items: nineCycle(20_000) }, 20_000, 1324],
+    ['INTEGER[]', 8, { items: nineCycle(200_000) }, 200_000, 6188],
+    ['INTEGER[][]', 8, { items: 3 }, 20_000, 2638], // 3 lists of 4
+    ['FLOAT[]', 8, { items: 768 }, 20_000, 62_764],
+    ['FLOAT[768]', 8, {}, 20_000, 62_476],
+    ['VARCHAR[]', 5, { items: 3 }, 20_000, 1348],
+    ['JSON[]', 7, { items: 3 }, 20_000, 1604],
+    ['MAP(VARCHAR, INTEGER)', 4, { items: 3 }, 20_000, 2128],
+    ['STRUCT(id INTEGER, tags VARCHAR[])', 2, { items: 2 }, 20_000, 1872],
+    ['STRUCT("name" VARCHAR, qty INTEGER)[]', 5, { items: 2 }, 20_000, 2128],
+    // Half the rows hold a string of 5.4 bytes on average, half NULL.
+    ['UNION(i INTEGER, s VARCHAR)', 2.72, {}, 20_000, 1842],
+    ['VARIANT', 8, { variant: { length: 5.4, nodes: 1 } }, 1, 212],
+  ])('%s, %d rows: the measured %d KiB, to the block', (type, length, lengths, rows, kib) => {
+    const columns = storageColumns(type, length, lengths).map((c) => ({ ...c, leaf: false }));
+    expect(estimateStorageBytes(rows, columns)).toBe(kib * 1024);
+  });
+
+  it('gives a child column a block per row group even when its lists are empty', () => {
+    // 200,000 empty INTEGER[]: DuckDB measured 2,860 KiB.
+    const columns = storageColumns('INTEGER[]', 8, { items: 0 }).map((c) => ({
+      ...c,
+      leaf: false,
+    }));
+    expect(estimateStorageBytes(200_000, columns)).toBe(2860 * 1024);
+  });
+
+  it('adds the bookkeeping once per leaf', () => {
+    const struct = storageColumns('STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 16 / 3);
+    const segments = struct.map((c) => ({ ...c, leaf: false }));
+    expect(estimateStorageBytes(1, struct) - estimateStorageBytes(1, segments)).toBe(3 * 4096);
   });
 });
 
@@ -409,5 +573,140 @@ describe('measureParquetFootprint with a projection', () => {
     ]);
     await measureParquetFootprint(conn, 'f.parquet', DESCRIBE, ['a']);
     expect(chunkQuery(sql)).not.toContain('column_id IN');
+  });
+});
+
+describe('measureParquetFootprint length samples', () => {
+  /** The text sample: averages of the top-level text columns. */
+  const isTextSample = (sql: string) => /^SELECT avg\(/.test(sql);
+  /** The nested sample: sums over the nested columns' values. */
+  const isNestedSample = (sql: string) => sql.startsWith('SELECT count(*) AS n');
+
+  /**
+   * A connection that answers the estimate's queries for a 100,000-row file,
+   * the two samples with the rows given (or rejects them with the error
+   * given), and records them.
+   */
+  function sampleConnection(samples: {
+    text?: Record<string, number> | Error;
+    nested?: Record<string, number> | Error;
+  }) {
+    const sql: string[] = [];
+    const conn = {
+      query: (query: string) => {
+        sql.push(query);
+        const answer = isTextSample(query)
+          ? samples.text
+          : isNestedSample(query)
+            ? samples.nested
+            : query.includes('parquet_file_metadata')
+              ? { num_rows: 100_000, file_size_bytes: 10_000_000 }
+              : { bytes: 100 };
+        if (answer instanceof Error) return Promise.reject(answer);
+        const rows = [answer ?? {}];
+        return Promise.resolve({ toArray: () => rows.map((row) => ({ toJSON: () => row })) });
+      },
+    };
+    return { conn: conn as unknown as Parameters<typeof measureParquetFootprint>[0], sql };
+  }
+
+  const describeRows = (columns: Record<string, string>) =>
+    Object.entries(columns).map(([column_name, column_type]) => ({ column_name, column_type }));
+
+  /** The table estimate for 100,000 rows of these columns, after __rowid__. */
+  const tableBytes = (...columns: ReturnType<typeof storageColumns>[]) =>
+    estimateStorageBytes(100_000, [...storageColumns('BIGINT'), ...columns.flat()]);
+
+  it('measures top-level text in the text sample, and text in lists and structs apart', async () => {
+    const { conn, sql } = sampleConnection({});
+    await measureParquetFootprint(
+      conn,
+      'f.parquet',
+      describeRows({
+        note: 'VARCHAR',
+        doc: 'JSON',
+        raw: 'BLOB',
+        tags: 'VARCHAR[]',
+        docs: 'JSON[]',
+        point: 'STRUCT(x DOUBLE, tier VARCHAR)',
+        attrs: 'MAP(VARCHAR, INTEGER)',
+        embedding: 'FLOAT[768]',
+      }),
+    );
+    const text = sql.filter(isTextSample);
+    const nested = sql.filter(isNestedSample);
+    expect(text).toHaveLength(1);
+    expect(nested).toHaveLength(1);
+
+    // strlen of a list is a Binder error, and strlen of JSON is one until
+    // the json extension loads: either used to fail the whole text sample.
+    expect(text[0]).toContain('avg(strlen(CAST("note" AS VARCHAR))) AS "0"');
+    expect(text[0]).toContain('avg(strlen(CAST("doc" AS VARCHAR))) AS "1"');
+    expect(text[0]).toContain('avg(octet_length("raw")) AS "2"');
+    expect(text[0]).not.toMatch(/"(tags|docs|point|attrs|embedding)"/);
+
+    expect(nested[0]).toContain('coalesce(len("tags"), 0)');
+    expect(nested[0]).toContain(
+      'list_transform("tags", lambda __dt_item: coalesce(strlen(CAST(__dt_item AS VARCHAR)), 0))',
+    );
+    expect(nested[0]).toContain('list_transform("docs", lambda __dt_item:');
+    expect(nested[0]).toContain(
+      'coalesce(strlen(CAST(struct_extract_at("point", 2) AS VARCHAR)), 0)',
+    );
+    expect(nested[0]).toContain('coalesce(cardinality("attrs"), 0)');
+    expect(nested[0]).toContain('list_transform(map_keys("attrs"), lambda __dt_item:');
+    // Nothing to measure in an array of floats: its size is in its type.
+    expect(nested[0]).not.toContain('"embedding"');
+  });
+
+  it('keeps the text lengths when the nested sample fails', async () => {
+    const { conn } = sampleConnection({ text: { 0: 120 }, nested: new Error('Binder Error') });
+    const footprint = await measureParquetFootprint(
+      conn,
+      'f.parquet',
+      describeRows({ note: 'VARCHAR', tags: 'VARCHAR[]' }),
+    );
+    expect(footprint.tableBytes).toBe(
+      tableBytes(storageColumns('VARCHAR', 120), storageColumns('VARCHAR[]')),
+    );
+  });
+
+  it('keeps the nested lengths when the text sample fails', async () => {
+    // 100 rows: `tags` holds 300 items of 1,500 bytes; `v` 100 VARIANTs of
+    // 4,000 characters and 700 nodes.
+    const nested = { n: 100, 0: 300, 1: 1500, 2: 300, 3: 4000, 4: 700, 5: 100 };
+    const { conn } = sampleConnection({ text: new Error('Binder Error'), nested });
+    const footprint = await measureParquetFootprint(
+      conn,
+      'f.parquet',
+      describeRows({ note: 'VARCHAR', tags: 'VARCHAR[]', v: 'VARIANT' }),
+    );
+    expect(footprint.tableBytes).toBe(
+      tableBytes(
+        storageColumns('VARCHAR'),
+        storageColumns('VARCHAR[]', 5, { items: 3 }),
+        storageColumns('VARIANT', 8, { variant: { length: 40, nodes: 7 } }),
+      ),
+    );
+  });
+
+  it('reaches text through struct fields, union members and the outermost list only', async () => {
+    const { conn, sql } = sampleConnection({});
+    await measureParquetFootprint(
+      conn,
+      'f.parquet',
+      describeRows({
+        people: 'STRUCT("name" VARCHAR, langs VARCHAR[])[]',
+        u: `UNION(num INTEGER, "it's" VARCHAR)`,
+      }),
+    );
+    const nested = sql.find(isNestedSample)!;
+    expect(nested).toContain('coalesce(len("people"), 0)');
+    expect(nested).toContain(
+      'list_transform("people", lambda __dt_item: coalesce(strlen(CAST(struct_extract_at(__dt_item, 1) AS VARCHAR)), 0))',
+    );
+    // A list inside the outermost one is not entered.
+    expect(nested).not.toContain('struct_extract_at(__dt_item, 2)');
+    expect(nested).toContain(`strlen(CAST(union_extract("u", 'it''s') AS VARCHAR))`);
   });
 });

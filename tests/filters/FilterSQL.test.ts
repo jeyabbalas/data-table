@@ -863,3 +863,162 @@ describe('Phase 5 — filter coverage gaps', () => {
     });
   });
 });
+
+// ==========================================
+// valueType: 'text' — comparing a column's DuckDB text
+// ==========================================
+
+describe("filterToSQL with valueType: 'text'", () => {
+  describe('point filter', () => {
+    it('compares the column cast to VARCHAR with a text literal', () => {
+      const filter: Filter = {
+        type: 'point',
+        column: 'tags',
+        value: '[red, green]',
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(`CAST("tags" AS VARCHAR) = '[red, green]'`);
+    });
+
+    it('doubles every single quote in the value', () => {
+      // DuckDB writes a quote inside a nested string as \' — the backslash
+      // stays as it is, the quote is doubled.
+      const filter: Filter = {
+        type: 'point',
+        column: 'point',
+        value: "{'x': 1.25, 'y': 0.58, 'tier': 'it\\'s'}",
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(
+        `CAST("point" AS VARCHAR) = '{''x'': 1.25, ''y'': 0.58, ''tier'': ''it\\''s''}'`,
+      );
+    });
+
+    it('keeps IS NULL on the column itself for a null value', () => {
+      const filter: Filter = { type: 'point', column: 'tags', value: null, valueType: 'text' };
+      expect(filterToSQL(filter)).toBe('"tags" IS NULL');
+    });
+
+    it('takes a number, a boolean or a bigint as text, never as a bare literal', () => {
+      // A bare 42 would make DuckDB cast the column's text to INTEGER, which
+      // fails on any text that is not a number.
+      expect(filterToSQL({ type: 'point', column: 'u', value: 42, valueType: 'text' })).toBe(
+        `CAST("u" AS VARCHAR) = '42'`,
+      );
+      expect(filterToSQL({ type: 'point', column: 'v', value: true, valueType: 'text' })).toBe(
+        `CAST("v" AS VARCHAR) = 'true'`,
+      );
+      const big = { type: 'point', column: 'v', value: 9007199254740993n, valueType: 'text' };
+      expect(filterToSQL(big as unknown as Filter)).toBe(
+        `CAST("v" AS VARCHAR) = '9007199254740993'`,
+      );
+    });
+
+    it('takes a Date by its ISO string', () => {
+      const value = new Date('2024-06-01T12:00:00.000Z');
+      expect(filterToSQL({ type: 'point', column: 'v', value, valueType: 'text' })).toBe(
+        `CAST("v" AS VARCHAR) = '2024-06-01T12:00:00.000Z'`,
+      );
+    });
+
+    it('quotes an odd column name inside the cast', () => {
+      const filter: Filter = { type: 'point', column: 'my "col"', value: 'x', valueType: 'text' };
+      expect(filterToSQL(filter)).toBe(`CAST("my ""col""" AS VARCHAR) = 'x'`);
+    });
+
+    it('leaves a filter without valueType comparing the value', () => {
+      expect(filterToSQL({ type: 'point', column: 'tags', value: '[red, green]' })).toBe(
+        `"tags" = '[red, green]'`,
+      );
+    });
+  });
+
+  describe('set filter', () => {
+    it('compares the text with IN', () => {
+      const filter: Filter = {
+        type: 'set',
+        column: 'tier_list',
+        values: ['[NULL]', "['NULL']"],
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(`CAST("tier_list" AS VARCHAR) IN ('[NULL]', '[''NULL'']')`);
+    });
+
+    it('adds IS NULL on the column itself with includeNull', () => {
+      const filter: Filter = {
+        type: 'set',
+        column: 'tags',
+        values: ['[]'],
+        includeNull: true,
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(`(CAST("tags" AS VARCHAR) IN ('[]') OR "tags" IS NULL)`);
+    });
+
+    it('formats every value as text, a null one as NULL', () => {
+      const filter: Filter = {
+        type: 'set',
+        column: 'u',
+        values: [0, '0', false, null, "it's"],
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(
+        `CAST("u" AS VARCHAR) IN ('0', '0', 'false', NULL, 'it''s')`,
+      );
+    });
+
+    it('keeps the empty set as it is', () => {
+      expect(filterToSQL({ type: 'set', column: 'x', values: [], valueType: 'text' })).toBe(
+        'FALSE',
+      );
+      expect(
+        filterToSQL({
+          type: 'set',
+          column: 'x',
+          values: [],
+          includeNull: true,
+          valueType: 'text',
+        }),
+      ).toBe('"x" IS NULL');
+    });
+  });
+
+  describe('not-set filter', () => {
+    it('compares the text with NOT IN', () => {
+      const filter: Filter = {
+        type: 'not-set',
+        column: 'attrs',
+        values: ['{k1=1, k2=2}', '{}'],
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(`CAST("attrs" AS VARCHAR) NOT IN ('{k1=1, k2=2}', '{}')`);
+    });
+
+    it('adds IS NULL on the column itself with includeNull', () => {
+      const filter: Filter = {
+        type: 'not-set',
+        column: 'v',
+        values: [42],
+        includeNull: true,
+        valueType: 'text',
+      };
+      expect(filterToSQL(filter)).toBe(`(CAST("v" AS VARCHAR) NOT IN ('42') OR "v" IS NULL)`);
+    });
+
+    it('keeps the empty set as it is', () => {
+      expect(filterToSQL({ type: 'not-set', column: 'x', values: [], valueType: 'text' })).toBe(
+        'TRUE',
+      );
+    });
+  });
+
+  it('joins with other filters in a WHERE clause', () => {
+    const filters: Filter[] = [
+      { type: 'point', column: 'u', value: '0', valueType: 'text' },
+      { type: 'range', column: 'id', min: 0, max: 10 },
+    ];
+    expect(filtersToWhereClause(filters)).toBe(
+      `CAST("u" AS VARCHAR) = '0' AND ("id" >= 0 AND "id" < 10)`,
+    );
+  });
+});

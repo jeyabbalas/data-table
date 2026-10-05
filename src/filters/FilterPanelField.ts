@@ -9,6 +9,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { parseDuckDBType } from '../core/duckdbType';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
@@ -559,6 +560,19 @@ export class FilterPanelField {
     const col = this.column.name;
 
     if (mode === 'exact') {
+      // A nested value is matched by its DuckDB text, the text the grid
+      // shows. Compared as a value, the text would have to read as a list,
+      // struct or map (a Conversion Error when it does not), a UNION would
+      // find only the member the text reads as, and a VARIANT would fail on
+      // values of other types. A JSON value too: compared as JSON, text that
+      // is not JSON is a Conversion Error, and JSON that is compares as its
+      // text anyway. The pattern modes below already compare text.
+      if (
+        this.column.type === 'nested' ||
+        parseDuckDBType(this.column.originalType ?? '').kind === 'json'
+      ) {
+        return { type: 'point', column: col, value, valueType: 'text' };
+      }
       return { type: 'point', column: col, value };
     }
     return {

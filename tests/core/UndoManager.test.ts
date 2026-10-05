@@ -4,6 +4,7 @@ import {
   captureSnapshot,
   applySnapshot,
   derivedColumnsEqual,
+  snapshotsEqual,
 } from '@/core/UndoManager';
 import type { StateSnapshot } from '@/core/UndoManager';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
@@ -819,6 +820,75 @@ describe('applySnapshot — equality-guarded signal updates', () => {
     expect(callbacks.pinnedColumns).not.toHaveBeenCalled();
     expect(callbacks.columnWidths).not.toHaveBeenCalled();
     expect(callbacks.hiddenColumnInfo).not.toHaveBeenCalled();
+  });
+});
+
+// --- Filter valueType in equality ---
+
+describe('filter equality — valueType', () => {
+  const withFilters = (...filters: Filter[]) => createTestSnapshot({ filters });
+
+  it('tells a text filter from a value filter with the same value', () => {
+    // CAST("tags" AS VARCHAR) = '[a]' is not "tags" = '[a]'.
+    expect(
+      snapshotsEqual(
+        withFilters({ type: 'point', column: 'tags', value: '[a]' }),
+        withFilters({ type: 'point', column: 'tags', value: '[a]', valueType: 'text' }),
+      ),
+    ).toBe(false);
+    expect(
+      snapshotsEqual(
+        withFilters({ type: 'point', column: 'tags', value: '[a]', valueType: 'text' }),
+        withFilters({ type: 'point', column: 'tags', value: '[a]', valueType: 'text' }),
+      ),
+    ).toBe(true);
+  });
+
+  it.each(['set', 'not-set'] as const)('compares valueType on %s filters', (type) => {
+    const plain = withFilters({ type, column: 'u', values: ['0'], includeNull: true });
+    const text = withFilters({
+      type,
+      column: 'u',
+      values: ['0'],
+      includeNull: true,
+      valueType: 'text',
+    });
+    expect(snapshotsEqual(plain, text)).toBe(false);
+    expect(snapshotsEqual(text, structuredClone(text))).toBe(true);
+  });
+
+  it('compares valueType on range filters', () => {
+    const range = { type: 'range', column: 'd', min: '1 day', max: '2 days' } as const;
+    expect(
+      snapshotsEqual(withFilters(range), withFilters({ ...range, valueType: 'interval' })),
+    ).toBe(false);
+    expect(
+      snapshotsEqual(
+        withFilters({ ...range, valueType: 'interval' }),
+        withFilters({ ...range, valueType: 'interval' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('applySnapshot writes the filters when only valueType differs', () => {
+    const state = setupState();
+    state.filters.set([{ type: 'point', column: 'name', value: '[a]' }]);
+    const snapshot = captureSnapshot(state);
+    state.filters.set([{ type: 'point', column: 'name', value: '[a]', valueType: 'text' }]);
+
+    const cb = vi.fn();
+    state.filters.subscribe(cb);
+    applySnapshot(state, snapshot);
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(state.filters.get()).toEqual([{ type: 'point', column: 'name', value: '[a]' }]);
+  });
+
+  it('captureSnapshot keeps valueType', () => {
+    const state = setupState();
+    const filter: Filter = { type: 'set', column: 'name', values: ['[a]'], valueType: 'text' };
+    state.filters.set([filter]);
+    expect(captureSnapshot(state).filters).toEqual([filter]);
   });
 });
 

@@ -32,6 +32,34 @@ export interface PointFilter {
   type: 'point';
   column: string;
   value: string | number | boolean | Date | null;
+  /**
+   * What the value is compared with. Left out, it is the column's value:
+   * `"col" = 'x'`, where DuckDB reads the literal as the column's type.
+   *
+   * `'text'` compares the column's DuckDB text instead,
+   * `CAST("col" AS VARCHAR) = 'x'`, and takes the value as text (a number or
+   * boolean by its `String()` form, a `Date` by its ISO string). This is how a
+   * nested column (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) is matched
+   * exactly: its text is what the grid shows, so the cell `[red, green]`
+   * matches the value `'[red, green]'`. Compared as a value, the text would
+   * be read as a list, struct or map, which fails with a Conversion Error on
+   * text that does not read as one; a UNION would read it as one member only
+   * (`0` finds the text `'0'` but not the integer `0`, though both show `0`);
+   * and a VARIANT fails on any value of another type. The filter panel's
+   * "exact" mode sets it on nested columns.
+   *
+   * A `null` value still filters `"col" IS NULL`.
+   *
+   * @example
+   * // A VARCHAR[] column whose cell reads [red, green]
+   * table.actions.addFilter({
+   *   type: 'point',
+   *   column: 'tags',
+   *   value: '[red, green]',
+   *   valueType: 'text',
+   * });
+   */
+  valueType?: 'text';
 }
 
 /**
@@ -44,6 +72,21 @@ export interface SetFilter {
   values: unknown[];
   /** When true, NULL rows are included (generates `col IN (...) OR col IS NULL`). */
   includeNull?: boolean;
+  /**
+   * `'text'` compares the column's DuckDB text with the values, taken as
+   * text: `CAST("col" AS VARCHAR) IN (…)`. The `IS NULL` that
+   * {@link includeNull} adds still tests the column itself. See
+   * {@link PointFilter.valueType}.
+   *
+   * @example
+   * table.actions.addFilter({
+   *   type: 'set',
+   *   column: 'point',
+   *   values: ["{'x': 1.25, 'y': 0.58, 'tier': bronze}", "{'x': 2.0, 'y': 1.5, 'tier': gold}"],
+   *   valueType: 'text',
+   * });
+   */
+  valueType?: 'text';
 }
 
 /**
@@ -55,6 +98,23 @@ export interface NotSetFilter {
   values: unknown[];
   /** When true, NULL rows are included (generates `col NOT IN (...) OR col IS NULL`). */
   includeNull?: boolean;
+  /**
+   * `'text'` compares the column's DuckDB text with the values, taken as
+   * text: `CAST("col" AS VARCHAR) NOT IN (…)`. The `IS NULL` that
+   * {@link includeNull} adds still tests the column itself. See
+   * {@link PointFilter.valueType}.
+   *
+   * @example
+   * // Every row but the empty lists, NULL rows included
+   * table.actions.addFilter({
+   *   type: 'not-set',
+   *   column: 'tags',
+   *   values: ['[]'],
+   *   includeNull: true,
+   *   valueType: 'text',
+   * });
+   */
+  valueType?: 'text';
 }
 
 /**

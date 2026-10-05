@@ -60,17 +60,67 @@ function truncateSQL(sql: string, maxLen: number): string {
 }
 
 /**
+ * Most characters of one value a chip shows. A nested value's text runs to
+ * 1,000 characters, and so can the value of an exact filter on it; the chip
+ * is at most 280px wide and clips its text there anyway. Cutting each value
+ * well past that width changes nothing on screen but keeps the chip's text,
+ * which a screen reader reads out, short. The chip's `title` keeps every
+ * value whole.
+ */
+export const CHIP_VALUE_MAX_LENGTH = 60;
+
+let graphemeSegmenter: Intl.Segmenter | null | undefined;
+
+/**
+ * Cut `text` to at most `max` characters, the last of them `…`. Characters
+ * are graphemes where the runtime has `Intl.Segmenter`, so an emoji sequence
+ * or a letter with its accent is never split, else code points.
+ */
+function shortenText(text: string, max: number): string {
+  // A string's UTF-16 length is never below its count of characters.
+  if (text.length <= max) return text;
+  if (graphemeSegmenter === undefined) {
+    graphemeSegmenter =
+      typeof Intl.Segmenter === 'function'
+        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+        : null;
+  }
+  // Read one character past `max`, to learn whether there is more to cut.
+  const head: string[] = [];
+  if (graphemeSegmenter) {
+    for (const { segment } of graphemeSegmenter.segment(text)) {
+      head.push(segment);
+      if (head.length > max) break;
+    }
+  } else {
+    for (const point of text) {
+      head.push(point);
+      if (head.length > max) break;
+    }
+  }
+  if (head.length <= max) return text;
+  return head.slice(0, max - 1).join('') + '\u2026';
+}
+
+/**
  * Format a filter into a human-readable description.
  *
  * @param filter - The filter to format.
  * @param messages - Resolved i18n strings. Defaults to English.
+ * @param options - `maxValueLength` cuts each value, and a pattern, to that
+ *   many characters with `…`. Values are whole by default.
  * @returns Object with column name and description text.
  */
 export function formatFilter(
   filter: Filter,
   messages: Strings = defaultStrings,
+  options: { maxValueLength?: number } = {},
 ): { column: string; description: string } {
   const d = messages.filters.chipDescriptions;
+  const maxLength = options.maxValueLength;
+  const fit = (text: string): string =>
+    maxLength === undefined ? text : shortenText(text, maxLength);
+  const show = (value: unknown): string => fit(formatDisplayValue(value));
   switch (filter.type) {
     case 'range': {
       const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
@@ -81,32 +131,32 @@ export function formatFilter(
       }
       if (minIsOpen) {
         const op = filter.maxInclusive ? '\u2264' : '<';
-        return { column: filter.column, description: `${op} ${formatDisplayValue(filter.max)}` };
+        return { column: filter.column, description: `${op} ${show(filter.max)}` };
       }
       if (maxIsOpen) {
         const op = filter.minExclusive ? '>' : '\u2265';
-        return { column: filter.column, description: `${op} ${formatDisplayValue(filter.min)}` };
+        return { column: filter.column, description: `${op} ${show(filter.min)}` };
       }
-      const min = formatDisplayValue(filter.min);
-      const max = formatDisplayValue(filter.max);
+      const min = show(filter.min);
+      const max = show(filter.max);
       return { column: filter.column, description: `${min} ${d.rangeSeparator} ${max}` };
     }
     case 'point': {
       return {
         column: filter.column,
-        description: `${d.pointPrefix} ${formatDisplayValue(filter.value)}`,
+        description: `${d.pointPrefix} ${show(filter.value)}`,
       };
     }
     case 'set': {
       const maxShow = 3;
-      const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
+      const shown = filter.values.slice(0, maxShow).map(show);
       const rest = filter.values.length - maxShow;
       const list = rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
       return { column: filter.column, description: d.inSet(list, !!filter.includeNull) };
     }
     case 'not-set': {
       const maxShow = 3;
-      const shown = filter.values.slice(0, maxShow).map(formatDisplayValue);
+      const shown = filter.values.slice(0, maxShow).map(show);
       const rest = filter.values.length - maxShow;
       const list = rest > 0 ? `${shown.join(', ')}, ${d.valueListMore(rest)}` : shown.join(', ');
       return { column: filter.column, description: d.notInSet(list, !!filter.includeNull) };
@@ -126,7 +176,8 @@ export function formatFilter(
             : filter.mode === 'regex'
               ? d.patternModes.regex
               : d.patternModes.contains;
-      const quote = filter.mode === 'regex' ? `/${filter.pattern}/` : `"${filter.pattern}"`;
+      const pattern = fit(filter.pattern);
+      const quote = filter.mode === 'regex' ? `/${pattern}/` : `"${pattern}"`;
       return {
         column: filter.column,
         description: `${modeLabel} ${quote}`,
@@ -161,12 +212,17 @@ export class FilterChip {
   }
 
   private createElement(): HTMLElement {
-    const { column, description } = formatFilter(this.filter, this.messages);
+    // The chip shows each value cut short; its title keeps them whole. The
+    // remove button is named by the column alone, however long the value.
+    const { column, description } = formatFilter(this.filter, this.messages, {
+      maxValueLength: CHIP_VALUE_MAX_LENGTH,
+    });
+    const fullDescription = formatFilter(this.filter, this.messages).description;
 
     // Container span
     const chip = document.createElement('span');
     chip.className = `${this.prefix}-filter-chip`;
-    chip.title = `${column} ${description}`;
+    chip.title = `${column} ${fullDescription}`;
 
     // Label area
     const label = document.createElement('span');

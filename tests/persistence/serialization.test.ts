@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
-import type { RangeFilter, SetFilter } from '@/filters/FilterTypes';
+import type { Filter, RangeFilter, SetFilter } from '@/filters/FilterTypes';
 import {
   snapshotFromState,
   restoreStateFromSnapshot,
@@ -1251,5 +1251,85 @@ describe('deserializeStateSnapshot — column order', () => {
     expect(entry.visibleColumns).toEqual(['age', 'name']);
     expect(entry.columnOrder).toEqual(['age', 'id', 'name', 'created']);
     expect(entry.pinnedColumns).toEqual(['age']);
+  });
+});
+
+// =========================================
+// Filters comparing a nested column's text (valueType) — session and undo
+// =========================================
+
+describe('filters with valueType survive the session and the undo stacks', () => {
+  // A text filter restored without its valueType would compare the value
+  // instead: "tags" = '[a, b]' rather than CAST("tags" AS VARCHAR) = '[a, b]'.
+  const nestedSchema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+    {
+      name: 'choice',
+      type: 'nested',
+      nullable: true,
+      originalType: 'UNION(i INTEGER, s VARCHAR)',
+    },
+    { name: 'point', type: 'nested', nullable: true, originalType: 'STRUCT(x DOUBLE)' },
+    { name: 'wait', type: 'interval', nullable: true, originalType: 'INTERVAL' },
+  ];
+  const filters: Filter[] = [
+    { type: 'point', column: 'tags', value: "['it\\'s', NULL]", valueType: 'text' },
+    { type: 'set', column: 'choice', values: ['0', '42'], includeNull: true, valueType: 'text' },
+    { type: 'not-set', column: 'point', values: ["{'x': 1.5}"], valueType: 'text' },
+    { type: 'range', column: 'wait', min: '1 day', max: '2 days', valueType: 'interval' },
+  ];
+
+  it('restores them from a session snapshot, as IndexedDB and as JSON give it back', () => {
+    const state = setupState(nestedSchema);
+    state.filters.set(filters);
+    const snapshot = snapshotFromState(state);
+
+    for (const stored of [structuredClone(snapshot), JSON.parse(JSON.stringify(snapshot))]) {
+      const restored = setupState(nestedSchema);
+      restoreStateFromSnapshot(restored, stored as SessionSnapshot);
+      expect(restored.filters.get()).toEqual(filters);
+    }
+  });
+
+  it('keeps them in a serialized undo entry', () => {
+    const entry = serializeStateSnapshot({
+      filters,
+      sortColumns: [],
+      visibleColumns: ['id', 'tags'],
+      columnOrder: ['id', 'tags', 'choice', 'point', 'wait'],
+      columnWidths: new Map(),
+      pinnedColumns: [],
+      hiddenColumnInfo: new Map(),
+      derivedColumns: [],
+    });
+    expect(entry.filters).toEqual(filters);
+    const back = deserializeStateSnapshot(
+      structuredClone(entry),
+      new Set(nestedSchema.map((c) => c.name)),
+    );
+    expect(back.filters).toEqual(filters);
+  });
+
+  it('restores the undo and redo stacks saved with the session', () => {
+    const state = setupState(nestedSchema);
+    const undoManager = new UndoManager();
+    undoManager.push(captureSnapshot(state));
+    state.filters.set(filters.slice(0, 2));
+    undoManager.push(captureSnapshot(state));
+    state.filters.set(filters);
+    // One step back, so the redo stack holds the full set.
+    const previous = undoManager.undo(captureSnapshot(state));
+    state.filters.set(previous!.filters);
+
+    const snapshot = structuredClone(snapshotFromState(state, undoManager));
+
+    const restored = setupState(nestedSchema);
+    const restoredUndo = new UndoManager();
+    restoreStateFromSnapshot(restored, snapshot, restoredUndo);
+    const { undoStack, redoStack } = restoredUndo.getStacks();
+    expect(undoStack[0]!.filters).toEqual([]);
+    expect(redoStack[0]!.filters).toEqual(filters);
+    expect(restored.filters.get()).toEqual(filters.slice(0, 2));
   });
 });

@@ -62,6 +62,8 @@ function sortColumnsEqual(a: SortColumn[], b: SortColumn[]): boolean {
   return true;
 }
 
+// `valueType` changes what a filter compares — `CAST(col AS VARCHAR) = 'x'`
+// is not `col = 'x'` — so two filters that differ only in it are different.
 function filterEqual(a: Filter, b: Filter): boolean {
   if (a.type !== b.type || a.column !== b.column) return false;
   switch (a.type) {
@@ -71,15 +73,19 @@ function filterEqual(a: Filter, b: Filter): boolean {
         valueEqual(a.min, br.min) &&
         valueEqual(a.max, br.max) &&
         (a.maxInclusive ?? false) === (br.maxInclusive ?? false) &&
-        (a.minExclusive ?? false) === (br.minExclusive ?? false)
+        (a.minExclusive ?? false) === (br.minExclusive ?? false) &&
+        a.valueType === br.valueType
       );
     }
-    case 'point':
-      return valueEqual(a.value, (b as typeof a).value);
+    case 'point': {
+      const bp = b as typeof a;
+      return valueEqual(a.value, bp.value) && a.valueType === bp.valueType;
+    }
     case 'set':
     case 'not-set': {
       const bs = b as typeof a;
       if ((a.includeNull ?? false) !== (bs.includeNull ?? false)) return false;
+      if (a.valueType !== bs.valueType) return false;
       if (a.values.length !== bs.values.length) return false;
       for (let i = 0; i < a.values.length; i++) {
         if (!valueEqual(a.values[i], bs.values[i])) return false;

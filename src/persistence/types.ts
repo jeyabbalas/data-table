@@ -35,6 +35,8 @@ export interface SerializedRangeFilter {
   max: number | string | DateWrapper;
   maxInclusive?: boolean;
   minExclusive?: boolean;
+  /** As {@link RangeFilter.valueType}: `'interval'` bounds are INTERVAL literals. */
+  valueType?: 'interval';
 }
 
 /** JSON-safe form of {@link PointFilter}: any `Date` operand becomes a {@link DateWrapper}. */
@@ -42,6 +44,8 @@ export interface SerializedPointFilter {
   type: 'point';
   column: string;
   value: string | number | boolean | DateWrapper | null;
+  /** As {@link PointFilter.valueType}: `'text'` compares the column's DuckDB text. */
+  valueType?: 'text';
 }
 
 /** JSON-safe form of {@link SetFilter}; values pass through `serializeValue`. */
@@ -50,6 +54,8 @@ export interface SerializedSetFilter {
   column: string;
   values: unknown[];
   includeNull?: boolean;
+  /** As {@link SetFilter.valueType}: `'text'` compares the column's DuckDB text. */
+  valueType?: 'text';
 }
 
 /** JSON-safe form of {@link NotSetFilter}; values pass through `serializeValue`. */
@@ -58,6 +64,8 @@ export interface SerializedNotSetFilter {
   column: string;
   values: unknown[];
   includeNull?: boolean;
+  /** As {@link NotSetFilter.valueType}: `'text'` compares the column's DuckDB text. */
+  valueType?: 'text';
 }
 
 /**

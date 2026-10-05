@@ -7,7 +7,7 @@
  */
 
 import { SQLValidationError } from '../core/errors';
-import type { Filter } from '../core/types';
+import type { Filter, NotSetFilter, SetFilter } from '../core/types';
 
 /**
  * Quote a SQL identifier (table/column name) for safe DuckDB use.
@@ -90,6 +90,38 @@ export function formatSQLValue(value: unknown): string {
 }
 
 /**
+ * Format a value as a VARCHAR literal, for a filter that compares a column's
+ * DuckDB text (`valueType: 'text'`). A bare `42` or `TRUE` beside
+ * `CAST(col AS VARCHAR)` would make DuckDB cast the text to a number or
+ * boolean instead, a Conversion Error on any text that is not one. So every
+ * value goes in as text: strings as they are, numbers and booleans by their
+ * `String()` form, a `Date` by its ISO string. NULL stays `NULL`.
+ */
+function formatTextValue(value: unknown): string {
+  if (value === null || value === undefined || typeof value === 'string' || value instanceof Date) {
+    return formatSQLValue(value);
+  }
+  return formatSQLValue(String(value));
+}
+
+/**
+ * The two sides of a set or not-set filter's `IN`: the quoted column and its
+ * formatted values, or with `valueType: 'text'` the column's text and the
+ * values as text. `includeNull` adds an `IS NULL` on the column itself either
+ * way: a value's text is NULL exactly when the value is, so the plain test
+ * says the same without the cast.
+ */
+function membershipOperands(
+  column: string,
+  filter: SetFilter | NotSetFilter,
+): [target: string, list: string] {
+  if (filter.valueType === 'text') {
+    return [`CAST(${column} AS VARCHAR)`, filter.values.map(formatTextValue).join(', ')];
+  }
+  return [column, filter.values.map(formatSQLValue).join(', ')];
+}
+
+/**
  * Escape special LIKE characters (%, _, \) in a pattern string.
  * Uses backslash as the escape character.
  */
@@ -143,6 +175,9 @@ export function filterToSQL(filter: Filter): string {
       if (filter.value === null || filter.value === undefined) {
         return `${column} IS NULL`;
       }
+      if (filter.valueType === 'text') {
+        return `CAST(${column} AS VARCHAR) = ${formatTextValue(filter.value)}`;
+      }
       const val = formatSQLValue(filter.value);
       return `${column} = ${val}`;
     }
@@ -151,8 +186,8 @@ export function filterToSQL(filter: Filter): string {
       if (filter.values.length === 0) {
         return filter.includeNull ? `${column} IS NULL` : 'FALSE';
       }
-      const formattedValues = filter.values.map(formatSQLValue).join(', ');
-      const inClause = `${column} IN (${formattedValues})`;
+      const [target, list] = membershipOperands(column, filter);
+      const inClause = `${target} IN (${list})`;
       if (filter.includeNull) {
         return `(${inClause} OR ${column} IS NULL)`;
       }
@@ -164,8 +199,8 @@ export function filterToSQL(filter: Filter): string {
         // Nothing excluded → matches everything (with or without nulls)
         return 'TRUE';
       }
-      const formattedValues = filter.values.map(formatSQLValue).join(', ');
-      const notIn = `${column} NOT IN (${formattedValues})`;
+      const [target, list] = membershipOperands(column, filter);
+      const notIn = `${target} NOT IN (${list})`;
       if (filter.includeNull) {
         return `(${notIn} OR ${column} IS NULL)`;
       }

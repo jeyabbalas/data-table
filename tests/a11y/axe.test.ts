@@ -29,6 +29,7 @@ import { ExportDialog } from '@/export/ExportDialog';
 import { AnnotationPopover } from '@/table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from '@/table/ColumnHeaderTooltipPopover';
 import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
+import { ExtractColumnPanel } from '@/table/ExtractColumnPanel';
 import { ValueInspector } from '@/table/ValueInspector';
 import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
@@ -305,6 +306,75 @@ describe('a11y: axe-core grid scan', () => {
       expect(inspector.getElement().querySelector('.dt-value-tree__add')).toBeTruthy();
       await scan(tc.getElement());
       inspector.destroy();
+      tc.destroy();
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // Extract panel (a non-modal panel in the table root, under a header's
+  // extract button)
+  // ------------------------------------------------------------------
+
+  /**
+   * The table with a list-of-structs column, whose header has the extract
+   * button, and the extract panel open under it on a JSON field of the
+   * element: the tree, a position field, the JSON path with its hint, the
+   * "Read as" select, the name, the expression and an inline error are all
+   * in the scan.
+   */
+  function openExtractPanel(scheme: 'light' | 'dark'): {
+    tc: TableContainer;
+    panel: ExtractColumnPanel;
+  } {
+    const state = createTableState();
+    const withNested: ColumnSchema[] = [
+      ...schema,
+      {
+        name: 'people',
+        type: 'nested',
+        nullable: true,
+        originalType: 'STRUCT("name" VARCHAR, meta JSON)[]',
+      },
+    ];
+    state.schema.set(withNested);
+    initializeColumnsFromSchema(state, withNested);
+    state.totalRows.set(25);
+    state.tableName.set('test_table');
+    const actions = new StateActions(state, mockBridge);
+    const tc = new TableContainer(container, state, actions, mockBridge);
+    tc.getElement().setAttribute('data-dt-color-scheme', scheme);
+    const button = tc
+      .getElement()
+      .querySelector<HTMLElement>('.dt-col-header[data-column="people"] .dt-col-extract-btn')!;
+    expect(button).toBeTruthy();
+    const panel = new ExtractColumnPanel(state, {
+      onSubmit: vi.fn(async () => ({ success: true })),
+      colorSchemeSource: tc.getElement(),
+    });
+    tc.getElement().appendChild(panel.getElement());
+    panel.open('people', button);
+    const meta = [...panel.getElement().querySelectorAll<HTMLElement>('[role="treeitem"]')].find(
+      (item) => item.getAttribute('aria-label') === 'meta: json',
+    )!;
+    meta.click();
+    const path = panel.getElement().querySelector<HTMLInputElement>('.dt-extract-panel__path')!;
+    path.value = '$.a.';
+    path.dispatchEvent(new Event('input', { bubbles: true }));
+    return { tc, panel };
+  }
+
+  it.each(['light', 'dark'] as const)(
+    'reports zero blocking violations with the extract panel open (%s mode)',
+    async (scheme) => {
+      const { tc, panel } = openExtractPanel(scheme);
+      const el = panel.getElement();
+      expect(el.querySelector('.dt-extract-panel__steps input')).toBeTruthy();
+      expect(el.querySelector('.dt-extract-panel__path')!.getAttribute('aria-invalid')).toBe(
+        'true',
+      );
+      expect(el.querySelector('.dt-extract-panel__error')!.textContent).not.toBe('');
+      await scan(tc.getElement());
+      panel.destroy();
       tc.destroy();
     },
   );

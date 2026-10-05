@@ -76,10 +76,23 @@
     color: CanvasText;
   }
 
-  /* The value tree's active item, which a box-shadow marks otherwise. */
+  /* The value tree's active item, which a box-shadow marks otherwise; the
+     extract panel's tree of a column's type is one too. */
   .dt-value-tree__item[aria-selected='true'],
   .dt-value-tree__item:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: -2px;
+  }
+
+  /* The extract button while its panel is open, which only its colour marks
+     otherwise. */
+  .dt-col-extract-btn[aria-expanded='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  /* A field at fault, which a red border marks otherwise. */
+  .dt-extract-panel__input[aria-invalid='true'] {
+    border: 2px solid Highlight;
   }
 }

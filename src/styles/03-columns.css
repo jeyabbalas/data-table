@@ -369,6 +369,12 @@
   background: var(--dt-primary-alpha-10);
 }
 
+/* A nested or JSON column's extract button while its panel is open
+   (`aria-expanded`, which the panel sets): lit as an active button is. */
+.dt-col-extract-btn[aria-expanded='true'] {
+  color: var(--dt-primary);
+}
+
 .dt-col-action-btn svg {
   width: 18px;
   height: 18px;

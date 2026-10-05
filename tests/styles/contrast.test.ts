@@ -432,6 +432,10 @@ describe('component rules — indicators (WCAG 1.4.11)', () => {
       ],
       ['action-panel icons', paintedBy('03-columns.css', '.dt-col-action-btn')],
       ['an active action icon', paintedBy('03-columns.css', '.dt-col-action-btn--active')],
+      [
+        'the extract icon while its panel is open',
+        paintedBy('03-columns.css', ".dt-col-extract-btn[aria-expanded='true']"),
+      ],
     ];
 
     it.each(
@@ -523,6 +527,7 @@ describe('stylesheet antipatterns', () => {
       '.dt-filter-panel-body', // filter inputs
       '.dt-filter-preset-list', // preset rows, each with load/delete buttons
       '.dt-value-tree', // treeitems, the active one the tree's tab stop
+      '.dt-extract-panel__body', // the type's tree, inputs, the name field
     ]);
     const found: string[] = [];
     for (const file of componentStyleFiles()) {
@@ -704,6 +709,7 @@ describe('the value inspector', () => {
       '.dt-value-tree__key--bucket',
       '.dt-value-tree__key--position',
       '.dt-value-tree__key--json-index',
+      '.dt-value-tree__key--part',
       '.dt-value-tree__sep',
       '.dt-value-tree__type',
       '.dt-value-tree__count',
@@ -756,6 +762,58 @@ describe('the value inspector', () => {
         activeRow,
         AA_NON_TEXT,
         'the add glyph on a hovered row',
+        themeName,
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. The extract panel — its labels, hint, errors and buttons
+// ---------------------------------------------------------------------------
+
+describe('the extract panel', () => {
+  describe.each(THEME_NAMES)('%s theme', (themeName) => {
+    const panel = paintedBy('11-nested.css', '.dt-extract-panel', 'background');
+
+    /** Text set on the panel's own surface; its tree's text is checked above. */
+    const PANEL_TEXT = [
+      '.dt-extract-panel__label',
+      '.dt-extract-panel__hint',
+      '.dt-extract-panel__error',
+      '.dt-extract-panel__alert',
+    ] as const;
+
+    it.each(PANEL_TEXT)(`%s clears ${AA_NORMAL_TEXT}:1 on the panel`, (selector) => {
+      expectRatio(paintedBy('11-nested.css', selector), panel, AA_NORMAL_TEXT, selector, themeName);
+    });
+
+    it(`Add column clears ${AA_NORMAL_TEXT}:1 at rest and hovered`, () => {
+      const button = '.dt-extract-panel__button--primary';
+      expectRatio(
+        paintedBy('11-nested.css', button),
+        paintedBy('11-nested.css', button, 'background'),
+        AA_NORMAL_TEXT,
+        'Add column',
+        themeName,
+      );
+      const hovered = `${button}:hover:not(:disabled)`;
+      expectRatio(
+        paintedBy('11-nested.css', hovered),
+        paintedBy('11-nested.css', hovered, 'background'),
+        AA_NORMAL_TEXT,
+        'a hovered Add column',
+        themeName,
+      );
+    });
+
+    it(`the expression preview clears ${AA_NORMAL_TEXT}:1 on its well`, () => {
+      const preview = '.dt-extract-panel__expression';
+      expectRatio(
+        paintedBy('11-nested.css', preview),
+        paintedBy('11-nested.css', preview, 'background'),
+        AA_NORMAL_TEXT,
+        'the expression preview',
         themeName,
       );
     });

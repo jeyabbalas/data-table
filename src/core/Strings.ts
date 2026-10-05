@@ -537,6 +537,85 @@ export interface Strings {
     tooLargeToCopy: string;
     /** `aria-label` of the value inspector's × button. */
     closeLabel: string;
+
+    /**
+     * Value inspector button that adds the active node's value as a column
+     * ("extract field → column"); also the `title` of the "+" a row shows
+     * under the pointer.
+     */
+    addAsColumn: string;
+    /** Value inspector button that adds a list's, an array's or a JSON array's length as a column. */
+    addLengthAsColumn: string;
+    /** Value inspector button that adds a map's number of entries as a column. */
+    addSizeAsColumn: string;
+    /** Value inspector button that adds which member a union holds as a column. */
+    addTagAsColumn: string;
+    /** Status while a column is being added (the value inspector, the extract panel's button). */
+    adding: string;
+    /** A column could not be added, with the reason (in English, from the action): "Could not add the column: …". */
+    extractFailed: (error: string) => string;
+    /** Live-region text once a column has been added: "Column point_x added". */
+    columnAdded: (column: string) => string;
+
+    /** `aria-label` of a nested or JSON column header's extract button: "Extract from point". */
+    extractButtonLabel: (column: string) => string;
+    /** `title` of the header's extract button. */
+    extractButtonTitle: string;
+    /** Title of the extract panel, which names it for assistive technology: "Extract from point". */
+    extractTitle: (column: string) => string;
+    /** `aria-label` of the extract panel's × button. */
+    extractCloseLabel: string;
+    /** Accessible name of the extract panel's tree of the column's type: "Parts of point". */
+    extractTreeLabel: (column: string) => string;
+    /** The extract panel's text when the column's type could not be read, so has no parts. */
+    nothingToExtract: string;
+    /** The tree's leaf for a list's or an array's number of elements. */
+    lengthNode: string;
+    /** The tree's leaf for a map's number of entries. */
+    sizeNode: string;
+    /** The tree's leaf for which member a union holds. */
+    tagNode: string;
+    /** The tree's node for a list's or an array's elements, read at a position. */
+    elementNode: string;
+    /** The tree's node for a map's values, read by key. */
+    mapValueNode: string;
+    /**
+     * Label of the input for an element's 1-based position, by the list or
+     * array it is in: "Position in people". A list inside a list is named
+     * after the outer one's element: "Position in matrix › element".
+     */
+    positionLabel: (container: string) => string;
+    /** The position input holds something other than a whole number from 1 up. */
+    positionInvalid: string;
+    /** Label of the input for a map value's key, by the map: "Key in attrs". */
+    keyLabel: (container: string) => string;
+    /** The key input is empty. */
+    keyRequired: string;
+    /** Label of the extract panel's JSON path input, for a part that is JSON or VARIANT. */
+    jsonPathLabel: string;
+    /** How to write a JSON path, under the input. */
+    jsonPathHint: string;
+    /** The JSON path does not parse, by the 1-based character where it goes wrong. */
+    jsonPathInvalid: (character: number) => string;
+    /** Label of the extract panel's "Read as" select, for a part that is JSON or VARIANT. */
+    readAsLabel: string;
+    /**
+     * The "Read as" choices: a value inside JSON or VARIANT as text, a
+     * number, a boolean or JSON, or the length of the array there.
+     */
+    readAs: {
+      string: string;
+      number: string;
+      boolean: string;
+      json: string;
+      length: string;
+    };
+    /** Label of the extract panel's input for the new column's name. */
+    columnNameLabel: string;
+    /** Label of the extract panel's preview of the SQL expression the column reads. */
+    expressionLabel: string;
+    /** The extract panel's submit button. */
+    addColumn: string;
   };
 
   // =========================================
@@ -952,6 +1031,45 @@ export const defaultStrings: Strings = {
     copyFailed: 'Copy failed',
     tooLargeToCopy: 'Too large to copy',
     closeLabel: 'Close value inspector',
+
+    addAsColumn: 'Add as column',
+    addLengthAsColumn: 'Add length as column',
+    addSizeAsColumn: 'Add size as column',
+    addTagAsColumn: 'Add tag as column',
+    adding: 'Adding…',
+    extractFailed: (error) => `Could not add the column: ${error}`,
+    columnAdded: (column) => `Column ${column} added`,
+
+    extractButtonLabel: (column) => `Extract from ${column}`,
+    extractButtonTitle: 'Extract a field as a column',
+    extractTitle: (column) => `Extract from ${column}`,
+    extractCloseLabel: 'Close extract panel',
+    extractTreeLabel: (column) => `Parts of ${column}`,
+    nothingToExtract: 'This column has no parts to extract',
+    lengthNode: 'length',
+    sizeNode: 'size',
+    tagNode: 'tag',
+    elementNode: 'element',
+    mapValueNode: 'value',
+    positionLabel: (container) => `Position in ${container}`,
+    positionInvalid: 'Enter a whole number, 1 or more',
+    keyLabel: (container) => `Key in ${container}`,
+    keyRequired: 'Enter a key',
+    jsonPathLabel: 'JSON path',
+    jsonPathHint:
+      'As $.a.b[0]: keys after dots, array indexes from 0. A key with a dot, a bracket or a quote goes in brackets: $["a.b"].',
+    jsonPathInvalid: (character) => `Not a JSON path: check character ${character}`,
+    readAsLabel: 'Read as',
+    readAs: {
+      string: 'Text',
+      number: 'Number',
+      boolean: 'Boolean',
+      json: 'JSON',
+      length: 'Array length',
+    },
+    columnNameLabel: 'Column name',
+    expressionLabel: 'Expression',
+    addColumn: 'Add column',
   },
 
   errors: {

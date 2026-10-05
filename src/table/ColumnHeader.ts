@@ -5,13 +5,14 @@
  * - Column name
  * - Type label
  * - Stats line, and the slot a column's chart draws in
- * - Pin, hide, filter and sort buttons, with multi-sort badges
+ * - Pin, hide, filter and sort buttons, with multi-sort badges, and on a
+ *   nested or JSON column an extract button ("extract field → column")
  * - A drag handle and a resize handle
  *
- * The pin, hide, filter and sort buttons and the two handles are the header's
- * controls, and can be left out: a header without them is a shell, which is
- * what `TableContainer` keeps for a column far from the view (see
- * {@link ColumnHeader.setControlsMounted}). A derived column's f(x) icon stays.
+ * The buttons and the two handles are the header's controls, and can be left
+ * out: a header without them is a shell, which is what `TableContainer` keeps
+ * for a column far from the view (see {@link ColumnHeader.setControlsMounted}).
+ * A derived column's f(x) icon stays.
  *
  * Supports click to sort and Shift+click for multi-column sort.
  */
@@ -24,6 +25,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
 import { columnTypeLabel, columnTypeSpoken, columnTypeTitle } from '../nested/typeOutline';
 import type { AnnotationPopover } from './AnnotationPopover';
+import { isInspectableColumn } from './Cell';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, resolveColumnWidth } from './ColumnLayout';
 import { ColumnResizer } from './ColumnResizer';
@@ -44,6 +46,15 @@ export interface ColumnHeaderOptions {
   onFilterClick?: ((column: string, buttonElement: HTMLElement) => void) | undefined;
   /** Called when the f(x) icon on a derived column is clicked */
   onDerivedIconClick?: ((columnName: string, buttonElement: HTMLElement) => void) | undefined;
+  /**
+   * Called when the extract button is clicked, with the column name and the
+   * button, under which the extract panel opens. The button
+   * (`.dt-col-extract-btn`, after the filter button) is only on a nested or
+   * JSON column, and only with this callback: `TableContainer` passes it
+   * while extraction is on (`extractColumns`, which the facade ties to
+   * `derivedColumns`).
+   */
+  onExtractClick?: ((column: string, buttonElement: HTMLElement) => void) | undefined;
   /**
    * Show the f(x) edit icon on derived columns (default: true). When `false`,
    * the icon is not mounted and `onDerivedIconClick` is unreachable. Set by
@@ -95,6 +106,8 @@ interface HeaderControls {
   pinButton: HTMLElement;
   hideButton: HTMLElement;
   filterButton: HTMLElement;
+  /** A nested or JSON column's, while extraction is on (see `onExtractClick`). */
+  extractButton: HTMLElement | null;
   sortButton: HTMLElement;
   sortBadge: HTMLElement;
   dragHandle: HTMLElement;
@@ -268,8 +281,8 @@ export class ColumnHeader {
   }
 
   /**
-   * Build the controls: the pin, hide, filter and sort buttons, the drag
-   * handle and the resize handle.
+   * Build the controls: the pin, hide, filter, extract (a nested or JSON
+   * column's) and sort buttons, the drag handle and the resize handle.
    *
    * Every button is out of the native tab order. A 266-column table rendered
    * ~1,600 of them when every header had its controls; leaving them tabbable
@@ -321,6 +334,29 @@ export class ColumnHeader {
       </svg>
     `;
 
+    // Extract button (an arrow out of the column, ↳): a field of a nested or
+    // JSON column as a column of its own. Only where a click goes somewhere.
+    // It opens a dialog, and says whether that is open (`aria-expanded`,
+    // which the panel sets).
+    let extractBtn: HTMLButtonElement | null = null;
+    if (this.options.onExtractClick && isInspectableColumn(this.column)) {
+      extractBtn = document.createElement('button');
+      extractBtn.className = `${p}-col-action-btn ${p}-col-extract-btn`;
+      extractBtn.setAttribute('type', 'button');
+      extractBtn.setAttribute(
+        'aria-label',
+        this.messages.values.extractButtonLabel(this.column.name),
+      );
+      extractBtn.setAttribute('title', this.messages.values.extractButtonTitle);
+      extractBtn.setAttribute('aria-haspopup', 'dialog');
+      extractBtn.setAttribute('aria-expanded', 'false');
+      extractBtn.innerHTML = `
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M2.25 2.75a.75.75 0 0 1 1.5 0v6.5H10V6.5l4 3.5-4 3.5v-2.75H3a.75.75 0 0 1-.75-.75z" />
+        </svg>
+      `;
+    }
+
     // Sort button with SVG arrows
     const sortBtn = document.createElement('button');
     sortBtn.className = `${p}-col-sort-btn`;
@@ -357,10 +393,11 @@ export class ColumnHeader {
       </svg>
     `;
 
-    for (const btn of [pinBtn, hideBtn, filterBtn, sortBtn, dragHandle]) {
+    const buttons = [pinBtn, hideBtn, filterBtn, ...(extractBtn ? [extractBtn] : []), sortBtn];
+    for (const btn of [...buttons, dragHandle]) {
       btn.setAttribute('tabindex', '-1');
     }
-    this.actionPanel.append(pinBtn, hideBtn, filterBtn, sortBtn, dragHandle);
+    this.actionPanel.append(...buttons, dragHandle);
 
     // Only the sort button sorts, NOT the whole header: a resize handle's
     // release would trigger it otherwise.
@@ -368,6 +405,7 @@ export class ColumnHeader {
     pinBtn.addEventListener('click', this.handlePinClick);
     hideBtn.addEventListener('click', this.handleHideClick);
     filterBtn.addEventListener('click', this.handleFilterClick);
+    extractBtn?.addEventListener('click', this.handleExtractClick);
 
     // Create resizer for column width adjustment
     const resizer = new ColumnResizer(
@@ -400,6 +438,7 @@ export class ColumnHeader {
       pinButton: pinBtn,
       hideButton: hideBtn,
       filterButton: filterBtn,
+      extractButton: extractBtn,
       sortButton: sortBtn,
       sortBadge,
       dragHandle,
@@ -424,6 +463,7 @@ export class ColumnHeader {
     controls.pinButton.removeEventListener('click', this.handlePinClick);
     controls.hideButton.removeEventListener('click', this.handleHideClick);
     controls.filterButton.removeEventListener('click', this.handleFilterClick);
+    controls.extractButton?.removeEventListener('click', this.handleExtractClick);
     this.actionPanel.replaceChildren();
   }
 
@@ -637,6 +677,13 @@ export class ColumnHeader {
     if (this.destroyed) return;
     event.stopPropagation();
     this.options.onFilterClick?.(this.column.name, event.currentTarget as HTMLElement);
+  };
+
+  /** The extract button: open the extract panel under it. */
+  private handleExtractClick = (event: MouseEvent): void => {
+    if (this.destroyed) return;
+    event.stopPropagation();
+    this.options.onExtractClick?.(this.column.name, event.currentTarget as HTMLElement);
   };
 
   private handleDerivedIconClick = (event: MouseEvent): void => {
@@ -1103,6 +1150,7 @@ export class ColumnHeader {
       controls?.pinButton ?? null,
       controls?.hideButton ?? null,
       controls?.filterButton ?? null,
+      controls?.extractButton ?? null,
       controls?.sortButton ?? null,
     ];
     return candidates.filter((el): el is HTMLElement => el !== null && this.isControlActive(el));

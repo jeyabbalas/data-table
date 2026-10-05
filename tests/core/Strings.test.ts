@@ -101,6 +101,53 @@ describe('Strings', () => {
       expect(v.tooLargeToCopy).toBe('Too large to copy');
       expect(v.closeLabel).toBe('Close value inspector');
     });
+
+    it('ships the words of extract field → column', () => {
+      const v = defaultStrings.values;
+      // The value inspector's buttons, and what it and the table say.
+      expect(v.addAsColumn).toBe('Add as column');
+      expect(v.addLengthAsColumn).toBe('Add length as column');
+      expect(v.addSizeAsColumn).toBe('Add size as column');
+      expect(v.addTagAsColumn).toBe('Add tag as column');
+      expect(v.adding).toBe('Adding…');
+      expect(v.extractFailed('Column name "x" already exists')).toBe(
+        'Could not add the column: Column name "x" already exists',
+      );
+      expect(v.columnAdded('point_x')).toBe('Column point_x added');
+      // The header's button.
+      expect(v.extractButtonLabel('point')).toBe('Extract from point');
+      expect(v.extractButtonTitle).toBe('Extract a field as a column');
+      // The panel.
+      expect(v.extractTitle('point')).toBe('Extract from point');
+      expect(v.extractCloseLabel).toBe('Close extract panel');
+      expect(v.extractTreeLabel('point')).toBe('Parts of point');
+      expect(v.nothingToExtract).toBe('This column has no parts to extract');
+      expect(v.lengthNode).toBe('length');
+      expect(v.sizeNode).toBe('size');
+      expect(v.tagNode).toBe('tag');
+      expect(v.elementNode).toBe('element');
+      expect(v.mapValueNode).toBe('value');
+      expect(v.positionLabel('people')).toBe('Position in people');
+      expect(v.positionInvalid).toBe('Enter a whole number, 1 or more');
+      expect(v.keyLabel('attrs')).toBe('Key in attrs');
+      expect(v.keyRequired).toBe('Enter a key');
+      expect(v.jsonPathLabel).toBe('JSON path');
+      expect(v.jsonPathHint).toBe(
+        'As $.a.b[0]: keys after dots, array indexes from 0. A key with a dot, a bracket or a quote goes in brackets: $["a.b"].',
+      );
+      expect(v.jsonPathInvalid(5)).toBe('Not a JSON path: check character 5');
+      expect(v.readAsLabel).toBe('Read as');
+      expect(v.readAs).toEqual({
+        string: 'Text',
+        number: 'Number',
+        boolean: 'Boolean',
+        json: 'JSON',
+        length: 'Array length',
+      });
+      expect(v.columnNameLabel).toBe('Column name');
+      expect(v.expressionLabel).toBe('Expression');
+      expect(v.addColumn).toBe('Add column');
+    });
   });
 
   describe('mergeStrings', () => {
@@ -140,6 +187,14 @@ describe('Strings', () => {
       expect(merged.values.typeList('integer')).toBe('Liste von integer');
       expect(merged.values.typeMap('a', 'b')).toBe(defaultStrings.values.typeMap('a', 'b'));
       expect(merged.values.typeJson).toBe('JSON');
+    });
+
+    it('overrides one "Read as" choice, keeping the others', () => {
+      const merged = mergeStrings(defaultStrings, {
+        values: { readAs: { number: 'Zahl' } },
+      });
+      expect(merged.values.readAs).toEqual({ ...defaultStrings.values.readAs, number: 'Zahl' });
+      expect(merged.values.addColumn).toBe('Add column');
     });
 
     it('replaces function-valued templates wholesale', () => {

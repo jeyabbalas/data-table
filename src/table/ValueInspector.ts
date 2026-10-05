@@ -122,6 +122,13 @@ export interface ValueInspectorExtractRequest {
   rowId: number | bigint;
 }
 
+/** How an "add as column" request ended: {@link ValueInspectorExtract.onExtract}. */
+export interface ValueInspectorExtractResult {
+  success: boolean;
+  /** Why it failed, shown in the panel's status line. */
+  error?: string | undefined;
+}
+
 /**
  * Turns nodes of the tree into columns ("extract field → column"). With it,
  * the footer gets a button for each kind the active node offers, a node
@@ -140,15 +147,20 @@ export interface ValueInspectorExtractRequest {
  * ```ts
  * const extract: ValueInspectorExtract = {
  *   onExtract: ({ column, path, extract, jsonLeaf }) =>
- *     void actions.addNestedFieldColumn(column, path, { extract, jsonLeaf }),
+ *     actions.addNestedFieldColumn(column, path, { extract, jsonLeaf }),
  *   labels: { value: 'Add as column', length: 'Add length as column',
  *             size: 'Add size as column', tag: 'Add tag as column' },
  * };
  * ```
  */
 export interface ValueInspectorExtract {
-  /** Add it. The panel stays open; closing it, or not, is the caller's. */
-  onExtract(request: ValueInspectorExtractRequest): void;
+  /**
+   * Add it. The panel stays open; closing it, or not, is the caller's. Given
+   * a promise of how it ends, the panel says "Adding…" in its status line
+   * meanwhile and a failure's reason after, and drops further requests
+   * until it settles.
+   */
+  onExtract(request: ValueInspectorExtractRequest): void | Promise<ValueInspectorExtractResult>;
   /** Text of each footer button; `value`'s is also the row affordance's `title`. */
   labels: Readonly<Record<ValueInspectorExtractKind, string>>;
 }
@@ -258,6 +270,11 @@ export class ValueInspector {
   private loaded: { json: JsonNode; truncated: boolean } | null = null;
   /** What each node offers to add as a column; `null` for nothing. */
   private extractChoices = new WeakMap<ValueTreeNode, ExtractChoices | null>();
+  /**
+   * The `loadSeq` an "add as column" request was made at, until it settles:
+   * the next one is dropped meanwhile. A close lets go of it.
+   */
+  private extracting: number | null = null;
 
   // Opened, and focus not yet handed on: see the constructor's focus listener.
   private focusPending = false;
@@ -683,9 +700,9 @@ export class ValueInspector {
   private requestExtract(node: ValueTreeNode, kind: ValueInspectorExtractKind): void {
     const target = this.target;
     const choices = this.choicesOf(node);
-    if (!this.extract || !target || !choices?.kinds.has(kind)) return;
+    if (!this.extract || !target || !choices?.kinds.has(kind) || this.extracting !== null) return;
     const extract: NestedExtractKind = kind === 'size' ? 'length' : kind;
-    this.extract.onExtract({
+    const outcome = this.extract.onExtract({
       column: target.column.name,
       path: choices.path,
       extract,
@@ -696,6 +713,20 @@ export class ValueInspector {
       row: target.row,
       rowId: target.rowId,
     });
+    if (!outcome) return;
+    // Said in the status line, which a load or a close numbers anew: an
+    // outcome for a value no longer shown is dropped.
+    const seq = this.loadSeq;
+    this.extracting = seq;
+    this.setMessage(this.messages.values.adding);
+    const settle = (result: ValueInspectorExtractResult): void => {
+      if (this.extracting === seq) this.extracting = null;
+      if (seq !== this.loadSeq || this.destroyed) return;
+      this.setMessage(result.success ? '' : this.messages.values.extractFailed(result.error ?? ''));
+    };
+    outcome.then(settle, (err: unknown) =>
+      settle({ success: false, error: err instanceof Error ? err.message : String(err) }),
+    );
   }
 
   // =========================================
@@ -831,6 +862,7 @@ export class ValueInspector {
     this.destroyTree();
     this.loaded = null;
     this.extractChoices = new WeakMap();
+    this.extracting = null;
     this.target = null;
     this.onOpenChange?.(null);
   }

@@ -205,11 +205,13 @@ export interface CreateDataTableOptions {
   expressionFilter?: boolean;
 
   /**
-   * Show the derived-column UI: the "+" button at the table's right edge and
-   * the f(x) edit icon on every derived-column header. The programmatic API
+   * Show the derived-column UI: the "+" button at the table's right edge,
+   * the f(x) edit icon on every derived-column header, and "extract field →
+   * column": the extract button on every nested and JSON column header and
+   * the value inspector's "add as column" buttons. The programmatic API
    * (`actions.addDerivedColumn`, `actions.removeDerivedColumn`,
-   * `actions.updateDerivedColumn`) is unaffected by this flag — only the
-   * user-visible affordances are removed.
+   * `actions.updateDerivedColumn`, `actions.addNestedFieldColumn`) is
+   * unaffected by this flag — only the user-visible affordances are removed.
    *
    * Set this to `false` together with `expressionFilter: false` to skip
    * loading CodeMirror entirely. Consumers in that mode can omit the
@@ -617,6 +619,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     showExpressionFilter: opts.expressionFilter !== false,
     showAddColumnButton: opts.derivedColumns !== false,
     showDerivedColumnEditIcon: opts.derivedColumns !== false,
+    extractColumns: opts.derivedColumns !== false,
     editorFactory: opts.editorFactory,
     presetManager: presetManager ?? undefined,
     portalTarget: opts.portalTarget,

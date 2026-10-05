@@ -23,15 +23,17 @@
  * into VisualizationRegistry):
  *   root entry · ESM               10.85 kB   →  11.4 kB cap (5.1 %)
  *   advanced entry · ESM            2.47 kB   →   2.6 kB cap (5.3 %)
- *   stylesheet                     21.81 kB   →  22.9 kB cap (5.0 %)
- *   lazy ExportDialog chunk        94.04 kB   →  96 kB   cap (2.1 %)
+ *   stylesheet                     22.57 kB   →  23.7 kB cap (5.0 %)
+ *   lazy ExportDialog chunk        94.98 kB   → 100 kB   cap (5.3 %)
  *   lazy SQLFilterModal chunk       2.54 kB   →   2.6 kB cap (2.4 %)
  *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
  *   lazy DerivedColumnEditPanel     3.00 kB   →   3.1 kB cap (3.3 %)
  *   lazy FilterPresetPanel          2.61 kB   →   2.7 kB cap (3.4 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
- *   lazy ValueInspector chunk      10.59 kB   →  11.2 kB cap (5.8 %)
+ *   lazy ValueInspector chunk       8.51 kB   →   8.9 kB cap (4.6 %)
+ *   lazy ExtractColumnPanel chunk   5.12 kB   →   5.3 kB cap (3.5 %)
+ *   lazy TreeView chunk             2.71 kB   →   2.85 kB cap (5.2 %)
  *
  * Root entry history. It measured 7.68 kB until the column charts became
  * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
@@ -74,7 +76,9 @@
  * chart to 87.80 kB, and the cap to 92 kB. Reading cell and column values
  * exactly, nested ones as JSON, took it to 91.28 kB, and the cap to 96 kB.
  * The `codeSplitting` group in `vite.config.ts` (see the ValueInspector
- * chunk below) took it to 94.04 kB.
+ * chunk below) took it to 94.04 kB, and "extract field → column" from the
+ * UI (the header's extract button, the panels' wiring) to 94.98 kB, and the
+ * cap to 100 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -91,6 +95,16 @@
  * the root entry imports (3.94 kB, which no budget here measured), and a
  * page would load 1.07 kB more: the `codeSplitting` group in
  * `vite.config.ts` keeps them in the shared chunk.
+ *
+ * ExtractColumnPanel chunk history. New with "extract field → column" from
+ * the UI (the extract button on a nested or JSON column's header), at
+ * 5.12 kB: the panel and its JSON path parser. It loads the
+ * `extractExpression-*` chunk too, and shares the tree view with the
+ * ValueInspector chunk, so rolldown moved `TreeView` out of that chunk into
+ * a `TreeView-*` chunk the two load, measured here at 2.71 kB (cap
+ * 2.85 kB): the ValueInspector chunk measured 8.51 kB with it gone, and its
+ * cap moved from 11.2 to 8.9 kB. A page that opens both panels loads the
+ * tree once.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -115,7 +129,8 @@
  *
  * Nested columns took it from 20.51 to 20.54 kB (the header's type label),
  * and the value inspector's panel and tree to 21.81 kB, and the cap from
- * 21.5 to 22.9 kB.
+ * 21.5 to 22.9 kB. The extract panel took it to 22.57 kB, and the cap to
+ * 23.7 kB.
  *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
@@ -136,12 +151,12 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '22.9 kB',
+    limit: '23.7 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '96 kB',
+    limit: '100 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -176,6 +191,16 @@ module.exports = [
   {
     name: 'lazy ValueInspector chunk · ESM',
     path: 'dist/ValueInspector-*.js',
-    limit: '11.2 kB',
+    limit: '8.9 kB',
+  },
+  {
+    name: 'lazy ExtractColumnPanel chunk · ESM',
+    path: 'dist/ExtractColumnPanel-*.js',
+    limit: '5.3 kB',
+  },
+  {
+    name: 'lazy TreeView chunk · ESM',
+    path: 'dist/TreeView-*.js',
+    limit: '2.85 kB',
   },
 ];

@@ -790,4 +790,115 @@ describe('ColumnHeader', () => {
       header.destroy();
     });
   });
+
+  describe('extract button', () => {
+    const point: ColumnSchema = {
+      name: 'point',
+      type: 'nested',
+      nullable: true,
+      originalType: 'STRUCT(x DOUBLE, y DOUBLE)',
+    };
+    const doc: ColumnSchema = { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' };
+
+    const extractOf = (header: ColumnHeader): HTMLButtonElement | null =>
+      header.getElement().querySelector<HTMLButtonElement>('.dt-col-extract-btn');
+
+    it('is on a nested or JSON column, after the filter button, out of the tab order', () => {
+      state.visibleColumns.set(['point', 'doc']);
+      for (const col of [point, doc, { ...point, originalType: 'VARIANT' }]) {
+        const onExtractClick = vi.fn();
+        const header = new ColumnHeader(col, state, actions, { onExtractClick });
+        const button = extractOf(header)!;
+        expect(button, col.originalType).toBeTruthy();
+        expect(button.tagName).toBe('BUTTON');
+        expect(button.getAttribute('type')).toBe('button');
+        expect(button.getAttribute('tabindex')).toBe('-1');
+        expect(button.classList.contains('dt-col-action-btn')).toBe(true);
+        expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(button.getAttribute('aria-label')).toBe(`Extract from ${col.name}`);
+        expect(button.getAttribute('title')).toBe('Extract a field as a column');
+        // An inline SVG, as the other buttons draw theirs: no `data:` URI.
+        expect(button.querySelector('svg[aria-hidden="true"] path')).toBeTruthy();
+        expect(button.outerHTML).not.toContain('data:');
+
+        const children = Array.from(
+          header.getElement().querySelector('.dt-col-action-panel')!.children,
+        );
+        expect(children.map((c) => c.classList[1] ?? c.classList[0])).toEqual([
+          'dt-col-pin-btn',
+          'dt-col-hide-btn',
+          'dt-col-filter-btn',
+          'dt-col-extract-btn',
+          'dt-col-sort-btn',
+          'dt-col-drag-handle',
+        ]);
+        header.destroy();
+      }
+    });
+
+    it('is not on a scalar column, nor without a click handler (extraction off)', () => {
+      const scalar = new ColumnHeader(column, state, actions, { onExtractClick: vi.fn() });
+      expect(extractOf(scalar)).toBeNull();
+      scalar.destroy();
+      const off = new ColumnHeader(point, state, actions);
+      expect(extractOf(off)).toBeNull();
+      expect(off.getControls().some((c) => c.classList.contains('dt-col-extract-btn'))).toBe(false);
+      off.destroy();
+    });
+
+    it('is a controls-mode stop, between filter and sort', () => {
+      state.visibleColumns.set(['point', 'doc']);
+      const header = new ColumnHeader(point, state, actions, { onExtractClick: vi.fn() });
+      document.body.appendChild(header.getElement());
+      const controls = header.getControls();
+      const at = controls.indexOf(extractOf(header)!);
+      expect(at).toBeGreaterThan(0);
+      expect(controls[at - 1]!.classList.contains('dt-col-filter-btn')).toBe(true);
+      expect(controls[at + 1]!.classList.contains('dt-col-sort-btn')).toBe(true);
+      header.destroy();
+    });
+
+    it('hands the click on with the column and itself, and nothing else', () => {
+      const onExtractClick = vi.fn();
+      const onFilterClick = vi.fn();
+      const header = new ColumnHeader(point, state, actions, { onExtractClick, onFilterClick });
+      const sort = vi.spyOn(actions, 'toggleSort');
+      const button = extractOf(header)!;
+      button.click();
+      expect(onExtractClick).toHaveBeenCalledWith('point', button);
+      expect(onFilterClick).not.toHaveBeenCalled();
+      expect(sort).not.toHaveBeenCalled();
+      header.destroy();
+    });
+
+    it('comes and goes with the controls, and its listener with it', () => {
+      const onExtractClick = vi.fn();
+      const header = new ColumnHeader(point, state, actions, { onExtractClick, controls: false });
+      expect(extractOf(header)).toBeNull();
+      header.setControlsMounted(true);
+      const button = extractOf(header)!;
+      header.setControlsMounted(false);
+      expect(extractOf(header)).toBeNull();
+      button.click();
+      expect(onExtractClick).not.toHaveBeenCalled();
+      header.destroy();
+    });
+
+    it('is labelled in the configured language', () => {
+      const messages = mergeStrings(defaultStrings, {
+        values: {
+          extractButtonLabel: (name: string) => `Extraire de ${name}`,
+          extractButtonTitle: 'Extraire un champ',
+        },
+      });
+      const header = new ColumnHeader(point, state, actions, {
+        onExtractClick: vi.fn(),
+        messages,
+      });
+      expect(extractOf(header)!.getAttribute('aria-label')).toBe('Extraire de point');
+      expect(extractOf(header)!.getAttribute('title')).toBe('Extraire un champ');
+      header.destroy();
+    });
+  });
 });

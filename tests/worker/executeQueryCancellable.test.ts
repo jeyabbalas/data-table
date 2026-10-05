@@ -13,13 +13,28 @@ import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { executeQueryCancellable, __setConnForTests } from '@/worker/duckdb';
 import { isCancelRejection } from '@/worker/dispatcher';
 
-/** Async iterable standing in for the Arrow RecordBatchStreamReader from `conn.send()`. */
+/**
+ * Stands in for the Arrow RecordBatchStreamReader from `conn.send()`: `open()`
+ * reads the schema (no dictionary-encoded fields here), then the batches.
+ */
+function asReader(batches: AsyncGenerator<{ toArray: () => unknown[] }>) {
+  return Object.assign(batches, {
+    schema: { fields: [] as { type: { typeId: number } }[] },
+    open: async function (this: unknown) {
+      return this;
+    },
+  });
+}
+
+/** A reader over rows, batch by batch. */
 function makeReader(batches: Record<string, unknown>[][]) {
-  return (async function* () {
-    for (const rows of batches) {
-      yield { toArray: () => rows.map((r) => ({ toJSON: () => ({ ...r }) })) };
-    }
-  })();
+  return asReader(
+    (async function* () {
+      for (const rows of batches) {
+        yield { toArray: () => rows.map((r) => ({ toJSON: () => ({ ...r }) })) };
+      }
+    })(),
+  );
 }
 
 /** Awaits a promise expected to reject and returns the captured rejection. */
@@ -76,10 +91,12 @@ describe('executeQueryCancellable', () => {
   it('mid-iteration rejection with a cancel-shaped message is recognized', async () => {
     const conn = {
       send: async () =>
-        (async function* () {
-          yield { toArray: () => [{ toJSON: () => ({ id: 1n, name: 'a' }) }] };
-          throw new Error('query was canceled');
-        })(),
+        asReader(
+          (async function* () {
+            yield { toArray: () => [{ toJSON: () => ({ id: 1n, name: 'a' }) }] };
+            throw new Error('query was canceled');
+          })(),
+        ),
     } as unknown as AsyncDuckDBConnection;
     __setConnForTests(conn);
 

@@ -541,11 +541,13 @@ describe('scalars read as text', () => {
 
   it('because Arrow, on the query path the worker uses, gets them wrong', async () => {
     // Pinned so that a duckdb-wasm or apache-arrow upgrade that reads them
-    // right shows up here: the CAST could then go.
+    // right shows up here: the CAST could then go. An ENUM comes back right,
+    // but only because the worker runs a query whose result holds one a
+    // second time (see `executeQueryCancellable`); read as text, it runs once.
     const [row] = await executeQueryCancellable<Record<string, unknown>>(
       'SELECT e, iv, b, big FROM scalar_texts WHERE id = 0',
     );
-    expect(row!['e']).toBeNull();
+    expect(row!['e']).toBe('a');
     expect(row!['iv']).toBeInstanceOf(Int32Array);
     expect(row!['b']).toBeInstanceOf(Uint8Array);
     expect(row!['big']).toBeInstanceOf(Uint8Array);

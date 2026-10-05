@@ -112,6 +112,10 @@ describe('gridValueSQL', () => {
     }
   });
 
+  it('ENUM, whose dictionary the worker does not receive, is cast and capped', () => {
+    expect(grid("ENUM('a', 'it''s')")).toBe(capped(CAST_TEXT));
+  });
+
   it('INTERVAL keeps its plain cast', () => {
     expect(grid('INTERVAL')).toBe(CAST_TEXT);
   });
@@ -130,7 +134,6 @@ describe('gridValueSQL', () => {
       'TIMESTAMP',
       'TIMESTAMP WITH TIME ZONE',
       'UUID',
-      "ENUM('a', 'b')",
     ]) {
       expect(grid(type), type).toBeNull();
     }

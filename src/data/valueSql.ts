@@ -38,14 +38,20 @@ export const BLOB_PREVIEW = 256;
 /** BLOB and its aliases: Arrow carries a value as bytes, which a cell shows as `[object Object]`. */
 const BLOB_NAMES = new Set(['BLOB', 'BYTEA', 'BINARY', 'VARBINARY']);
 
-/** Other scalar types Arrow carries as bytes, whose text is DuckDB's: `0101`, `POINT (1 2)`, digits. */
-const BYTES_AS_TEXT_NAMES = new Set([
+/**
+ * Other scalar types read as DuckDB's text: those Arrow carries as bytes
+ * (`0101`, `POINT (1 2)`, digits), and ENUM, whose dictionary the worker's
+ * query path does not receive, so that a result holding one is read twice
+ * (see `executeQueryCancellable`).
+ */
+const SCALAR_TEXT_NAMES = new Set([
   'BIT',
   'BITSTRING',
   'BIT VARYING',
   'GEOMETRY',
   'BIGNUM',
   'VARINT',
+  'ENUM',
 ]);
 
 /** A plain or table-qualified quoted identifier: `"tags"`, `"t"."tags"`. */
@@ -90,7 +96,8 @@ function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
  *   (`\xAA` for a byte that is not printable ASCII), then the bytes left:
  *   `\x89PNG… +1834`.
  * - STRUCT, UNION, VARIANT, a type the parser could not read, BIT,
- *   GEOMETRY and BIGNUM (whose values Arrow carries as bytes) show their
+ *   GEOMETRY and BIGNUM (whose values Arrow carries as bytes) and ENUM
+ *   (whose dictionary the worker's query path does not receive) show their
  *   whole text. INTERVAL keeps the plain cast it always had: Arrow carries
  *   it as an object, and its text is short.
  *
@@ -166,7 +173,7 @@ export function gridValueSQL(column: ColumnSchema, quotedCol: string): string | 
           ` ELSE CAST(${c} AS VARCHAR) END`;
         break;
       }
-      if (BYTES_AS_TEXT_NAMES.has(node.name)) {
+      if (SCALAR_TEXT_NAMES.has(node.name)) {
         text = `CAST(${c} AS VARCHAR)`;
         break;
       }

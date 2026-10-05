@@ -390,6 +390,19 @@ export async function executeQueryCancellable<T = Record<string, unknown>>(
     throw new Error('DuckDB worker is detached; cannot execute query.');
   }
 
+  // A pending query's result comes without its dictionary batches: a
+  // dictionary-encoded column, which is what an ENUM is at any depth,
+  // arrives with an empty dictionary, and every value reads as null.
+  // `conn.query()` carries them, so such a result is read again that way,
+  // which cannot be cancelled. The library selects its own ENUM columns as
+  // text; this is the path of a raw SELECT of one through `bridge.query`.
+  await reader.open();
+  if (reader.schema.fields.some((field) => holdsDictionary(field.type))) {
+    await reader.return();
+    const result = await conn.query(sql);
+    return result.toArray().map((row) => convertRow(row.toJSON()) as T);
+  }
+
   const rows: T[] = [];
   for await (const batch of reader) {
     for (const row of batch.toArray()) {
@@ -397,6 +410,20 @@ export async function executeQueryCancellable<T = Record<string, unknown>>(
     }
   }
   return rows;
+}
+
+/** `Type.Dictionary` in apache-arrow, which this module does not import. */
+const ARROW_DICTIONARY_TYPE_ID = -1;
+
+/** Whether an Arrow type is dictionary-encoded, or holds a type that is. */
+function holdsDictionary(type: { typeId: number; children?: { type: unknown }[] | null }): boolean {
+  const pending = [type];
+  while (pending.length > 0) {
+    const next = pending.pop()!;
+    if (next.typeId === ARROW_DICTIONARY_TYPE_ID) return true;
+    for (const child of next.children ?? []) pending.push(child.type as typeof type);
+  }
+  return false;
 }
 
 /**

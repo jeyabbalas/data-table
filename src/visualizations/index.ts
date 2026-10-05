@@ -6,6 +6,8 @@
  * - DateHistogram: For date/timestamp columns
  * - TimeHistogram: For time columns
  * - ValueCounts: For categorical columns (string, boolean, uuid)
+ * - NestedSummaryVisualization: For nested columns (list, array, struct, map,
+ *   union, variant)
  */
 
 export { BaseVisualization } from './BaseVisualization';
@@ -27,6 +29,10 @@ export type { TimeHistogramBin, TimeHistogramData } from './histogram';
 // Value counts visualization for categorical columns
 export { ValueCounts } from './valuecounts';
 export type { CategorySegment, ValueCountsData } from './valuecounts';
+
+// Summary visualization for nested columns
+export { NestedSummaryVisualization } from './nested';
+export type { NestedSummaryData } from './nested';
 
 // Visualization factory for centralized creation
 export { VisualizationFactory } from './VisualizationFactory';

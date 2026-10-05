@@ -50,6 +50,64 @@ export function findSlotAtX(
 }
 
 /**
+ * Fill one segment of a horizontal stacked bar: a rectangle whose left
+ * corners are rounded when it starts the bar (`roundLeft`), and whose right
+ * corners are rounded when it ends it (`roundRight`). The value counts' and
+ * the nested summary's bars are drawn of these.
+ */
+export function drawSegmentRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fill: string,
+  roundLeft: boolean,
+  roundRight: boolean,
+  radius = 2,
+): void {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+
+  if (roundLeft && roundRight) {
+    // Both corners rounded
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+  } else if (roundLeft) {
+    // Only left corners rounded
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width, y);
+    ctx.lineTo(x + width, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+  } else if (roundRight) {
+    // Only right corners rounded
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x, y + height);
+    ctx.lineTo(x, y);
+  } else {
+    // No rounded corners
+    ctx.rect(x, y, width, height);
+  }
+
+  ctx.closePath();
+  ctx.fill();
+}
+
+/**
  * Truncate text to fit within maxWidth, appending ellipsis (…) if needed.
  * Returns empty string if nothing fits.
  */

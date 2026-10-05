@@ -6,6 +6,7 @@ import { ColumnHeader, type ColumnHeaderOptions } from '@/table/ColumnHeader';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 
@@ -605,6 +606,125 @@ describe('ColumnHeader', () => {
       const typeEl = header.getElement().querySelector('.dt-col-type');
       expect(typeEl?.textContent).toBe('boolean');
 
+      header.destroy();
+    });
+  });
+
+  describe('nested and JSON column types', () => {
+    const typeOf = (header: ColumnHeader): HTMLElement =>
+      header.getElement().querySelector<HTMLElement>('.dt-col-type')!;
+
+    it.each([
+      ['tags', 'VARCHAR[]', '[varchar]', 'tags, list of varchar'],
+      ['scores', 'INTEGER[]', '[integer]', 'scores, list of integer'],
+      ['embedding', 'FLOAT[768]', 'float[768]', 'embedding, array of 768 float'],
+      [
+        'point',
+        'STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)',
+        'struct(3)',
+        'point, struct with 3 fields',
+      ],
+      [
+        'attrs',
+        'MAP(VARCHAR, INTEGER)',
+        '{varchar → integer}',
+        'attrs, map from varchar to integer',
+      ],
+      ['u', 'UNION(num INTEGER, str VARCHAR)', 'union(2)', 'u, union of 2 types'],
+      [
+        'people',
+        'STRUCT("name" VARCHAR, age INTEGER, langs VARCHAR[])[]',
+        '[struct(3)]',
+        'people, list of struct with 3 fields',
+      ],
+      ['v', 'VARIANT', 'variant', 'v, variant'],
+    ])(
+      'labels %s (%s) as %s, titled with its full type, spoken as "%s"',
+      (name, originalType, label, ariaLabel) => {
+        const header = new ColumnHeader(
+          { name, type: 'nested', nullable: true, originalType },
+          state,
+          actions,
+        );
+        expect(typeOf(header).textContent).toBe(label);
+        expect(typeOf(header).getAttribute('title')).toBe(originalType);
+        expect(header.getElement().getAttribute('aria-label')).toBe(ariaLabel);
+        header.destroy();
+      },
+    );
+
+    it('labels a JSON column json, and says JSON', () => {
+      const header = new ColumnHeader(
+        { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+        state,
+        actions,
+      );
+      expect(typeOf(header).textContent).toBe('json');
+      expect(typeOf(header).getAttribute('title')).toBe('JSON');
+      expect(header.getElement().getAttribute('aria-label')).toBe('doc, JSON');
+      header.destroy();
+    });
+
+    it('keeps a scalar column’s type, with no title', () => {
+      for (const column of [
+        { name: 'n', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 's', type: 'string', nullable: true, originalType: 'VARCHAR' },
+        { name: 'd', type: 'decimal', nullable: true, originalType: 'DECIMAL(18,4)' },
+      ] satisfies ColumnSchema[]) {
+        const header = new ColumnHeader(column, state, actions);
+        expect(typeOf(header).textContent).toBe(column.type);
+        expect(typeOf(header).hasAttribute('title')).toBe(false);
+        expect(header.getElement().getAttribute('aria-label')).toBe(
+          `${column.name}, ${column.type}`,
+        );
+        header.destroy();
+      }
+    });
+
+    it('keeps the spoken type when sort and filter state join the label', () => {
+      const column: ColumnSchema = {
+        name: 'tags',
+        type: 'nested',
+        nullable: true,
+        originalType: 'VARCHAR[]',
+      };
+      const header = new ColumnHeader(column, state, actions);
+      state.sortColumns.set([{ column: 'tags', direction: 'asc' }]);
+      expect(header.getElement().getAttribute('aria-label')).toBe(
+        'tags, list of varchar, sorted ascending',
+      );
+      header.destroy();
+    });
+
+    it('says the type in the configured language', () => {
+      const messages = mergeStrings(defaultStrings, {
+        values: { typeList: (element: string) => `liste de ${element}` },
+      });
+      const header = new ColumnHeader(
+        { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+        state,
+        actions,
+        { messages },
+      );
+      expect(header.getElement().getAttribute('aria-label')).toBe('tags, liste de varchar');
+      header.destroy();
+    });
+
+    it('leaves markup in a field name as text', () => {
+      const header = new ColumnHeader(
+        {
+          name: 'evil',
+          type: 'nested',
+          nullable: true,
+          originalType: 'STRUCT("<img src=x onerror=alert(1)>" INTEGER)[]',
+        },
+        state,
+        actions,
+      );
+      // The label names no field; the title holds the type as text.
+      expect(typeOf(header).textContent).toBe('[struct(1)]');
+      expect(typeOf(header).querySelector('img')).toBeNull();
+      expect(typeOf(header).title).toBe('STRUCT("<img src=x onerror=alert(1)>" INTEGER)[]');
       header.destroy();
     });
   });

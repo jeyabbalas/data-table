@@ -56,6 +56,7 @@ import {
 } from '../../src/visualizations/VisualizationRegistry';
 import { VisualizationFactory } from '../../src/visualizations/VisualizationFactory';
 import { BaseVisualization } from '../../src/visualizations/BaseVisualization';
+import { NestedSummaryVisualization } from '../../src/visualizations/nested';
 import type { ColumnSchema, DataType } from '../../src/core/types';
 import type { VisualizationOptions } from '../../src/visualizations/BaseVisualization';
 
@@ -93,7 +94,7 @@ describe('VisualizationRegistry (Phase 3)', () => {
     defaultVisualizationRegistry.resetToDefaults();
   });
 
-  it('seeds the 5 built-in registrations on construction', () => {
+  it('seeds the 6 built-in registrations on construction', () => {
     const reg = new VisualizationRegistry();
     const types = reg.getRegisteredTypes();
     expect(types).toContain('histogram');
@@ -101,7 +102,8 @@ describe('VisualizationRegistry (Phase 3)', () => {
     expect(types).toContain('time-histogram');
     expect(types).toContain('interval-histogram');
     expect(types).toContain('value-counts');
-    expect(types).toHaveLength(5);
+    expect(types).toContain('nested-summary');
+    expect(types).toHaveLength(6);
   });
 
   it('treats nested columns as nested, not categorical', () => {
@@ -123,9 +125,54 @@ describe('VisualizationRegistry (Phase 3)', () => {
       nullable: true,
       originalType: 'VARCHAR[]',
     };
-    expect(
-      reg.create(document.createElement('div'), nested, {} as VisualizationOptions),
-    ).not.toBeInstanceOf(FakeViz);
+    const viz = reg.create(document.createElement('div'), nested, makeOptions());
+    expect(viz).not.toBeInstanceOf(FakeViz);
+    viz?.destroy();
+  });
+
+  it('gives a nested column the nested summary chart', () => {
+    const reg = new VisualizationRegistry();
+    for (const originalType of ['INTEGER[]', 'FLOAT[768]', 'STRUCT(x DOUBLE)', 'VARIANT']) {
+      const column: ColumnSchema = { name: 'n', type: 'nested', nullable: true, originalType };
+      expect(reg.isApplicable(column)).toBe(true);
+      const viz = reg.create(document.createElement('div'), column, makeOptions());
+      expect(viz).toBeInstanceOf(NestedSummaryVisualization);
+      viz?.destroy();
+    }
+    // Text columns keep the value counts, JSON ones included.
+    const json: ColumnSchema = {
+      name: 'doc',
+      type: 'string',
+      nullable: true,
+      originalType: 'JSON',
+    };
+    const viz = reg.create(document.createElement('div'), json, makeOptions());
+    expect(viz).not.toBeInstanceOf(NestedSummaryVisualization);
+    viz?.destroy();
+  });
+
+  it('lets a higher-priority registration for nested columns replace the summary', () => {
+    const reg = new VisualizationRegistry();
+    reg.register({
+      name: 'list-length',
+      isApplicable: isNestedType,
+      constructor: FakeViz,
+      priority: 10,
+    });
+    const column: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+    const viz = reg.create(document.createElement('div'), column, makeOptions());
+    expect(viz).toBeInstanceOf(FakeViz);
+    viz?.destroy();
+
+    // Unregistering the built-in leaves nested columns without a chart.
+    const bare = new VisualizationRegistry();
+    expect(bare.unregister('nested-summary')).toBe(true);
+    expect(bare.isApplicable(column)).toBe(false);
   });
 
   it('isolates custom registrations between two registries', () => {

@@ -111,6 +111,10 @@ vi.mock('../../src/visualizations/valuecounts/ValueCountsData', async (importAct
   ...((await importActual()) as Record<string, unknown>),
   fetchValueCountsData: deferredFetch,
 }));
+vi.mock('../../src/visualizations/nested/NestedSummaryData', async (importActual) => ({
+  ...((await importActual()) as Record<string, unknown>),
+  fetchNestedSummaryData: deferredFetch,
+}));
 
 import type { ColumnSchema } from '../../src/core/types';
 import type {
@@ -121,6 +125,7 @@ import { DateHistogram } from '../../src/visualizations/histogram/DateHistogram'
 import { Histogram } from '../../src/visualizations/histogram/Histogram';
 import { IntervalHistogram } from '../../src/visualizations/histogram/IntervalHistogram';
 import { TimeHistogram } from '../../src/visualizations/histogram/TimeHistogram';
+import { NestedSummaryVisualization } from '../../src/visualizations/nested/NestedSummary';
 import { ValueCounts } from '../../src/visualizations/valuecounts/ValueCounts';
 
 type ChartClass = new (
@@ -270,7 +275,8 @@ const HISTOGRAMS: ChartCase[] = [
   },
 ];
 
-const CHARTS: ChartCase[] = [
+/** The charts whose bars or segments a click selects. */
+const SELECTABLE: ChartCase[] = [
   ...HISTOGRAMS,
   {
     name: 'ValueCounts',
@@ -287,6 +293,18 @@ const CHARTS: ChartCase[] = [
       total: 4,
       isAllUnique: false,
     },
+  },
+];
+
+const CHARTS: ChartCase[] = [
+  ...SELECTABLE,
+  {
+    // Hover only: a click on the summary bar selects nothing.
+    name: 'NestedSummaryVisualization',
+    Chart: NestedSummaryVisualization,
+    column: column('nested', 'INTEGER[]'),
+    empty: { total: 0, nonNullCount: 0, filtered: null },
+    values: { total: 4, nonNullCount: 3, filtered: null },
   },
 ];
 
@@ -455,7 +473,9 @@ describe.each(CHARTS)('$name detail once a refetch fails', (chartCase) => {
     expect(lastDetail()).toBeNull();
     chart.destroy();
   });
+});
 
+describe.each(SELECTABLE)('$name selection detail once a refetch fails', (chartCase) => {
   it('clears the detail of its selection', async () => {
     const chart = create(chartCase);
     fetches[0]!.resolve(chartCase.values);

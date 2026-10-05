@@ -47,6 +47,7 @@ import {
   type Rule,
   type ThemeName,
 } from './cssContrast';
+import { inkFor } from '../../src/visualizations/palette';
 
 /** WCAG AA for text below 18pt / 14pt-bold. Nothing here qualifies as large. */
 const AA_NORMAL_TEXT = 4.5;
@@ -552,5 +553,126 @@ describe('stylesheet antipatterns', () => {
         'overflow',
       ),
     ).toMatch(/\b(auto|scroll)\b/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Canvas labels — the nested summary bar
+// ---------------------------------------------------------------------------
+
+/**
+ * The summary chart of a nested column labels its segments on the canvas,
+ * where no stylesheet rule can be checked: "99%" on the primary fill and "∅"
+ * on the accent, in the ink `inkFor` picks for the fill, and on a faded or
+ * ghost segment (another one hovered, or filters on) in `--dt-text`. The
+ * type outline under the bar is `--dt-text-secondary` on the chart slot.
+ */
+describe('canvas labels — the nested summary bar', () => {
+  /** Fills a label is drawn on solid: the segments, resting and hovered. */
+  const SOLID_FILLS = [
+    '--dt-primary',
+    '--dt-primary-hover',
+    '--dt-accent',
+    '--dt-accent-hover',
+  ] as const;
+
+  /** Translucent fills, labelled in `--dt-text`: faded (hover) and ghost (filters). */
+  const TINTED_FILLS = [
+    '--dt-primary-alpha-30',
+    '--dt-primary-alpha-50',
+    '--dt-accent-soft',
+  ] as const;
+
+  /** The chart slot, which the tints are painted over. */
+  const chartSlot = paintedBy('03-columns.css', '.dt-col-viz', 'background');
+
+  describe.each(THEME_NAMES)('%s theme', (themeName) => {
+    it.each(SOLID_FILLS)(`the ink inkFor picks clears ${AA_NORMAL_TEXT}:1 on %s`, (fillToken) => {
+      // What the chart reads from the computed style: the token's colour.
+      const fill = formatHex(resolveColor(`var(${fillToken})`, themeName));
+      const ink = inkFor(fill);
+      expectRatio(
+        () => parseColor(ink, {}),
+        token(fillToken),
+        AA_NORMAL_TEXT,
+        `inkFor(${fill}) = ${ink} on ${fillToken}`,
+        themeName,
+      );
+    });
+
+    it.each(TINTED_FILLS)(
+      `--dt-text clears ${AA_NORMAL_TEXT}:1 on %s over the chart slot`,
+      (fillToken) => {
+        expectRatio(
+          token('--dt-text'),
+          layered(token(fillToken), chartSlot),
+          AA_NORMAL_TEXT,
+          `--dt-text on ${fillToken} over .dt-col-viz`,
+          themeName,
+        );
+      },
+    );
+
+    it(`the type outline clears ${AA_NORMAL_TEXT}:1 on the chart slot`, () => {
+      expectRatio(
+        token('--dt-text-secondary'),
+        chartSlot,
+        AA_NORMAL_TEXT,
+        '--dt-text-secondary on .dt-col-viz',
+        themeName,
+      );
+    });
+  });
+
+  it(`picks an ink that clears ${AA_NORMAL_TEXT}:1 on any opaque fill`, () => {
+    const fills: string[] = [];
+    for (let v = 0; v <= 255; v += 5) {
+      const h = v.toString(16).padStart(2, '0');
+      fills.push(`#${h}${h}${h}`, `#${h}0000`, `#00${h}00`, `#0000${h}`, `#${h}${h}00`);
+    }
+    // Mid-tones, where white and near-black both fall short of 4.5:1.
+    fills.push('#767676', '#808080', '#7a7a7a', '#2f9e44', '#e8590c', '#d6336c', '#1c7ed6');
+    for (const fill of fills) {
+      const ratio = contrastRatio(parseColor(inkFor(fill), {}), parseColor(fill, {}));
+      expect(
+        ratio,
+        `inkFor(${fill}) = ${inkFor(fill)} is ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it('prefers white, then near-black, and black only for a mid-tone', () => {
+    expect(inkFor('#2563eb')).toBe('#ffffff');
+    expect(inkFor('#60a5fa')).toBe('#111827');
+    expect(inkFor('#f59e0b')).toBe('#111827');
+    expect(inkFor('#000000')).toBe('#ffffff');
+    expect(inkFor('#ffffff')).toBe('#111827');
+    // Neither white (4.24:1) nor #111827 (4.19:1) reaches 4.5:1 on #6b7d8f; black is 4.96:1.
+    expect(inkFor('#6b7d8f')).toBe('#000000');
+  });
+
+  it('reads short and long hex, rgb() and rgba() in either syntax', () => {
+    expect(inkFor('#25E')).toBe(inkFor('#2255ee'));
+    expect(inkFor('  #2563EB ')).toBe('#ffffff');
+    expect(inkFor('rgb(37, 99, 235)')).toBe('#ffffff');
+    expect(inkFor('rgb(37 99 235)')).toBe('#ffffff');
+    expect(inkFor('rgb(14.5% 38.8% 92.2%)')).toBe('#ffffff');
+    expect(inkFor('rgba(96, 165, 250, 1)')).toBe('#111827');
+    expect(inkFor('#60a5faff')).toBe('#111827');
+  });
+
+  it('reads a translucent fill as painted over its backdrop', () => {
+    // 30% primary over white is a pale blue; over the dark slot, a dark one.
+    expect(inkFor('rgba(37, 99, 235, 0.3)')).toBe('#111827');
+    expect(inkFor('rgba(37, 99, 235, 0.3)', { backdrop: '#1f2937' })).toBe('#ffffff');
+    expect(inkFor('#2563eb4d', { backdrop: '#1f2937' })).toBe('#ffffff');
+    expect(inkFor('transparent', { backdrop: '#111827' })).toBe('#ffffff');
+  });
+
+  it('falls back for a fill it cannot read', () => {
+    expect(inkFor('oklch(0.62 0.19 260)')).toBe('#ffffff');
+    expect(inkFor('rebeccapurple', { fallback: '#111827' })).toBe('#111827');
+    expect(inkFor('rgb(1, 2)')).toBe('#ffffff');
+    expect(inkFor('#12345')).toBe('#ffffff');
   });
 });

@@ -155,6 +155,7 @@ export type {
   TemporalColumnStats,
   TimeColumnStats,
   IntervalColumnStats,
+  NestedColumnStats,
   BaseColumnStats,
 } from './statistics/ColumnStatsTypes';
 export { statsKindForDataType } from './statistics/ColumnStatsTypes';
@@ -198,6 +199,9 @@ export type {
 
 export { ValueCounts } from './visualizations/valuecounts';
 export type { CategorySegment, ValueCountsData } from './visualizations/valuecounts';
+
+export { NestedSummaryVisualization } from './visualizations/nested';
+export type { NestedSummaryData } from './visualizations/nested';
 
 export { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
 export { InteractionManager } from './visualizations/InteractionManager';

@@ -12,6 +12,7 @@ import type {
   TemporalColumnStats,
   TimeColumnStats,
   IntervalColumnStats,
+  NestedColumnStats,
 } from '../../src/statistics/ColumnStatsTypes';
 
 // =========================================
@@ -620,6 +621,58 @@ describe('formatDefaultStats - Interval Line 2', () => {
     expect(result).toContain('&lt;script&gt;');
     expect(result).toContain('&amp;danger');
     expect(result).toContain('&quot;quoted&quot;');
+  });
+});
+
+// =========================================
+// formatDefaultStats - Line 2: Nested
+// =========================================
+
+describe('formatDefaultStats - Nested Line 2', () => {
+  const makeNested = (overrides: Partial<NestedColumnStats> = {}): NestedColumnStats => ({
+    kind: 'nested',
+    totalRows: 1000,
+    nonNullCount: 990,
+    nullCount: 10,
+    filteredTotalRows: null,
+    outline: 'x double · y double · tier varchar',
+    ...overrides,
+  });
+
+  it('shows the type outline as line 2, and the counts as line 1', () => {
+    const stats = makeNested();
+    expect(formatStatsLine2(stats, 'nested')).toBe('x double · y double · tier varchar');
+    expect(formatDefaultStats(stats, 'nested')).toBe(
+      '<span class="dt-stats-line1">1,000 rows · 10 null</span><br>' +
+        '<span class="dt-stats-line2">x double · y double · tier varchar</span>',
+    );
+  });
+
+  it('counts the filtered rows in line 1', () => {
+    const stats = makeNested({ filteredTotalRows: 120, nonNullCount: 118, nullCount: 2 });
+    expect(formatStatsLine1(stats)).toBe('120 / 1,000 rows · 2 null');
+    expect(formatStatsLine2(stats, 'nested')).toBe('x double · y double · tier varchar');
+  });
+
+  it('HTML-escapes field names from the data file', () => {
+    const result = formatStatsLine2(
+      makeNested({ outline: '<img src=x onerror=alert(1)> integer · a&b "q" varchar' }),
+      'nested',
+    );
+    // Written as HTML, the line is text: no tag survives.
+    expect(result).toBe(
+      '&lt;img src=x onerror=alert(1)&gt; integer · a&amp;b &quot;q&quot; varchar',
+    );
+    expect(formatDefaultStats(makeNested({ outline: '<b>x</b> integer' }), 'nested')).toContain(
+      '<span class="dt-stats-line2">&lt;b&gt;x&lt;/b&gt; integer</span>',
+    );
+  });
+
+  it('shows no line 2 for an all-null or empty column', () => {
+    expect(formatStatsLine2(makeNested({ nonNullCount: 0, nullCount: 1000 }), 'nested')).toBe('');
+    expect(
+      formatStatsLine2(makeNested({ totalRows: 0, nonNullCount: 0, nullCount: 0 }), 'nested'),
+    ).toBe('');
   });
 });
 

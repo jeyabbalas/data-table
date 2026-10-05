@@ -22,6 +22,7 @@ import type { StateActions } from '../core/Actions';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
+import { columnTypeLabel, columnTypeSpoken, columnTypeTitle } from '../nested/typeOutline';
 import type { AnnotationPopover } from './AnnotationPopover';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, resolveColumnWidth } from './ColumnLayout';
@@ -219,10 +220,14 @@ export class ColumnHeader {
 
     el.appendChild(nameRow);
 
-    // Type label
+    // Type label: the library's type, or for a nested or JSON column a short
+    // outline of DuckDB's (`[integer]`, `struct(3)`, `json`), titled with the
+    // full type. Ellipsized in CSS.
     const typeEl = document.createElement('div');
     typeEl.className = `${this.classPrefix}-col-type`;
-    typeEl.textContent = this.column.type;
+    typeEl.textContent = columnTypeLabel(this.column);
+    const fullType = columnTypeTitle(this.column);
+    if (fullType !== null) typeEl.title = fullType;
     el.appendChild(typeEl);
 
     // Divider — thin horizontal bar separating header info from data display
@@ -813,11 +818,15 @@ export class ColumnHeader {
   // =========================================
 
   /**
-   * Build a descriptive aria-label including sort and filter state.
+   * Build a descriptive aria-label including sort and filter state. A nested
+   * or JSON column's type is said in words ("tags, list of integer"), not
+   * in the notation its label shows.
    */
   private buildAriaLabel(): string {
     const a = this.messages.a11y;
-    const parts: string[] = [`${this.column.name}, ${this.column.type}`];
+    const parts: string[] = [
+      `${this.column.name}, ${columnTypeSpoken(this.column, this.messages)}`,
+    ];
 
     const sortColumns = this.state.sortColumns.get();
     const sortIndex = sortColumns.findIndex((s) => s.column === this.column.name);

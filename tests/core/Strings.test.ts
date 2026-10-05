@@ -55,6 +55,21 @@ describe('Strings', () => {
       expect(s.matchCount(300)).toBe('300 match');
       expect(s.matchCount(0)).toBe('0 match');
       expect(s.valueListSuffix(8)).toBe(', ... (8 values)');
+      expect(s.nonNullCategory).toBe('non-null');
+    });
+
+    it('ships the spoken forms of nested and JSON types', () => {
+      const v = defaultStrings.values;
+      expect(v.typeList('integer')).toBe('list of integer');
+      expect(v.typeArray('float', 768)).toBe('array of 768 float');
+      expect(v.typeArray('float', 1536)).toBe('array of 1,536 float');
+      expect(v.typeStruct(3)).toBe('struct with 3 fields');
+      expect(v.typeStruct(1)).toBe('struct with 1 field');
+      expect(v.typeMap('varchar', 'integer')).toBe('map from varchar to integer');
+      expect(v.typeUnion(2)).toBe('union of 2 types');
+      expect(v.typeUnion(1)).toBe('union of 1 type');
+      expect(v.typeJson).toBe('JSON');
+      expect(v.typeVariant).toBe('variant');
     });
   });
 
@@ -86,6 +101,15 @@ describe('Strings', () => {
       expect(merged.export.csv.delimiters.tab).toBe('Tabulator');
       expect(merged.export.csv.delimiters.comma).toBe('Comma (,)');
       expect(merged.export.csv.headersLabel).toBe(defaultStrings.export.csv.headersLabel);
+    });
+
+    it('overrides one spoken type, keeping the rest of the values section', () => {
+      const merged = mergeStrings(defaultStrings, {
+        values: { typeList: (element: string) => `Liste von ${element}` },
+      });
+      expect(merged.values.typeList('integer')).toBe('Liste von integer');
+      expect(merged.values.typeMap('a', 'b')).toBe(defaultStrings.values.typeMap('a', 'b'));
+      expect(merged.values.typeJson).toBe('JSON');
     });
 
     it('replaces function-valued templates wholesale', () => {

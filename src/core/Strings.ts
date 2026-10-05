@@ -442,6 +442,11 @@ export interface Strings {
     selectedLabel: string;
     /** Display value for the null bin/segment in a selection detail line. */
     nullBinLabel: string;
+    /**
+     * Display value for the non-null segment of a nested column's summary
+     * bar in a hover detail line, the counterpart of `nullBinLabel`.
+     */
+    nonNullCategory: string;
     /** Display value for the folded "Other" segment (count = folded distinct values). */
     otherCategory: (count: number) => string;
     /** Display value for the all-unique segment (count = distinct values). */
@@ -454,6 +459,30 @@ export interface Strings {
     valueListSuffix: (total: number) => string;
     /** Stats-slot line for a column whose chart's data failed to load. */
     chartFailed: string;
+  };
+
+  // =========================================
+  // Values — nested and JSON columns
+  // =========================================
+  values: {
+    /**
+     * Spoken type of a LIST, given its element's spoken type: "list of
+     * integer". A column header's accessible name ends with it ("tags, list
+     * of integer"); the visible label stays DuckDB's notation (`[integer]`).
+     */
+    typeList: (element: string) => string;
+    /** Spoken type of a fixed-size ARRAY: "array of 768 float". */
+    typeArray: (element: string, size: number) => string;
+    /** Spoken type of a STRUCT, by its number of fields: "struct with 3 fields". */
+    typeStruct: (fieldCount: number) => string;
+    /** Spoken type of a MAP, given its key's and value's: "map from varchar to integer". */
+    typeMap: (key: string, value: string) => string;
+    /** Spoken type of a UNION, by its number of members: "union of 2 types". */
+    typeUnion: (memberCount: number) => string;
+    /** Spoken name of the JSON type. */
+    typeJson: string;
+    /** Spoken name of the VARIANT type. */
+    typeVariant: string;
   };
 
   // =========================================
@@ -827,6 +856,7 @@ export const defaultStrings: Strings = {
     categoryLabel: 'Category:',
     selectedLabel: 'Selected:',
     nullBinLabel: 'null',
+    nonNullCategory: 'non-null',
     otherCategory: (count) => `Other (${count.toLocaleString()} values)`,
     allUniqueCategory: (count) => `All unique (${count.toLocaleString()})`,
     selectionRowCount: (count, pct) =>
@@ -834,6 +864,18 @@ export const defaultStrings: Strings = {
     matchCount: (count) => `${count.toLocaleString()} match`,
     valueListSuffix: (total) => `, ... (${total.toLocaleString()} values)`,
     chartFailed: 'Failed to load',
+  },
+
+  values: {
+    typeList: (element) => `list of ${element}`,
+    typeArray: (element, size) => `array of ${size.toLocaleString()} ${element}`,
+    typeStruct: (fieldCount) =>
+      `struct with ${fieldCount.toLocaleString()} ${fieldCount === 1 ? 'field' : 'fields'}`,
+    typeMap: (key, value) => `map from ${key} to ${value}`,
+    typeUnion: (memberCount) =>
+      `union of ${memberCount.toLocaleString()} ${memberCount === 1 ? 'type' : 'types'}`,
+    typeJson: 'JSON',
+    typeVariant: 'variant',
   },
 
   errors: {

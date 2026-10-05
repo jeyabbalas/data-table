@@ -46,6 +46,7 @@ import { FilterPanel } from '../filters/FilterPanel';
 import type { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { SQLFilterModal } from '../filters/SQLFilterModal';
+import { columnTypeLabel } from '../nested/typeOutline';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
@@ -1466,7 +1467,7 @@ export class TableContainer {
             const nameEl = document.createElement('strong');
             nameEl.textContent = colSchema.name;
             const typeEl = document.createElement('small');
-            typeEl.textContent = colSchema.type;
+            typeEl.textContent = columnTypeLabel(colSchema);
             colEl.replaceChildren(nameEl, document.createElement('br'), typeEl);
             headerRowEl.appendChild(colEl);
           }

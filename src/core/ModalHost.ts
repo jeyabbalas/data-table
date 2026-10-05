@@ -61,6 +61,12 @@ export interface ModalOptions {
    */
   returnFocus?: HTMLElement | undefined;
   /**
+   * Give focus back on close without scrolling to it (default false). For a
+   * focus target the page need not scroll to, such as the grid, taller than
+   * the window, whose top a plain `focus()` would bring into view.
+   */
+  restoreFocusPreventScroll?: boolean | undefined;
+  /**
    * Element to focus after open. `null` (or omitted) focuses the first
    * focusable descendant of the dialog.
    */
@@ -446,7 +452,7 @@ export class ModalHost {
     if (opts.restoreFocus !== false && this.opener) {
       if (document.contains(this.opener)) {
         try {
-          this.opener.focus({ preventScroll: false });
+          this.opener.focus({ preventScroll: opts.restoreFocusPreventScroll === true });
           restored = true;
         } catch {
           /* ignore */

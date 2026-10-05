@@ -434,6 +434,9 @@ export class ValueInspector {
       element: this.element,
       labelledBy: this.titleId,
       returnFocus: this.returnFocus,
+      // The cell stays where it was, beside the panel: the page need not
+      // move to show the top of the grid.
+      restoreFocusPreventScroll: true,
       // The panel itself: the tree is not there yet. It passes focus on to
       // the tree's active item when it is.
       initialFocus: this.element,

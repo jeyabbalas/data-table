@@ -288,6 +288,29 @@ describe('ModalHost — focus restore', () => {
     expect(document.activeElement).toBe(second);
   });
 
+  it('scrolls to the element it gives focus back to, unless told not to', () => {
+    const target = document.createElement('div');
+    target.tabIndex = 0;
+    document.body.appendChild(target);
+    const focus = vi.spyOn(target, 'focus');
+    const host = new ModalHost();
+
+    host.open({ mode: 'panel', element: makePanel(), returnFocus: target });
+    host.close();
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: false });
+
+    // The grid, say, which is taller than the window: the page stays put.
+    host.open({
+      mode: 'panel',
+      element: makePanel(),
+      returnFocus: target,
+      restoreFocusPreventScroll: true,
+    });
+    host.close();
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(target);
+  });
+
   it('falls back gracefully when opener is removed from the DOM', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);

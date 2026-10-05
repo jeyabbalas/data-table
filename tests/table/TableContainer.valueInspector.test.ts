@@ -175,11 +175,14 @@ describe('TableContainer — the value inspector', () => {
     await opened();
     await vi.waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('treeitem'));
 
+    const focus = vi.spyOn(grid, 'focus');
     document.activeElement!.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
     );
     expect(isShown()).toBe(false);
     expect(document.activeElement).toBe(grid);
+    // The cell is in view beside the panel: the page does not jump to the grid's top.
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
     expect(state.focusedCell.get()).toEqual({ row: 3, column: 'tags' });
     expect(grid.getAttribute('aria-activedescendant')).toBe(descendant);
   });

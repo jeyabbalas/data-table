@@ -11,6 +11,9 @@ import {
   type DuckDBTypeNode,
 } from '@/core/duckdbType';
 
+import { MANIFEST } from '../helpers/nestedFixture';
+import { SQL_ONLY_COLUMNS } from '../helpers/nestedSql';
+
 /** A compact rendering of a tree, to compare whole shapes at once. */
 function shape(node: DuckDBTypeNode): string {
   switch (node.kind) {
@@ -325,5 +328,76 @@ describe('structPaths', () => {
   it('stops at the limit', () => {
     const fields = Array.from({ length: 50 }, (_, i) => `f${i} INTEGER`).join(', ');
     expect(structPaths(parseDuckDBType(`STRUCT(${fields})`), 10)).toHaveLength(10);
+  });
+});
+
+describe('the types of the nested stress fixture', () => {
+  // Every type DuckDB reports for the fixture files and the SQL-only
+  // companions: what the parser meets on real data, quoted keyword field
+  // names, `"quote""d"`, ENUM literals and VARIANT included.
+  const cases = [
+    ...MANIFEST.parquet.columns.map((c) => ({
+      source: 'parquet',
+      name: c.name,
+      kind: c.kind,
+      type: c.duckdbType,
+    })),
+    ...MANIFEST.json.columns.map((c) => ({
+      source: 'json',
+      name: c.name,
+      kind: c.kind,
+      type: c.duckdbType,
+    })),
+    ...SQL_ONLY_COLUMNS.map((c) => ({ source: 'sql', name: c.name, kind: null, type: c.type })),
+  ];
+
+  it.each(cases)('$source $name parses as a whole: $type', ({ kind, type }) => {
+    const node = parseDuckDBType(type);
+    expect(containsKind(node, 'unknown')).toBe(false);
+    expect(node.sqlType).toBe(type);
+    if (kind === 'list' || kind === 'struct' || kind === 'map') {
+      expect(node.kind).toBe(kind);
+      expect(dataTypeOf(node)).toBe('nested');
+    } else if (kind === 'json') {
+      expect(node.kind).toBe('json');
+      expect(dataTypeOf(node)).toBe('string');
+    } else if (kind === 'scalar') {
+      expect(node.kind).toBe('scalar');
+    } else {
+      expect(isNestedSqlType(type)).toBe(true);
+    }
+  });
+
+  it('reads the 26 odd field names of odd_names, quotes and keywords included', () => {
+    const column = MANIFEST.parquet.columns.find((c) => c.name === 'odd_names')!;
+    const node = parseDuckDBType(column.duckdbType);
+    expect(node.kind === 'struct' && node.fields.map((f) => f.name)).toEqual([
+      'label',
+      'name',
+      'type',
+      'data',
+      'size',
+      'length',
+      'toJSON',
+      'constructor',
+      '__proto__',
+      'hasOwnProperty',
+      'months',
+      'days',
+      'nanoseconds',
+      'my field',
+      'x,y',
+      'quote"d',
+      "it's",
+      '2',
+      '1',
+      '10',
+      'ünï',
+      'emoji😀',
+      'order',
+      'null',
+      'SELECT',
+      'ID',
+    ]);
   });
 });

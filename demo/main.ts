@@ -448,7 +448,8 @@ function updateTableInfo(): void {
 
   const totalRows = state.totalRows.get();
   const filteredRows = state.filteredRows.get();
-  const schema = state.schema.get();
+  // The dataset's columns: the hidden `__rowid__` is the table's own.
+  const schema = state.schema.get().filter((c) => !c.system);
   const filters = state.filters.get();
 
   const numericCols = schema.filter((c) => isNumericType(c.type)).length;

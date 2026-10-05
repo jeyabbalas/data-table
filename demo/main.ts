@@ -105,6 +105,19 @@ function setUrlParam(url: string | null): void {
   }
 }
 
+// ----- Example datasets -----
+// The example chips load this repository's test fixtures from GitHub. The
+// dev server serves the same files from the working tree at /fixtures/
+// (vite.demo.config.ts), and a chip uses those in development: they work
+// offline, and a fixture added on a branch works before it reaches main.
+const FIXTURES_ON_GITHUB =
+  /^https:\/\/raw\.githubusercontent\.com\/jeyabbalas\/data-table\/(?:refs\/heads\/)?main\/tests\/fixtures\/datasets\//;
+
+/** The URL an example chip loads: its own, or in development the local copy. */
+function exampleUrl(url: string): string {
+  return import.meta.env.DEV ? url.replace(FIXTURES_ON_GITHUB, '/fixtures/') : url;
+}
+
 // ----- Dataset cache for the current dataset (demo-only) -----
 // Stores the active dataset in IndexedDB so a refresh can restore it
 // without re-fetching the URL or re-prompting for a file. Keyed by the same
@@ -312,7 +325,16 @@ async function prepareSource(source: File | string): Promise<PreparedSource> {
   }
   // A Blob, not an ArrayBuffer: the browser keeps a large one on disk.
   const blob = await response.blob();
-  const path = new URL(source).pathname;
+  // A web page is no dataset, though it would load as a CSV of its HTML: a
+  // server that answers any path with its app's page sends one, as Vite's
+  // dev server does for a relative `?url=` it has no file for.
+  const head = (await blob.slice(0, 1024).text()).trimStart().toLowerCase();
+  if (head.startsWith('<!doctype html') || head.startsWith('<html')) {
+    throw new Error('The URL returned a web page, not a data file');
+  }
+  // Relative to the page, as fetch reads it: an example chip's /fixtures/
+  // path in development, or a relative `?url=`.
+  const path = new URL(source, window.location.href).pathname;
   const fileSeg = path.split('/').pop() || '';
   return {
     file: new File([blob], fileSeg || 'data', { type: blob.type }),
@@ -335,6 +357,18 @@ function preparedFromCache(cached: CachedSource): PreparedSource {
 const sessionStore = new SessionStore();
 
 let table: DataTable | null = null;
+// Development only: the current table as `window.__dtDemo.table`, for the
+// browser tests and for poking at it from DevTools.
+if (import.meta.env.DEV) {
+  Object.defineProperty(window, '__dtDemo', {
+    value: Object.freeze({
+      get table(): DataTable | null {
+        return table;
+      },
+    }),
+    configurable: true,
+  });
+}
 // Per-page counter that ensures every file upload yields a unique
 // `tableName` even when two uploads share a millisecond timestamp.
 let fileUploadCounter = 0;
@@ -816,7 +850,7 @@ urlInput.addEventListener('keydown', (e) => {
 // URL input, so format auto-detection and `?url=` syncing both happen for free.
 for (const chip of exampleChips) {
   chip.addEventListener('click', () => {
-    const url = chip.dataset.url;
+    const url = chip.dataset.url && exampleUrl(chip.dataset.url);
     if (!url || loadRunning) return;
     urlInput.value = url;
     void exclusively(() => loadSource(url));

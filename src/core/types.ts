@@ -2,7 +2,15 @@
  * Core type definitions for the Interactive Data Table Library
  */
 
-// Column data types supported by the library
+/**
+ * Column data types supported by the library.
+ *
+ * `'nested'` covers DuckDB's container types: LIST (`INTEGER[]`), fixed-size
+ * ARRAY (`FLOAT[768]`), STRUCT, MAP, UNION and VARIANT. Their values are not
+ * scalars; the grid shows DuckDB's text for them, and
+ * `ColumnSchema.originalType` says which container a column is. A `JSON`
+ * column is `'string'`.
+ */
 export type DataType =
   | 'integer'
   | 'float'
@@ -13,7 +21,8 @@ export type DataType =
   | 'date'
   | 'timestamp'
   | 'time'
-  | 'interval';
+  | 'interval'
+  | 'nested';
 
 /**
  * Column metadata exposed on `state.schema.get()` and threaded through every
@@ -48,18 +57,6 @@ export type RowId = bigint;
 
 /** Name of the library-reserved synthetic row-id column. */
 export const ROWID_COLUMN = '__rowid__';
-
-const NESTED_TYPE = /[[\]]|^(STRUCT|MAP|UNION)\b/i;
-
-/**
- * Whether a DuckDB type, as `DESCRIBE` names it (`ColumnSchema.originalType`),
- * is nested: a LIST (`INTEGER[]`), a fixed-size ARRAY (`INTEGER[3]`), a
- * STRUCT, a MAP or a UNION. Their values are not scalars: Arrow returns
- * lists as vectors, and structs and maps as row objects.
- */
-export function isNestedType(originalType: string | undefined): boolean {
-  return originalType !== undefined && NESTED_TYPE.test(originalType.trim());
-}
 
 // Filter types (re-exported from FilterTypes for backward compatibility)
 export type {

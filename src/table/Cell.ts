@@ -143,6 +143,11 @@ export class CellRenderer {
       case 'interval':
         return this.formatInterval(value);
 
+      case 'nested':
+        // The grid reads a nested value as DuckDB's text for it (see
+        // rowQuery.ts), so it arrives here as a string already.
+        return typeof value === 'string' ? value : String(value);
+
       case 'string':
       default:
         return String(value);

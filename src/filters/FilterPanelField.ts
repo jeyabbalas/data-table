@@ -134,7 +134,8 @@ export class FilterPanelField {
 
     if (type === 'integer' || type === 'float' || type === 'decimal') {
       this.createNumericControls();
-    } else if (type === 'string') {
+    } else if (type === 'string' || type === 'nested') {
+      // A nested value is matched by its text, as the grid shows it.
       this.createStringControls();
     } else if (type === 'boolean') {
       this.createBooleanControls();
@@ -466,7 +467,7 @@ export class FilterPanelField {
 
     if (type === 'integer' || type === 'float' || type === 'decimal') {
       return this.buildNumericFilter();
-    } else if (type === 'string') {
+    } else if (type === 'string' || type === 'nested') {
       return this.buildStringFilter();
     } else if (type === 'boolean') {
       return this.buildBooleanFilter();
@@ -745,7 +746,7 @@ export class FilterPanelField {
 
     if (type === 'integer' || type === 'float' || type === 'decimal') {
       this.populateNumericFromFilter(filter);
-    } else if (type === 'string') {
+    } else if (type === 'string' || type === 'nested') {
       this.populateStringFromFilter(filter);
     } else if (type === 'boolean') {
       this.populateBooleanFromFilter(filter);

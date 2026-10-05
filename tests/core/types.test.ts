@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isNestedType,
-  type DataType,
-  type ColumnSchema,
-  type FilterType,
-  type Filter,
-} from '@/core/types';
+import type { DataType, ColumnSchema, FilterType, Filter } from '@/core/types';
 
 describe('Core Types', () => {
   it('should allow valid DataType values', () => {
@@ -20,8 +14,9 @@ describe('Core Types', () => {
       'timestamp',
       'time',
       'interval',
+      'nested',
     ];
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(11);
   });
 
   it('should allow valid ColumnSchema', () => {
@@ -59,40 +54,5 @@ describe('Core Types', () => {
     };
     expect(filter.column).toBe('age');
     expect(filter.type).toBe('range');
-  });
-});
-
-describe('isNestedType', () => {
-  it.each([
-    'INTEGER[]',
-    'BIGINT[]',
-    'INTEGER[3]',
-    'INTEGER[][]',
-    'STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)',
-    'STRUCT("inner" INTEGER[])',
-    'MAP(VARCHAR, INTEGER)',
-    'UNION(num INTEGER, str VARCHAR)',
-    'struct(a integer)',
-    ' MAP(VARCHAR, INTEGER) ',
-  ])('%s is nested', (type) => {
-    expect(isNestedType(type)).toBe(true);
-  });
-
-  it.each([
-    'INTEGER',
-    'VARCHAR',
-    'DECIMAL(18,3)',
-    'TIMESTAMP WITH TIME ZONE',
-    'INTERVAL',
-    'JSON',
-    'BLOB',
-    'MAPPING',
-    '',
-  ])('%s is not nested', (type) => {
-    expect(isNestedType(type)).toBe(false);
-  });
-
-  it('a missing type is not nested', () => {
-    expect(isNestedType(undefined)).toBe(false);
   });
 });

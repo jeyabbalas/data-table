@@ -1952,7 +1952,7 @@ export class StateActions {
       // Push to undo stack AFTER DuckDB success, BEFORE state mutation
       this.pushDerivedUndo();
 
-      const typeChanged = oldEntry.type !== info.detectedType;
+      const typeChanged = derivedTypeChanged(oldEntry, info);
 
       batch(() => {
         // Update derivedColumns list
@@ -2163,7 +2163,7 @@ export class StateActions {
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation.
     this.pushDerivedUndo();
 
-    const typeChanged = oldEntry.type !== info.detectedType;
+    const typeChanged = derivedTypeChanged(oldEntry, info);
 
     batch(() => {
       this.state.derivedColumns.set(
@@ -2621,6 +2621,17 @@ function alignOrderWithVisible(
   }
   moved.splice(insertAt, 0, column);
   return moved;
+}
+
+/**
+ * Whether a derived column's new definition changed its type, so that the
+ * filters on it no longer fit. Two nested types are both `'nested'`: a
+ * STRUCT made a LIST is a change all the same, so they are compared by their
+ * DuckDB types.
+ */
+function derivedTypeChanged(before: ColumnSchema, after: DerivedColumnInfo): boolean {
+  if (before.type !== after.detectedType) return true;
+  return before.type === 'nested' && before.originalType !== after.detectedOriginalType;
 }
 
 // ---------------------------------------------------------------------------

@@ -213,6 +213,7 @@ export {
   isTimeType,
   isCategoricalType,
   isIntervalType,
+  isNestedType,
   needsVisualization,
 } from './visualizations/VisualizationRegistry';
 

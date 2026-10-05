@@ -143,21 +143,28 @@ describe('SchemaDetector', () => {
       });
     });
 
-    describe('complex types (fallback to string)', () => {
-      it('should map array types to string', () => {
-        expect(mapDuckDBType('INTEGER[]')).toBe('string');
-        expect(mapDuckDBType('VARCHAR[]')).toBe('string');
+    describe('nested types', () => {
+      it('should map list and array types to nested', () => {
+        expect(mapDuckDBType('INTEGER[]')).toBe('nested');
+        expect(mapDuckDBType('VARCHAR[]')).toBe('nested');
+        expect(mapDuckDBType('FLOAT[768]')).toBe('nested');
+        expect(mapDuckDBType('JSON[]')).toBe('nested');
+        expect(mapDuckDBType('LIST(INTEGER)')).toBe('nested');
       });
 
-      it('should map MAP/STRUCT types to string', () => {
-        expect(mapDuckDBType('MAP(VARCHAR, INTEGER)')).toBe('string');
-        expect(mapDuckDBType('STRUCT(a INTEGER, b VARCHAR)')).toBe('string');
+      it('should map MAP/STRUCT/UNION/VARIANT types to nested', () => {
+        expect(mapDuckDBType('MAP(VARCHAR, INTEGER)')).toBe('nested');
+        expect(mapDuckDBType('STRUCT(a INTEGER, b VARCHAR)')).toBe('nested');
+        expect(mapDuckDBType('UNION(num INTEGER, str VARCHAR)')).toBe('nested');
+        expect(mapDuckDBType('VARIANT')).toBe('nested');
       });
 
-      it('should map LIST types to string', () => {
+      it('should map a bare LIST name to string', () => {
         expect(mapDuckDBType('LIST')).toBe('string');
       });
+    });
 
+    describe('other types (fallback to string)', () => {
       it('should map unknown types to string', () => {
         expect(mapDuckDBType('SOME_UNKNOWN_TYPE')).toBe('string');
       });

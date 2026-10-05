@@ -39,9 +39,11 @@ async function drain(): Promise<void> {
   for (let i = 0; i < 12; i++) await Promise.resolve();
 }
 
-/** What DuckDB would answer: a type for `typeof(…)`, no rows otherwise. */
+/** What DuckDB would answer: a type for `DESCRIBE SELECT (…)`, no rows otherwise. */
 function reply(query: CapturedQuery): unknown[] {
-  return /^SELECT typeof\(/.test(query.sql) ? [{ t: 'INTEGER' }] : [];
+  return /^DESCRIBE SELECT \(/.test(query.sql)
+    ? [{ column_name: 'v', column_type: 'INTEGER' }]
+    : [];
 }
 
 /** Answer one query and let what it unblocks run. */
@@ -503,8 +505,8 @@ describe('a load while derived-column changes wait or run', () => {
     // The running add's three statements, then the old manager's DROP: none
     // for the changes that waited.
     expect(h.queries.slice(sentBefore).map((q) => q.sql.slice(0, 32))).toEqual([
-      expect.stringMatching(/^SELECT \(id \* 3\)/),
-      expect.stringMatching(/^SELECT typeof\(\(id \* 3\)\)/),
+      expect.stringMatching(/^SELECT NULL FROM \(SELECT \(id \* 3/),
+      expect.stringMatching(/^DESCRIBE SELECT \(id \* 3\) AS v/),
       expect.stringMatching(/^CREATE OR REPLACE VIEW/),
       expect.stringMatching(/^DROP VIEW IF EXISTS/),
     ]);

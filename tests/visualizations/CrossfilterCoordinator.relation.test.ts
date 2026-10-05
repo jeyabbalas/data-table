@@ -72,7 +72,7 @@ function counts(queries: CapturedQuery[]): CapturedQuery[] {
 /** Add `x2 = id * 2` and let it land: validation, type detection, the VIEW. */
 async function landDerivedColumn({ actions, queries }: ReturnType<typeof setup>): Promise<void> {
   const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
-  for (const rows of [[], [{ t: 'INTEGER' }], []]) {
+  for (const rows of [[], [{ column_name: 'v', column_type: 'INTEGER' }], []]) {
     await drain();
     queries.at(-1)!.deferred.resolve(rows);
   }

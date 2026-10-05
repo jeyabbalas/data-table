@@ -107,9 +107,12 @@ export function statsKindForDataType(dataType: DataType): ColumnStatsData['kind'
     case 'float':
     case 'decimal':
       return 'numeric';
+    // Nested columns share the categorical kind until they get a kind of
+    // their own.
     case 'string':
     case 'boolean':
     case 'uuid':
+    case 'nested':
       return 'categorical';
     case 'date':
     case 'timestamp':

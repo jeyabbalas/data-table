@@ -232,6 +232,37 @@ describe('FilterPanelField', () => {
   // String Filters
   // =========================================
 
+  describe('nested columns', () => {
+    const listColumn: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+
+    it('get the text controls, matching the text the grid shows', () => {
+      const field = createField(listColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      expect(select).not.toBeNull();
+      expect(input).not.toBeNull();
+      expect(el.querySelector('input[type="number"]')).toBeNull();
+
+      select.value = 'contains';
+      input.value = 'red';
+      field.applyFilter();
+      expect(state.filters.get()[0]).toEqual({
+        type: 'pattern',
+        column: 'tags',
+        pattern: 'red',
+        mode: 'contains',
+      });
+      field.destroy();
+    });
+  });
+
   describe('string filters', () => {
     const strColumn: ColumnSchema = {
       name: 'name',

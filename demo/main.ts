@@ -46,6 +46,7 @@ import {
   isDateType,
   isTimeType,
   isCategoricalType,
+  isNestedType,
 } from '@jeyabbalas/data-table/advanced';
 
 // ----- DOM refs -----
@@ -420,12 +421,15 @@ function updateTableInfo(): void {
   const dateCols = schema.filter((c) => isDateType(c.type)).length;
   const timeCols = schema.filter((c) => isTimeType(c.type)).length;
   const categoricalCols = schema.filter((c) => isCategoricalType(c.type)).length;
+  const nestedCols = schema.filter((c) => isNestedType(c.type)).length;
 
   let info =
     filters.length > 0
       ? `<strong>${filteredRows.toLocaleString()}</strong> / ${totalRows.toLocaleString()} rows, <strong>${schema.length}</strong> columns | <strong>${filters.length}</strong> filter${filters.length > 1 ? 's' : ''}`
       : `<strong>${totalRows.toLocaleString()}</strong> rows, <strong>${schema.length}</strong> columns`;
-  info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical)`;
+  info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical`;
+  if (nestedCols > 0) info += `, ${nestedCols} nested`;
+  info += ')';
 
   const derived = state.derivedColumns.get();
   if (derived.length > 0) info += ` | <strong>${derived.length}</strong> derived`;

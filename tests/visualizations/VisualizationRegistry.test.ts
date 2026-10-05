@@ -51,6 +51,8 @@ vi.mock('../../src/data/WorkerBridge', () => ({
 import {
   VisualizationRegistry,
   defaultVisualizationRegistry,
+  isCategoricalType,
+  isNestedType,
 } from '../../src/visualizations/VisualizationRegistry';
 import { VisualizationFactory } from '../../src/visualizations/VisualizationFactory';
 import { BaseVisualization } from '../../src/visualizations/BaseVisualization';
@@ -100,6 +102,30 @@ describe('VisualizationRegistry (Phase 3)', () => {
     expect(types).toContain('interval-histogram');
     expect(types).toContain('value-counts');
     expect(types).toHaveLength(5);
+  });
+
+  it('treats nested columns as nested, not categorical', () => {
+    expect(isNestedType('nested')).toBe(true);
+    expect(isNestedType('string')).toBe(false);
+    expect(isCategoricalType('nested')).toBe(false);
+
+    // A registration for text columns does not receive a nested column.
+    const reg = new VisualizationRegistry();
+    reg.register({
+      name: 'text-only',
+      isApplicable: (t) => t === 'string',
+      constructor: FakeViz,
+      priority: 10,
+    });
+    const nested: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+    expect(
+      reg.create(document.createElement('div'), nested, {} as VisualizationOptions),
+    ).not.toBeInstanceOf(FakeViz);
   });
 
   it('isolates custom registrations between two registries', () => {

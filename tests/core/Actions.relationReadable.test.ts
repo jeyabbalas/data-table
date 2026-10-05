@@ -45,7 +45,7 @@ async function landDerivedColumn({ actions, queries }: ReturnType<typeof setup>)
   const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
   await drain();
   await answer(queries);
-  await answer(queries, [{ t: 'INTEGER' }]);
+  await answer(queries, [{ column_name: 'v', column_type: 'INTEGER' }]);
   await answer(queries);
   await expect(add).resolves.toEqual({ success: true });
 }
@@ -178,7 +178,7 @@ describe('StateActions.whenRelationReadable', () => {
     expect(readable.resolved).toBe(true);
 
     await answer(queries);
-    await answer(queries, [{ t: 'INTEGER' }]);
+    await answer(queries, [{ column_name: 'v', column_type: 'INTEGER' }]);
     await answer(queries);
     await expect(add).resolves.toEqual({ success: true });
     expect(actions.isRelationChanging()).toBe(false);

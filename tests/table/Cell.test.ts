@@ -288,6 +288,37 @@ describe('CellRenderer', () => {
       };
     });
 
+    describe('nested values', () => {
+      const nested: ColumnSchema = {
+        name: 'point',
+        type: 'nested',
+        nullable: true,
+        originalType: 'STRUCT(x DOUBLE, tier VARCHAR)',
+      };
+
+      it("shows DuckDB's text as it is, as text, with a title", () => {
+        renderer.render(cellEl, "{'x': 1.25, 'tier': bronze}", nested);
+        expect(cellEl.textContent).toBe("{'x': 1.25, 'tier': bronze}");
+        expect(cellEl.title).toBe("{'x': 1.25, 'tier': bronze}");
+        expect(cellEl.classList.contains('dt-cell--number')).toBe(false);
+        expect(cellEl.classList.contains('dt-cell--null')).toBe(false);
+      });
+
+      it('clears the number class a reused cell carried', () => {
+        renderer.render(cellEl, 42, schema);
+        expect(cellEl.classList.contains('dt-cell--number')).toBe(true);
+        renderer.render(cellEl, '[1, 2, 3]', { ...nested, originalType: 'INTEGER[]' });
+        expect(cellEl.textContent).toBe('[1, 2, 3]');
+        expect(cellEl.classList.contains('dt-cell--number')).toBe(false);
+      });
+
+      it('shows NULL as null', () => {
+        renderer.render(cellEl, null, nested);
+        expect(cellEl.textContent).toBe('null');
+        expect(cellEl.classList.contains('dt-cell--null')).toBe(true);
+      });
+    });
+
     describe('null values', () => {
       it('should display "null" text', () => {
         renderer.render(cellEl, null, schema);

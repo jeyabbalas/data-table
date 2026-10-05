@@ -504,7 +504,7 @@ describe('TableBody during a derived-column change', () => {
     await harness.drain();
     // Validation, type detection, then the VIEW.
     await answerLast(harness);
-    await answerLast(harness, [{ t: 'INTEGER' }]);
+    await answerLast(harness, [{ column_name: 'v', column_type: 'INTEGER' }]);
     await answerLast(harness);
     await expect(add).resolves.toEqual({ success: true });
     await vi.advanceTimersByTimeAsync(0);
@@ -564,7 +564,7 @@ describe('TableBody during a derived-column change', () => {
     // Validation, type detection, then the VIEW.
     queries[start - 1]!.deferred.resolve([]);
     await harness.drain();
-    await answerLast(harness, [{ t: 'INTEGER' }]);
+    await answerLast(harness, [{ column_name: 'v', column_type: 'INTEGER' }]);
     expect(queries.at(-1)!.sql).toMatch(/^CREATE OR REPLACE VIEW "__dt_view_t__"/);
     expect(queries.slice(start).filter(isRowQuery)).toEqual([]);
     await answerLast(harness);
@@ -714,7 +714,7 @@ describe('TableBody during a derived-column change', () => {
     const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
     await harness.drain();
     await answerLast(harness);
-    await answerLast(harness, [{ t: 'INTEGER' }]);
+    await answerLast(harness, [{ column_name: 'v', column_type: 'INTEGER' }]);
     await answerLast(harness);
     await add;
 
@@ -862,7 +862,7 @@ describe('TableBody with rows in view past the row count', () => {
     state.baseTableName.set('t');
     const add = actions.addDerivedColumn({ kind: 'expression', name: 'x2', expression: 'id * 2' });
     await harness.drain();
-    for (const rows of [[], [{ t: 'INTEGER' }], []]) {
+    for (const rows of [[], [{ column_name: 'v', column_type: 'INTEGER' }], []]) {
       queries.at(-1)!.deferred.resolve(rows);
       await harness.drain();
     }

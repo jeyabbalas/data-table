@@ -43,6 +43,16 @@ import type {
 const VECTOR_BATCH_SIZE = 1000;
 
 /**
+ * A query that binds `select`, and so reports its errors, without reading a
+ * row or returning its columns. The result of `select` itself would have to
+ * cross Arrow even when empty, and Arrow has no VARIANT type: a VARIANT
+ * expression failed validation with "Unsupported Arrow type VARIANT".
+ */
+function bindOnly(select: string): string {
+  return `SELECT NULL FROM (${select}) LIMIT 0`;
+}
+
+/**
  * The number the next manager made on each bridge takes, which its helper
  * tables are named with. Per bridge, since a bridge is one DuckDB database:
  * two tables sharing one must not share a helper table, nor must the
@@ -689,9 +699,14 @@ export class DerivedColumnManager {
     return this.columns.length > 0 ? this.viewName : this.baseTableName;
   }
 
-  /** Validate expression: SELECT (<expr>) AS "<alias>" FROM "<view_or_base>" LIMIT 0 */
+  /**
+   * Validate expression: binds `SELECT (<expr>) AS "<alias>" FROM
+   * "<view_or_base>"` without reading a row (see {@link bindOnly}).
+   */
   private async validateExpressionSQL(expression: string, alias: string): Promise<void> {
-    const sql = `SELECT (${expression}) AS ${quoteIdentifier(alias)} FROM ${quoteIdentifier(this.validationTableName)} LIMIT 0`;
+    const sql = bindOnly(
+      `SELECT (${expression}) AS ${quoteIdentifier(alias)} FROM ${quoteIdentifier(this.validationTableName)}`,
+    );
     await this.bridge.query(sql);
   }
 
@@ -774,7 +789,7 @@ export class DerivedColumnManager {
       for (const depInfo of sortedDependents) {
         const depExpr = (depInfo.def as { expression: string }).expression;
         const preflightCTE = `WITH __dt_preflight AS (SELECT * REPLACE (CAST(${quoteIdentifier(oldName)} AS ${duckdbType}) AS ${quoteIdentifier(oldName)}) FROM ${quoteIdentifier(this.validationTableName)})`;
-        const sql = `${preflightCTE} SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM __dt_preflight LIMIT 0`;
+        const sql = `${preflightCTE} ${bindOnly(`SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM __dt_preflight`)}`;
         try {
           await this.bridge.query(sql);
         } catch (err) {
@@ -798,7 +813,7 @@ export class DerivedColumnManager {
       const layerName = `__dt_preflight_${i + 1}`;
 
       // Validate the dependent's expression against the previous layer.
-      const validateSql = `WITH ${cteLayers.join(', ')} SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer} LIMIT 0`;
+      const validateSql = `WITH ${cteLayers.join(', ')} ${bindOnly(`SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer}`)}`;
       try {
         await this.bridge.query(validateSql);
       } catch (err) {
@@ -818,20 +833,21 @@ export class DerivedColumnManager {
     return reasons;
   }
 
-  /** Detect type: SELECT typeof((<expr>)) AS t FROM "<view_or_base>" LIMIT 1, then mapDuckDBType() */
+  /**
+   * Detect type: `DESCRIBE SELECT (<expr>) AS v FROM "<view_or_base>"`, then
+   * mapDuckDBType().
+   *
+   * DESCRIBE binds the query without running it, so the type is known on an
+   * empty table too: a `typeof()` over the rows had none to read there, and
+   * fell back to `VARCHAR`.
+   */
   private async detectType(expression: string): Promise<{
     detectedType: DataType;
     detectedOriginalType: string;
   }> {
-    const sql = `SELECT typeof((${expression})) AS t FROM ${quoteIdentifier(this.validationTableName)} LIMIT 1`;
-    const rows = await this.bridge.query<{ t: string }>(sql);
-
-    if (rows.length === 0) {
-      // Empty table — fallback to string
-      return { detectedType: 'string', detectedOriginalType: 'VARCHAR' };
-    }
-
-    const originalType = rows[0]!.t;
+    const sql = `DESCRIBE SELECT (${expression}) AS v FROM ${quoteIdentifier(this.validationTableName)}`;
+    const rows = await this.bridge.query<{ column_name: string; column_type: string }>(sql);
+    const originalType = rows[0]?.column_type ?? 'VARCHAR';
     return {
       detectedType: mapDuckDBType(originalType),
       detectedOriginalType: originalType,

@@ -5,13 +5,8 @@
  * `TableBody.fetchBlock` sends.
  */
 
-import {
-  ROWID_COLUMN,
-  isNestedType,
-  type ColumnSchema,
-  type Filter,
-  type SortColumn,
-} from '../core/types';
+import { isNestedSqlType } from '../core/duckdbType';
+import { ROWID_COLUMN, type ColumnSchema, type Filter, type SortColumn } from '../core/types';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
 export interface RowQuery {
@@ -39,7 +34,9 @@ export interface RowQuery {
  * the header chart's labels: `[56, 3, 91]`, `{'x': 1.0, 'tier': bronze}`.
  */
 function readsAsText(column: ColumnSchema | undefined): boolean {
-  return column !== undefined && (column.type === 'interval' || isNestedType(column.originalType));
+  return (
+    column !== undefined && (column.type === 'interval' || isNestedSqlType(column.originalType))
+  );
 }
 
 /**

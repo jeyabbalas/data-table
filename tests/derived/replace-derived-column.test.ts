@@ -18,7 +18,7 @@ import { DerivedColumnError } from '@/core/errors';
  * Build a mock WorkerBridge for the replace-column flow.
  *
  * Options:
- * - typeMap: maps expression text (as it appears inside `typeof((...))`) to
+ * - typeMap: maps expression text (as it appears inside `DESCRIBE SELECT (...) AS v`) to
  *   its DuckDB type. Controls what detectType returns.
  * - preflightBreaks: when the pre-flight query contains every token in this
  *   array, throw a Binder-Error-like failure. Used to simulate dependents
@@ -41,12 +41,12 @@ function createMockBridge(
     queryCalls.push(sql);
     const trimmed = sql.trim();
 
-    // Type detection: SELECT typeof((<expr>)) AS t FROM ...
-    if (sql.includes('typeof(')) {
-      const m = sql.match(/typeof\(\((.+)\)\) AS t/);
+    // Type detection: DESCRIBE SELECT (<expr>) AS v FROM ...
+    if (sql.startsWith('DESCRIBE SELECT (')) {
+      const m = sql.match(/^DESCRIBE SELECT \((.+)\) AS v FROM /);
       const expr = m?.[1] ?? '';
       const duckdbType = typeMap[expr] ?? 'DOUBLE';
-      return [{ t: duckdbType }];
+      return [{ column_name: 'v', column_type: duckdbType }];
     }
 
     // Pre-flight simulation: throw when all needles are present.
@@ -418,7 +418,8 @@ describe('replaceDerivedColumn', () => {
     let helperCreateCount = 0;
     mockBridge.query.mockImplementation(async (sql: string) => {
       const trimmed = sql.trim();
-      if (sql.includes('typeof(')) return [{ t: 'INTEGER' }];
+      if (sql.startsWith('DESCRIBE SELECT ('))
+        return [{ column_name: 'v', column_type: 'INTEGER' }];
       if (/^CREATE TABLE\s+"?__dt_vec_/i.test(trimmed)) {
         helperCreateCount++;
         if (helperCreateCount === 1) {
@@ -471,10 +472,10 @@ describe('replaceDerivedColumn', () => {
     let viewCount = 0;
     mockBridge.query.mockImplementation(async (sql: string) => {
       const trimmed = sql.trim();
-      if (sql.includes('typeof(')) {
-        const m = sql.match(/typeof\(\((.+)\)\) AS t/);
+      if (sql.startsWith('DESCRIBE SELECT (')) {
+        const m = sql.match(/^DESCRIBE SELECT \((.+)\) AS v FROM /);
         const expr = m?.[1] ?? '';
-        return [{ t: expr === 'x + 2' ? 'INTEGER' : 'DOUBLE' }];
+        return [{ column_name: 'v', column_type: expr === 'x + 2' ? 'INTEGER' : 'DOUBLE' }];
       }
       if (/^CREATE OR REPLACE VIEW/i.test(trimmed)) {
         viewCount++;

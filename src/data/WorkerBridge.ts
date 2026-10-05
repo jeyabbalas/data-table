@@ -335,6 +335,23 @@ export class WorkerBridge {
    * (viewport row fetches use this so they are not stuck behind
    * stats/histogram fan-outs).
    *
+   * Each row is a plain object keyed by column name. Integers arrive as
+   * numbers (the nearest one, past ±2^53), a LIST or ARRAY value as an
+   * array, a STRUCT or MAP value as an object (a MAP's keys as strings; an
+   * unnamed STRUCT, as `row(1, 'a')` builds, as an array), and a BLOB as a
+   * `Uint8Array`.
+   *
+   * DECIMAL, HUGEINT and INTERVAL values inside a LIST, ARRAY, STRUCT or MAP
+   * do not arrive intact: a nested DECIMAL or HUGEINT reads as a meaningless
+   * number (`[1.25, 2.50, 3.75]` as `[6.2e-322, 0, 1.235e-321]`), and an
+   * INTERVAL, nested or a column's own value, as an `Int32Array` that does
+   * not hold it. Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
+   * nested value as JSON text, which is exact: `CAST(to_json(c) AS VARCHAR)`
+   * keeps every digit and writes an INTERVAL as DuckDB does
+   * (`"1 year 2 months 3 days"`). `JSON.parse` rounds integers past 2^53
+   * and rejects the bare `NaN` and `Infinity` DuckDB writes for non-finite
+   * DOUBLEs.
+   *
    * @param sql SQL text to execute.
    * @param signal Optional abort signal; aborting rejects with
    *   `QUERY_ABORTED` and posts a targeted cancel to the worker.

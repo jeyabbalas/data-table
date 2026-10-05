@@ -50,11 +50,16 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
 }
 
 /**
- * Check if a value is a DuckDB WASM interval object.
+ * Check if a value is an interval object: numeric `months` and `days`, as in
+ * Arrow's MonthDayNano shape `{ months, days, nanoseconds }` or DuckDB's
+ * `{ months, days, micros }`.
  *
- * DuckDB WASM returns INTERVAL values as Arrow MonthDayNano objects
- * with { months, days, nanoseconds } instead of strings. This detector
- * checks for that shape so we can convert to a string representation.
+ * apache-arrow 17 never returns one: it reads an INTERVAL value as a
+ * two-element `Int32Array` that does not hold the interval, which is why
+ * the grid and the column stats select INTERVAL columns as text.
+ * {@link convertBigInts} tests only a plain object outside any list and any
+ * STRUCT or MAP value, so a STRUCT with `months` and `days` fields stays a
+ * record.
  */
 function isIntervalObject(obj: Record<string, unknown>): boolean {
   return (
@@ -150,46 +155,169 @@ function isArrowVector(obj: object): obj is Iterable<unknown> {
 }
 
 /**
- * Convert BigInt values to Numbers for JSON serialization, and convert
- * DuckDB WASM interval objects to string representations.
+ * The symbol Arrow keeps a STRUCT value's row index under, on
+ * `StructRow.prototype`. `MapRow.prototype` has no such property.
+ */
+const ARROW_ROW_INDEX = Symbol.for('rowIndex');
+
+/** An Arrow row's entries, in order: see {@link readArrowRow}. */
+interface ArrowRowEntries {
+  /** Whether the row is a STRUCT value; if not, it is a MAP value. */
+  isStruct: boolean;
+  /** `[field name, value]` for a STRUCT, `[key, value]` for a MAP. */
+  entries: [unknown, unknown][];
+}
+
+/**
+ * Read an Arrow row: what a STRUCT value (a `StructRow`) or a MAP value (a
+ * `MapRow`) is. Returns `null` for any other value.
  *
- * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify().
- * It also returns INTERVAL values as Arrow MonthDayNano objects instead of strings.
+ * Both are proxies, tagged `Row`, that read fields (a MAP's keys) as
+ * properties. Their `get` looks a name up on the row object first, so a
+ * field named `size` reads as a MAP's entry count, and one named `toJSON`
+ * or `constructor` as a function, which `postMessage` cannot clone; and
+ * listing the fields of an unnamed STRUCT, all named '', throws. Their own
+ * `toJSON()` assigns the fields to a plain object, so it loses a
+ * `__proto__` field or makes it the object's prototype (after which the
+ * next field's assignment can throw), and an unnamed STRUCT's fields
+ * overwrite one another. The entries come from the iterator on the row's
+ * prototype instead, which reads Arrow's data by position.
+ */
+function readArrowRow(obj: object): ArrowRowEntries | null {
+  if (Object.prototype.toString.call(obj) !== '[object Row]') {
+    return null;
+  }
+  const proto = Object.getPrototypeOf(obj) as Record<PropertyKey, unknown> | null;
+  if (proto === null || typeof proto[Symbol.iterator] !== 'function') {
+    return null;
+  }
+  const iterate = proto[Symbol.iterator] as (this: object) => Iterator<[unknown, unknown]>;
+  const iterator = iterate.call(obj);
+  const entries: [unknown, unknown][] = [];
+  for (let step = iterator.next(); !step.done; step = iterator.next()) {
+    entries.push(step.value);
+  }
+  return { isStruct: Object.hasOwn(proto, ARROW_ROW_INDEX), entries };
+}
+
+/**
+ * Set `key` on a plain object being built as an own, enumerable data
+ * property, the way `JSON.parse` does. Assigning `__proto__` would run
+ * `Object.prototype`'s setter instead, changing the object's prototype and
+ * losing the key, so that key is defined. Every other inherited property is
+ * a writable data property, which assignment shadows, and assigning is the
+ * cheaper on rows a thousand columns wide.
+ */
+function setOwnProperty(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    target[key] = value;
+  }
+}
+
+/**
+ * A copy of a typed array in a buffer of its own. Arrow returns a BLOB value
+ * as a view into the buffer that holds a whole batch of the result, and
+ * structured clone copies a view's entire buffer: a 2-byte BLOB posted as it
+ * is would take every other column of the batch with it.
+ */
+function copyTypedArray(view: ArrayBufferView): ArrayBufferView {
+  // Every typed array has slice(). A DataView has not, and stays as it is;
+  // Arrow never returns one.
+  return view instanceof DataView ? view : (view as Uint8Array).slice();
+}
+
+/**
+ * Convert a query result value for posting to the main thread, as plain
+ * data that structured clone can copy and `JSON.stringify` can write.
  *
- * Nested values become plain data: a LIST or ARRAY value an array, a STRUCT
- * or MAP value an object. Arrow returns a list as a `Vector`, whose own
- * properties include functions, so copied field by field it could not be
- * posted to the main thread.
+ * - A BigInt becomes a Number: the nearest one, past ±2^53.
+ * - A LIST or ARRAY value becomes an array. Arrow returns one as a
+ *   `Vector`, whose own properties include functions, so copied field by
+ *   field it could not be posted.
+ * - A STRUCT or MAP value becomes an object whose own properties are its
+ *   fields, or its keys as `String` writes them; `__proto__` included. An
+ *   unnamed STRUCT, as `row(1, 'a')` builds, names every field '', and
+ *   becomes an array. See {@link readArrowRow}.
+ * - A typed array, such as a BLOB's `Uint8Array`, stays one, in a copy:
+ *   see {@link copyTypedArray}.
+ * - A plain object with numeric `months` and `days` becomes DuckDB-style
+ *   interval text, unless it is inside a list or a STRUCT or MAP value: see
+ *   {@link isIntervalObject}.
+ *
+ * DECIMAL, HUGEINT and INTERVAL values inside a LIST, ARRAY, STRUCT or MAP
+ * cannot be read this way. duckdb-wasm, opened with `castDecimalToDouble`,
+ * labels a nested DECIMAL (and a HUGEINT, which it passes as a DECIMAL) a
+ * DOUBLE without converting its data, so `[1.25, 2.50, 3.75]` arrives as
+ * `[6.2e-322, 0, 1.235e-321]`, and a HUGEINT as a number just as
+ * meaningless, or NaN. Arrow reads an INTERVAL, there or as a column's own
+ * value, as an `Int32Array` that does not hold it. `CAST(to_json(c) AS
+ * VARCHAR)` reads all three exactly, as JSON text.
  */
 export function convertBigInts(obj: unknown): unknown {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
-  if (typeof obj === 'bigint') {
-    return Number(obj);
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(convertBigInts);
-  }
-  if (typeof obj === 'object') {
-    if (isArrowVector(obj)) {
-      return Array.from(obj, convertBigInts);
-    }
+  return convertValue(obj, true);
+}
 
-    const record = obj as Record<string, unknown>;
-
-    // Detect and convert interval objects before general recursion
-    if (isIntervalObject(record)) {
-      return intervalObjectToString(record);
-    }
-
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(record)) {
-      result[key] = convertBigInts(value);
-    }
-    return result;
+/**
+ * {@link convertBigInts} for one value. `topLevel` says whether it may be
+ * taken for an interval object: true for the value converted and, through
+ * plain objects, for their fields; false inside a list or an Arrow row.
+ */
+function convertValue(value: unknown, topLevel: boolean): unknown {
+  if (value === null || value === undefined) {
+    return value;
   }
-  return obj;
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+  if (typeof value !== 'object') {
+    return value;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return copyTypedArray(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item: unknown) => convertValue(item, false));
+  }
+  const row = readArrowRow(value);
+  if (row !== null) {
+    return convertArrowRow(row);
+  }
+  if (isArrowVector(value)) {
+    return Array.from(value, (item) => convertValue(item, false));
+  }
+
+  const record = value as Record<string, unknown>;
+  if (topLevel && isIntervalObject(record)) {
+    return intervalObjectToString(record);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(record)) {
+    setOwnProperty(result, key, convertValue(item, topLevel));
+  }
+  return result;
+}
+
+/**
+ * Convert an Arrow row's entries: a STRUCT's fields, or a MAP's keys and
+ * values, to an object's own properties, and an unnamed STRUCT's fields to
+ * an array.
+ */
+function convertArrowRow({ isStruct, entries }: ArrowRowEntries): unknown {
+  if (isStruct && entries.length > 0 && entries.every(([name]) => name === '')) {
+    return entries.map(([, item]) => convertValue(item, false));
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of entries) {
+    setOwnProperty(result, String(key), convertValue(item, false));
+  }
+  return result;
 }
 
 /**
@@ -203,7 +331,7 @@ export function convertBigInts(obj: unknown): unknown {
 export function convertRow(row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
-    result[key] = convertBigInts(value);
+    setOwnProperty(result, key, convertBigInts(value));
   }
   return result;
 }

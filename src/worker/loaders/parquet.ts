@@ -3,6 +3,7 @@
  */
 
 import { DuckDBDataProtocol, type AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import { containsKind, parseDuckDBType } from '../../core/duckdbType';
 import { ROWID_COLUMN, type ColumnSchema } from '../../core/types';
 import { mapDuckDBType } from '../../data/SchemaDetector';
 import { getDatabase, getConnection } from '../duckdb';
@@ -28,6 +29,11 @@ import {
 import type { LoadResult, ParquetLoadOptions } from './types';
 
 let tableCounter = 0;
+
+/** Whether values of `type` are JSON, or hold it in a list, an array, a struct, a map or a union. */
+function holdsJson(type: string): boolean {
+  return containsKind(parseDuckDBType(type), 'json');
+}
 
 const PREFETCH_SETTINGS = ['prefetch_all_parquet_files', 'enable_external_file_cache'] as const;
 
@@ -164,6 +170,23 @@ export async function loadParquet(
     const probeRows = probeResult.toArray().map((row) => row.toJSON());
     if (probeRows.some((row) => String(row.column_name) === ROWID_COLUMN)) {
       throw makeReservedColumnError();
+    }
+
+    // duckdb-wasm loads DuckDB's json extension for the first JSON function
+    // a query uses, and until then JSON from a Parquet file reads as plain
+    // text: `CAST(c AS VARCHAR)` writes JSON inside a list, struct or map as
+    // quoted strings (`[1, NULL, 'null']`, not `[1, NULL, null]`), and a
+    // JSON column compares with any text, where once the extension is loaded
+    // text that is not JSON is a Conversion Error. A cell's text, or a
+    // filter, would change the first time anything read a value exactly.
+    // Loaded with the table instead. Best effort: where it cannot load
+    // (offline, a strict CSP), the table reads as plain text throughout.
+    if (probeRows.some((row) => holdsJson(String(row.column_type)))) {
+      try {
+        await conn.query('LOAD json');
+      } catch {
+        // Plain text, as before.
+      }
     }
 
     // Text columns of dates and times, read from the file, and the types

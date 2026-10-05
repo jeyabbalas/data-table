@@ -56,6 +56,7 @@ import { ColumnWindowController } from './ColumnWindowController';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
+import type { ValueInspector } from './ValueInspector';
 
 /**
  * Options for configuring the TableContainer
@@ -200,6 +201,10 @@ export class TableContainer {
   private derivedModal: DerivedColumnModal | null = null;
   private sqlFilterModal: SQLFilterModal | null = null;
   private presetPanel: FilterPresetPanel | null = null;
+  // The value inspector, a lazy chunk: built on the first open, and rebuilt
+  // after a render, which tears it down with the other panels.
+  private valueInspector: ValueInspector | null = null;
+  private valueInspectorModule: Promise<{ ValueInspector: typeof ValueInspector }> | null = null;
   private addColumnButton: AddColumnButton | null = null;
   private wrapperElement: HTMLElement | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
@@ -459,6 +464,7 @@ export class TableContainer {
         getColumnHeaders: () => this.columnHeaders,
         revealColumn: (column) => this.columnWindow.revealColumn(column),
         revealControl: (control) => this.columnWindow.revealHeaderElement(control),
+        openCellInspector: (cell) => this.openValueInspector(cell),
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
@@ -1121,6 +1127,25 @@ export class TableContainer {
     });
     this.unsubscribes.push(unsubLiveSort);
 
+    // The value inspector shows one value of one row, titled with the row's
+    // position. A new filter, sort or relation moves or replaces that row,
+    // and the cursor or the selection moving elsewhere is the user going on
+    // to another cell (a press on the inspected cell itself is not an
+    // outside click, so this is what closes the panel for a click on it).
+    const closeInspector = (): void => {
+      if (!this.destroyed) this.valueInspector?.close();
+    };
+    this.unsubscribes.push(
+      this.state.filters.subscribe(closeInspector),
+      this.state.sortColumns.subscribe(closeInspector),
+      this.state.tableName.subscribe(closeInspector),
+      this.state.selectedRows.subscribe(closeInspector),
+      this.state.focusedCell.subscribe((cell) => {
+        const shown = this.valueInspector?.getShown();
+        if (shown && (cell?.row !== shown.row || cell.column !== shown.column)) closeInspector();
+      }),
+    );
+
     // Clamp focused cell when row count shrinks. A header cursor
     // (row === HEADER_ROW_INDEX) is exempt — the header row exists
     // independently of how many data rows survive the filter.
@@ -1428,6 +1453,13 @@ export class TableContainer {
       this.derivedEditPanel = null;
     }
 
+    // Destroy the value inspector (recreated on the next open). Focus goes
+    // back to the grid.
+    if (this.valueInspector) {
+      this.valueInspector.destroy();
+      this.valueInspector = null;
+    }
+
     if (schema.length === 0 || !tableName) {
       // No data loaded - show placeholder
       this.destroyColumnHeaders();
@@ -1514,6 +1546,7 @@ export class TableContainer {
               // row holding it. Passed explicitly rather than rediscovered with
               // `closest('.dt-grid')` so the dependency is visible at the wiring.
               gridElement: this.gridElement,
+              onInspectCell: (cell) => void this.openValueInspector(cell),
             },
           );
           this.bodySchema = schema;
@@ -1757,6 +1790,7 @@ export class TableContainer {
     if (this.presetPanel?.getIsOpen()) {
       this.presetPanel.close();
     }
+    this.valueInspector?.close();
 
     // Create panel lazily on first click
     if (!this.filterPanel) {
@@ -1795,6 +1829,7 @@ export class TableContainer {
     if (this.presetPanel?.getIsOpen()) {
       this.presetPanel.close();
     }
+    this.valueInspector?.close();
 
     if (!this.derivedEditPanel) {
       const { DerivedColumnEditPanel } = await import('../derived/DerivedColumnEditPanel');
@@ -1828,6 +1863,7 @@ export class TableContainer {
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
     if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    this.valueInspector?.close();
 
     if (!this.derivedModal) {
       const { DerivedColumnModal } = await import('../derived/DerivedColumnModal');
@@ -1886,6 +1922,7 @@ export class TableContainer {
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
     if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    this.valueInspector?.close();
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
@@ -1903,6 +1940,7 @@ export class TableContainer {
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
     if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    this.valueInspector?.close();
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
@@ -1928,6 +1966,7 @@ export class TableContainer {
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
     if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
     if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+    this.valueInspector?.close();
 
     if (!this.presetPanel) {
       const { FilterPresetPanel } = await import('../filters/FilterPresetPanel');
@@ -1957,6 +1996,73 @@ export class TableContainer {
     if (presetsBtn) {
       this.presetPanel.toggle(presetsBtn);
     }
+  }
+
+  /**
+   * Open the value inspector on a body cell: the whole of a nested (LIST,
+   * ARRAY, STRUCT, MAP, UNION, VARIANT) or JSON value as a keyboard tree, in
+   * a panel beside the cell. What `F2` on the cursor, a double click and the
+   * cell's inspect icon do. Closes the other panels; Escape closes it, and
+   * focus goes back to the grid with the cursor where it was.
+   *
+   * The panel is a lazy chunk: it opens a microtask later, after the cursor
+   * keys have scrolled the cell into view, and the first time after the
+   * chunk loads.
+   *
+   * @param cell - The cell, by row (0-based, in the table as sorted and
+   *   filtered) and column name.
+   * @returns whether there is a value to inspect there: `false` for a column
+   *   that is not nested or JSON, a NULL, a row not loaded or not rendered.
+   *
+   * @example
+   * ```typescript
+   * container.openValueInspector({ row: 12, column: 'tags' });
+   * ```
+   */
+  openValueInspector(cell: { row: number; column: string }): boolean {
+    if (this.destroyed || !this.bridge || !this.actions) return false;
+    if (!this.tableBody?.getInspectTarget(cell.row, cell.column)) return false;
+    // Mutual exclusion: one panel at a time
+    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
+    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
+    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
+    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    void this.showValueInspector(cell);
+    return true;
+  }
+
+  /** Load the inspector's chunk if need be, then open it on the cell as it is by then. */
+  private async showValueInspector(cell: { row: number; column: string }): Promise<void> {
+    const { ValueInspector } = await (this.valueInspectorModule ??= import('./ValueInspector'));
+    const bridge = this.bridge;
+    if (this.destroyed || !bridge) return;
+    // Rendered again, scrolled, or sorted while the chunk loaded: read the
+    // cell anew, and give up if it holds nothing to inspect now.
+    const target = this.tableBody?.getInspectTarget(cell.row, cell.column);
+    const column = this.state.schema.get().find((c) => c.name === cell.column);
+    const tableName = this.state.tableName.get();
+    if (!target || !column || !tableName) return;
+    if (!this.valueInspector) {
+      this.valueInspector = new ValueInspector({
+        bridge,
+        classPrefix: this.resolvedOptions.classPrefix,
+        messages: this.messages,
+        colorSchemeSource: this.element,
+        // Not the cell: a pooled cell can hold another row by the time the
+        // panel closes. The grid keeps the cursor.
+        returnFocus: this.gridElement,
+        onOpenChange: this.holdWhileOpen(),
+      });
+      this.element.appendChild(this.valueInspector.getElement());
+    }
+    this.valueInspector.open({
+      tableName,
+      column,
+      rowId: target.rowId,
+      row: cell.row,
+      anchor: target.cell,
+    });
   }
 
   /**
@@ -2176,6 +2282,12 @@ export class TableContainer {
     if (this.derivedEditPanel) {
       this.derivedEditPanel.destroy();
       this.derivedEditPanel = null;
+    }
+
+    // Destroy the value inspector, which aborts its read
+    if (this.valueInspector) {
+      this.valueInspector.destroy();
+      this.valueInspector = null;
     }
 
     // Destroy add column button

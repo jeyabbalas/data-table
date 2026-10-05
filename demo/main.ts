@@ -480,6 +480,10 @@ function updateTableInfo(): void {
     info += ` | <strong>Sort:</strong> ${desc}`;
   }
   if (lastLoadSeconds !== null) info += ` | loaded in ${lastLoadSeconds.toFixed(1)} s`;
+  // Nested and JSON cells open in the value inspector.
+  if (nestedCols > 0 || schema.some((c) => c.originalType.toUpperCase() === 'JSON')) {
+    info += ' | F2 or double-click a nested cell to inspect it';
+  }
   updateInfo(info);
 }
 

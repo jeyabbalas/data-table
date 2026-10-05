@@ -8,8 +8,8 @@
  * Handles: arrow navigation across the header row and the body, Home/End (and
  * Ctrl variants), PageUp/PageDown, Escape to clear the cursor, Enter to toggle
  * sort (header) or row selection (body), F2 to enter the header cell's
- * buttons, Shift+F2 to enter column layout mode (resize and reorder), and
- * Ctrl+Z/Y/C.
+ * buttons or, on a nested or JSON body cell, to open the value inspector,
+ * Shift+F2 to enter column layout mode (resize and reorder), and Ctrl+Z/Y/C.
  *
  * Column layout mode (issue #87) is the answer to the two per-column controls
  * that have no focus stop: the resize separator and the drag handle. It is a
@@ -114,6 +114,16 @@ export interface KeyboardNavigatorOptions {
    * @internal
    */
   revealControl?: ((control: HTMLElement) => void) | undefined;
+  /**
+   * Open the value inspector on a body cell, for `F2` on the cursor. Returns
+   * `true` when it opened (the key is then the inspector's), and `false` for
+   * a cell with nothing to inspect: a scalar column, a NULL, a row not loaded
+   * yet. `F2` then does what it does without this option. `TableContainer`
+   * passes its `openValueInspector`.
+   *
+   * @internal
+   */
+  openCellInspector?: ((cell: { row: number; column: string }) => boolean) | undefined;
   /** Optional bridge for clipboard copy; when absent, Ctrl+C is a no-op. */
   getBridge?: () => WorkerBridge | undefined;
   /**
@@ -129,8 +139,9 @@ export interface KeyboardNavigatorOptions {
 /**
  * WCAG-oriented keyboard navigation controller for the table grid: arrow
  * keys, Home / End, Ctrl+Home / End, PageUp / PageDown, Enter to sort
- * (header) or select (body), F2 to reach the per-column buttons, Shift+F2 to
- * resize and reorder the column, and Ctrl/Cmd+C to copy the selection.
+ * (header) or select (body), F2 to reach the per-column buttons (header) or
+ * open the value inspector (a nested or JSON body cell), Shift+F2 to resize
+ * and reorder the column, and Ctrl/Cmd+C to copy the selection.
  * Composed by {@link TableContainer}; reach for it directly only when
  * assembling a custom container shell.
  */
@@ -144,6 +155,8 @@ export class KeyboardNavigator {
   private readonly getColumnHeaders: (() => ColumnHeader[]) | undefined;
   private readonly revealColumn: (column: string) => boolean;
   private readonly revealControl: ((control: HTMLElement) => void) | undefined;
+  private readonly openCellInspector:
+    ((cell: { row: number; column: string }) => boolean) | undefined;
   private readonly getBridge: (() => WorkerBridge | undefined) | undefined;
   private readonly announceMessage: ((message: string) => void) | undefined;
   private readonly messages: Strings;
@@ -176,6 +189,7 @@ export class KeyboardNavigator {
     this.revealColumn =
       opts.revealColumn ?? ((column) => revealColumnIn(this.bodyScroll, this.state, column));
     this.revealControl = opts.revealControl;
+    this.openCellInspector = opts.openCellInspector;
     this.getBridge = opts.getBridge;
     this.announceMessage = opts.announce;
     this.messages = opts.messages ?? defaultStrings;
@@ -319,8 +333,36 @@ export class KeyboardNavigator {
       return;
     }
 
+    // F2 on a body cell holding a nested or JSON value opens the value
+    // inspector on it, the dialog its `aria-haspopup` and `aria-keyshortcuts`
+    // announce. The cell is scrolled into view first when the user has
+    // scrolled away from it, which also renders it. A cell with nothing to
+    // inspect leaves F2 to the branches below, which do nothing on the body.
+    if (
+      e.key === 'F2' &&
+      focused &&
+      !onHeader &&
+      this.openCellInspector &&
+      !e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey
+    ) {
+      const cell = { row: focused.row, column: focused.column };
+      let opened = this.openCellInspector(cell);
+      if (!opened && this.scrollFocusedCellIntoView(cell.row, cell.column)) {
+        opened = this.openCellInspector(cell);
+      }
+      if (opened) {
+        e.preventDefault();
+        // The panel opens beside the cell: bring it into view under it.
+        this.scrollFocusedCellIntoView(cell.row, cell.column);
+        return;
+      }
+    }
+
     // F2 on a header cell hands real DOM focus to its first button —
-    // the APG "actionable cell" gesture. Body cells have no controls.
+    // the APG "actionable cell" gesture.
     // Shift+F2 is the sibling gesture for the two controls that deliberately
     // have no focus stop: column resize and column reorder.
     if (e.key === 'F2' && onHeader && focused) {

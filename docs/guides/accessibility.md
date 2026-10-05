@@ -322,7 +322,7 @@ high-contrast palette automatically. No extra work needed on your side —
 but if you override `--dt-*` tokens, make sure focus outlines remain
 visible in your overrides.
 
-On top of that automatic behaviour, `src/styles/11-high-contrast.css` — last
+On top of that automatic behaviour, `src/styles/12-high-contrast.css` — last
 in the cascade, so it wins over the per-component styles — adds two targeted
 blocks: `prefers-contrast: more` thickens filter-chip borders, and
 `forced-colors: active` keeps the visualization canvases in colour, pins
@@ -489,7 +489,7 @@ to post-1.0).
 ## What's not yet supported
 
 - **Contrast beyond AA under `prefers-contrast: more`.** The media query
-  _is_ handled — `src/styles/11-high-contrast.css` ships a
+  _is_ handled — `src/styles/12-high-contrast.css` ships a
   `@media (prefers-contrast: more)` block — but all it does is thicken the
   filter-chip border to 2px so chip boundaries stay distinct against the
   user's preferred palette. The colour tokens are left alone, on the grounds
@@ -519,4 +519,4 @@ to post-1.0).
 - i18n: [i18n guide](./i18n.md) for translating `a11y` strings and ARIA labels
 - Theming: [Theming guide](./theming.md) for focus-outline and contrast customization
 - Migration: [v0.5 → v0.6](../migration-guides/from-0.5-to-0.6.md) if you query the table's DOM by ARIA role
-- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode), `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/11-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)
+- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode), `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/12-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)

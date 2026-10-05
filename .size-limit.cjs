@@ -23,7 +23,7 @@
  * into VisualizationRegistry):
  *   root entry · ESM               10.85 kB   →  11.4 kB cap (5.1 %)
  *   advanced entry · ESM            2.47 kB   →   2.6 kB cap (5.3 %)
- *   stylesheet                     20.51 kB   →  21.5 kB cap (4.8 %)
+ *   stylesheet                     21.81 kB   →  22.9 kB cap (5.0 %)
  *   lazy ExportDialog chunk        91.28 kB   →  96 kB   cap (5.2 %)
  *   lazy SQLFilterModal chunk       2.54 kB   →   2.6 kB cap (2.4 %)
  *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
@@ -31,6 +31,7 @@
  *   lazy FilterPresetPanel          2.61 kB   →   2.7 kB cap (3.4 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
+ *   lazy ValueInspector chunk      10.61 kB   →  11.2 kB cap (5.6 %)
  *
  * Root entry history. It measured 7.68 kB until the column charts became
  * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
@@ -77,6 +78,18 @@
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
  * the first time a column is extracted.
  *
+ * ValueInspector chunk history. New with the value inspector (F2, a double
+ * click or the inspect icon on a nested or JSON cell), at 10.61 kB: the
+ * panel, the tree view and the value-tree model, which pairs a value's JSON
+ * with its DuckDB type. The JSON parser, the type parser and the cell read
+ * it uses are shared with the table. Opening it also loads the
+ * `extractExpression-*` chunk, for its "add as column" rules. Since the
+ * type parser is now shared by two lazy chunks and the table, rolldown
+ * moves it, with `FilterSQL`, `errors` and `types`, out of the shared chunk
+ * into a `duckdbType-*` chunk the root entry imports (3.94 kB, not measured
+ * here): the shared chunk measures 1.61 kB less for it, and a page loads
+ * 1.07 kB more, the price of the split.
+ *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
  * already cover the added bytes.
@@ -98,6 +111,10 @@
  * documentation; it is deliberately left alone here because it changes
  * published output.
  *
+ * Nested columns took it from 20.51 to 20.54 kB (the header's type label),
+ * and the value inspector's panel and tree to 21.81 kB, and the cap from
+ * 21.5 to 22.9 kB.
+ *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
  *   advanced entry · ESM    2.36 kB   →   2.5 kB cap
@@ -117,7 +134,7 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '21.5 kB',
+    limit: '22.9 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',
@@ -153,5 +170,10 @@ module.exports = [
     name: 'lazy extractExpression chunk · ESM',
     path: 'dist/extractExpression-*.js',
     limit: '2.95 kB',
+  },
+  {
+    name: 'lazy ValueInspector chunk · ESM',
+    path: 'dist/ValueInspector-*.js',
+    limit: '11.2 kB',
   },
 ];

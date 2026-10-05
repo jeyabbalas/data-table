@@ -522,6 +522,7 @@ describe('stylesheet antipatterns', () => {
       '.dt-export-dialog',
       '.dt-filter-panel-body', // filter inputs
       '.dt-filter-preset-list', // preset rows, each with load/delete buttons
+      '.dt-value-tree', // treeitems, the active one the tree's tab stop
     ]);
     const found: string[] = [];
     for (const file of componentStyleFiles()) {
@@ -674,5 +675,89 @@ describe('canvas labels — the nested summary bar', () => {
     expect(inkFor('rebeccapurple', { fallback: '#111827' })).toBe('#111827');
     expect(inkFor('rgb(1, 2)')).toBe('#ffffff');
     expect(inkFor('#12345')).toBe('#ffffff');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. The value inspector — the cell's inspect icon, the tree's text
+// ---------------------------------------------------------------------------
+
+describe('the value inspector', () => {
+  describe.each(THEME_NAMES)('%s theme', (themeName) => {
+    // The icon is the only sign that the cell opens a dialog: non-text
+    // content, drawn in the glyph's colour on the chip behind it.
+    it(`the inspect glyph clears ${AA_NON_TEXT}:1 on its chip`, () => {
+      const icon = '.dt-cell--inspectable:is(:hover, .dt-cell--focused)';
+      expectRatio(
+        paintedBy('05-data-grid.css', `${icon}::after`),
+        paintedBy('05-data-grid.css', `${icon}::before`, 'background'),
+        AA_NON_TEXT,
+        'the inspect glyph on its chip',
+        themeName,
+      );
+    });
+
+    /** Every text style a tree row shows, by the rule that colours it. */
+    const TREE_TEXT = [
+      '.dt-value-tree__key--column',
+      '.dt-value-tree__key--field',
+      '.dt-value-tree__key--bucket',
+      '.dt-value-tree__key--position',
+      '.dt-value-tree__key--json-index',
+      '.dt-value-tree__sep',
+      '.dt-value-tree__type',
+      '.dt-value-tree__count',
+      '.dt-value-tree__more',
+      '.dt-value-tree__preview',
+      '.dt-value-tree__value--string',
+      '.dt-value-tree__value--number',
+      '.dt-value-tree__value--keyword',
+      '.dt-value-tree__value--null',
+    ] as const;
+
+    /** The surfaces a row sits on: the panel, and a hovered or active row. */
+    const ROW_SURFACES: Array<[string, Paint]> = [
+      ['the panel', paintedBy('11-nested.css', '.dt-value-inspector', 'background')],
+      [
+        'an active row',
+        paintedBy('11-nested.css', ".dt-value-tree__item[aria-selected='true']", 'background'),
+      ],
+    ];
+
+    it.each(
+      TREE_TEXT.flatMap((selector) =>
+        ROW_SURFACES.map(([surface, bg]) => [selector, surface, bg] as const),
+      ),
+    )(`%s clears ${AA_NORMAL_TEXT}:1 on %s`, (selector, surface, bg) => {
+      expectRatio(
+        paintedBy('11-nested.css', selector),
+        bg,
+        AA_NORMAL_TEXT,
+        `${selector} on ${surface}`,
+        themeName,
+      );
+    });
+
+    it(`the active row's marker and the "add" glyph clear ${AA_NON_TEXT}:1`, () => {
+      const activeRow = paintedBy(
+        '11-nested.css',
+        ".dt-value-tree__item[aria-selected='true']",
+        'background',
+      );
+      expectRatio(
+        paintedBy('11-nested.css', ".dt-value-tree__item[aria-selected='true']", 'box-shadow'),
+        activeRow,
+        AA_NON_TEXT,
+        'the active row marker',
+        themeName,
+      );
+      expectRatio(
+        paintedBy('11-nested.css', '.dt-value-tree__add'),
+        activeRow,
+        AA_NON_TEXT,
+        'the add glyph on a hovered row',
+        themeName,
+      );
+    });
   });
 });

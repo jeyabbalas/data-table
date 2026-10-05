@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { CellRenderer, type CellOptions } from '@/table/Cell';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { CellRenderer, isInspectableColumn, type CellOptions } from '@/table/Cell';
 import type { ColumnSchema } from '@/core/types';
 
 describe('CellRenderer', () => {
@@ -515,6 +515,78 @@ describe('CellRenderer', () => {
         renderer.render(cellEl, longText, schema);
         expect(cellEl.title).toBe(longText);
       });
+    });
+  });
+
+  describe('inspectable cells (the value inspector)', () => {
+    const nested: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+    const json: ColumnSchema = {
+      name: 'doc',
+      type: 'string',
+      nullable: true,
+      originalType: 'JSON',
+    };
+    const text: ColumnSchema = {
+      name: 'name',
+      type: 'string',
+      nullable: true,
+      originalType: 'VARCHAR',
+    };
+
+    it('takes nested and JSON columns, and nothing else', () => {
+      expect(isInspectableColumn(nested)).toBe(true);
+      expect(
+        isInspectableColumn({ ...nested, originalType: 'STRUCT(x DOUBLE, tier VARCHAR)' }),
+      ).toBe(true);
+      expect(isInspectableColumn({ ...nested, originalType: 'VARIANT' })).toBe(true);
+      expect(isInspectableColumn(json)).toBe(true);
+      expect(isInspectableColumn(text)).toBe(false);
+      expect(
+        isInspectableColumn({
+          name: 'n',
+          type: 'integer',
+          nullable: false,
+          originalType: 'INTEGER',
+        }),
+      ).toBe(false);
+      expect(isInspectableColumn(undefined)).toBe(false);
+    });
+
+    it('marks a cell with the class, aria-haspopup and aria-keyshortcuts, and unmarks it', () => {
+      const cellEl = document.createElement('div');
+      renderer.setInspectable(cellEl, true);
+      expect(cellEl.classList.contains('dt-cell--inspectable')).toBe(true);
+      expect(cellEl.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(cellEl.getAttribute('aria-keyshortcuts')).toBe('F2');
+
+      renderer.setInspectable(cellEl, false);
+      expect(cellEl.classList.contains('dt-cell--inspectable')).toBe(false);
+      expect(cellEl.hasAttribute('aria-haspopup')).toBe(false);
+      expect(cellEl.hasAttribute('aria-keyshortcuts')).toBe(false);
+    });
+
+    it('writes nothing when nothing changes', () => {
+      const cellEl = document.createElement('div');
+      renderer.setInspectable(cellEl, true);
+      const setAttribute = vi.spyOn(cellEl, 'setAttribute');
+      const removeAttribute = vi.spyOn(cellEl, 'removeAttribute');
+      renderer.setInspectable(cellEl, true);
+      expect(setAttribute).not.toHaveBeenCalled();
+
+      renderer.setInspectable(cellEl, false);
+      renderer.setInspectable(cellEl, false);
+      expect(removeAttribute).toHaveBeenCalledTimes(2); // once per attribute, once only
+    });
+
+    it('uses the class prefix', () => {
+      const cellEl = document.createElement('div');
+      new CellRenderer({ classPrefix: 'custom' }).setInspectable(cellEl, true);
+      expect(cellEl.className).toBe('custom-cell--inspectable');
     });
   });
 

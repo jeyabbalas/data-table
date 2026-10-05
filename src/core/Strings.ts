@@ -483,6 +483,60 @@ export interface Strings {
     typeJson: string;
     /** Spoken name of the VARIANT type. */
     typeVariant: string;
+
+    /**
+     * Title of the value inspector, the panel that shows one nested or JSON
+     * cell's whole value (F2, a double click, or the cell's inspect icon):
+     * the column and `rowLabel`'s text, "tags · Row 1,235". It also
+     * names the panel for assistive technology.
+     */
+    inspectorTitle: (column: string, rowLabel: string) => string;
+    /**
+     * The row a value inspector shows, by its 1-based position in the table
+     * as sorted and filtered (the number a loading row shows): "Row 1,235".
+     */
+    rowLabel: (row: number) => string;
+    /** Accessible name of the value inspector's tree: "Value of tags". */
+    treeLabel: (column: string) => string;
+    /** Elements of a list, an array or a JSON array, in the tree: "3 items". */
+    itemCount: (count: number) => string;
+    /** Entries of a map, in the tree: "600 entries". */
+    entryCount: (count: number) => string;
+    /** Fields of a struct, in the tree: "3 fields". */
+    fieldCount: (count: number) => string;
+    /** Keys of a JSON object, in the tree: "2 keys". */
+    keyCount: (count: number) => string;
+    /**
+     * One bucket of a container too big to list at once, by the numbers of
+     * its first and last child (1-based for DuckDB values, 0-based inside
+     * JSON, the same number twice for a bucket of one): "[1 … 100]",
+     * "[10001 … 10001]".
+     */
+    bucketLabel: (first: number, last: number) => string;
+    /** After text the tree cut short, by the characters left out: "18,000 more characters". */
+    moreCharacters: (count: number) => string;
+    /** Value inspector status while the value loads, shown after 150 ms. */
+    loading: string;
+    /** Value inspector status when the value could not be read. */
+    loadFailed: string;
+    /** Button that reads the value again after it failed to load. */
+    retry: string;
+    /**
+     * Value inspector status for a value too long to show whole, by the
+     * characters shown and the value's length:
+     * "Showing the first 2,097,152 of 3,000,000 characters".
+     */
+    truncatedNotice: (shownChars: number, totalChars: number) => string;
+    /** Value inspector button that copies the whole value as JSON. */
+    copyJson: string;
+    /** Value inspector status after a copy (Copy JSON, or Ctrl/Cmd+C on a node). */
+    copied: string;
+    /** Value inspector status when the clipboard refused the copy. */
+    copyFailed: string;
+    /** Value inspector status when the value is too long to copy: over 8 MiB of JSON. */
+    tooLargeToCopy: string;
+    /** `aria-label` of the value inspector's × button. */
+    closeLabel: string;
   };
 
   // =========================================
@@ -876,6 +930,28 @@ export const defaultStrings: Strings = {
       `union of ${memberCount.toLocaleString()} ${memberCount === 1 ? 'type' : 'types'}`,
     typeJson: 'JSON',
     typeVariant: 'variant',
+
+    inspectorTitle: (column, rowLabel) => `${column} · ${rowLabel}`,
+    rowLabel: (row) => `Row ${row.toLocaleString()}`,
+    treeLabel: (column) => `Value of ${column}`,
+    itemCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'item' : 'items'}`,
+    entryCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'entry' : 'entries'}`,
+    fieldCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'field' : 'fields'}`,
+    keyCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'key' : 'keys'}`,
+    // Plain digits, as the positions of the children inside it show.
+    bucketLabel: (first, last) => `[${first} … ${last}]`,
+    moreCharacters: (count) =>
+      `${count.toLocaleString()} more ${count === 1 ? 'character' : 'characters'}`,
+    loading: 'Loading…',
+    loadFailed: 'Could not load this value',
+    retry: 'Retry',
+    truncatedNotice: (shownChars, totalChars) =>
+      `Showing the first ${shownChars.toLocaleString()} of ${totalChars.toLocaleString()} characters`,
+    copyJson: 'Copy JSON',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    tooLargeToCopy: 'Too large to copy',
+    closeLabel: 'Close value inspector',
   },
 
   errors: {

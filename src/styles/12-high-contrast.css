@@ -2,7 +2,7 @@
  * High-contrast + forced-colors accessibility (Phase 9).
  *
  * MUST be last in cascade order so the contrast/forced-color overrides
- * win against the per-component base styles in 02–10.
+ * win against the per-component base styles in 02–11.
  *
  * Two scenarios:
  *
@@ -61,5 +61,25 @@
   button:disabled {
     color: GrayText;
     border-color: GrayText;
+  }
+
+  /* The inspect icon: forced colors would drop the gradients that draw its
+     glyph, so it keeps its own, in system colors. */
+  .dt-cell--inspectable:is(:hover, .dt-cell--focused)::before {
+    forced-color-adjust: none;
+    background: Canvas;
+    box-shadow: 0 0 0 1px CanvasText;
+  }
+
+  .dt-cell--inspectable:is(:hover, .dt-cell--focused)::after {
+    forced-color-adjust: none;
+    color: CanvasText;
+  }
+
+  /* The value tree's active item, which a box-shadow marks otherwise. */
+  .dt-value-tree__item[aria-selected='true'],
+  .dt-value-tree__item:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

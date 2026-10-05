@@ -29,6 +29,7 @@ import { ExportDialog } from '@/export/ExportDialog';
 import { AnnotationPopover } from '@/table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from '@/table/ColumnHeaderTooltipPopover';
 import { HEADER_ROW_INDEX } from '@/table/KeyboardNavigator';
+import { ValueInspector } from '@/table/ValueInspector';
 import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
@@ -239,6 +240,74 @@ describe('a11y: axe-core grid scan', () => {
     await scan(modal.getElement());
     modal.destroy();
   });
+
+  // ------------------------------------------------------------------
+  // Value inspector (a non-modal panel in the table root)
+  // ------------------------------------------------------------------
+
+  /**
+   * The inspector open on a struct holding a list and a map, its tree
+   * loaded, with the extract hook so its buttons and row affordances are in
+   * the scan too.
+   */
+  async function openInspector(scheme: 'light' | 'dark'): Promise<{
+    tc: TableContainer;
+    inspector: ValueInspector;
+  }> {
+    const { tc } = buildTable(container);
+    tc.getElement().setAttribute('data-dt-color-scheme', scheme);
+    const bridge = {
+      query: vi
+        .fn()
+        .mockResolvedValue([
+          { json: '{"x":1.5,"tags":["a","b"],"m":{"k1":1},"note":null}', chars: 52 },
+        ]),
+    } as unknown as WorkerBridge;
+    const inspector = new ValueInspector({
+      bridge,
+      returnFocus: tc.getGridElement(),
+      colorSchemeSource: tc.getElement(),
+      extract: {
+        onExtract: vi.fn(),
+        labels: {
+          value: 'Add as column',
+          length: 'Add length as column',
+          size: 'Add size as column',
+          tag: 'Add tag as column',
+        },
+      },
+    });
+    tc.getElement().appendChild(inspector.getElement());
+    inspector.open({
+      tableName: 'test_table',
+      column: {
+        name: 'point',
+        type: 'nested',
+        nullable: true,
+        originalType: 'STRUCT(x DOUBLE, tags VARCHAR[], m MAP(VARCHAR, INTEGER), note VARCHAR)',
+      },
+      rowId: 0,
+      row: 0,
+      anchor: tc.getGridElement(),
+    });
+    await vi.waitFor(() =>
+      expect(inspector.getElement().querySelectorAll('[role="treeitem"]').length).toBeGreaterThan(
+        4,
+      ),
+    );
+    return { tc, inspector };
+  }
+
+  it.each(['light', 'dark'] as const)(
+    'reports zero blocking violations with the value inspector open (%s mode)',
+    async (scheme) => {
+      const { tc, inspector } = await openInspector(scheme);
+      expect(inspector.getElement().querySelector('.dt-value-tree__add')).toBeTruthy();
+      await scan(tc.getElement());
+      inspector.destroy();
+      tc.destroy();
+    },
+  );
 
   // ------------------------------------------------------------------
   // Popovers (tooltip-role; no focus trap by design).

@@ -71,6 +71,36 @@ describe('Strings', () => {
       expect(v.typeJson).toBe('JSON');
       expect(v.typeVariant).toBe('variant');
     });
+
+    it('ships the value inspector’s words', () => {
+      const v = defaultStrings.values;
+      expect(v.inspectorTitle('tags', v.rowLabel(1235))).toBe('tags · Row 1,235');
+      expect(v.treeLabel('tags')).toBe('Value of tags');
+      expect(v.itemCount(1)).toBe('1 item');
+      expect(v.itemCount(10000)).toBe('10,000 items');
+      expect(v.entryCount(1)).toBe('1 entry');
+      expect(v.entryCount(600)).toBe('600 entries');
+      expect(v.fieldCount(1)).toBe('1 field');
+      expect(v.fieldCount(26)).toBe('26 fields');
+      expect(v.keyCount(1)).toBe('1 key');
+      expect(v.keyCount(2)).toBe('2 keys');
+      // Plain digits, as the positions inside the bucket show them.
+      expect(v.bucketLabel(1, 100)).toBe('[1 … 100]');
+      expect(v.bucketLabel(10001, 10001)).toBe('[10001 … 10001]');
+      expect(v.moreCharacters(1)).toBe('1 more character');
+      expect(v.moreCharacters(18000)).toBe('18,000 more characters');
+      expect(v.loading).toBe('Loading…');
+      expect(v.loadFailed).toBe('Could not load this value');
+      expect(v.retry).toBe('Retry');
+      expect(v.truncatedNotice(2097152, 3000000)).toBe(
+        'Showing the first 2,097,152 of 3,000,000 characters',
+      );
+      expect(v.copyJson).toBe('Copy JSON');
+      expect(v.copied).toBe('Copied');
+      expect(v.copyFailed).toBe('Copy failed');
+      expect(v.tooLargeToCopy).toBe('Too large to copy');
+      expect(v.closeLabel).toBe('Close value inspector');
+    });
   });
 
   describe('mergeStrings', () => {

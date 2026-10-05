@@ -1,0 +1,260 @@
+/*
+ * Nested values — the value inspector panel (src/table/ValueInspector.ts)
+ * and the value tree in it (src/table/TreeView.ts).
+ */
+
+/* Placed, and capped in height, by ValueInspector.position(). */
+.dt-value-inspector {
+  position: absolute;
+  z-index: var(--dt-z-floating-panel, 50);
+  display: flex;
+  flex-direction: column;
+  width: min(36rem, calc(100% - 16px));
+  max-height: 28rem;
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius);
+  box-shadow: 0 4px 16px var(--dt-shadow-md);
+  font-family: var(--dt-font-family);
+  font-size: var(--dt-font-size-sm);
+}
+
+.dt-value-inspector__header,
+.dt-value-inspector__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--dt-border);
+}
+
+.dt-value-inspector__header {
+  flex-wrap: nowrap;
+  border-top: none;
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.dt-value-inspector__title,
+.dt-value-inspector__type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-value-inspector__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--dt-font-size);
+  font-weight: 600;
+}
+
+.dt-value-inspector__type,
+.dt-value-tree {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.dt-value-inspector__type {
+  max-width: 40%;
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text-tertiary);
+  font-size: var(--dt-font-size-xs);
+}
+
+.dt-value-inspector__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dt-radius-sm);
+  background: transparent;
+  color: var(--dt-text-secondary);
+  cursor: pointer;
+}
+
+/* Takes no room while it has nothing to say. */
+.dt-value-inspector__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 0 0.75rem;
+  color: var(--dt-text-secondary);
+}
+
+.dt-value-inspector__notice:not(:empty),
+.dt-value-inspector__message:not(:empty) {
+  padding: 0.375rem 0;
+}
+
+.dt-value-inspector__button,
+.dt-value-inspector__retry {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg);
+  color: var(--dt-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dt-value-inspector__close:hover,
+.dt-value-inspector__button:hover,
+.dt-value-inspector__retry:hover {
+  background: var(--dt-bg-tertiary);
+  color: var(--dt-text);
+}
+
+.dt-value-inspector__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dt-value-inspector__close:focus-visible,
+.dt-value-inspector__button:focus-visible,
+.dt-value-inspector__retry:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: 1px;
+}
+
+.dt-value-inspector__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The tree is its own scroll container: it scrolls its active item into view. */
+.dt-value-tree {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 20rem;
+  overflow: auto;
+  padding: 0.25rem 0;
+  line-height: 1.5;
+}
+
+/* Indented by level, which TreeView sets on each item. */
+.dt-value-tree__item {
+  display: flex;
+  align-items: flex-start;
+  padding-block: 0.0625rem;
+  padding-inline: calc(0.25rem + (var(--dt-tree-level, 1) - 1) * 1.25rem) 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.dt-value-tree__item:hover,
+.dt-value-tree__item[aria-selected='true'] {
+  background: var(--dt-bg-secondary);
+}
+
+.dt-value-tree__item[aria-selected='true'] {
+  box-shadow: inset 2px 0 0 var(--dt-primary);
+}
+
+.dt-value-tree__item:focus-visible {
+  outline: 2px solid var(--dt-primary);
+  outline-offset: -2px;
+}
+
+/* A chevron from aria-expanded, which end nodes do not have. */
+.dt-value-tree__twisty {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1.5em;
+}
+
+.dt-value-tree__item[aria-expanded] > .dt-value-tree__twisty::before {
+  content: '';
+  width: 0.3rem;
+  height: 0.3rem;
+  border: solid var(--dt-text-tertiary);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
+  cursor: pointer;
+}
+
+.dt-value-tree__item[aria-expanded='true'] > .dt-value-tree__twisty::before {
+  transform: rotate(45deg);
+}
+
+.dt-value-tree__content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Text from the data: right-to-left text in it cannot reorder the row. */
+.dt-value-tree__key,
+.dt-value-tree__value,
+.dt-value-tree__preview {
+  unicode-bidi: isolate;
+}
+
+.dt-value-tree__key--column,
+.dt-value-tree__key--field,
+.dt-value-tree__key--bucket,
+.dt-value-tree__preview {
+  color: var(--dt-text-secondary);
+}
+
+.dt-value-tree__key--position,
+.dt-value-tree__key--json-index,
+.dt-value-tree__sep,
+.dt-value-tree__type,
+.dt-value-tree__count,
+.dt-value-tree__more,
+.dt-value-tree__value--null {
+  color: var(--dt-text-tertiary);
+}
+
+.dt-value-tree__type,
+.dt-value-tree__count,
+.dt-value-tree__preview,
+.dt-value-tree__more {
+  margin-inline-start: 0.75ch;
+}
+
+.dt-value-tree__value--string {
+  color: var(--dt-syntax-string);
+}
+
+.dt-value-tree__value--number,
+.dt-value-tree__add {
+  color: var(--dt-primary);
+}
+
+.dt-value-tree__value--keyword {
+  color: var(--dt-syntax-type);
+}
+
+.dt-value-tree__value--null {
+  font-style: italic;
+}
+
+/* "Add as column", for the pointer; the keyboard has Ctrl/Cmd+Enter. */
+.dt-value-tree__add {
+  flex: none;
+  visibility: hidden;
+  width: 1.25rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.dt-value-tree__add::before {
+  content: '+';
+}
+
+.dt-value-tree__item:hover > .dt-value-tree__add {
+  visibility: visible;
+}

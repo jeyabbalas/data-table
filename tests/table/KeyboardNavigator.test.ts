@@ -1414,3 +1414,143 @@ describe('KeyboardNavigator — keys that act on the cursor bring it into view',
     cleanup();
   });
 });
+
+// ---- F2 on a body cell: the value inspector ----
+
+describe('KeyboardNavigator — F2 opens the value inspector on a body cell', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    __resetModalHostForTests();
+  });
+
+  function setupInspector(
+    openCellInspector: (cell: { row: number; column: string }) => boolean,
+    scrollTop = 0,
+  ) {
+    const state = createTableState();
+    state.schema.set(schema);
+    initializeColumnsFromSchema(state, schema);
+    state.totalRows.set(1000);
+    const actions = new StateActions(state, mockBridge);
+
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const grid = document.createElement('div');
+    grid.setAttribute('tabindex', '0');
+    root.appendChild(grid);
+
+    const headers = schema.map(
+      (col, i) => new ColumnHeader(col, state, actions, { cellId: `dt-t1-colheader-${i}` }),
+    );
+    for (const h of headers) grid.appendChild(h.getElement());
+
+    const scrollToRow = vi.fn();
+    const vs = {
+      getViewportHeight: () => 320,
+      getRowHeight: () => 32,
+      getScrollTop: () => scrollTop,
+      getVirtualScrollTop: () => scrollTop,
+      scrollToRow,
+    };
+    const body = { getVirtualScroller: () => vs } as unknown as TableBody;
+    const open = vi.fn(openCellInspector);
+    const nav = new KeyboardNavigator({
+      rootElement: root,
+      gridElement: grid,
+      bodyScroll: document.createElement('div'),
+      state,
+      actions,
+      getTableBody: () => body,
+      getColumnHeaders: () => headers,
+      openCellInspector: open,
+    });
+    const cleanup = (): void => {
+      nav.destroy();
+      for (const h of headers) h.destroy();
+    };
+    return { state, actions, root, grid, headers, open, scrollToRow, cleanup };
+  }
+
+  function press(el: Element, init: KeyboardEventInit = {}): KeyboardEvent {
+    const event = new KeyboardEvent('keydown', {
+      key: 'F2',
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    el.dispatchEvent(event);
+    return event;
+  }
+
+  it('opens it on the cursor’s cell, and claims the key', () => {
+    const { actions, root, grid, open, cleanup } = setupInspector(() => true);
+    actions.setFocusedCell({ row: 3, column: 'b' });
+    grid.focus();
+    const event = press(root);
+    expect(open).toHaveBeenCalledWith({ row: 3, column: 'b' });
+    expect(event.defaultPrevented).toBe(true);
+    // No controls mode: focus stays where it was until the panel takes it.
+    expect(document.activeElement).toBe(grid);
+    cleanup();
+  });
+
+  it('leaves F2 alone on a cell with nothing to inspect', () => {
+    const { actions, root, grid, open, scrollToRow, cleanup } = setupInspector(() => false);
+    actions.setFocusedCell({ row: 3, column: 'a' });
+    grid.focus();
+    const event = press(root);
+    // Asked once: the cell is in view, so there was nothing to scroll to and ask again.
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(scrollToRow).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(grid);
+    cleanup();
+  });
+
+  it('brings a cursor scrolled out of view back, and asks again', () => {
+    // Rows 0–9 in view; the cursor at row 500 has no rendered cell yet.
+    let rendered = false;
+    const { actions, root, open, scrollToRow, cleanup } = setupInspector(() => rendered);
+    scrollToRow.mockImplementation(() => {
+      rendered = true;
+    });
+    actions.setFocusedCell({ row: 500, column: 'c' });
+    const event = press(root);
+    expect(scrollToRow).toHaveBeenCalledWith(500, 'end');
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(event.defaultPrevented).toBe(true);
+    cleanup();
+  });
+
+  it('keeps header F2 for the header’s buttons', () => {
+    const { actions, root, headers, open, cleanup } = setupInspector(() => true);
+    actions.setFocusedCell({ row: HEADER_ROW_INDEX, column: 'b' });
+    press(root);
+    expect(open).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(headers[1]!.getControls()[0]);
+    cleanup();
+  });
+
+  it('is plain F2 only: Shift, Ctrl, Meta and Alt with it are other keys', () => {
+    const { actions, root, open, cleanup } = setupInspector(() => true);
+    actions.setFocusedCell({ row: 3, column: 'b' });
+    for (const modifier of ['shiftKey', 'ctrlKey', 'metaKey', 'altKey'] as const) {
+      press(root, { [modifier]: true });
+    }
+    expect(open).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('does nothing while a panel or dialog is open', () => {
+    const { actions, root, open, cleanup } = setupInspector(() => true);
+    actions.setFocusedCell({ row: 3, column: 'b' });
+    const panel = document.createElement('div');
+    document.body.appendChild(panel);
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel });
+    press(root);
+    expect(open).not.toHaveBeenCalled();
+    host.close();
+    cleanup();
+  });
+});

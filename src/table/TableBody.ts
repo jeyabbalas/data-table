@@ -15,7 +15,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import { ROWID_COLUMN, type ColumnSchema, type SortColumn, type Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { AnnotationPopover } from './AnnotationPopover';
-import { CellRenderer } from './Cell';
+import { CellRenderer, isInspectableColumn } from './Cell';
 import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
 import { buildRowColumnsQuery, buildRowQuery } from './rowQuery';
@@ -108,7 +108,27 @@ export interface TableBodyOptions {
    * (priority 'high') always jump ahead of them in the worker queue.
    */
   prefetch?: boolean | undefined;
+  /**
+   * Opens the value inspector on a cell. With it, the non-NULL cells of
+   * nested and JSON columns are inspectable (see
+   * `CellRenderer.setInspectable`), and the pointer opens one: a click on
+   * its inspect icon, which also moves the cursor there and leaves the
+   * selection alone, or a double click. Without it no cell is inspectable.
+   * `TableContainer` passes its `openValueInspector`.
+   *
+   * @internal
+   */
+  onInspectCell?: ((cell: { row: number; column: string }) => void) | undefined;
 }
+
+/**
+ * How far from a cell's inline end, and from its vertical middle, a click
+ * opens the value inspector rather than selecting the row: the inspect icon
+ * the stylesheet draws there (20 px, 4 px in from the edge), and a little
+ * room around it. In px.
+ */
+const INSPECT_ZONE_INLINE = 28;
+const INSPECT_ZONE_BLOCK = 12;
 
 /**
  * Row data from query results
@@ -358,7 +378,12 @@ export class TableBody {
   private readonly annotations: AnnotationStore | null;
   private readonly annotationPopover: AnnotationPopover | null;
   private readonly messages: Strings;
+  private readonly onInspectCell: ((cell: { row: number; column: string }) => void) | null;
   private unsubAnnotations: (() => void) | null = null;
+
+  // The kind of pointer that pressed last, for a click event that does not
+  // say (a `click` is a PointerEvent only in newer browsers).
+  private lastPointerType = 'mouse';
 
   // Tracks the anchor currently driving the popover so pointer/focus
   // transitions between child elements inside the same cell don't retrigger
@@ -382,6 +407,7 @@ export class TableBody {
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
     this.messages = options.messages ?? defaultStrings;
+    this.onInspectCell = options.onInspectCell ?? null;
     this.fetchBlockSize = Math.min(1024, Math.max(16, Math.floor(options.fetchBlockSize ?? 128)));
     this.rowCacheRows = Math.max(
       4 * this.fetchBlockSize,
@@ -405,6 +431,13 @@ export class TableBody {
       container.addEventListener('pointerout', this.handleAnnotationPointerOut);
       container.addEventListener('focusin', this.handleAnnotationFocusIn);
       container.addEventListener('focusout', this.handleAnnotationFocusOut);
+    }
+
+    // Delegated, like the annotation listeners: rows are pooled, and a pooled
+    // row loses the listeners of its row (see returnRowToPool).
+    if (this.onInspectCell) {
+      container.addEventListener('pointerdown', this.handlePointerDown);
+      container.addEventListener('dblclick', this.handleCellDblClick);
     }
   }
 
@@ -1799,6 +1832,9 @@ export class TableBody {
       const cell = child as HTMLElement;
       cell.classList.remove(focusClass);
       cell.removeAttribute('id');
+      // Nor does a pooled cell promise a dialog: the next render says
+      // whether the value it then holds opens one.
+      this.cellRenderer.setInspectable(cell, false);
     }
 
     // Limit pool size to prevent memory bloat
@@ -1944,6 +1980,10 @@ export class TableBody {
    * pending when the row was fetched without its column: `undefined` there
    * means "not fetched", not NULL.
    *
+   * A non-NULL value of a nested or JSON column also makes the cell
+   * inspectable, when the body can open the inspector: see
+   * `TableBodyOptions.onInspectCell`. A pending cell never is.
+   *
    * @returns whether the cell is pending.
    */
   private renderCellValue(
@@ -1961,10 +2001,19 @@ export class TableBody {
       // there, and a selector for NULLs would count it.
       cellEl.classList.remove(`${this.classPrefix}-cell--null`, `${this.classPrefix}-cell--number`);
       cellEl.classList.add(pendingClass);
+      this.cellRenderer.setInspectable(cellEl, false);
       return true;
     }
     cellEl.classList.remove(pendingClass);
-    this.cellRenderer.render(cellEl, data[colName], colSchema);
+    const value = data[colName];
+    this.cellRenderer.render(cellEl, value, colSchema);
+    this.cellRenderer.setInspectable(
+      cellEl,
+      this.onInspectCell !== null &&
+        value !== null &&
+        value !== undefined &&
+        isInspectableColumn(colSchema),
+    );
     return false;
   }
 
@@ -2194,6 +2243,9 @@ export class TableBody {
 
     // Click (selection + focus)
     rowEl.addEventListener('click', (event) => {
+      // A click on a cell's inspect icon opens the value inspector instead.
+      if (this.handleInspectIconClick(rowEl, index, event)) return;
+
       this.handleRowClick(index, event);
 
       // Set focused cell from clicked cell
@@ -2338,6 +2390,86 @@ export class TableBody {
 
     this.actions.selectRow(index, mode);
   }
+
+  // =========================================
+  // Value inspector
+  // =========================================
+
+  /**
+   * A click on an inspectable cell's inspect icon: move the cursor to the
+   * cell, open the value inspector on it, and leave the selection alone.
+   *
+   * The icon has no element (the stylesheet draws it in the cell's
+   * pseudo-elements, which a render cannot clobber and the pool cannot
+   * duplicate), so the click is placed by where it landed: within
+   * `INSPECT_ZONE_INLINE` px of the cell's inline end and
+   * `INSPECT_ZONE_BLOCK` px of its middle. A touch shows no hover, so the
+   * icon shows only on the cursor's cell: a tap on its place opens the
+   * inspector on that cell, and on any other cell selects, as it always
+   * has. A click with a modifier key is a selection gesture, and stays one.
+   *
+   * @returns whether the click was the icon's.
+   */
+  private handleInspectIconClick(rowEl: HTMLElement, index: number, event: MouseEvent): boolean {
+    if (!this.onInspectCell || !this.actions || this.destroyed) return false;
+    if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
+    const target = event.target instanceof Element ? event.target : null;
+    const cell = target?.closest<HTMLElement>(`.${this.classPrefix}-cell--inspectable`);
+    if (!cell || cell.parentElement !== rowEl) return false;
+    const column = cell.getAttribute('data-column');
+    if (column === null || !this.inInspectZone(cell, event)) return false;
+
+    const pointerType =
+      'pointerType' in event && typeof event.pointerType === 'string' && event.pointerType !== ''
+        ? event.pointerType
+        : this.lastPointerType;
+    if (pointerType === 'touch') {
+      const cursor = this.state.focusedCell.get();
+      if (cursor?.row !== index || cursor.column !== column) return false;
+    }
+
+    this.actions.setFocusedCell({ row: index, column });
+    this.onInspectCell({ row: index, column });
+    return true;
+  }
+
+  /**
+   * Whether a click landed on the inspect icon's place in `cell`. A cell
+   * with no width has not been laid out, and shows no icon.
+   */
+  private inInspectZone(cell: HTMLElement, event: MouseEvent): boolean {
+    const rect = cell.getBoundingClientRect();
+    if (rect.width <= 0) return false;
+    const rtl = getComputedStyle(cell).direction === 'rtl';
+    const fromEnd = rtl ? event.clientX - rect.left : rect.right - event.clientX;
+    const fromMiddle = Math.abs(event.clientY - (rect.top + rect.height / 2));
+    return fromEnd >= 0 && fromEnd <= INSPECT_ZONE_INLINE && fromMiddle <= INSPECT_ZONE_BLOCK;
+  }
+
+  /** Remember what kind of pointer pressed, for a click that does not say. */
+  private handlePointerDown = (event: PointerEvent): void => {
+    if (typeof event.pointerType === 'string' && event.pointerType !== '') {
+      this.lastPointerType = event.pointerType;
+    }
+  };
+
+  /**
+   * Delegated dblclick: opens the value inspector on an inspectable cell,
+   * anywhere in it. The two clicks before it have already done what clicks
+   * do, and put the cursor on the cell.
+   */
+  private handleCellDblClick = (event: MouseEvent): void => {
+    if (this.destroyed || !this.onInspectCell) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const cell = target?.closest<HTMLElement>(`.${this.classPrefix}-cell--inspectable`);
+    const rowEl = cell?.parentElement;
+    if (!cell || !rowEl || this.isPlaceholderRow(rowEl)) return;
+    const index = Number(rowEl.getAttribute('data-row-index'));
+    const column = cell.getAttribute('data-column');
+    if (column === null || this.rowElementMap.get(index) !== rowEl) return;
+    this.actions?.setFocusedCell({ row: index, column });
+    this.onInspectCell({ row: index, column });
+  };
 
   // =========================================
   // Style Updates
@@ -2520,6 +2652,42 @@ export class TableBody {
   }
 
   /**
+   * What the value inspector needs to open on the cell at `row` (0-based, in
+   * the table as sorted and filtered) and `column`: the row's `__rowid__`,
+   * which the inspector reads the value by, and the cell's element, which it
+   * opens beside.
+   *
+   * `null` when there is nothing to inspect there: a column that is not
+   * nested or JSON, a NULL, a row not fetched or not rendered, a cell still
+   * waiting for its value.
+   *
+   * @example
+   * ```typescript
+   * const target = body.getInspectTarget(12, 'tags');
+   * if (target) inspector.open({ rowId: target.rowId, anchor: target.cell, ... });
+   * ```
+   */
+  getInspectTarget(
+    row: number,
+    column: string,
+  ): { rowId: number | bigint; cell: HTMLElement } | null {
+    if (this.destroyed) return null;
+    const rowEl = this.rowElementMap.get(row);
+    const data = this.rowDataCache.get(row);
+    if (!rowEl || !data || this.isPlaceholderRow(rowEl)) return null;
+    if (!isInspectableColumn(this.schemaMap().get(column))) return null;
+    const fetched = this.blockColumns.get(this.blockStartOf(row));
+    if (fetched && !fetched.has(column)) return null;
+    const value = data[column];
+    if (value === null || value === undefined) return null;
+    const rowId = data[ROWID_COLUMN];
+    if (typeof rowId !== 'number' && typeof rowId !== 'bigint') return null;
+    const cell = this.cellFor(rowEl, column);
+    if (!cell || cell.classList.contains(`${this.classPrefix}-cell--pending`)) return null;
+    return { rowId, cell };
+  }
+
+  /**
    * Check if the table body has been destroyed
    */
   isDestroyed(): boolean {
@@ -2575,6 +2743,8 @@ export class TableBody {
     this.container.removeEventListener('pointerout', this.handleAnnotationPointerOut);
     this.container.removeEventListener('focusin', this.handleAnnotationFocusIn);
     this.container.removeEventListener('focusout', this.handleAnnotationFocusOut);
+    this.container.removeEventListener('pointerdown', this.handlePointerDown);
+    this.container.removeEventListener('dblclick', this.handleCellDblClick);
     if (this.unsubAnnotations) {
       this.unsubAnnotations();
       this.unsubAnnotations = null;

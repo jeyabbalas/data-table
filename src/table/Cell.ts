@@ -5,8 +5,38 @@
  * cell element updates with appropriate CSS classes.
  */
 
+import { parseDuckDBType } from '../core/duckdbType';
 import type { ColumnSchema, DataType } from '../core/types';
 import { MONTH_SECONDS, YEAR_SECONDS } from '../visualizations/histogram/IntervalHistogramData';
+
+/** `isInspectableColumn`'s answers, by schema entry: it runs for every cell rendered. */
+const inspectableColumns = new WeakMap<ColumnSchema, boolean>();
+
+/**
+ * Whether the value inspector opens a column's values: a nested column
+ * (`type: 'nested'`: LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) or a JSON one
+ * (`type: 'string'` with `originalType` `JSON`). A cell shows only part of
+ * such a value: a nested one's text is bounded, and any text runs on past
+ * the column's edge. The inspector shows all of it, as a tree.
+ *
+ * @example
+ * ```ts
+ * isInspectableColumn({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // true
+ * isInspectableColumn({ name: 'doc', type: 'string', nullable: true, originalType: 'JSON' });       // true
+ * isInspectableColumn({ name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' });   // false
+ * ```
+ */
+export function isInspectableColumn(column: ColumnSchema | undefined): boolean {
+  if (!column) return false;
+  let inspectable = inspectableColumns.get(column);
+  if (inspectable === undefined) {
+    inspectable =
+      column.type === 'nested' ||
+      (column.type === 'string' && parseDuckDBType(column.originalType ?? '').kind === 'json');
+    inspectableColumns.set(column, inspectable);
+  }
+  return inspectable;
+}
 
 /**
  * Format a number with scientific notation for extreme values.
@@ -100,6 +130,37 @@ export class CellRenderer {
       } else {
         cellEl.classList.remove(numberClass);
       }
+    }
+  }
+
+  /**
+   * Mark a cell as one the value inspector opens, or unmark it: the
+   * `-cell--inspectable` class, which shows the inspect icon (drawn by the
+   * stylesheet, no element of its own) on hover and on the cursor, and
+   * `aria-haspopup="dialog"` with `aria-keyshortcuts="F2"`, which tell
+   * assistive technology that the cell opens a dialog and how.
+   *
+   * For the non-NULL values of nested and JSON columns
+   * (`isInspectableColumn`). A cell is reused across rows and columns, so
+   * every render says which it is now; nothing is written unless that
+   * changes, since this runs for every cell of every render.
+   *
+   * @example
+   * ```typescript
+   * renderer.setInspectable(cellEl, value != null && isInspectableColumn(column));
+   * ```
+   */
+  setInspectable(cellEl: HTMLElement, inspectable: boolean): void {
+    const inspectableClass = `${this.classPrefix}-cell--inspectable`;
+    if (cellEl.classList.contains(inspectableClass) === inspectable) return;
+    if (inspectable) {
+      cellEl.classList.add(inspectableClass);
+      cellEl.setAttribute('aria-haspopup', 'dialog');
+      cellEl.setAttribute('aria-keyshortcuts', 'F2');
+    } else {
+      cellEl.classList.remove(inspectableClass);
+      cellEl.removeAttribute('aria-haspopup');
+      cellEl.removeAttribute('aria-keyshortcuts');
     }
   }
 

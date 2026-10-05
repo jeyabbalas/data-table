@@ -95,7 +95,7 @@ export interface DuckDBUnionTypeNode {
 
 /**
  * A type the parser could not read: text it does not understand, or nesting
- * deeper than {@link MAX_TYPE_DEPTH}.
+ * deeper than `MAX_TYPE_DEPTH` (256) levels.
  */
 export interface DuckDBUnknownTypeNode {
   readonly kind: 'unknown';
@@ -320,7 +320,7 @@ function fail(): never {
  * Keywords are matched in any case.
  *
  * Never throws: text it cannot read, and types nested deeper than
- * {@link MAX_TYPE_DEPTH}, come back as an `unknown` node. Results are
+ * `MAX_TYPE_DEPTH` (256) levels, come back as an `unknown` node. Results are
  * memoized, so the same text gives back the same (frozen) node.
  *
  * @example

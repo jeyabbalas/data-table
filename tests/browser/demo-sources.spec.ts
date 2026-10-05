@@ -11,19 +11,43 @@
  * a small CSV as a Parquet export, as before. And the demo runs one load at
  * a time, clears a cached dataset it cannot restore, and shows what it did
  * not write as text.
+ *
+ * In development the example chips and a relative `?url=` read the dev
+ * server's `/fixtures/`, so the nested-types fixture loads before it reaches
+ * GitHub's main branch; its nested columns have to come back from the cache
+ * as they first loaded, types and text alike.
  */
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { openDemo } from './helpers/demo';
+import { NESTED_EXAMPLE, NESTED_EXAMPLE_STRUCTS, openDemo } from './helpers/demo';
+import {
+  type BodyState,
+  expectedCellTexts,
+  scrollToColumn,
+  waitForFilledBody,
+  wrongCells,
+} from './helpers/nested';
 
 const fixture = (path: string): string =>
   fileURLToPath(new URL(`../fixtures/datasets/${path}`, import.meta.url));
 const PARQUET = fixture('parquet/titanic.parquet');
 const CSV = fixture('csv/titanic.csv');
 const ROWS = '891 rows';
+
+const NESTED_PARQUET = fixture('parquet/nested-stress-tests.parquet');
+const NESTED_ROWS = '1,000 rows';
+
+/** The fixture's columns, in file order, as its manifest records them. */
+const NESTED_COLUMNS = (
+  JSON.parse(readFileSync(fixture('nested-stress-tests.manifest.json'), 'utf8')) as {
+    parquet: { columns: { name: string; kind: 'scalar' | 'list' | 'struct' | 'map' | 'json' }[] };
+  }
+).parquet.columns;
+
+type DemoWindow = { __dtDemo: { table: import('../../src/index').DataTable | null } };
 
 type Probe = { __reads: string[]; __injected: boolean; __infoTexts: string[] };
 
@@ -57,8 +81,8 @@ async function loadFile(page: Page, file: Parameters<Page['setInputFiles']>[1]):
   await page.click('#load-file-btn');
 }
 
-async function expectTable(page: Page): Promise<void> {
-  await expect(page.locator('#table-info')).toContainText(ROWS, { timeout: 90_000 });
+async function expectTable(page: Page, rows = ROWS): Promise<void> {
+  await expect(page.locator('#table-info')).toContainText(rows, { timeout: 90_000 });
   await expect(
     page.locator('#table-container .dt-body .dt-row:not([data-placeholder])').first(),
   ).toBeVisible();
@@ -556,4 +580,136 @@ test('shows a previous session’s file name as text, not markup', async ({ page
   await page.reload();
   await expect(page.locator('#table-info')).toContainText(`Previous session: ${source}`);
   expect(await injected(page)).toBe(false);
+});
+
+/** The demo table's schema: what a restore has to bring back. */
+function demoSchema(
+  page: Page,
+): Promise<{ name: string; type: string; originalType: string; system: boolean }[]> {
+  return page.evaluate(() =>
+    (window as unknown as DemoWindow).__dtDemo.table!.state.schema.get().map((c) => ({
+      name: c.name,
+      type: c.type,
+      originalType: c.originalType,
+      system: c.system === true,
+    })),
+  );
+}
+
+/** Columns at least partly in view with the view's left edge at `id`, and at `point`. */
+const SCREENS = [
+  ['id', ['raw_blob', 'tags', 'scores', 'long_list']],
+  ['point', NESTED_EXAMPLE_STRUCTS],
+] as const;
+
+/**
+ * The demo table's cells of {@link SCREENS}, by screen, row id and column,
+ * each screen checked against DuckDB on the way: texts equal across a
+ * restore are right ones too.
+ */
+async function nestedCells(page: Page): Promise<BodyState['cells'][]> {
+  const root = '#table-container';
+  const screens: BodyState['cells'][] = [];
+  for (const [left, columns] of SCREENS) {
+    await scrollToColumn(page, left, root);
+    const body = await waitForFilledBody(page, columns, root);
+    const expected = await expectedCellTexts(page, columns, Object.keys(body.cells), 'demo');
+    expect(wrongCells(body, expected, columns)).toEqual([]);
+    screens.push(body.cells);
+  }
+  return screens;
+}
+
+test('in development, the Nested types chip loads the dev server’s fixture, its nested columns typed nested', async ({
+  page,
+}) => {
+  const parquet: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('.parquet')) parquet.push(request.url());
+  });
+  // A chip that reached for GitHub would fail here, rather than pass on GitHub's copy.
+  await page.route('https://raw.githubusercontent.com/**', (route) => route.abort());
+  await openDemo(page);
+
+  await page.getByRole('button', { name: NESTED_EXAMPLE }).click();
+  await expectTable(page, NESTED_ROWS);
+  expect(parquet).toEqual([
+    `${new URL(page.url()).origin}/fixtures/parquet/nested-stress-tests.parquet`,
+  ]);
+
+  // The file's 36 columns, after the hidden `__rowid__`.
+  const schema = await demoSchema(page);
+  expect(schema[0]).toMatchObject({ name: '__rowid__', system: true });
+  expect(schema.slice(1).map((c) => c.name)).toEqual(NESTED_COLUMNS.map((c) => c.name));
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as DemoWindow).__dtDemo.table!.state.visibleColumns.get(),
+    ),
+  ).toEqual(NESTED_COLUMNS.map((c) => c.name));
+  // The lists, structs and maps are nested, and nothing else: the JSON
+  // column stays text.
+  const nested = NESTED_COLUMNS.filter((c) => ['list', 'struct', 'map'].includes(c.kind));
+  expect(schema.filter((c) => c.type === 'nested').map((c) => c.name)).toEqual(
+    nested.map((c) => c.name),
+  );
+  expect(schema.find((c) => c.name === 'doc')!.type).toBe('string');
+  // The info bar counts the file's columns, without the hidden `__rowid__`.
+  const info = page.locator('#table-info');
+  await expect(info).toContainText(`${NESTED_ROWS}, ${NESTED_COLUMNS.length} columns (`);
+  await expect(info).toContainText(`, ${nested.length} nested)`);
+});
+
+test('opens a ?url= link relative to the page', async ({ page }) => {
+  const path = '/fixtures/csv/titanic.csv';
+  await page.goto(`./?url=${path}`);
+  await expectTable(page);
+
+  const hash = createHash('sha256').update(readFileSync(CSV)).digest('hex').slice(0, 16);
+  expect(await sessionTableName(page)).toBe(`dt_${hash}`);
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem('dt-last-session')!) as unknown),
+  ).toEqual({ type: 'url', source: path, tableName: `dt_${hash}` });
+  expect(new URL(page.url()).searchParams.get('url')).toBe(path);
+});
+
+test('brings the Nested types dataset back after a reload, and from the cache, with the same schema and cells', async ({
+  page,
+}) => {
+  test.slow();
+  await openDemo(page);
+  await page.getByRole('button', { name: NESTED_EXAMPLE }).click();
+  await expectTable(page, NESTED_ROWS);
+  const tableName = await sessionTableName(page);
+  expect(await cacheRow(page, tableName)).toEqual({
+    fields: ['data', 'format', 'sourceName', 'tableName'],
+    format: 'parquet',
+    isFile: true,
+    size: readFileSync(NESTED_PARQUET).byteLength,
+    magic: 'PAR1',
+  });
+  const schema = await demoSchema(page);
+  const cells = await nestedCells(page);
+
+  const fetched: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('.parquet')) fetched.push(request.url());
+  });
+  // A reload keeps the chip's `?url=` in the address, and the demo opens a
+  // `?url=` link by fetching it again, to see whether its content changed.
+  await page.reload();
+  await expectTable(page, NESTED_ROWS);
+  expect(fetched).toHaveLength(1);
+  expect(await sessionTableName(page)).toBe(tableName);
+  expect(await demoSchema(page)).toEqual(schema);
+  expect(await nestedCells(page)).toEqual(cells);
+
+  // Opened at its own address, the demo restores the dataset from the
+  // cache, without fetching it.
+  fetched.length = 0;
+  await page.goto('./');
+  await expectTable(page, NESTED_ROWS);
+  expect(fetched).toEqual([]);
+  expect(await sessionTableName(page)).toBe(tableName);
+  expect(await demoSchema(page)).toEqual(schema);
+  expect(await nestedCells(page)).toEqual(cells);
 });

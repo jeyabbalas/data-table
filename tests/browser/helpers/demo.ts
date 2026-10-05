@@ -16,6 +16,26 @@ export const NARROW_COLUMNS = 4;
 export const WIDE_COLUMNS = 266;
 
 /**
+ * The example chip of the nested-types fixture, 1,000 rows of lists,
+ * structs, maps and JSON (`tests/fixtures/datasets/nested-stress-tests.*`).
+ */
+export const NESTED_EXAMPLE = 'Nested types (Parquet)';
+
+/**
+ * {@link NESTED_EXAMPLE}'s structs and its list of structs, side by side: all
+ * of them wholly in the demo's view once `point` is scrolled to its left
+ * edge. Its first screen holds lists only.
+ */
+export const NESTED_EXAMPLE_STRUCTS = [
+  'point',
+  'odd_names',
+  'typed_leaves',
+  'wide_struct',
+  'nested_struct',
+  'people',
+] as const;
+
+/**
  * Page-side probe surface installed by {@link installProbes}.
  *
  * Focus order is a property of real layout, so these helpers have to run in
@@ -231,6 +251,33 @@ export async function loadCsv(page: Page, columns: number, rows = 200): Promise<
   );
   // Column-header plots render asynchronously after the first row paint;
   // their buttons are part of the tab-stop census, so wait them out.
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+  await settle(page);
+}
+
+/**
+ * Click the demo's example chip labelled `name`, and wait for the load to
+ * end and the grid to finish its first paint, as {@link loadCsv} does.
+ *
+ * In development a chip loads the dev server's copy of its fixture, from
+ * `/fixtures/`, not GitHub's.
+ */
+export async function loadExample(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name }).click();
+  // The info bar gains the load's time once `loadData` has resolved.
+  await page.waitForFunction(
+    () => document.querySelector('#table-info')?.textContent?.includes('loaded in') === true,
+    undefined,
+    { timeout: 90_000 },
+  );
+  await page.waitForFunction(
+    () =>
+      !!document.querySelector('.dt-grid[role="grid"]') &&
+      document.querySelectorAll('.dt-root [role="columnheader"]').length > 0 &&
+      document.querySelectorAll('.dt-body .dt-row:not([data-placeholder])').length > 0,
+    undefined,
+    { timeout: 90_000 },
+  );
   await page.waitForLoadState('networkidle').catch(() => undefined);
   await settle(page);
 }

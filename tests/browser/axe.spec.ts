@@ -16,7 +16,18 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { WIDE_COLUMNS, loadCsv, mountEmptyTable, openDemo, setTheme, settle } from './helpers/demo';
+import {
+  NESTED_EXAMPLE,
+  NESTED_EXAMPLE_STRUCTS,
+  WIDE_COLUMNS,
+  loadCsv,
+  loadExample,
+  mountEmptyTable,
+  openDemo,
+  setTheme,
+  settle,
+} from './helpers/demo';
+import { scrollToColumn, unpaintedCharts, waitForFilledBody } from './helpers/nested';
 
 /**
  * The rules issue #84 reported. An `incomplete` result here means axe could
@@ -103,5 +114,27 @@ for (const theme of ['light', 'dark'] as const) {
     await settle(page);
 
     assertClean(await scan(page), `column layout mode, ${theme}`);
+  });
+
+  test(`the nested types example is axe-clean in ${theme}`, async ({ page }) => {
+    // Nested columns have a header chart of their own, the nested summary,
+    // which writes its own stats line, and their cells hold DuckDB's text:
+    // escapes, right-to-left text, combining marks, values cut with `…`.
+    // Scanned where the lists are, then where the structs are, each once
+    // every chart in view has drawn and the stats lines have stopped moving.
+    test.setTimeout(240_000);
+    await openDemo(page);
+    await loadExample(page, NESTED_EXAMPLE);
+    await setTheme(page, theme);
+    const root = '.dt-root';
+    await expect.poll(() => unpaintedCharts(page, ['tags', 'scores'], root)).toEqual([]);
+    await settle(page);
+    assertClean(await scan(page), `nested types, lists, ${theme}`);
+
+    await scrollToColumn(page, 'point', root);
+    await waitForFilledBody(page, NESTED_EXAMPLE_STRUCTS, root);
+    await expect.poll(() => unpaintedCharts(page, NESTED_EXAMPLE_STRUCTS, root)).toEqual([]);
+    await settle(page);
+    assertClean(await scan(page), `nested types, structs, ${theme}`);
   });
 }

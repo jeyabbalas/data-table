@@ -9,19 +9,33 @@
  * body cell; a JSON file with an array field in its first screen never
  * finished loading. Struct cells showed `[object Object]`.
  *
- * Each test builds its table in-page from generated JSON, as
- * `helpers/table.ts` does from CSV, so every cell is a pure function of its
- * row.
+ * The grid now reads a nested value as bounded DuckDB text: a list past 32
+ * items, or a map past 32 entries, shows its first 32 and how many more
+ * there are. A long list in jsdom is only a string a test made up; here it
+ * comes out of DuckDB, through the worker, into a real cell.
+ *
+ * Each test builds its table in-page, from generated JSON as
+ * `helpers/table.ts` does from CSV, or in DuckDB from SQL, so every cell is a
+ * pure function of its row. What a nested cell should show comes from DuckDB
+ * itself, through the table's bridge (`helpers/nested.ts`).
  */
 
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import {
+  NESTED_HOST_ID,
+  PREVIEW_ITEMS,
+  type NestedWindow,
+  expectedCellTexts,
+  mountSqlTable,
+  unpaintedCharts,
+  waitForFilledBody,
+  watchConsoleErrors,
+  wrongCells,
+} from './helpers/nested';
 
-const HOST_ID = 'dt-nested-host';
 const ROW_HEIGHT = 32;
 const BLOCK_ROWS = 128;
-
-type NestedWindow = { __dt: import('../../src/index').DataTable };
 
 interface MountOptions {
   /** Scalar columns before the nested ones, `c000`… Default 0. */
@@ -42,11 +56,6 @@ function nestedRow(r: number, kind: MountOptions['nested']): Record<string, unkn
     labels: r % 5 === 0 ? null : [`a${r % 3}`, 'b'],
     point: { x: r / 4, y: (r % 8) / 8, tier: ['gold', 'silver', 'bronze'][r % 3] },
   };
-}
-
-/** The text DuckDB gives `tags` of row `r` cast to VARCHAR. */
-function tagsText(r: number): string {
-  return `[${(nestedRow(r, 'lists-and-structs').tags as number[]).join(', ')}]`;
 }
 
 /**
@@ -88,74 +97,8 @@ async function mountJson(page: Page, options: MountOptions): Promise<'loaded' | 
         new Promise<'timed out'>((resolve) => setTimeout(() => resolve('timed out'), 30_000)),
       ]);
     },
-    { hostId: HOST_ID, json: JSON.stringify(rows) },
+    { hostId: NESTED_HOST_ID, json: JSON.stringify(rows) },
   );
-}
-
-interface BodyState {
-  /** Body rows with data. */
-  rows: number;
-  /** Rows still waiting for their data. */
-  placeholders: number;
-  /** Cells of rows with data still waiting for their column. */
-  pending: number;
-  /** Text of each cell of `columns`, by row id. */
-  cells: Record<string, Record<string, string | null>>;
-}
-
-function readBody(page: Page, columns: string[]): Promise<BodyState> {
-  return page.evaluate(
-    ({ hostId, columns }) => {
-      const host = document.getElementById(hostId)!;
-      const rows = Array.from(
-        host.querySelectorAll<HTMLElement>('.dt-body .dt-row:not([data-placeholder])'),
-      );
-      const cells: Record<string, Record<string, string | null>> = {};
-      for (const row of rows) {
-        const texts: Record<string, string | null> = {};
-        for (const column of columns) {
-          const cell = row.querySelector(`.dt-cell[data-column="${column}"]`);
-          texts[column] = cell ? cell.textContent : null;
-        }
-        cells[row.getAttribute('data-row-id')!] = texts;
-      }
-      return {
-        rows: rows.length,
-        placeholders: host.querySelectorAll('.dt-body .dt-row[data-placeholder]').length,
-        pending: host.querySelectorAll('.dt-body .dt-cell--pending').length,
-        cells,
-      };
-    },
-    { hostId: HOST_ID, columns },
-  );
-}
-
-/**
- * Wait until every body row has a cell for each of `columns` and every cell
- * has its data, and return the body as it was then. Requiring the cells
- * keeps a check made just after a scroll from passing on the columns the
- * view has not yet left.
- */
-async function waitForFilledBody(page: Page, columns: string[]): Promise<BodyState> {
-  let state: BodyState | undefined;
-  await expect
-    .poll(
-      async () => {
-        state = await readBody(page, columns);
-        const mounted = Object.values(state.cells).every((texts) =>
-          columns.every((column) => texts[column] !== null),
-        );
-        return {
-          rows: state.rows > 0,
-          mounted,
-          placeholders: state.placeholders,
-          pending: state.pending,
-        };
-      },
-      { message: 'every body row and cell gets its data', timeout: 20_000 },
-    )
-    .toEqual({ rows: true, mounted: true, placeholders: 0, pending: 0 });
-  return state!;
 }
 
 /** Errors of the hang: the bridge failing to read the reply, and the row fetch failing. */
@@ -184,7 +127,7 @@ test('a jump to list and struct columns at the far right of a wide table fills e
   await page.evaluate((hostId) => {
     const scroller = document.querySelector(`#${hostId} .dt-body-scroll`)!;
     scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth;
-  }, HOST_ID);
+  }, NESTED_HOST_ID);
   const nested = ['tags', 'labels', 'point'];
   const atRight = await waitForFilledBody(page, nested);
 
@@ -193,24 +136,21 @@ test('a jump to list and struct columns at the far right of a wide table fills e
     ({ hostId, px }) => {
       document.querySelector(`#${hostId} .dt-body-scroll`)!.scrollTop += px;
     },
-    { hostId: HOST_ID, px: BLOCK_ROWS * ROW_HEIGHT },
+    { hostId: NESTED_HOST_ID, px: BLOCK_ROWS * ROW_HEIGHT },
   );
   // Placeholder or not, a row of that block is rendered.
-  await page.waitForSelector(`#${HOST_ID} .dt-body .dt-row[data-row-index="${BLOCK_ROWS + 4}"]`);
+  await page.waitForSelector(
+    `#${NESTED_HOST_ID} .dt-body .dt-row[data-row-index="${BLOCK_ROWS + 4}"]`,
+  );
   const below = await waitForFilledBody(page, nested);
   expect(Object.keys(below.cells).filter((id) => Number(id) >= BLOCK_ROWS).length).toBeGreaterThan(
     10,
   );
 
   for (const state of [atRight, below]) {
-    const ids = Object.keys(state.cells).map(Number);
+    const ids = Object.keys(state.cells);
     expect(ids.length).toBeGreaterThan(10);
-    for (const id of ids) {
-      const { tags, labels, point } = state.cells[id]!;
-      expect(tags, `tags of row ${id}`).toBe(tagsText(id));
-      expect(labels, `labels of row ${id}`).toBe(id % 5 === 0 ? 'null' : `[a${id % 3}, b]`);
-      expect(point, `point of row ${id}`).toMatch(/^\{'x': .*, 'tier': (gold|silver|bronze)\}$/);
-    }
+    expect(wrongCells(state, await expectedCellTexts(page, nested, ids), nested)).toEqual([]);
   }
   expect(errors).toEqual([]);
 });
@@ -220,10 +160,14 @@ test('a JSON file with array and object fields in its first screen loads, and sh
 }) => {
   const errors = watchErrors(page);
   expect(await mountJson(page, { rows: 50, nested: 'lists-and-structs' })).toBe('loaded');
-  const { cells } = await waitForFilledBody(page, ['tags', 'labels', 'point']);
-  expect(cells['2']).toEqual({ tags: tagsText(2), labels: '[a2, b]', point: expect.any(String) });
-  expect(cells['2']!.point).toBe("{'x': 0.5, 'y': 0.25, 'tier': bronze}");
-  expect(cells['0']!.tags).toBe('[]');
+  const nested = ['tags', 'labels', 'point'];
+  const body = await waitForFilledBody(page, nested);
+  const expected = await expectedCellTexts(page, nested, Object.keys(body.cells));
+  expect(wrongCells(body, expected, nested)).toEqual([]);
+  // The cells are DuckDB's text, then, not JavaScript's: row 0's empty list
+  // is `[]`, not ``, and row 2's struct is not `[object Object]`.
+  expect(expected['0']!.tags).toBe('[]');
+  expect(expected['2']!.point).toMatch(/^\{'x': /);
 
   // Read outside the grid, the values come back as arrays and objects.
   const values = await page.evaluate(async () => {
@@ -246,3 +190,110 @@ test('a table with numeric months and days columns shows their numbers', async (
   const { cells } = await waitForFilledBody(page, ['id', 'months', 'days']);
   expect(cells['13']).toEqual({ id: '13', months: '2', days: '14' });
 });
+
+/**
+ * Items in row `r` of each long column of {@link LONG_SELECT}: up to 119,
+ * 69, 59 and 49, so the first screen holds values on both sides of 32.
+ */
+const LONG_LENGTHS = {
+  ints: (r: number) => (r * 37) % 120,
+  words: (r: number) => (r * 13) % 70,
+  attrs: (r: number) => (r * 11) % 60,
+  people: (r: number) => (r * 7) % 50,
+} as const;
+
+/** Every ninth `ints` is NULL. */
+const intsIsNull = (r: number) => r % 9 === 8;
+
+/**
+ * Lists of integers, of words and of structs, and a map, as long as
+ * {@link LONG_LENGTHS} says; a struct; and a list column that is NULL in
+ * every row, whose chart is all nulls.
+ */
+const LONG_SELECT = `
+  CASE WHEN i % 9 = 8 THEN NULL
+       ELSE list_transform(range((i * 37) % 120), j -> CAST(i * 1000 + j AS INTEGER)) END AS ints,
+  list_transform(range((i * 13) % 70), j -> 'w' || j) AS words,
+  map_from_entries(list_transform(range((i * 11) % 60),
+    j -> {'k': 'k' || j, 'v': CAST(i + j AS INTEGER)})) AS attrs,
+  list_transform(range((i * 7) % 50),
+    j -> {'rid': CAST(i AS INTEGER), 'qty': CAST(j AS INTEGER)}) AS people,
+  {'rid': CAST(i AS INTEGER), 'x': i / 4, 'tier': ['gold', 'silver', 'bronze'][i % 3 + 1]} AS point,
+  CAST(NULL AS INTEGER[]) AS nothing`;
+
+const LONG_NESTED = ['ints', 'words', 'attrs', 'people', 'point', 'nothing'] as const;
+
+for (const visualizations of [false, true]) {
+  test(`lists past 32 items and a map past 32 entries show their first 32 and how many more${visualizations ? ', with header charts' : ''}`, async ({
+    page,
+  }) => {
+    const errors = watchConsoleErrors(page);
+    await mountSqlTable(page, { select: LONG_SELECT, rows: 400, visualizations });
+    const body = await waitForFilledBody(page, LONG_NESTED);
+    const ids = Object.keys(body.cells);
+    expect(ids.length).toBeGreaterThan(10);
+
+    const schema = await page.evaluate(() =>
+      (window as unknown as NestedWindow).__dt.state.schema
+        .get()
+        .map((c) => ({ name: c.name, type: c.type })),
+    );
+    for (const name of LONG_NESTED) {
+      expect(schema, `${name} is typed nested`).toContainEqual({ name, type: 'nested' });
+    }
+
+    // Every cell is what DuckDB says it should be.
+    expect(wrongCells(body, await expectedCellTexts(page, LONG_NESTED, ids), LONG_NESTED)).toEqual(
+      [],
+    );
+
+    // N is the generator's count past 32, not only DuckDB's: each long
+    // column has cells on both sides of the cut in the first screen.
+    for (const [name, length] of Object.entries(LONG_LENGTHS)) {
+      const close = name === 'attrs' ? '}' : ']';
+      let cut = 0;
+      for (const id of ids) {
+        const r = Number(id);
+        const text = body.cells[id]![name]!;
+        if (name === 'ints' && intsIsNull(r)) {
+          expect(text, `${name} of row ${r}`).toBe('null');
+        } else if (length(r) > PREVIEW_ITEMS) {
+          expect(
+            text.endsWith(`, … +${length(r) - PREVIEW_ITEMS}${close}`),
+            `${name} of row ${r}: ${text}`,
+          ).toBe(true);
+          cut++;
+        } else {
+          expect(text, `${name} of row ${r}`).not.toContain('…');
+        }
+      }
+      expect(cut, `${name} cells cut at ${PREVIEW_ITEMS}`).toBeGreaterThan(2);
+    }
+
+    // And the head is the value's first 32 items, read off its whole text
+    // rather than off the slice the grid takes.
+    const whole = await page.evaluate(async (ids) => {
+      const { bridge, state } = (window as unknown as NestedWindow).__dt;
+      return bridge.query<{ id: number; whole: string | null }>(
+        `SELECT CAST("ints" AS VARCHAR) AS whole, "__rowid__" AS id FROM "${state.tableName.get()}"` +
+          ` WHERE "__rowid__" IN (${ids.join(', ')}) AND len("ints") > 32`,
+      );
+    }, ids);
+    expect(whole.length).toBeGreaterThan(2);
+    for (const { id, whole: text } of whole) {
+      const items = text!.slice(1, -1).split(', ');
+      expect(body.cells[String(id)]!.ints).toBe(
+        `[${items.slice(0, PREVIEW_ITEMS).join(', ')}, … +${items.length - PREVIEW_ITEMS}]`,
+      );
+    }
+
+    if (visualizations) {
+      await expect
+        .poll(() => unpaintedCharts(page, LONG_NESTED), {
+          message: 'nested columns whose header chart has not drawn',
+        })
+        .toEqual([]);
+    }
+    expect(errors).toEqual([]);
+  });
+}

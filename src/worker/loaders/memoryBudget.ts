@@ -25,6 +25,7 @@
  */
 
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import { isNestedType } from '../../core/types';
 import { quoteIdentifier } from './common';
 
 const MiB = 2 ** 20;
@@ -74,7 +75,6 @@ const LENGTH_SAMPLE_ROWS = 2048;
 /** Value width assumed for nested types, whose size depends on their contents. */
 const NESTED_VALUE_BYTES = 40;
 
-const NESTED_TYPE = /[[\]]|^(STRUCT|MAP|UNION)\b/;
 const TEXT_TYPE = /^(VARCHAR|BLOB|BIT|JSON)\b/;
 
 /**
@@ -84,7 +84,7 @@ const TEXT_TYPE = /^(VARCHAR|BLOB|BIT|JSON)\b/;
  */
 export function valueWidth(columnType: string, averageLength = 8): number {
   const type = columnType.trim().toUpperCase();
-  if (NESTED_TYPE.test(type)) return NESTED_VALUE_BYTES;
+  if (isNestedType(type)) return NESTED_VALUE_BYTES;
   if (TEXT_TYPE.test(type)) return 4 + Math.max(0, averageLength);
   const decimal = /^DECIMAL\((\d+)/.exec(type);
   if (decimal) return Number(decimal[1]) > 18 ? 16 : 8;
@@ -102,7 +102,7 @@ export function valueWidth(columnType: string, averageLength = 8): number {
  */
 export function firstSegmentBytes(columnType: string, width: number): number {
   const type = columnType.trim().toUpperCase();
-  const slot = NESTED_TYPE.test(type) || TEXT_TYPE.test(type) ? REFERENCE_SLOT_BYTES : width;
+  const slot = isNestedType(type) || TEXT_TYPE.test(type) ? REFERENCE_SLOT_BYTES : width;
   return Math.min(BLOCK_BYTES, VECTOR_ROWS * slot);
 }
 

@@ -5,7 +5,13 @@
  * `TableBody.fetchBlock` sends.
  */
 
-import { ROWID_COLUMN, type ColumnSchema, type Filter, type SortColumn } from '../core/types';
+import {
+  ROWID_COLUMN,
+  isNestedType,
+  type ColumnSchema,
+  type Filter,
+  type SortColumn,
+} from '../core/types';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
 export interface RowQuery {
@@ -26,21 +32,31 @@ export interface RowQuery {
 }
 
 /**
+ * Whether the grid reads `column` as DuckDB's text for it. INTERVAL values
+ * would otherwise arrive as Arrow MonthDayNano objects, and nested values
+ * (lists, arrays, structs, maps, unions) as arrays and objects that a cell
+ * shows as `1,2,3` or `[object Object]`. As text they read as they do in
+ * the header chart's labels: `[56, 3, 91]`, `{'x': 1.0, 'tier': bronze}`.
+ */
+function readsAsText(column: ColumnSchema | undefined): boolean {
+  return column !== undefined && (column.type === 'interval' || isNestedType(column.originalType));
+}
+
+/**
  * The `SELECT` list for `columns`, `__rowid__` first.
  *
- * Quotes column names and casts INTERVAL columns to VARCHAR so DuckDB returns
- * strings instead of Arrow MonthDayNano objects. Drops any accidental
- * `__rowid__` in `columns`, which is always prepended (keeps the projection
- * deterministic).
+ * Quotes column names and casts INTERVAL and nested columns to VARCHAR (see
+ * {@link readsAsText}). Drops any accidental `__rowid__` in `columns`, which
+ * is always prepended (keeps the projection deterministic).
  */
 function selectList(columns: readonly string[], schema: ColumnSchema[] | undefined): string {
-  const types = new Map<string, ColumnSchema['type']>();
-  for (const col of schema ?? []) types.set(col.name, col.type);
+  const byName = new Map<string, ColumnSchema>();
+  for (const col of schema ?? []) byName.set(col.name, col);
   const parts: string[] = [quoteIdentifier(ROWID_COLUMN)];
   for (const col of columns) {
     if (col === ROWID_COLUMN) continue;
     const quoted = quoteIdentifier(col);
-    parts.push(types.get(col) === 'interval' ? `CAST(${quoted} AS VARCHAR) AS ${quoted}` : quoted);
+    parts.push(readsAsText(byName.get(col)) ? `CAST(${quoted} AS VARCHAR) AS ${quoted}` : quoted);
   }
   return parts.join(', ');
 }
@@ -143,8 +159,9 @@ export function buildRowQuery(query: RowQuery): string {
   // second and little extra memory. The OFFSET cost still grows with depth.
   //
   // The outer ORDER BY restores the subquery's order, and names the table
-  // so that a sort column the projection casts (INTERVAL → VARCHAR) sorts
-  // by its value, as in the subquery, rather than by the text alias.
+  // so that a sort column the projection casts (INTERVAL or nested →
+  // VARCHAR) sorts by its value, as in the subquery, rather than by the
+  // text alias.
   const page = `SELECT ${rowid} FROM ${table}${where} ORDER BY ${orderBy('')} LIMIT ${limit} OFFSET ${offset}`;
   return `${select} WHERE ${rowid} IN (${page}) ORDER BY ${orderBy(`${table}.`)}`;
 }

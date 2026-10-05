@@ -16,8 +16,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { ColumnSchema, SortColumn } from '@/core/types';
+import { detectSchema } from '@/data/SchemaDetector';
 import type { Filter } from '@/filters/FilterTypes';
-import { buildRowQuery } from '@/table/rowQuery';
+import { buildRowColumnsQuery, buildRowQuery } from '@/table/rowQuery';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from '../helpers/duckdbNode';
 import { makeNodeBridge } from '../helpers/nodeBridge';
@@ -278,4 +279,129 @@ describe('buildRowQuery on real DuckDB: memory at depth', () => {
       ),
     ).rejects.toThrow(/Out of Memory/);
   }, 60_000);
+});
+
+describe('buildRowQuery on real DuckDB: nested columns', () => {
+  let harness: NodeDuckDBHarness;
+  let bridge: ReturnType<typeof makeNodeBridge>;
+  let schema: ColumnSchema[];
+  const NESTED_COLUMNS = ['tags', 'trio', 'point', 'attrs'];
+
+  beforeAll(async () => {
+    harness = await createNodeDuckDB();
+    bridge = makeNodeBridge(harness.conn);
+    // Lists of 0–2 items and NULLs, so that their text order ("[12]" before
+    // "[5]") differs from their value order.
+    await harness.conn.query(
+      `CREATE TABLE nested AS
+         SELECT CAST(range AS BIGINT) AS "__rowid__",
+                CAST(range AS INTEGER) AS id,
+                CASE range % 4
+                  WHEN 0 THEN []::INTEGER[]
+                  WHEN 1 THEN [CAST(range % 97 AS INTEGER)]
+                  WHEN 2 THEN [CAST(range % 97 AS INTEGER), CAST((range * 7) % 97 AS INTEGER)]
+                  ELSE NULL
+                END AS tags,
+                [CAST(range AS INTEGER), 2, 3]::INTEGER[3] AS trio,
+                {'x': range / 4, 'tier': CASE WHEN range % 2 = 0 THEN 'gold' ELSE 'bronze' END} AS point,
+                MAP {'k': CAST(range AS INTEGER)} AS attrs
+         FROM range(${TOTAL_ROWS})`,
+    );
+    // The schema as the loaders build it, from DuckDB's own type names.
+    schema = await detectSchema('nested', bridge);
+  }, 30_000);
+
+  afterAll(async () => {
+    await harness?.cleanup();
+  });
+
+  it('the schema names the nested types as DuckDB prints them', () => {
+    const types = Object.fromEntries(schema.map((c) => [c.name, c.originalType]));
+    expect(types).toMatchObject({
+      tags: 'INTEGER[]',
+      trio: 'INTEGER[3]',
+      point: 'STRUCT(x DOUBLE, tier VARCHAR)',
+      attrs: 'MAP(VARCHAR, INTEGER)',
+    });
+  });
+
+  it('a block and a top-up read nested columns as DuckDB text', async () => {
+    const block = await bridge.query<Record<string, unknown>>(
+      buildRowQuery({
+        tableName: 'nested',
+        columns: ['id', ...NESTED_COLUMNS],
+        sortColumns: [],
+        filters: [],
+        offset: BLOCK,
+        limit: BLOCK,
+        schema,
+        rowidFastPath: true,
+      }),
+    );
+    expect(block).toHaveLength(BLOCK);
+    for (const row of block) {
+      expect(typeof row.id).toBe('number');
+      for (const column of NESTED_COLUMNS) {
+        if (row[column] !== null) expect(typeof row[column], column).toBe('string');
+      }
+    }
+    const byId = new Map(block.map((row) => [row.__rowid__ as number, row]));
+    expect(byId.get(129)).toEqual({
+      __rowid__: 129,
+      id: 129,
+      tags: '[32]',
+      trio: '[129, 2, 3]',
+      point: "{'x': 32.25, 'tier': bronze}",
+      attrs: '{k=129}',
+    });
+    expect(byId.get(130)).toMatchObject({ tags: '[33, 37]' });
+    expect(byId.get(131)).toMatchObject({ tags: null });
+    expect(byId.get(132)).toMatchObject({ tags: '[]' });
+
+    // Columns of rows already cached, read by __rowid__.
+    const topUp = await bridge.query<Record<string, unknown>>(
+      buildRowColumnsQuery({
+        tableName: 'nested',
+        columns: NESTED_COLUMNS,
+        rowids: [129, 130, 131, 132],
+        schema,
+      }),
+    );
+    expect(topUp).toHaveLength(4);
+    for (const row of topUp) {
+      const { id: _id, ...expected } = byId.get(row.__rowid__ as number)!;
+      expect(row).toEqual(expected);
+    }
+  });
+
+  for (const direction of ['asc', 'desc'] as const) {
+    it(`a block sorted ${direction} on a list column orders by value, not by text`, async () => {
+      const order = `tags ${direction.toUpperCase()} NULLS LAST, "__rowid__" ASC`;
+      const ids = async (sql: string) =>
+        (await bridge.query<{ __rowid__: number }>(sql)).map((r) => r.__rowid__);
+      const reference = await ids(`SELECT "__rowid__" FROM nested ORDER BY ${order}`);
+      // Guard: by text, the order would be different.
+      const byText = await ids(
+        `SELECT "__rowid__" FROM nested ORDER BY CAST(tags AS VARCHAR) ${direction.toUpperCase()} NULLS LAST, "__rowid__" ASC`,
+      );
+      expect(byText).not.toEqual(reference);
+
+      for (let offset = 0; offset < reference.length; offset += BLOCK) {
+        const limit = Math.min(BLOCK, reference.length - offset);
+        const rows = await bridge.query<Record<string, unknown>>(
+          buildRowQuery({
+            tableName: 'nested',
+            columns: NESTED_COLUMNS,
+            sortColumns: [{ column: 'tags', direction }],
+            filters: [],
+            offset,
+            limit,
+            schema,
+            rowidFastPath: false,
+          }),
+        );
+        expect(rows.map((row) => row.__rowid__)).toEqual(reference.slice(offset, offset + limit));
+      }
+    });
+  }
 });

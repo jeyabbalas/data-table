@@ -7,8 +7,10 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { fetchCellJson, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
+import { jsonValueSQL } from '../data/valueSql';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
@@ -18,6 +20,7 @@ import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
+import { dataTypeOf, parseDuckDBType, type DuckDBTypeNode } from './duckdbType';
 import {
   ConfigurationError,
   DerivedColumnError,
@@ -25,6 +28,7 @@ import {
   QueryError,
   SQLValidationError,
 } from './errors';
+import { materialize, parseJsonTree } from './jsonTree';
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import {
@@ -88,6 +92,21 @@ export interface GetColumnValuesOptions {
   offset?: number;
   /** Optional AbortSignal forwarded to the DuckDB worker. */
   signal?: AbortSignal;
+}
+
+/**
+ * Options for {@link StateActions.getCellValue}.
+ *
+ * @example
+ * const controller = new AbortController();
+ * const value = await table.actions.getCellValue(0, 'tags', { signal: controller.signal });
+ */
+export interface GetCellValueOptions {
+  /**
+   * Aborts the read: the query is cancelled in the DuckDB worker, and the
+   * promise rejects with a `QueryError` coded `QUERY_ABORTED`.
+   */
+  signal?: AbortSignal | undefined;
 }
 
 /**
@@ -2288,7 +2307,7 @@ export class StateActions {
    * the export "selected rows" scope) — not strict selection insertion order.
    *
    * Numeric columns materialize into the narrowest sensible typed array:
-   * - DuckDB `BIGINT` / `HUGEINT` → `BigInt64Array`
+   * - DuckDB `BIGINT` / `UBIGINT` / `HUGEINT` / `UHUGEINT` → `BigInt64Array`
    * - other integer types → `Int32Array`
    * - `FLOAT` / `DOUBLE` / `DECIMAL` → `Float64Array`
    * - all other types → `unknown[]`
@@ -2296,6 +2315,33 @@ export class StateActions {
    * If any returned row carries a `NULL` value, the function falls back to
    * `unknown[]` regardless of declared type so that `null` is preserved (the
    * typed-array packed form would coerce `null` to `0`, which is ambiguous).
+   * It falls back the same way when an integer does not fit the typed array:
+   * a `UINTEGER` past 2^31−1, or a `UBIGINT`, `HUGEINT` or `UHUGEINT` beyond
+   * the 64-bit range. In that `unknown[]`, an integer is a `number` when it
+   * is exact (within ±(2^53−1)) and a `bigint` beyond, as inside nested
+   * values.
+   *
+   * Every value is exact:
+   * - Integers keep every digit. `BIGINT`, `UBIGINT`, `HUGEINT` and
+   *   `UHUGEINT` columns are read as DuckDB's text and parsed as bigints
+   *   (Arrow's numbers for them are rounded past 2^53, or wrong).
+   * - A `DECIMAL` is the double nearest its value.
+   * - A nested column (`type: 'nested'`: LIST, ARRAY, STRUCT, MAP, UNION,
+   *   VARIANT) is read as exact JSON text and returned as
+   *   {@link getCellValue} returns a value: lists and arrays as arrays,
+   *   structs as objects (an unnamed struct as an array), a MAP as a `Map`
+   *   with typed keys in order, a UNION as `{ [tag]: value }`; integers
+   *   inside as numbers when exact and bigints beyond, DECIMAL, FLOAT and
+   *   DOUBLE as numbers (`NaN`, `±Infinity` and `-0` kept), and dates,
+   *   times, UUIDs, INTERVALs, BLOBs, ENUMs and BITs as DuckDB's text.
+   * - `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY` and `TIME WITH TIME
+   *   ZONE` values are DuckDB's text: `'1 year 2 months 3 days'`,
+   *   `'POINT (1 2)'`, `'03:04:05+02'`. Arrow returns them as bytes, numbers
+   *   or `null` that do not hold them.
+   * - Other values come as the DuckDB worker returns them: text for
+   *   `VARCHAR`, `UUID` and `JSON`, a `Uint8Array` for a `BLOB`, epoch
+   *   milliseconds for `DATE` and `TIMESTAMP`, microseconds since midnight
+   *   for `TIME`.
    *
    * The reserved `__rowid__` column is retrievable by name; the loaders
    * always cast its synthesized `row_number()` to `BIGINT` (the conditional
@@ -2312,6 +2358,11 @@ export class StateActions {
    * @example
    * await table.actions.addFilter({ type: 'range', column: 'age', min: 18 });
    * const adultAges = await table.actions.getColumnValues('age', { scope: 'filtered' });
+   *
+   * @example
+   * // A DECIMAL(10,2)[] column: exact numbers, NULL rows as null.
+   * const prices = await table.actions.getColumnValues('prices', { limit: 3 });
+   * // [[1.25, 2.5, 3.75], null, []]
    *
    * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `name` is not
    *   in the current schema.
@@ -2359,6 +2410,8 @@ export class StateActions {
       (limit !== undefined ? ` LIMIT ${limit}` : '') +
       (offset !== undefined ? ` OFFSET ${offset}` : '');
 
+    const read = valueReadOf(entry);
+    const quotedCol = quoteIdentifier(name);
     let sql: string;
     let valKey: string;
 
@@ -2383,10 +2436,18 @@ export class StateActions {
         this.state.sortColumns.get(),
         indices,
       );
-      sql = pagination ? `SELECT * FROM (${baseSql})${pagination}` : baseSql;
-      valKey = name;
+      if (read === 'raw') {
+        sql = pagination ? `SELECT * FROM (${baseSql})${pagination}` : baseSql;
+        valKey = name;
+      } else {
+        // The subquery numbers the rows by the values as they are and
+        // returns the selected ones in view order; the outer SELECT reads
+        // the value as text, keeping that order, as the pagination wrapper
+        // above keeps it.
+        sql = `SELECT ${valueReadSQL(read, entry, quotedCol)} AS val FROM (${baseSql})${pagination}`;
+        valKey = 'val';
+      }
     } else {
-      const quotedCol = quoteIdentifier(name);
       const quotedTbl = quoteIdentifier(tbl);
       const filtersFragment =
         scope === 'filtered' ? filtersToWhereClause(this.state.filters.get()) : '';
@@ -2397,13 +2458,126 @@ export class StateActions {
       const needsExplicitOrder =
         scope !== 'all' || where !== '' || this.state.sortColumns.get().length > 0;
       const orderBy = needsExplicitOrder ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}` : '';
-      sql = `SELECT ${quotedCol} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
+      sql = `SELECT ${valueReadSQL(read, entry, quotedCol)} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
       valKey = 'val';
     }
 
-    const rows = await this.bridge.query<Record<string, unknown>>(sql, signal);
+    // A nested column's JSON text can run to megabytes a row (a 768-float
+    // embedding is some 15,000 characters): the query cache must not keep it.
+    const rows =
+      read === 'json'
+        ? await this.bridge.query<Record<string, unknown>>(sql, signal, { cache: false })
+        : await this.bridge.query<Record<string, unknown>>(sql, signal);
     this.throwIfDestroyed('getColumnValues');
     return materializeColumn(rows, valKey, entry);
+  }
+
+  /**
+   * Read one cell's value, exactly: the value in column `column` of the row
+   * whose `__rowid__` is `rowId`, from the current effective table (the
+   * derived-column VIEW when there is one).
+   *
+   * A nested column's value (`type: 'nested'`: a LIST, ARRAY, STRUCT, MAP,
+   * UNION or VARIANT) is read as exact JSON text and turned into JS values:
+   *
+   * - LIST and ARRAY → an array.
+   * - STRUCT → an object keyed by field name; a struct whose fields have no
+   *   names (`row(1, 'a')`) → an array of its values. Every key is an own
+   *   property, `__proto__`, `constructor` and `toJSON` included, so the
+   *   object survives `structuredClone` and `JSON.stringify`. Test keys with
+   *   `Object.hasOwn`: a field named `hasOwnProperty` hides the method.
+   * - MAP → a `Map`, entries in order, keys typed by the key type: an
+   *   integer key is a number (a bigint beyond ±(2^53−1)), a FLOAT, DOUBLE or
+   *   DECIMAL key a number, a BOOLEAN key a boolean, any other key its text
+   *   (a DATE key `'2024-01-02'`, a STRUCT key `"{'k': 1}"`).
+   * - UNION → `{ [tag]: value }`.
+   * - Integers → a number when exact, a `bigint` beyond ±(2^53−1). DECIMAL,
+   *   FLOAT and DOUBLE → a number (`NaN`, `±Infinity` and `-0` kept; a FLOAT
+   *   is its float32 value, `0.10000000149011612` for `0.1`). BOOLEAN → a
+   *   boolean. Dates, times, timestamps, UUIDs, INTERVALs, BLOBs, ENUMs and
+   *   BITs → DuckDB's text: `'2024-01-02'`, `'1 year 2 months'`, `'\\xAA\\xBB'`.
+   * - A VARIANT, or JSON inside a value → what its JSON holds.
+   *
+   * Any other column's value is the one {@link getColumnValues} returns for
+   * the row: a `bigint` for `BIGINT`, `UBIGINT`, `HUGEINT` and `UHUGEINT`; a
+   * number for the other integers and for `FLOAT`, `DOUBLE` and `DECIMAL`;
+   * DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY` and
+   * `TIME WITH TIME ZONE`; a `JSON` column's text; a `Uint8Array` for a
+   * `BLOB`. SQL NULL, at the top or anywhere inside, is `null`.
+   *
+   * One query by `__rowid__`. It skips the query cache and runs ahead of
+   * queued chart and stats queries.
+   *
+   * @param rowId - The row's `__rowid__`: a non-negative integer, as a
+   *   number or as the bigint `getColumnValues('__rowid__')` gives.
+   * @param column - The column's name.
+   *
+   * @example
+   * // point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+   * await table.actions.getCellValue(10, 'point'); // { x: 1.5, y: -0.5, tier: 'gold' }
+   *
+   * @example
+   * // attrs: MAP(VARCHAR, INTEGER), keys in order, `size` a key like any other
+   * const attrs = (await table.actions.getCellValue(11n, 'attrs')) as Map<string, number>;
+   * attrs.get('size'); // 1
+   *
+   * @example
+   * // big_ints: BIGINT[]: numbers when exact, bigints beyond 2^53
+   * await table.actions.getCellValue(3, 'big_ints');
+   * // [9007199254740991, 9007199254740993n, -9223372036854775808n, 9223372036854775807n]
+   *
+   * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `column` is not
+   *   in the current schema.
+   * @throws `QueryError` with `code: 'INVALID_ROWID'` and `details: { rowId }`
+   *   when `rowId` is not a non-negative integer (a safe integer, or a bigint
+   *   within the BIGINT range), or when no row has it.
+   * @throws `QueryError` with `code: 'NO_TABLE'` when called before any data
+   *   is loaded.
+   * @throws `QueryError` with `code: 'QUERY_ABORTED'` when `options.signal`
+   *   aborts the read.
+   * @throws `DestroyedError` if the table was destroyed before or during the
+   *   call.
+   */
+  async getCellValue(
+    rowId: number | bigint,
+    column: string,
+    options: GetCellValueOptions = {},
+  ): Promise<unknown> {
+    this.throwIfDestroyed('getCellValue');
+    const entry = this.state.schema.get().find((c) => c.name === column);
+    if (!entry) {
+      throw new QueryError(`Column "${column}" not found`, {
+        code: 'COLUMN_NOT_FOUND',
+        details: { column },
+      });
+    }
+    const id = rowIdLiteral(rowId);
+    const tbl = this.state.tableName.get();
+    if (!tbl) {
+      throw new QueryError('No table loaded', { code: 'NO_TABLE' });
+    }
+
+    const { signal } = options;
+    const read = valueReadOf(entry);
+    if (read === 'json') {
+      const cell = await fetchCellJson(this.bridge, tbl, entry, rowId, { signal });
+      this.throwIfDestroyed('getCellValue');
+      if (cell === undefined) throw rowNotFound(rowId);
+      if (cell.text === null) return null;
+      return materialize(parseJsonTree(cell.text).root, typeNodeOf(entry), 'value');
+    }
+
+    const sql =
+      `SELECT ${valueReadSQL(read, entry, quoteIdentifier(column))} AS val` +
+      ` FROM ${quoteIdentifier(tbl)} WHERE ${quoteIdentifier(ROWID_COLUMN)} = ${id}`;
+    const rows = await this.bridge.query<Record<string, unknown>>(sql, signal, {
+      priority: 'high',
+      cache: false,
+    });
+    this.throwIfDestroyed('getCellValue');
+    const row = rows[0];
+    if (row === undefined) throw rowNotFound(rowId);
+    return materializeColumn([row], 'val', entry)[0];
   }
 
   /**
@@ -2635,70 +2809,261 @@ function derivedTypeChanged(before: ColumnSchema, after: DerivedColumnInfo): boo
 }
 
 // ---------------------------------------------------------------------------
-// Column-value materialization helpers (supporting getColumnValues).
+// Column-value reads (supporting getColumnValues and getCellValue).
 // ---------------------------------------------------------------------------
 
-function isBigIntOriginalType(originalType: string): boolean {
-  return /BIGINT|HUGEINT/i.test(originalType);
+/**
+ * How getColumnValues and getCellValue select a column so that every value
+ * arrives exact. Arrow, and the worker's conversion of what it returns, get
+ * some types wrong; those are selected in a form that crosses intact.
+ *
+ * - `'raw'`: as the query returns it.
+ * - `'json'`: a nested value, as exact JSON text (`jsonValueSQL`), which
+ *   `materialize` turns into JS values. Arrow's own nested values are wrong
+ *   for DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT cannot
+ *   cross Arrow at all.
+ * - `'text'`: DuckDB's text, kept as text: see {@link TEXT_READ_NAMES}.
+ * - `'integer-text'`: DuckDB's text, parsed as a bigint. The worker posts a
+ *   BIGINT or UBIGINT as the nearest number, which past 2^53 is another
+ *   integer, and a HUGEINT or UHUGEINT arrives as a double, with the wrong
+ *   sign at the edges: a UHUGEINT past 2^127 negative (its maximum as -1),
+ *   the HUGEINT minimum positive.
+ * - `'decimal-text'`: DuckDB's text, parsed as the nearest double.
+ * - `'double'`: `CAST(c AS DOUBLE)`: see {@link EXACT_DOUBLE_DIGITS}.
+ */
+type ValueRead = 'raw' | 'json' | 'text' | 'integer-text' | 'decimal-text' | 'double';
+
+/**
+ * Scalar types whose values Arrow returns in a form that does not hold them
+ * (duckdb-wasm 1.33, apache-arrow 17), by the upper-case name
+ * `parseDuckDBType` gives them: an INTERVAL as an `Int32Array` of two
+ * meaningless numbers; a BIT and a BIGNUM as their storage bytes; a
+ * GEOMETRY as WKB bytes, where the grid, the exports and a geometry inside
+ * a nested value all give its text, `POINT (1 2)`; a TIME WITH TIME ZONE as
+ * microseconds since midnight, its offset lost; and an ENUM as `null`
+ * through the worker's cancellable query path (`conn.send`), which every
+ * `bridge.query` takes. DuckDB's text for each is exact. A BLOB arrives
+ * intact, as a `Uint8Array`, and stays one.
+ */
+const TEXT_READ_NAMES: ReadonlySet<string> = new Set([
+  'INTERVAL',
+  'BIT',
+  'BITSTRING',
+  'BIT VARYING',
+  'BIGNUM',
+  'VARINT',
+  'GEOMETRY',
+  'TIME WITH TIME ZONE',
+  'TIMETZ',
+  'ENUM',
+]);
+
+/** Integer types whose values can lie beyond ±(2^53−1): they materialize as bigints. */
+const WIDE_INTEGER_NAMES: ReadonlySet<string> = new Set([
+  'BIGINT',
+  'INT8',
+  'LONG',
+  'UBIGINT',
+  'HUGEINT',
+  'UHUGEINT',
+]);
+
+/**
+ * The most digits a DECIMAL may have for `CAST(c AS DOUBLE)` to be the
+ * double nearest its value: DuckDB divides the unscaled integer by a power
+ * of ten, which rounds once while that integer is below 2^53. A wider
+ * DECIMAL is read as text, which `Number` rounds once. Arrow's own DECIMAL
+ * numbers, with duckdb-wasm's `castDecimalToDouble`, miss the nearest double
+ * for 13 to 31 % of values (scales 2 to 10 measured): 1.2345 reads as
+ * 1.2345000000000002.
+ */
+const EXACT_DOUBLE_DIGITS = 15;
+
+const INT32_MIN = -2147483648;
+const INT32_MAX = 2147483647;
+const INT64_MIN = -9223372036854775808n;
+const INT64_MAX = 9223372036854775807n;
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+
+/** The parsed DuckDB type of `column`. */
+function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
+  // `originalType` is required by the type, but a schema built by hand in
+  // JavaScript may leave it out.
+  return parseDuckDBType(column.originalType ?? '');
+}
+
+/** How getColumnValues and getCellValue read `column`: see {@link ValueRead}. */
+function valueReadOf(column: ColumnSchema): ValueRead {
+  const node = typeNodeOf(column);
+  if (column.type === 'nested' || dataTypeOf(node) === 'nested') return 'json';
+  // The loaders number rows from 0, far below 2^53: as numbers, the rowids
+  // are exact, and cheaper to read than text.
+  if (column.name === ROWID_COLUMN) return 'raw';
+  if (node.kind !== 'scalar') {
+    // A JSON column is text already. A type the parser could not read
+    // follows the library's type for it.
+    return node.kind === 'unknown' && column.type === 'interval' ? 'text' : 'raw';
+  }
+  if (TEXT_READ_NAMES.has(node.name)) return 'text';
+  if (WIDE_INTEGER_NAMES.has(node.name)) return 'integer-text';
+  if (node.dataType === 'decimal') {
+    // `DECIMAL` alone is DECIMAL(18,3).
+    const precision = node.args.length === 0 ? 18 : Number(node.args[0]);
+    return precision <= EXACT_DOUBLE_DIGITS ? 'double' : 'decimal-text';
+  }
+  return 'raw';
+}
+
+/** SQL for the value of `column` (`quotedCol`) as `read` says, without an alias. */
+function valueReadSQL(read: ValueRead, column: ColumnSchema, quotedCol: string): string {
+  switch (read) {
+    case 'raw':
+      return quotedCol;
+    case 'json':
+      return jsonValueSQL(column, quotedCol);
+    case 'double':
+      return `CAST(${quotedCol} AS DOUBLE)`;
+    default:
+      return `CAST(${quotedCol} AS VARCHAR)`;
+  }
+}
+
+/** The typed array a column's values go into when every one fits: see getColumnValues. */
+type TypedArrayKind = 'int32' | 'bigint64' | 'float64' | null;
+
+function typedArrayKindOf(column: ColumnSchema, read: ValueRead): TypedArrayKind {
+  if (read === 'json') return null;
+  if (column.type === 'integer') {
+    const node = typeNodeOf(column);
+    return node.kind === 'scalar' && WIDE_INTEGER_NAMES.has(node.name) ? 'bigint64' : 'int32';
+  }
+  if (column.type === 'float' || column.type === 'decimal') return 'float64';
+  return null;
 }
 
 function emptyTypedResult(
-  schema: ColumnSchema,
+  column: ColumnSchema,
 ): unknown[] | Int32Array | Float64Array | BigInt64Array {
-  if (schema.type === 'integer') {
-    return isBigIntOriginalType(schema.originalType) ? new BigInt64Array(0) : new Int32Array(0);
+  switch (typedArrayKindOf(column, valueReadOf(column))) {
+    case 'int32':
+      return new Int32Array(0);
+    case 'bigint64':
+      return new BigInt64Array(0);
+    case 'float64':
+      return new Float64Array(0);
+    default:
+      return [];
   }
-  if (schema.type === 'float' || schema.type === 'decimal') {
-    return new Float64Array(0);
-  }
-  return [];
 }
 
-function materializeColumn(
-  rows: Record<string, unknown>[],
-  key: string,
-  schema: ColumnSchema,
-): unknown[] | Int32Array | Float64Array | BigInt64Array {
-  const len = rows.length;
-
-  // Detect NULLs (DuckDB's JS layer surfaces SQL NULL as JS null/undefined).
-  // Typed arrays cannot represent null, so any NULL forces a fallback to
-  // unknown[] to keep the semantic distinction intact.
-  // i < len, so rows[i] is defined; assertions encode the invariant.
-  let hasNull = false;
-  for (let i = 0; i < len; i++) {
-    if (rows[i]![key] == null) {
-      hasNull = true;
-      break;
+/** An integer value as a bigint: from DuckDB's text, a number or a bigint. */
+function toBigInt(value: unknown): bigint | undefined {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') return Number.isInteger(value) ? BigInt(value) : undefined;
+  if (typeof value === 'string' && value !== '') {
+    try {
+      return BigInt(value);
+    } catch {
+      return undefined;
     }
   }
-  if (hasNull) {
-    return rows.map((r) => r[key]);
-  }
+  return undefined;
+}
 
-  if (schema.type === 'integer') {
-    if (isBigIntOriginalType(schema.originalType)) {
-      const arr = new BigInt64Array(len);
+/**
+ * The values of `key` in `rows` in the typed array `kind` names, or `null`
+ * when a value is NULL or does not fit it.
+ */
+function typedValues(
+  rows: Record<string, unknown>[],
+  key: string,
+  kind: Exclude<TypedArrayKind, null>,
+): Int32Array | Float64Array | BigInt64Array | null {
+  const len = rows.length;
+  // i < len, so rows[i] is defined; assertions encode the invariant.
+  switch (kind) {
+    case 'int32': {
+      const arr = new Int32Array(len);
       for (let i = 0; i < len; i++) {
-        const v = rows[i]![key];
-        arr[i] = typeof v === 'bigint' ? v : BigInt(v as number | string);
+        const value = rows[i]![key];
+        if (value === null || value === undefined) return null;
+        const n = Number(value);
+        if (!Number.isInteger(n) || n < INT32_MIN || n > INT32_MAX) return null;
+        arr[i] = n;
       }
       return arr;
     }
-    const arr = new Int32Array(len);
-    for (let i = 0; i < len; i++) {
-      arr[i] = Number(rows[i]![key]);
+    case 'bigint64': {
+      const arr = new BigInt64Array(len);
+      for (let i = 0; i < len; i++) {
+        const value = toBigInt(rows[i]![key]);
+        if (value === undefined || value < INT64_MIN || value > INT64_MAX) return null;
+        arr[i] = value;
+      }
+      return arr;
     }
-    return arr;
-  }
-
-  if (schema.type === 'float' || schema.type === 'decimal') {
-    const arr = new Float64Array(len);
-    for (let i = 0; i < len; i++) {
-      arr[i] = Number(rows[i]![key]);
+    case 'float64': {
+      const arr = new Float64Array(len);
+      for (let i = 0; i < len; i++) {
+        const value = rows[i]![key];
+        if (value === null || value === undefined) return null;
+        arr[i] = Number(value);
+      }
+      return arr;
     }
-    return arr;
   }
+}
 
-  return rows.map((r) => r[key]);
+/**
+ * One value read as `read` says, for the `unknown[]` getColumnValues falls
+ * back to: NULL as `null`; an integer read as text as a number when exact
+ * and a bigint beyond ±(2^53−1); a nested value's JSON text as JS values
+ * (`type` is its parsed type).
+ */
+function readValue(value: unknown, read: ValueRead, type: DuckDBTypeNode | undefined): unknown {
+  if (value === null || value === undefined) return null;
+  switch (read) {
+    case 'json':
+      return typeof value === 'string'
+        ? materialize(parseJsonTree(value).root, type, 'value')
+        : value;
+    case 'integer-text': {
+      const n = toBigInt(value);
+      if (n === undefined) return value;
+      return n >= -MAX_SAFE_BIGINT && n <= MAX_SAFE_BIGINT ? Number(n) : n;
+    }
+    case 'decimal-text':
+      return Number(value);
+    default:
+      return value;
+  }
+}
+
+/**
+ * The values of `key` in `rows`, read from the form {@link valueReadOf}
+ * selected them in: in the typed array {@link typedArrayKindOf} names when
+ * every value fits it, else in an `unknown[]` (see getColumnValues).
+ */
+function materializeColumn(
+  rows: Record<string, unknown>[],
+  key: string,
+  column: ColumnSchema,
+): unknown[] | Int32Array | Float64Array | BigInt64Array {
+  const read = valueReadOf(column);
+  const kind = typedArrayKindOf(column, read);
+  if (kind !== null) {
+    const typed = typedValues(rows, key, kind);
+    if (typed !== null) return typed;
+  }
+  // Parsed once for the whole column.
+  const type = read === 'json' ? typeNodeOf(column) : undefined;
+  return rows.map((row) => readValue(row[key], read, type));
+}
+
+/** The error for a rowid no row of the table has. */
+function rowNotFound(rowId: number | bigint): QueryError {
+  return new QueryError(`No row has rowId ${String(rowId)}`, {
+    code: 'INVALID_ROWID',
+    details: { rowId },
+  });
 }

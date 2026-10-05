@@ -24,7 +24,7 @@
  *   root entry · ESM               10.85 kB   →  11.4 kB cap (5.1 %)
  *   advanced entry · ESM            2.47 kB   →   2.6 kB cap (5.3 %)
  *   stylesheet                     20.51 kB   →  21.5 kB cap (4.8 %)
- *   lazy ExportDialog chunk        87.80 kB   →  92 kB   cap (4.8 %)
+ *   lazy ExportDialog chunk        91.28 kB   →  96 kB   cap (5.2 %)
  *   lazy SQLFilterModal chunk       2.54 kB   →   2.6 kB cap (2.4 %)
  *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
  *   lazy DerivedColumnEditPanel     3.00 kB   →   3.1 kB cap (3.3 %)
@@ -69,7 +69,8 @@
  * Measured again under Vite 8.2.0 / rolldown 1.2.1, the chunk was 81.61 kB
  * before nested columns. Their type parser, bounded cell text and exact
  * text filters took it to 84.28 kB, and their header label and summary
- * chart to 87.80 kB, and the cap to 92 kB.
+ * chart to 87.80 kB, and the cap to 92 kB. Reading cell and column values
+ * exactly, nested ones as JSON, took it to 91.28 kB, and the cap to 96 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -116,7 +117,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '92 kB',
+    limit: '96 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

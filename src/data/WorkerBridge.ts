@@ -352,6 +352,12 @@ export class WorkerBridge {
    * and rejects the bare `NaN` and `Infinity` DuckDB writes for non-finite
    * DOUBLEs.
    *
+   * A VARIANT value cannot cross Arrow at all (`Unsupported Arrow type
+   * VARIANT`), nor a value that holds one, and `to_json` gets those wrong
+   * (`to_json(42::VARIANT)` is the string `"42"`). Select a VARIANT column
+   * as `CAST(c AS JSON)`, or read any of these with `actions.getCellValue`
+   * or `actions.getColumnValues`, which pick the SQL for each type.
+   *
    * @param sql SQL text to execute.
    * @param signal Optional abort signal; aborting rejects with
    *   `QUERY_ABORTED` and posts a targeted cancel to the worker.

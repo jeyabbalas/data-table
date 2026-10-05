@@ -125,11 +125,41 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
 }
 
 /**
+ * Check if a value is an Arrow `Vector`: what a LIST or fixed-size ARRAY
+ * cell holds.
+ *
+ * Duck-typed, because `apache-arrow` is only a transitive dependency. A
+ * STRUCT or MAP cell is a proxy that reads its fields as properties, so a
+ * `type` and a `data` field would pass for a Vector's; a Vector's `data` is
+ * an array of its chunks, and no field value is an array.
+ */
+function isArrowVector(obj: object): obj is Iterable<unknown> {
+  const vector = obj as {
+    toArray?: unknown;
+    type?: unknown;
+    data?: unknown;
+    [Symbol.iterator]?: unknown;
+  };
+  return (
+    typeof vector.toArray === 'function' &&
+    typeof vector[Symbol.iterator] === 'function' &&
+    typeof vector.type === 'object' &&
+    vector.type !== null &&
+    Array.isArray(vector.data)
+  );
+}
+
+/**
  * Convert BigInt values to Numbers for JSON serialization, and convert
  * DuckDB WASM interval objects to string representations.
  *
  * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify().
  * It also returns INTERVAL values as Arrow MonthDayNano objects instead of strings.
+ *
+ * Nested values become plain data: a LIST or ARRAY value an array, a STRUCT
+ * or MAP value an object. Arrow returns a list as a `Vector`, whose own
+ * properties include functions, so copied field by field it could not be
+ * posted to the main thread.
  */
 export function convertBigInts(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
@@ -142,6 +172,10 @@ export function convertBigInts(obj: unknown): unknown {
     return obj.map(convertBigInts);
   }
   if (typeof obj === 'object') {
+    if (isArrowVector(obj)) {
+      return Array.from(obj, convertBigInts);
+    }
+
     const record = obj as Record<string, unknown>;
 
     // Detect and convert interval objects before general recursion

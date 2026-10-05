@@ -5,8 +5,8 @@
  * `TableBody.fetchBlock` sends.
  */
 
-import { isNestedSqlType } from '../core/duckdbType';
 import { ROWID_COLUMN, type ColumnSchema, type Filter, type SortColumn } from '../core/types';
+import { gridValueSQL } from '../data/valueSql';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 
 export interface RowQuery {
@@ -27,24 +27,20 @@ export interface RowQuery {
 }
 
 /**
- * Whether the grid reads `column` as DuckDB's text for it. INTERVAL values
- * would otherwise arrive as Arrow MonthDayNano objects, and nested values
- * (lists, arrays, structs, maps, unions) as arrays and objects that a cell
- * shows as `1,2,3` or `[object Object]`. As text they read as they do in
- * the header chart's labels: `[56, 3, 91]`, `{'x': 1.0, 'tier': bronze}`.
- */
-function readsAsText(column: ColumnSchema | undefined): boolean {
-  return (
-    column !== undefined && (column.type === 'interval' || isNestedSqlType(column.originalType))
-  );
-}
-
-/**
  * The `SELECT` list for `columns`, `__rowid__` first.
  *
- * Quotes column names and casts INTERVAL and nested columns to VARCHAR (see
- * {@link readsAsText}). Drops any accidental `__rowid__` in `columns`, which
- * is always prepended (keeps the projection deterministic).
+ * Quotes column names, and reads a column as text where `gridValueSQL`
+ * says so, under its own name. Nested values (lists, arrays, structs, maps,
+ * unions, VARIANT) would otherwise arrive as arrays and objects that a cell
+ * shows as `1,2,3` or `[object Object]`, INTERVAL values as Arrow
+ * MonthDayNano objects, and BLOBs as bytes. As text they read as DuckDB
+ * writes them, `[56, 3, 91]`, `{'x': 1.0, 'tier': bronze}`, bounded: a long
+ * list shows 32 items and `… +N`, and any cell at most 1,000 graphemes, so
+ * a block of embeddings costs kilobytes, not megabytes. A column the schema
+ * does not know is read as it is.
+ *
+ * Drops any accidental `__rowid__` in `columns`, which is always prepended
+ * (keeps the projection deterministic).
  */
 function selectList(columns: readonly string[], schema: ColumnSchema[] | undefined): string {
   const byName = new Map<string, ColumnSchema>();
@@ -53,7 +49,9 @@ function selectList(columns: readonly string[], schema: ColumnSchema[] | undefin
   for (const col of columns) {
     if (col === ROWID_COLUMN) continue;
     const quoted = quoteIdentifier(col);
-    parts.push(readsAsText(byName.get(col)) ? `CAST(${quoted} AS VARCHAR) AS ${quoted}` : quoted);
+    const column = byName.get(col);
+    const text = column ? gridValueSQL(column, quoted) : null;
+    parts.push(text === null ? quoted : `${text} AS ${quoted}`);
   }
   return parts.join(', ');
 }
@@ -156,9 +154,9 @@ export function buildRowQuery(query: RowQuery): string {
   // second and little extra memory. The OFFSET cost still grows with depth.
   //
   // The outer ORDER BY restores the subquery's order, and names the table
-  // so that a sort column the projection casts (INTERVAL or nested →
-  // VARCHAR) sorts by its value, as in the subquery, rather than by the
-  // text alias.
+  // so that a sort column the projection reads as text (nested, INTERVAL,
+  // BLOB: see selectList) sorts by its value, as in the subquery, rather
+  // than by the text alias.
   const page = `SELECT ${rowid} FROM ${table}${where} ORDER BY ${orderBy('')} LIMIT ${limit} OFFSET ${offset}`;
   return `${select} WHERE ${rowid} IN (${page}) ORDER BY ${orderBy(`${table}.`)}`;
 }

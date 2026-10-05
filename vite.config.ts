@@ -38,6 +38,14 @@ function buildStylesPlugin(): Plugin {
 }
 
 /**
+ * The panels the table loads with `import()` that `src/advanced.ts` also
+ * exports, and so imports up front: the shared-chunk group below leaves them
+ * out, so each stays a chunk of its own, loaded when it first opens.
+ */
+const LAZY_PANELS =
+  /[\\/]src[\\/](?:sql-editor[\\/]|derived[\\/]DerivedColumn(?:EditPanel|Modal)\.ts$|filters[\\/](?:SQLFilterModal|FilterPresetPanel)\.ts$)/;
+
+/**
  * Plugin to emit a one-line type-stub at dist/styles.d.ts so that
  * `import '@jeyabbalas/data-table/styles'` typechecks under strict TS
  * (TS2882 otherwise — bare CSS exports have no type declaration).
@@ -91,6 +99,27 @@ export default defineConfig({
       external: [/^@codemirror\//, /^@lezer\//, /^@duckdb\/duckdb-wasm/],
       output: {
         // No UMD build, so no globals mapping needed.
+        //
+        // One chunk for the modules both entries load up front: the table's
+        // header, body, charts and type parser. Left to itself, rolldown
+        // moves the modules the table shares with two or more lazy chunks
+        // (the type parser, `FilterSQL`, `errors`, which the value inspector
+        // and the extract-expression chunk import too) into a chunk of their
+        // own. A page then loads one more file, ~1.1 kB more brotli, which
+        // no `.size-limit.cjs` budget measures. The group keeps the name
+        // rolldown gives the shared chunk, which the budget matches. A module
+        // only one entry loads stays in that entry; the panels `/advanced`
+        // exports, which the table loads lazily, stay chunks of their own.
+        codeSplitting: {
+          groups: [
+            {
+              name: 'VisualizationRegistry',
+              tags: ['$initial'],
+              minShareCount: 2,
+              test: (id: string) => !LAZY_PANELS.test(id),
+            },
+          ],
+        },
       },
     },
     sourcemap: true,

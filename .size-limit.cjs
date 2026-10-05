@@ -24,14 +24,14 @@
  *   root entry · ESM               10.85 kB   →  11.4 kB cap (5.1 %)
  *   advanced entry · ESM            2.47 kB   →   2.6 kB cap (5.3 %)
  *   stylesheet                     21.81 kB   →  22.9 kB cap (5.0 %)
- *   lazy ExportDialog chunk        91.28 kB   →  96 kB   cap (5.2 %)
+ *   lazy ExportDialog chunk        94.04 kB   →  96 kB   cap (2.1 %)
  *   lazy SQLFilterModal chunk       2.54 kB   →   2.6 kB cap (2.4 %)
  *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
  *   lazy DerivedColumnEditPanel     3.00 kB   →   3.1 kB cap (3.3 %)
  *   lazy FilterPresetPanel          2.61 kB   →   2.7 kB cap (3.4 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
- *   lazy ValueInspector chunk      10.61 kB   →  11.2 kB cap (5.6 %)
+ *   lazy ValueInspector chunk      10.59 kB   →  11.2 kB cap (5.8 %)
  *
  * Root entry history. It measured 7.68 kB until the column charts became
  * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
@@ -73,22 +73,24 @@
  * text filters took it to 84.28 kB, and their header label and summary
  * chart to 87.80 kB, and the cap to 92 kB. Reading cell and column values
  * exactly, nested ones as JSON, took it to 91.28 kB, and the cap to 96 kB.
+ * The `codeSplitting` group in `vite.config.ts` (see the ValueInspector
+ * chunk below) took it to 94.04 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
  * the first time a column is extracted.
  *
  * ValueInspector chunk history. New with the value inspector (F2, a double
- * click or the inspect icon on a nested or JSON cell), at 10.61 kB: the
+ * click or the inspect icon on a nested or JSON cell), at 10.59 kB: the
  * panel, the tree view and the value-tree model, which pairs a value's JSON
  * with its DuckDB type. The JSON parser, the type parser and the cell read
  * it uses are shared with the table. Opening it also loads the
- * `extractExpression-*` chunk, for its "add as column" rules. Since the
- * type parser is now shared by two lazy chunks and the table, rolldown
- * moves it, with `FilterSQL`, `errors` and `types`, out of the shared chunk
- * into a `duckdbType-*` chunk the root entry imports (3.94 kB, not measured
- * here): the shared chunk measures 1.61 kB less for it, and a page loads
- * 1.07 kB more, the price of the split.
+ * `extractExpression-*` chunk, for its "add as column" rules. With the
+ * type parser shared by two lazy chunks and the table, rolldown would move
+ * it, with `FilterSQL`, `errors` and `types`, into a chunk of their own that
+ * the root entry imports (3.94 kB, which no budget here measured), and a
+ * page would load 1.07 kB more: the `codeSplitting` group in
+ * `vite.config.ts` keeps them in the shared chunk.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above

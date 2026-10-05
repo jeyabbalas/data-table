@@ -221,6 +221,19 @@ describe('TableBody — inspectable cells', () => {
     body.destroy();
     expect(body.getInspectTarget(0, 'tags')).toBeNull();
   });
+
+  it('says whether a cell has a value to inspect, may have one once loaded, or has none', async () => {
+    const { body } = await setup();
+    expect(body.inspectState(0, 'tags')).toBe('ready');
+    expect(body.inspectState(1, 'tags')).toBe('none'); // NULL
+    expect(body.inspectState(0, 'name')).toBe('none'); // scalar
+    expect(body.inspectState(0, 'nope')).toBe('none');
+    expect(body.inspectState(39, 'tags')).toBe('loading'); // not rendered
+    expect(body.inspectState(40, 'tags')).toBe('none'); // past the end
+    expect(body.inspectState(-1, 'tags')).toBe('none'); // the header row
+    body.destroy();
+    expect(body.inspectState(0, 'tags')).toBe('none');
+  });
 });
 
 describe('TableBody — opening the inspector with the pointer', () => {

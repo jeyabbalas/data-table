@@ -43,6 +43,9 @@ function rowAt(i: number, columns: readonly string[]): Record<string, unknown> {
   return row;
 }
 
+/** The rows the bridge answers for; a test may grow the table. */
+let rowCount = 40;
+
 /** Answers the body's row reads and the inspector's value reads. */
 function makeBridge(): { bridge: WorkerBridge; valueReads: string[] } {
   const valueReads: string[] = [];
@@ -57,10 +60,13 @@ function makeBridge(): { bridge: WorkerBridge; valueReads: string[] } {
     const columns = SCHEMA.map((c) => c.name).filter((c) => select.includes(`"${c}"`));
     const byIds = /"__rowid__" IN \(([^)]*)\)/.exec(sql);
     if (byIds) return byIds[1]!.split(',').map((id) => rowAt(Number(id), columns));
-    if (sql.includes('COUNT(')) return [{ count: 40 }];
+    if (sql.includes('COUNT(')) return [{ count: rowCount }];
     const limit = Number(/LIMIT (\d+)/.exec(sql)?.[1] ?? 0);
-    const offset = Number(/OFFSET (\d+)/.exec(sql)?.[1] ?? 0);
-    return Array.from({ length: Math.min(limit, 40 - offset) }, (_, i) =>
+    // A block of the unsorted table reads a range of rowids, not an OFFSET.
+    const offset = Number(
+      /OFFSET (\d+)/.exec(sql)?.[1] ?? /"__rowid__" >= (\d+)/.exec(sql)?.[1] ?? 0,
+    );
+    return Array.from({ length: Math.max(0, Math.min(limit, rowCount - offset)) }, (_, i) =>
       rowAt(offset + i, columns),
     );
   });
@@ -94,6 +100,7 @@ async function opened(): Promise<void> {
 }
 
 beforeEach(async () => {
+  rowCount = 40;
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -175,6 +182,60 @@ describe('TableContainer — the value inspector', () => {
     expect(document.activeElement).toBe(grid);
     expect(state.focusedCell.get()).toEqual({ row: 3, column: 'tags' });
     expect(grid.getAttribute('aria-activedescendant')).toBe(descendant);
+  });
+
+  describe('F2 on a row still loading', () => {
+    const f2 = (): KeyboardEvent => {
+      const event = new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true });
+      table.getGridElement().dispatchEvent(event);
+      return event;
+    };
+    /** What the browser does after the cursor keys scroll the body: jsdom does not. */
+    const scrolled = (): void => {
+      root().querySelector<HTMLElement>('.dt-body-scroll')!.dispatchEvent(new Event('scroll'));
+    };
+
+    // 400 rows: row 300 is in a block the body has not fetched.
+    beforeEach(() => {
+      rowCount = 400;
+      state.totalRows.set(400);
+      state.filteredRows.set(400);
+      table.getGridElement().focus();
+    });
+
+    it('claims the key, and opens once the row is fetched and rendered', async () => {
+      actions.setFocusedCell({ row: 300, column: 'tags' });
+      expect(table.getTableBody()!.inspectState(300, 'tags')).toBe('loading');
+      expect(f2().defaultPrevented).toBe(true);
+      expect(isShown()).toBe(false);
+
+      scrolled();
+      await opened();
+      expect(inspectorEl()!.querySelector('.dt-value-inspector__title')!.textContent).toBe(
+        'tags · Row 301',
+      );
+      expect(valueReads.at(-1)).toContain('WHERE "__rowid__" = 300');
+    });
+
+    it('drops the request when the cursor moves on before the row is there', async () => {
+      actions.setFocusedCell({ row: 300, column: 'tags' });
+      expect(f2().defaultPrevented).toBe(true);
+      actions.setFocusedCell({ row: 299, column: 'tags' });
+
+      scrolled();
+      await vi.waitFor(() => expect(table.getTableBody()!.inspectState(300, 'tags')).toBe('ready'));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(isShown()).toBe(false);
+      expect(valueReads).toHaveLength(0);
+    });
+
+    it('leaves F2 alone on a cell with nothing to inspect, loaded or not', () => {
+      actions.setFocusedCell({ row: 1, column: 'tags' }); // NULL
+      expect(f2().defaultPrevented).toBe(false);
+      actions.setFocusedCell({ row: 300, column: 'name' }); // scalar, not fetched
+      expect(f2().defaultPrevented).toBe(false);
+      expect(isShown()).toBe(false);
+    });
   });
 
   it('is torn down by a render, and rebuilt on the next open', async () => {

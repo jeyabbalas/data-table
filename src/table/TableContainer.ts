@@ -216,6 +216,9 @@ export class TableContainer {
   // after a render, which tears it down with the other panels.
   private valueInspector: ValueInspector | null = null;
   private valueInspectorModule: Promise<{ ValueInspector: typeof ValueInspector }> | null = null;
+  // A cell F2 asked to inspect while its row was loading: the inspector
+  // opens on it once the row renders, unless the cursor has moved on.
+  private pendingInspect: { row: number; column: string } | null = null;
   // The header's extract panel, a lazy chunk too, built and torn down the same way.
   private extractPanel: ExtractColumnPanel | null = null;
   private extractPanelModule: Promise<{ ExtractColumnPanel: typeof ExtractColumnPanel }> | null =
@@ -480,7 +483,7 @@ export class TableContainer {
         getColumnHeaders: () => this.columnHeaders,
         revealColumn: (column) => this.columnWindow.revealColumn(column),
         revealControl: (control) => this.columnWindow.revealHeaderElement(control),
-        openCellInspector: (cell) => this.openValueInspector(cell),
+        openCellInspector: (cell) => this.openValueInspector(cell) || this.inspectOnceLoaded(cell),
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
@@ -1149,6 +1152,7 @@ export class TableContainer {
     // to another cell (a press on the inspected cell itself is not an
     // outside click, so this is what closes the panel for a click on it).
     const closeInspector = (): void => {
+      this.pendingInspect = null;
       if (!this.destroyed) this.valueInspector?.close();
     };
     this.unsubscribes.push(
@@ -1157,6 +1161,10 @@ export class TableContainer {
       this.state.tableName.subscribe(closeInspector),
       this.state.selectedRows.subscribe(closeInspector),
       this.state.focusedCell.subscribe((cell) => {
+        const pending = this.pendingInspect;
+        if (pending && (cell?.row !== pending.row || cell.column !== pending.column)) {
+          this.pendingInspect = null;
+        }
         const shown = this.valueInspector?.getShown();
         if (shown && (cell?.row !== shown.row || cell.column !== shown.column)) closeInspector();
       }),
@@ -1479,6 +1487,7 @@ export class TableContainer {
       this.valueInspector.destroy();
       this.valueInspector = null;
     }
+    this.pendingInspect = null;
 
     // Destroy the extract panel (recreated on the next extract click). Focus
     // goes back to its button; `extractColumn` takes it on from there.
@@ -1568,7 +1577,10 @@ export class TableContainer {
               fetchBlockSize: this.resolvedOptions.fetchBlockSize,
               rowCacheRows: this.resolvedOptions.rowCacheRows,
               prefetch: this.resolvedOptions.prefetch,
-              onRowsRendered: () => this.syncActiveDescendant(),
+              onRowsRendered: () => {
+                this.syncActiveDescendant();
+                this.openPendingInspect();
+              },
               // Where the body parks real DOM focus when it is about to detach the
               // row holding it. Passed explicitly rather than rediscovered with
               // `closest('.dt-grid')` so the dependency is visible at the wiring.
@@ -2055,6 +2067,7 @@ export class TableContainer {
   openValueInspector(cell: { row: number; column: string }): boolean {
     if (this.destroyed || !this.bridge || !this.actions) return false;
     if (!this.tableBody?.getInspectTarget(cell.row, cell.column)) return false;
+    this.pendingInspect = null;
     // Mutual exclusion: one panel at a time
     if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
     if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
@@ -2064,6 +2077,39 @@ export class TableContainer {
     this.extractPanel?.close();
     void this.showValueInspector(cell);
     return true;
+  }
+
+  /**
+   * F2 on a nested or JSON cell whose row is still loading, as after a jump
+   * to the end of a large table or a scroll far past the row cache: keep the
+   * request, and open the inspector once the row renders with a value there
+   * (see {@link openPendingInspect}). Moving the cursor, a filter, a sort or
+   * a selection drops it. `false` when there is nothing to wait for: a
+   * column that is not nested or JSON, or a NULL.
+   */
+  private inspectOnceLoaded(cell: { row: number; column: string }): boolean {
+    if (this.destroyed || this.tableBody?.inspectState(cell.row, cell.column) !== 'loading') {
+      return false;
+    }
+    this.pendingInspect = { row: cell.row, column: cell.column };
+    return true;
+  }
+
+  /**
+   * After the body renders rows: open the inspector F2 asked for on a row
+   * that was loading, once the row is there with a value, unless focus has
+   * left the table meanwhile. A row that turns out to hold NULL drops it.
+   */
+  private openPendingInspect(): void {
+    const pending = this.pendingInspect;
+    if (!pending || this.destroyed) return;
+    const state = this.tableBody?.inspectState(pending.row, pending.column) ?? 'none';
+    if (state === 'loading') return;
+    this.pendingInspect = null;
+    const active = this.activeElementInRoot();
+    if (state === 'ready' && active !== null && this.element.contains(active)) {
+      this.openValueInspector(pending);
+    }
   }
 
   /** Load the inspector's chunk if need be, then open it on the cell as it is by then. */

@@ -2688,6 +2688,28 @@ export class TableBody {
   }
 
   /**
+   * Whether the value inspector has a value to open at a body cell:
+   * `'ready'` when {@link getInspectTarget} finds one; `'loading'` while the
+   * cell could still hold one, its row or its column's data not fetched yet,
+   * or the row not rendered; `'none'` when there is nothing to inspect, as
+   * for a column that is not nested or JSON, a NULL, or a row past the end.
+   *
+   * @example
+   * ```typescript
+   * if (body.inspectState(12, 'tags') === 'loading') pending = { row: 12, column: 'tags' };
+   * ```
+   */
+  inspectState(row: number, column: string): 'ready' | 'loading' | 'none' {
+    if (this.destroyed || row < 0 || row >= this.virtualScroller.getTotalRows()) return 'none';
+    if (!isInspectableColumn(this.schemaMap().get(column))) return 'none';
+    if (this.getInspectTarget(row, column)) return 'ready';
+    const data = this.rowDataCache.get(row);
+    const fetched = data ? this.blockColumns.get(this.blockStartOf(row)) : undefined;
+    const known = data !== undefined && (!fetched || fetched.has(column));
+    return known && (data[column] === null || data[column] === undefined) ? 'none' : 'loading';
+  }
+
+  /**
    * Check if the table body has been destroyed
    */
   isDestroyed(): boolean {

@@ -9,7 +9,8 @@
  * that left every row fetch selecting a list column pending for good.
  *
  * Each case runs the worker's own query functions against a real
- * connection and clones the rows as `postMessage` would.
+ * connection and clones the rows as `postMessage` would. The last checks
+ * that a row is converted column by column, never taken for an interval.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -138,6 +139,15 @@ describe('nested values on real DuckDB', () => {
         point: { x: 1.5, tier: 'gold' },
       });
       expect(cloned[0]).toMatchObject({ tags: [] });
+    });
+
+    it('a row with numeric months and days columns stays a row', async () => {
+      // A row has the shape of an Arrow interval value when it has these
+      // columns, and used to be turned into "1 year 2 months 3 days".
+      const rows = await run(
+        `SELECT 1 AS id, 14 AS months, 3 AS days, CAST(5 AS BIGINT) AS nanoseconds, 'x' AS note`,
+      );
+      expect(rows).toEqual([{ id: 1, months: 14, days: 3, nanoseconds: 5, note: 'x' }]);
     });
   });
 });

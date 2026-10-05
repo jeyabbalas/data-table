@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertBigInts } from '@/worker/duckdb';
+import { convertBigInts, convertRow } from '@/worker/duckdb';
 
 describe('convertBigInts', () => {
   it('passes null and undefined through', () => {
@@ -144,5 +144,25 @@ describe('convertBigInts', () => {
       const interval = { months: 0, days: 0, nanoseconds: -3_600_000_000_000n };
       expect(convertBigInts(interval)).toBe('-01:00:00');
     });
+  });
+});
+
+describe('convertRow', () => {
+  it('converts each column value', () => {
+    expect(
+      convertRow({
+        id: 1n,
+        name: 'test',
+        duration: { months: 0, days: 0, nanoseconds: 7_200_000_000_000n },
+      }),
+    ).toEqual({ id: 1, name: 'test', duration: '02:00:00' });
+  });
+
+  it('keeps a row with numeric months and days columns a row', () => {
+    // convertBigInts would take the row itself for an interval value.
+    const row = { id: 1n, months: 14, days: 3, nanoseconds: 0n };
+    expect(convertBigInts(row)).toBe('1 year 2 months 3 days');
+    expect(convertRow(row)).toEqual({ id: 1, months: 14, days: 3, nanoseconds: 0 });
+    expect(convertRow({ months: 2n, days: 5n })).toEqual({ months: 2, days: 5 });
   });
 });

@@ -5,9 +5,10 @@
  * value-counts SQL paths end-to-end without spinning up the worker IPC.
  *
  * Mirrors the conversion the production worker dispatcher performs in
- * `src/worker/duckdb.ts:executeQuery` so result shapes match what
- * `bridge.query<T>(sql)` consumers see at runtime: BigInt → Number,
- * MonthDayNano interval objects → string, everything else preserved.
+ * `src/worker/duckdb.ts:executeQuery` (`convertRow`) so result shapes match
+ * what `bridge.query<T>(sql)` consumers see at runtime: BigInt → Number,
+ * MonthDayNano interval objects → string, list values → arrays, STRUCT and
+ * MAP values → objects, everything else preserved.
  *
  * @example
  * ```ts
@@ -25,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import { convertBigInts } from '@/worker/duckdb';
+import { convertRow } from '@/worker/duckdb';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 
 /**
@@ -43,7 +44,7 @@ export function makeNodeBridge(conn: AsyncDuckDBConnection, db?: AsyncDuckDB): W
   const stub: Pick<WorkerBridge, 'query' | 'exportToBuffer'> = {
     async query<T = Record<string, unknown>>(sql: string): Promise<T[]> {
       const result = await conn.query(sql);
-      return result.toArray().map((row) => convertBigInts(row.toJSON()) as T);
+      return result.toArray().map((row) => convertRow(row.toJSON()) as T);
     },
     async exportToBuffer(
       sql: string,

@@ -193,6 +193,22 @@ export function convertBigInts(obj: unknown): unknown {
 }
 
 /**
+ * Convert a result row (`row.toJSON()`) for posting to the main thread: each
+ * column's value through {@link convertBigInts}.
+ *
+ * Column by column, so the row itself is never taken for an interval: a
+ * table with numeric `months` and `days` columns would have every row turned
+ * into an interval string.
+ */
+export function convertRow(row: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    result[key] = convertBigInts(value);
+  }
+  return result;
+}
+
+/**
  * Execute a SQL query via `conn.query()` and return results as an array
  * of objects.
  *
@@ -212,7 +228,7 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
   }
 
   const result = await conn.query(sql);
-  return result.toArray().map((row) => convertBigInts(row.toJSON()) as T);
+  return result.toArray().map((row) => convertRow(row.toJSON()) as T);
 }
 
 /**
@@ -228,7 +244,7 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
  * cancellable window at the first result batch.
  *
  * Result rows are materialized exactly like {@link executeQuery}'s
- * (`row.toJSON()` → `convertBigInts`), so the two are interchangeable.
+ * (`row.toJSON()` → `convertRow`), so the two are interchangeable.
  */
 export async function executeQueryCancellable<T = Record<string, unknown>>(
   sql: string,
@@ -249,7 +265,7 @@ export async function executeQueryCancellable<T = Record<string, unknown>>(
   const rows: T[] = [];
   for await (const batch of reader) {
     for (const row of batch.toArray()) {
-      rows.push(convertBigInts(row.toJSON()) as T);
+      rows.push(convertRow(row.toJSON()) as T);
     }
   }
   return rows;

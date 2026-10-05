@@ -20,6 +20,7 @@ import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
+import { collidingColumnName, columnNameKey } from './columnNames';
 import { dataTypeOf, parseDuckDBType, type DuckDBTypeNode } from './duckdbType';
 import {
   ConfigurationError,
@@ -107,6 +108,77 @@ export interface GetCellValueOptions {
    * promise rejects with a `QueryError` coded `QUERY_ABORTED`.
    */
   signal?: AbortSignal | undefined;
+}
+
+/**
+ * Options for {@link StateActions.addNestedFieldColumn}.
+ *
+ * @example
+ * // tags: VARCHAR[]
+ * await table.actions.addNestedFieldColumn('tags', [], { extract: 'length', name: 'tag_count' });
+ */
+export interface NestedFieldColumnOptions {
+  /**
+   * The new column's name. Left out, one made of the column's name and the
+   * path's steps, which needs no quoting in SQL: `point_x`,
+   * `people_1_name`, `tags_length`, `attrs_size`, `doc_a_b_0`; with
+   * `_2`, `_3`, … after it when another column has that name, ignoring the
+   * case of its letters. Given, it is checked as `addDerivedColumn` checks a
+   * name: one another column has, in any letter case, is refused.
+   *
+   * @example
+   * // point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+   * await table.actions.addNestedFieldColumn('point', ['x'], { name: 'longitude' });
+   */
+  name?: string | undefined;
+  /**
+   * What the column reads at the end of the path:
+   *
+   * - `'value'` (the default): the value there.
+   * - `'length'`: how many elements a list or array has (`len`), how many
+   *   entries a map has (`cardinality`, named `…_size`), or how many
+   *   elements a JSON array has (0 for any other JSON value).
+   * - `'tag'`: the tag of the member a union holds (`union_tag`).
+   *
+   * @example
+   * // attrs: MAP(VARCHAR, INTEGER)
+   * await table.actions.addNestedFieldColumn('attrs', [], { extract: 'length' }); // attrs_size
+   */
+  extract?: 'value' | 'length' | 'tag' | undefined;
+  /**
+   * How the column reads a value inside a JSON or VARIANT value, whose type
+   * differs from row to row. Ignored on a path that does not reach one.
+   *
+   * - `'string'` (the default): a VARCHAR. A JSON string without its
+   *   quotes, a number, boolean, object or array as its JSON text, JSON
+   *   `null` as NULL.
+   * - `'number'`: a DOUBLE, NULL where the value is not a number. A string
+   *   holding a number counts.
+   * - `'boolean'`: a BOOLEAN, NULL where the value does not read as one.
+   *   DuckDB's text-to-boolean cast decides: besides `true` and `false`,
+   *   `1` and `0` count, as do the strings `"true"`, `"yes"` and `"t"`.
+   * - `'json'`: a JSON value, so objects and arrays stay inspectable.
+   *
+   * @example
+   * // doc: JSON such as {"score": 0.92}
+   * await table.actions.addNestedFieldColumn('doc', ['score'], { jsonLeaf: 'number' });
+   */
+  jsonLeaf?: 'string' | 'number' | 'boolean' | 'json' | undefined;
+}
+
+/** The values {@link NestedFieldColumnOptions.extract} takes. */
+const EXTRACT_KINDS: readonly unknown[] = ['value', 'length', 'tag'];
+
+/** The values {@link NestedFieldColumnOptions.jsonLeaf} takes. */
+const JSON_LEAF_KINDS: readonly unknown[] = ['string', 'number', 'boolean', 'json'];
+
+/**
+ * Where an added derived column goes, when not last: right after the column
+ * `after` names; see {@link placeAfterSource}. Internal: the public
+ * `DerivedColumnDef` has no say in it.
+ */
+interface DerivedColumnPlacement {
+  after: string;
 }
 
 /**
@@ -1811,8 +1883,13 @@ export class StateActions {
   }
 
   /**
-   * Add a derived column (expression or vector).
+   * Add a derived column (expression or vector), last in the column order.
    * Validates name uniqueness, creates VIEW, updates state.
+   *
+   * Names are compared as DuckDB compares them, ignoring the case of ASCII
+   * letters: `LABEL` beside a column `label` gets `already exists`, since
+   * DuckDB would read `label`'s values for it. `__rowid__` is reserved, in
+   * any case.
    *
    * Runs in its turn: derived-column changes, undo, redo, reset and loads run
    * one at a time, in call order, and an add is validated against the columns
@@ -1826,26 +1903,25 @@ export class StateActions {
     return this.inTurn(() => this.addDerivedColumnInTurn(def, epoch));
   }
 
-  /** The turn of {@link addDerivedColumn}. */
+  /**
+   * The turn of {@link addDerivedColumn}, and the add of
+   * {@link addNestedFieldColumn}, which places the column after its source.
+   */
   private async addDerivedColumnInTurn(
     def: DerivedColumnDef,
     epoch: number,
+    placement?: DerivedColumnPlacement,
   ): Promise<{ success: boolean; error?: string }> {
     if (this.destroyed) {
       return { success: false, error: 'DataTable is destroyed' };
     }
     if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
-    if (def.name === ROWID_COLUMN) {
-      return {
-        success: false,
-        error: `Column name "${def.name}" is reserved for the synthetic row id`,
-      };
-    }
     // Validate name uniqueness against all columns
-    const allColumnNames = this.state.schema.get().map((c) => c.name);
-    if (allColumnNames.includes(def.name)) {
-      return { success: false, error: `Column name "${def.name}" already exists` };
-    }
+    const nameError = newColumnNameError(
+      def.name,
+      this.state.schema.get().map((c) => c.name),
+    );
+    if (nameError) return { success: false, error: nameError };
 
     if (!def.name.trim()) {
       return { success: false, error: 'Column name cannot be empty' };
@@ -1868,8 +1944,25 @@ export class StateActions {
       }
       if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
 
-      // Push to undo stack AFTER DuckDB success, BEFORE state mutation
+      // Push to undo stack AFTER DuckDB success, BEFORE state mutation: the
+      // one entry for the whole add, whose undo takes the column out of the
+      // order and the visible columns too.
       this.pushDerivedUndo();
+
+      // Placed by the order as it is now, after the await: a column hidden,
+      // moved or pinned meanwhile counts.
+      const order = this.state.columnOrder.get();
+      const visible = this.state.visibleColumns.get();
+      const placed = placement
+        ? placeAfterSource(
+            def.name,
+            placement.after,
+            order,
+            visible,
+            this.state.pinnedColumns.get(),
+            this.derivedReaders(placement.after),
+          )
+        : { columnOrder: [...order, def.name], visibleColumns: [...visible, def.name] };
 
       batch(() => {
         // Switch tableName to the VIEW
@@ -1890,8 +1983,8 @@ export class StateActions {
         this.state.schema.set([...this.state.schema.get(), newSchemaEntry]);
 
         // Add to column visibility/order arrays
-        this.state.visibleColumns.set([...this.state.visibleColumns.get(), def.name]);
-        this.state.columnOrder.set([...this.state.columnOrder.get(), def.name]);
+        this.state.visibleColumns.set(placed.visibleColumns);
+        this.state.columnOrder.set(placed.columnOrder);
       });
 
       this.emitDerivedChange('added', def.name);
@@ -1906,8 +1999,157 @@ export class StateActions {
   }
 
   /**
+   * Whether a column is a derived expression column that reads `source`
+   * (see {@link leadingColumnKey}): the run of such columns right after a
+   * source is where {@link placeAfterSource} keeps its extracts together.
+   */
+  private derivedReaders(source: string): (column: string) => boolean {
+    const key = columnNameKey(source);
+    const expressions = new Map<string, string>();
+    for (const d of this.state.derivedColumns.get()) {
+      if (d.kind === 'expression') expressions.set(d.name, d.expression);
+    }
+    return (column) => {
+      const expression = expressions.get(column);
+      return expression !== undefined && leadingColumnKey(expression) === key;
+    };
+  }
+
+  /**
+   * Add a column that reads one part of a nested or JSON column: a struct's
+   * field, a list's or array's element, a map's value, a union's member, a
+   * key or index inside a JSON document; or how long a list is, how many
+   * entries a map has, which member a union holds. It is a derived
+   * expression column, with the histogram, stats and filters any column of
+   * its type gets.
+   *
+   * `path` is read against the column's DuckDB type
+   * (`ColumnSchema.originalType`), a step at a time:
+   *
+   * - STRUCT: a field's name, or its 1-based position (the only way to an
+   *   unnamed field).
+   * - LIST, ARRAY: an element's 1-based position, as in SQL (`tags[1]`).
+   * - MAP: a key, as text or as a number.
+   * - UNION: a member's tag.
+   * - JSON, VARIANT: every step from there on, an object's key (a string) or
+   *   an array's 0-based index (a number), as in JSONPath.
+   *
+   * The column goes right after its source, past the derived columns right
+   * after the source that read it, so that extracts stay in the order they
+   * were made: `point, point_x, point_y`. A pinned source's column goes
+   * right after the pinned columns, unpinned. One undo entry: undo removes
+   * the column, redo puts it back where it was.
+   *
+   * Runs in its turn, as {@link addDerivedColumn} does, and resolves as it
+   * does, `{ success: false, error }`, for a column that is not in the
+   * schema or neither nested nor JSON, a path that does not fit the type, an
+   * option it does not know, a name that is taken (ignoring letter case),
+   * an expression DuckDB refuses, a destroyed table, or new data loaded
+   * before the column has landed.
+   *
+   * @param column - The nested or JSON column's name.
+   * @param path - The steps from the column to the part to read. Empty for
+   *   the column itself: its length or tag (`extract`), or a JSON column's
+   *   value read as `jsonLeaf` says.
+   * @returns `{ success: true, name }`, with the new column's name.
+   *
+   * @example
+   * // point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+   * await table.actions.addNestedFieldColumn('point', ['x']);
+   * // { success: true, name: 'point_x' }, a DOUBLE column right after point
+   *
+   * @example
+   * // people: STRUCT(name VARCHAR, langs VARCHAR[])[]: the first person's
+   * // second language
+   * await table.actions.addNestedFieldColumn('people', [1, 'langs', 2]);
+   * // { success: true, name: 'people_1_langs_2' }
+   *
+   * @example
+   * // doc: JSON. A key with a dot in it, then an array index.
+   * const result = await table.actions.addNestedFieldColumn('doc', ['a.b', 0]);
+   * if (!result.success) console.warn(result.error);
+   */
+  async addNestedFieldColumn(
+    column: string,
+    path: readonly (string | number)[],
+    options: NestedFieldColumnOptions = {},
+  ): Promise<{ success: boolean; name?: string; error?: string }> {
+    if (this.destroyed) return { success: false, error: 'DataTable is destroyed' };
+    const epoch = this.loadEpoch;
+    return this.inTurn(() => this.addNestedFieldColumnInTurn(column, path, options, epoch));
+  }
+
+  /** The turn of {@link addNestedFieldColumn}. */
+  private async addNestedFieldColumnInTurn(
+    column: string,
+    path: readonly (string | number)[],
+    options: NestedFieldColumnOptions,
+    epoch: number,
+  ): Promise<{ success: boolean; name?: string; error?: string }> {
+    if (this.destroyed) return { success: false, error: 'DataTable is destroyed' };
+    if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
+    const { name, extract, jsonLeaf } = options;
+    if (name !== undefined && typeof name !== 'string') {
+      return { success: false, error: 'The column name must be a string' };
+    }
+    if (extract !== undefined && !EXTRACT_KINDS.includes(extract)) {
+      return {
+        success: false,
+        error: `extract must be 'value', 'length' or 'tag', not "${String(extract)}"`,
+      };
+    }
+    if (jsonLeaf !== undefined && !JSON_LEAF_KINDS.includes(jsonLeaf)) {
+      return {
+        success: false,
+        error: `jsonLeaf must be 'string', 'number', 'boolean' or 'json', not "${String(jsonLeaf)}"`,
+      };
+    }
+    const entry = this.state.schema.get().find((c) => c.name === column);
+    if (!entry) return { success: false, error: `Column "${column}" not found` };
+    const node = typeNodeOf(entry);
+    if (node.kind !== 'json' && entry.type !== 'nested' && dataTypeOf(node) !== 'nested') {
+      return {
+        success: false,
+        error: `Column "${column}" is neither nested nor JSON: it has no parts to extract`,
+      };
+    }
+
+    // Loaded here, not with this module: it stays out of the chunk every
+    // table loads.
+    const extractExpression = await import('../nested/extractExpression').catch((err: unknown) =>
+      err instanceof Error ? err : new Error(String(err)),
+    );
+    if (extractExpression instanceof Error) {
+      return { success: false, error: extractExpression.message };
+    }
+    const built = extractExpression.nestedFieldExpression(
+      { name: entry.name, originalType: entry.originalType ?? '' },
+      path,
+      { extract, jsonLeaf },
+    );
+    if (!built.ok) return { success: false, error: built.error.message };
+
+    const columnName =
+      name ??
+      extractExpression.uniqueColumnName(
+        built.name,
+        this.state.schema.get().map((c) => c.name),
+      );
+    const added = await this.addDerivedColumnInTurn(
+      { kind: 'expression', name: columnName, expression: built.expression },
+      epoch,
+      { after: entry.name },
+    );
+    return added.success ? { success: true, name: columnName } : added;
+  }
+
+  /**
    * Update a derived column's expression, name, or values.
    * Handles rename (updates all state references) and type change (removes stale filters).
+   *
+   * A new name is checked as {@link addDerivedColumn} checks one, against
+   * the other columns: a rename that only changes the case of the column's
+   * own name (`total` to `Total`) is allowed.
    *
    * Runs in its turn, as {@link addDerivedColumn} does: a rename to a name an
    * add ahead of it takes gets `already exists`.
@@ -1941,16 +2183,11 @@ export class StateActions {
     // If renaming, validate new name uniqueness (excluding self)
     const isRename = oldName !== def.name;
     if (isRename) {
-      if (def.name === ROWID_COLUMN) {
-        return {
-          success: false,
-          error: `Column name "${def.name}" is reserved for the synthetic row id`,
-        };
-      }
-      const otherNames = currentSchema.filter((c) => c.name !== oldName).map((c) => c.name);
-      if (otherNames.includes(def.name)) {
-        return { success: false, error: `Column name "${def.name}" already exists` };
-      }
+      const nameError = newColumnNameError(
+        def.name,
+        currentSchema.filter((c) => c.name !== oldName).map((c) => c.name),
+      );
+      if (nameError) return { success: false, error: nameError };
     }
 
     if (!def.name.trim()) {
@@ -2740,7 +2977,7 @@ export class StateActions {
 }
 
 // ---------------------------------------------------------------------------
-// Column-order helpers (supporting showColumn).
+// Column-order helpers (supporting showColumn and addNestedFieldColumn).
 // ---------------------------------------------------------------------------
 
 /** How many of `visible`'s leading columns are pinned. */
@@ -2749,6 +2986,74 @@ function leadingPinnedCount(visible: readonly string[], pinned: readonly string[
   let count = 0;
   while (count < visible.length && pinnedSet.has(visible[count]!)) count++;
   return count;
+}
+
+/**
+ * `order` (`columnOrder`) and `visible` (`visibleColumns`) with a new column
+ * `name` placed after the column `source`: right after it, past the run of
+ * columns right after it that `readsSource` (the derived columns that read
+ * it), so that extracts of a column stay in the order they were made,
+ * `point, point_x, point_y`. The run is taken in `order`, hidden columns
+ * included; any other column, hidden or not, ends it.
+ *
+ * A pinned source's column goes after the pinned block instead, and past
+ * the run there: `columnOrder` keeps every pinned column first, and the new
+ * column is not pinned. So does an unpinned source found inside the block,
+ * which only an out-of-step state has.
+ *
+ * In `visible`, the column goes right after the last column before it in the
+ * new order that is shown (first when none is), which keeps `visible` in
+ * `order`'s order and a hidden source's column where the source would show.
+ * A source missing from `order` puts the column last in both, as
+ * `addDerivedColumn` does.
+ */
+function placeAfterSource(
+  name: string,
+  source: string,
+  order: readonly string[],
+  visible: readonly string[],
+  pinned: readonly string[],
+  readsSource: (column: string) => boolean,
+): { columnOrder: string[]; visibleColumns: string[] } {
+  const at = order.indexOf(source);
+  if (at < 0) return { columnOrder: [...order, name], visibleColumns: [...visible, name] };
+  let insertAt = Math.max(at + 1, leadingPinnedCount(order, pinned));
+  while (insertAt < order.length && readsSource(order[insertAt]!)) insertAt++;
+
+  const shown = new Set(visible);
+  let before = insertAt - 1;
+  while (before >= 0 && !shown.has(order[before]!)) before--;
+  const visibleAt = before < 0 ? 0 : visible.indexOf(order[before]!) + 1;
+  return {
+    columnOrder: [...order.slice(0, insertAt), name, ...order.slice(insertAt)],
+    visibleColumns: [...visible.slice(0, visibleAt), name, ...visible.slice(visibleAt)],
+  };
+}
+
+/**
+ * The quoted name an expression opens with, past the function calls and
+ * parentheses before it (`len(`, `TRY_CAST(json_extract_string(`, `(`), in
+ * group 1, with `""` for each `"` in it.
+ */
+const LEADING_QUOTED_NAME = /^(?:\s*(?:[A-Za-z_][\w$]*\s*)?\()*\s*"((?:[^"]|"")*)"/;
+
+/**
+ * The column an expression column reads first: the quoted name it opens
+ * with, past the function calls and parentheses before it, as a
+ * {@link columnNameKey} (DuckDB binds `"POINT"` to `point`). `null` for an
+ * expression that opens otherwise: with an unquoted name, a literal, `CASE`.
+ *
+ * It is how {@link placeAfterSource} tells a column's extracts: every
+ * expression `addNestedFieldColumn` writes opens with its source's quoted
+ * name, `"point"['x']`, `"tags"[3]`, or wraps it, `len("tags")`,
+ * `cardinality("attrs")`, `union_tag("u")`, `struct_extract("pair", 2)`,
+ * `TRY_CAST(json_extract_string("doc", '$.a') AS DOUBLE)`,
+ * `json_array_length(NULLIF(CAST("v" AS JSON), 'null'))`. A column of the
+ * user's own that opens the same way, `upper("label")`, counts too.
+ */
+function leadingColumnKey(expression: string): string | null {
+  const match = LEADING_QUOTED_NAME.exec(expression);
+  return match ? columnNameKey(match[1]!.replace(/""/g, '"')) : null;
 }
 
 /**
@@ -2795,6 +3100,25 @@ function alignOrderWithVisible(
   }
   moved.splice(insertAt, 0, column);
   return moved;
+}
+
+/**
+ * Why a derived column cannot take `name` beside the columns named `others`,
+ * or `null` when it can. Names are compared as DuckDB compares them,
+ * ignoring the case of ASCII letters (see `columnNames`): the VIEW of the
+ * derived columns would rename a `LABEL` added beside `label` to `LABEL_1`,
+ * and reads of `"LABEL"` would return `label`'s values. So `__ROWID__` is
+ * the reserved `__rowid__`.
+ */
+function newColumnNameError(name: string, others: readonly string[]): string | null {
+  if (columnNameKey(name) === ROWID_COLUMN) {
+    return `Column name "${name}" is reserved for the synthetic row id`;
+  }
+  const taken = collidingColumnName(name, others);
+  if (taken === undefined) return null;
+  return taken === name
+    ? `Column name "${name}" already exists`
+    : `Column name "${name}" already exists as "${taken}" (column names ignore letter case)`;
 }
 
 /**

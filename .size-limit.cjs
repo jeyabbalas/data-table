@@ -30,6 +30,7 @@
  *   lazy DerivedColumnEditPanel     3.00 kB   →   3.1 kB cap (3.3 %)
  *   lazy FilterPresetPanel          2.61 kB   →   2.7 kB cap (3.4 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
+ *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
  *
  * Root entry history. It measured 7.68 kB until the column charts became
  * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
@@ -71,6 +72,10 @@
  * text filters took it to 84.28 kB, and their header label and summary
  * chart to 87.80 kB, and the cap to 92 kB. Reading cell and column values
  * exactly, nested ones as JSON, took it to 91.28 kB, and the cap to 96 kB.
+ *
+ * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
+ * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
+ * the first time a column is extracted.
  *
  * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
  * shared ModalHost helpers into each modal consumer. The per-modal caps above
@@ -143,5 +148,10 @@ module.exports = [
     name: 'lazy CodeMirror editor chunk · ESM',
     path: 'dist/CodeMirrorExpressionEditor-*.js',
     limit: '5.5 kB',
+  },
+  {
+    name: 'lazy extractExpression chunk · ESM',
+    path: 'dist/extractExpression-*.js',
+    limit: '2.95 kB',
   },
 ];

@@ -172,6 +172,7 @@ export type {
   CompletionContext,
 } from './derived/types';
 export type { ExpressionEditor, ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
+export type { NestedFieldColumnOptions } from './core/Actions';
 
 // ---- Progress reporting ----
 export type { ProgressInfo, ProgressCallback, ProgressStage } from './core/Progress';

@@ -28,6 +28,7 @@
  * that does not fit the type comes back as a {@link NestedPathError}.
  */
 
+import { columnNameKey } from '../core/columnNames';
 import { needsTextMatch, parseDuckDBType } from '../core/duckdbType';
 import type { DuckDBMapTypeNode, DuckDBTypeNode } from '../core/duckdbType';
 import { ROWID_COLUMN } from '../core/types';
@@ -702,20 +703,9 @@ function namePart(text: string, fallback: string): string {
   return part || fallback;
 }
 
-/**
- * The key DuckDB tells column names apart by: ASCII letters in either case
- * are the same (`label` and `LABEL` name one column), while every other
- * character is compared as is (`é` and `É` name two).
- *
- * @example
- * ```ts
- * columnNameKey('LABEL') === columnNameKey('label'); // true
- * columnNameKey('É') === columnNameKey('é'); // false
- * ```
- */
-export function columnNameKey(name: string): string {
-  return name.replace(/[A-Z]+/g, (letters) => letters.toLowerCase());
-}
+// The key DuckDB tells column names apart by. It lives in `core/columnNames`,
+// which the action layer imports without loading this module.
+export { columnNameKey };
 
 /**
  * `base`, or `base_2`, `base_3`, … : the first that no name in

@@ -36,6 +36,10 @@ const DEFAULT_PARQUET_OPTIONS: ParquetExportOptions = {
  *
  * Exported for testability — returns the inner SQL that will be wrapped
  * in `COPY (...) TO` by the worker.
+ *
+ * Every column is selected as it is: Parquet holds lists, structs and maps
+ * natively, so no schema is passed to the builders, which would read nested
+ * columns as JSON text for CSV and JSON exports.
  */
 export function buildParquetQuery(
   tableName: string,

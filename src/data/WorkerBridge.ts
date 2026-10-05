@@ -697,7 +697,19 @@ export class WorkerBridge {
           );
           break;
         }
-        request.reject(reconstructError(payload as ErrorPayload));
+        // The request is out of `pendingRequests` now, so nothing else can
+        // settle it: an error reply that cannot be read still rejects it.
+        let error: Error;
+        try {
+          error = reconstructError(payload as ErrorPayload);
+        } catch (cause) {
+          error = new WorkerInitError('Worker error response could not be read', {
+            code: 'WORKER_PROTOCOL_VIOLATION',
+            cause,
+            details: { id, type },
+          });
+        }
+        request.reject(error);
         break;
       }
 

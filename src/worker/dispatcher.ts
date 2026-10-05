@@ -142,6 +142,10 @@ async function readBlob(data: LoadPayload['data']): Promise<string | ArrayBuffer
  * `details` that loaders attached to the thrown `Error`. The main-thread
  * bridge passes this payload to `reconstructError()` to materialize a
  * typed subclass.
+ *
+ * Only a string `code` is kept. A `DOMException` is an `Error` too, but its
+ * `code` is a legacy number: 25 for the `DataCloneError` that `postMessage`
+ * throws on a result it cannot clone. Such errors get `fallbackCode`.
  */
 export function toErrorPayload(
   error: unknown,
@@ -150,13 +154,13 @@ export function toErrorPayload(
 ): ErrorPayload {
   if (error instanceof Error) {
     const withMeta = error as Error & {
-      code?: string;
+      code?: unknown;
       details?: Record<string, unknown>;
     };
     const payload: ErrorPayload = {
       message: error.message || fallbackMessage,
     };
-    if (withMeta.code) payload.code = withMeta.code;
+    if (typeof withMeta.code === 'string' && withMeta.code) payload.code = withMeta.code;
     else if (fallbackCode) payload.code = fallbackCode;
     if (withMeta.details) payload.details = withMeta.details;
     return payload;

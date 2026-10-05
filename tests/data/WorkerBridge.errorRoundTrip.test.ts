@@ -186,3 +186,61 @@ describe('WorkerBridge — error round-trip preserves rich details', () => {
     }
   });
 });
+
+describe('WorkerBridge — every error reply settles its request', () => {
+  let mock: MockWorkerHandle;
+  let bridge: WorkerBridge;
+
+  beforeEach(async () => {
+    mock = createMockWorker();
+    bridge = new WorkerBridge({ workerFactory: () => mock.worker });
+    await bridge.initialize();
+  });
+
+  /** Post a query, answer it with an error reply carrying `payload`, and return its rejection. */
+  async function rejectionFor(payload: unknown): Promise<DataTableError> {
+    const posts = mock.posted.length;
+    const queryPromise = bridge.query('UPDATE t SET w=1');
+    await mock.waitForPosts(posts + 1);
+    const queryPosted = mock.posted[posts]!;
+    expect(queryPosted.type).toBe('query');
+    mock.sendFromWorker({ id: queryPosted.id, type: 'error', payload });
+    return queryPromise.then(
+      () => {
+        throw new Error('should have rejected');
+      },
+      (err: DataTableError) => err,
+    );
+  }
+
+  it("a numeric code (a DOMException's) rejects with QueryError(QUERY_RUNTIME)", async () => {
+    // What the worker sent when a result could not be cloned: the
+    // DataCloneError's legacy code, 25. The query used to stay pending.
+    const err = await rejectionFor({
+      code: 25,
+      message: '(index) => isChunkedValid(unchunkedData, index) could not be cloned.',
+    });
+    expect(err).toBeInstanceOf(QueryError);
+    expect(err.code).toBe('QUERY_RUNTIME');
+    expect(err.message).toMatch(/could not be cloned/);
+  });
+
+  it('a message that is not a string becomes one', async () => {
+    const err = await rejectionFor({ code: 'QUERY_RUNTIME', message: 42 });
+    expect(err).toBeInstanceOf(QueryError);
+    expect(err.message).toBe('42');
+  });
+
+  it('a payload that cannot be read rejects with WORKER_PROTOCOL_VIOLATION', async () => {
+    const payload = {
+      message: 'unreadable',
+      get code(): string {
+        throw new Error('getter threw');
+      },
+    };
+    const err = await rejectionFor(payload);
+    expect(err).toBeInstanceOf(WorkerInitError);
+    expect(err.code).toBe('WORKER_PROTOCOL_VIOLATION');
+    expect((err.cause as Error).message).toBe('getter threw');
+  });
+});

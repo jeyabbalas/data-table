@@ -277,17 +277,39 @@ export class DestroyedError extends DataTableError {
   }
 }
 
+/** `value` as an error message: a string as is, nothing as `''`. */
+function errorText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === undefined || value === null) return '';
+  try {
+    return String(value);
+  } catch {
+    // `{ toString: 'x' }` survives a structured clone, and has no string form.
+    return Object.prototype.toString.call(value);
+  }
+}
+
 /**
  * Rehydrate a typed error from the flat `{ code, message, details }` shape
  * that crosses the worker / main-thread boundary (or any other IPC boundary).
  *
  * Unknown codes fall back to {@link QueryError} with `QUERY_RUNTIME` since
  * the worker's dominant responsibility is running SQL.
+ *
+ * The payload's fields are only as typed as whatever sent it. A `code` that
+ * is not a non-empty string counts as no code, a `message` that is not a
+ * string is converted to one, and `details` that are not an object are
+ * dropped, so that any payload that came through a structured clone yields
+ * an error.
  */
 export function reconstructError(payload: ErrorPayload): DataTableError {
-  const code = payload.code;
-  const message = payload.message;
-  const details = (payload as { details?: Record<string, unknown> }).details;
+  const raw = payload as { code?: unknown; message?: unknown; details?: unknown };
+  const code = typeof raw.code === 'string' && raw.code ? raw.code : undefined;
+  const message = errorText(raw.message);
+  const details =
+    typeof raw.details === 'object' && raw.details !== null
+      ? (raw.details as Record<string, unknown>)
+      : undefined;
   const options: DataTableErrorOptions = {
     code,
     details,

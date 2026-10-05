@@ -13,6 +13,7 @@ import {
   DestroyedError,
   reconstructError,
 } from '@/core/errors';
+import type { ErrorPayload } from '@/worker/types';
 
 describe('DataTableError classes', () => {
   it('base class sets name, code, and preserves message', () => {
@@ -155,5 +156,46 @@ describe('reconstructError', () => {
       details: { file: 'a.csv' },
     });
     expect(err.details).toEqual({ file: 'a.csv' });
+  });
+
+  // The payload crossed an IPC boundary, so its fields can be any cloneable
+  // value; reconstructError must still return an error, never throw.
+  describe('payload fields of the wrong type', () => {
+    it.each([
+      ['a number', 25],
+      ['an empty string', ''],
+      ['an object', { code: 'LOAD_PARSE_FAILED' }],
+      ['null', null],
+    ])('a code that is %s counts as no code: QueryError/QUERY_RUNTIME', (_label, code) => {
+      const err = reconstructError({ code, message: 'x' } as unknown as ErrorPayload);
+      expect(err).toBeInstanceOf(QueryError);
+      expect(err.code).toBe('QUERY_RUNTIME');
+      expect(err.message).toBe('x');
+    });
+
+    it.each([
+      ['a number', 42, '42'],
+      ['undefined', undefined, ''],
+      ['null', null, ''],
+      ['an object', { a: 1 }, '[object Object]'],
+      // Survives a structured clone, and String() of it throws.
+      ['an object with no string form', { toString: 'x' }, '[object Object]'],
+    ])('a message that is %s becomes a string', (_label, message, expected) => {
+      const err = reconstructError({
+        code: 'LOAD_PARSE_FAILED',
+        message,
+      } as unknown as ErrorPayload);
+      expect(err).toBeInstanceOf(LoadError);
+      expect(err.message).toBe(expected);
+    });
+
+    it('drops details that are not an object', () => {
+      const err = reconstructError({
+        code: 'LOAD_PARSE_FAILED',
+        message: 'bad',
+        details: 'a.csv',
+      } as unknown as ErrorPayload);
+      expect(err.details).toBeUndefined();
+    });
   });
 });

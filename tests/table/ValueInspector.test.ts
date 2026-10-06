@@ -170,7 +170,7 @@ describe('ValueInspector', () => {
       '"a"',
     );
 
-    // One read: by rowid, high priority, past the cache, cut at 2 MiB.
+    // One read: by rowid, ahead of charts, past the cache, cut at 2 MiB.
     expect(calls).toHaveLength(1);
     expect(calls[0]!.sql).toContain('WHERE "__rowid__" = 3');
     expect(calls[0]!.sql).toContain(String(INSPECTOR_DISPLAY_CHARS));

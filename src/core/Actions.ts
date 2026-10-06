@@ -2655,8 +2655,7 @@ export class StateActions {
    * // [[1.25, 2.5, 3.75], null, []]
    *
    * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `name` is not
-   *   in the current schema, as before any data is loaded, when the schema
-   *   is empty.
+   *   in the current schema, which is empty until data is loaded.
    * @throws `QueryError` with `code: 'INVALID_PAGINATION'` when `limit` or
    *   `offset` is present but not a non-negative integer.
    * @throws `QueryError` with `code: 'INVALID_ROWID'` when `scope: 'selected'`
@@ -2839,8 +2838,7 @@ export class StateActions {
    * // [9007199254740991, 9007199254740993n, -9223372036854775808n, 9223372036854775807n]
    *
    * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `column` is not
-   *   in the current schema, as before any data is loaded, when the schema
-   *   is empty.
+   *   in the current schema, which is empty until data is loaded.
    * @throws `QueryError` with `code: 'INVALID_ROWID'` and `details: { rowId }`
    *   when `rowId` is not a non-negative integer (a safe integer, or a bigint
    *   within the BIGINT range), or when no row has it.

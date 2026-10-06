@@ -400,8 +400,15 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
  * cancellable pending phase, whereas streaming mode would end the
  * cancellable window at the first result batch.
  *
- * Result rows are materialized exactly like {@link executeQuery}'s, by
- * {@link convertBatch}, so the two are interchangeable.
+ * Result rows are materialized like {@link executeQuery}'s, by
+ * {@link convertBatch}, with one difference. The pending-query path
+ * receives no dictionary batches, so a dictionary-encoded column, which is
+ * what an ENUM is at any depth, arrives with an empty dictionary and every
+ * value reads as null. A result holding one is read a second time through
+ * `conn.query()`, which carries them, when running the SQL again changes
+ * nothing (see {@link canRunAgain}); that read cannot be cancelled. Any
+ * other such result is the first run's, its ENUM values null, since a
+ * statement with side effects must run once.
  */
 export async function executeQueryCancellable<T = Record<string, unknown>>(
   sql: string,
@@ -419,23 +426,65 @@ export async function executeQueryCancellable<T = Record<string, unknown>>(
     throw new Error('DuckDB worker is detached; cannot execute query.');
   }
 
-  // A pending query's result comes without its dictionary batches: a
-  // dictionary-encoded column, which is what an ENUM is at any depth,
-  // arrives with an empty dictionary, and every value reads as null.
-  // `conn.query()` carries them, so such a result is read again that way,
-  // which cannot be cancelled. The library selects its own ENUM columns as
-  // text; this is the path of a raw SELECT of one through `bridge.query`.
   await reader.open();
-  if (reader.schema.fields.some((field) => holdsDictionary(field.type))) {
-    await reader.return();
-    return executeQuery<T>(sql);
+  const rows: T[] = [];
+  if (!reader.schema.fields.some((field) => holdsDictionary(field.type))) {
+    for await (const batch of reader) {
+      convertBatch(batch, rows);
+    }
+    return rows;
   }
 
-  const rows: T[] = [];
+  // The result holds an ENUM, whose values read as null here. The library
+  // selects its own ENUM columns as text; this is the path of a raw read of
+  // one through `bridge.query`. The first result is read to its end before
+  // anything else runs on the connection: a query run while it is open
+  // ends it early, without an error.
+  const batches: ResultBatch[] = [];
   for await (const batch of reader) {
+    batches.push(batch);
+  }
+  if (await canRunAgain(conn, sql)) {
+    return executeQuery<T>(sql);
+  }
+  for (const batch of batches) {
     convertBatch(batch, rows);
   }
   return rows;
+}
+
+/**
+ * A call of `nextval`: DuckDB's sequences are not transactional, so a
+ * second run would advance one again.
+ */
+const NAMES_NEXTVAL = /\bnextval\b/i;
+
+/**
+ * Whether running `sql` a second time, to read its ENUM values, changes
+ * nothing: DuckDB binds it as a single query, and it does not name
+ * `nextval`.
+ *
+ * `DESCRIBE` binds the query in its parentheses without running it. A
+ * statement that is not a query, such as `INSERT … RETURNING`, `UPDATE` or
+ * `DELETE`, cannot stand there, nor can a second statement after a `;`, so
+ * either fails to parse, which leaves a transaction the caller has open as
+ * it was. Trailing semicolons are dropped first, and the newline before
+ * `)` ends a trailing `--` comment. A `nextval` that a view or a macro
+ * calls is not seen, and its sequence advances twice.
+ */
+async function canRunAgain(
+  connection: duckdb.AsyncDuckDBConnection,
+  sql: string,
+): Promise<boolean> {
+  if (NAMES_NEXTVAL.test(sql)) return false;
+  let query = sql.trimEnd();
+  while (query.endsWith(';')) query = query.slice(0, -1).trimEnd();
+  try {
+    await connection.query(`DESCRIBE SELECT * FROM (\n${query}\n)`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** `Type.Dictionary` in apache-arrow, which this module does not import. */

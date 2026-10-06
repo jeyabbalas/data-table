@@ -358,6 +358,20 @@ export class WorkerBridge {
    * as `CAST(c AS JSON)`, or read any of these with `actions.getCellValue`
    * or `actions.getColumnValues`, which pick the SQL for each type.
    *
+   * The worker runs queries on a path that can be cancelled but receives
+   * no ENUM dictionaries. So a result holding an ENUM, at any depth, is
+   * computed a second time, on a path that has them, when the SQL is a
+   * single query (a `SELECT`, `WITH`, `FROM` or `VALUES` query) that does
+   * not name `nextval`. That second read cannot be cancelled: an abort
+   * still rejects at once, but the worker finishes the read before its
+   * next query. Anything else runs once, and its ENUM values arrive as
+   * `null`: an `INSERT`, `UPDATE` or `DELETE … RETURNING`, several
+   * statements in one text, and a query that calls `nextval`, whose
+   * sequence a second run would advance again. A `nextval` called through
+   * a view or a macro is not seen, and advances its sequence twice.
+   * `CAST(e AS VARCHAR)` reads an ENUM's text in one run, in any
+   * statement.
+   *
    * @param sql SQL text to execute.
    * @param signal Optional abort signal; aborting rejects with
    *   `QUERY_ABORTED` and posts a targeted cancel to the worker.

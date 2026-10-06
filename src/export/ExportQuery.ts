@@ -400,6 +400,16 @@ export function buildSelectedRowsQuery(
 // ---------------------------------------------------------------------------
 
 /**
+ * How export batches are queried: past the bridge's query cache. A batch
+ * is up to 10,000 rows, and a nested value arrives as its JSON text, some
+ * 15,000 characters for a `FLOAT[768]`: the cache kept every batch of an
+ * export until the next filter, sort or derived-column change, 460 MB
+ * after a 30,000-row export of one such column, and evicted the chart and
+ * stats results it is there for. Nothing reads a batch twice.
+ */
+const EXPORT_QUERY_OPTIONS = { cache: false } as const;
+
+/**
  * Fetch all rows matching the given scope, calling `onBatch` for each batch
  * of result rows. Handles batching, scope-based WHERE, contiguous-range
  * optimization for selected rows, and abort checking.
@@ -407,6 +417,8 @@ export function buildSelectedRowsQuery(
  * Columns are read as {@link exportColumnRead} says for `context.schema`:
  * a nested column's value arrives as its JSON text, an INTERVAL, BLOB, BIT,
  * GEOMETRY, BIGNUM or ENUM value as DuckDB's text.
+ *
+ * The batches skip the bridge's query cache ({@link EXPORT_QUERY_OPTIONS}).
  */
 export async function fetchAllRows(
   tableName: string,
@@ -449,7 +461,7 @@ async function fetchBatchedRows(
       context.schema,
     );
 
-    const rows = await context.bridge.query<RowData>(sql, signal);
+    const rows = await context.bridge.query<RowData>(sql, signal, EXPORT_QUERY_OPTIONS);
     if (rows.length > 0) {
       onBatch(rows);
     }
@@ -492,7 +504,7 @@ async function fetchSelectedRows(
         context.schema,
       );
 
-      const rows = await context.bridge.query<RowData>(sql, signal);
+      const rows = await context.bridge.query<RowData>(sql, signal, EXPORT_QUERY_OPTIONS);
       if (rows.length > 0) {
         onBatch(rows);
       }
@@ -518,7 +530,7 @@ async function fetchSelectedRows(
         context.schema,
       );
 
-      const rows = await context.bridge.query<RowData>(sql, signal);
+      const rows = await context.bridge.query<RowData>(sql, signal, EXPORT_QUERY_OPTIONS);
       if (rows.length > 0) {
         onBatch(rows);
       }

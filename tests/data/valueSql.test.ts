@@ -375,9 +375,17 @@ describe('jsonValueSQL', () => {
       'MAP(VARCHAR, VARIANT)',
       'STRUCT(a STRUCT(b VARIANT[]))',
       'UNION(v VARIANT, i INTEGER)',
+      // A field named "" is named: nothing to rename, so its value is kept.
+      'STRUCT(b BIGINT,  BIGINT, v VARIANT)',
     ]) {
       expect(json(type), type).toBe(viaVariant);
     }
+  });
+
+  it('names a field named "" by position beside an unnamed struct: SQL cannot write ""', () => {
+    expect(json('STRUCT(p STRUCT(INTEGER, VARCHAR), s STRUCT(b BIGINT,  BIGINT), v VARIANT)')).toBe(
+      `CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST(CAST(CAST("c" AS STRUCT("p" STRUCT("1" INTEGER, "2" VARCHAR), "s" STRUCT("b" BIGINT, "2" BIGINT), "v" VARIANT)) AS VARIANT) AS JSON) AS VARCHAR) END`,
+    );
   });
 
   it('names the fields of an unnamed struct by position before the cast to VARIANT', () => {

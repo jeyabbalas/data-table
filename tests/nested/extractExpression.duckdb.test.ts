@@ -427,6 +427,19 @@ describe('structs', () => {
   });
 });
 
+describe('a field named ""', () => {
+  it('is read by name and by position, as a JSON file names it', async () => {
+    const loader = makeNodeBridge(harness.conn, harness.db);
+    const { tableName, schema } = await loader.loadData(
+      '{"s":{"b":2,"":1}}\n{"s":{"b":3,"":4}}\n{"s":null}\n',
+      { format: 'json', tableName: 'empty_name' },
+    );
+    // DuckDB writes the empty name as nothing.
+    expect(schema.find((c) => c.name === 's')?.originalType).toBe('STRUCT(b BIGINT,  BIGINT)');
+    expect(await check(tableName, 's', values([[''], [2], ['b'], [1]]))).toBe(3);
+  });
+});
+
 describe('lists and arrays', () => {
   it('reads elements and lengths of every list column', async () => {
     const lists = [

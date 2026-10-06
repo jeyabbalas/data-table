@@ -645,6 +645,40 @@ describe.each([
   });
 });
 
+describe('a struct field named ""', () => {
+  beforeAll(async () => {
+    const loader = makeNodeBridge(harness.conn, harness.db);
+    const { tableName, schema } = await loader.loadData(
+      '{"s":{"b":2,"":1}}\n{"s":{"b":3,"":4}}\n',
+      { format: 'json', tableName: 'empty_name' },
+    );
+    relations.set(tableName, { schema, rows: 2 });
+    // The same struct in a type holding a VARIANT, read through VARIANT.
+    await harness.conn.query(
+      `CREATE VIEW empty_name_v AS SELECT "__rowid__", struct_insert(s, v := 7::VARIANT) AS sv FROM empty_name`,
+    );
+    relations.set('empty_name_v', { schema: await describeSchema('empty_name_v'), rows: 2 });
+  });
+
+  it('is read as an object keyed "", as DuckDB writes the struct, not as a tuple', async () => {
+    const { actions, schema } = tableOn('empty_name');
+    expect(schema.find((c) => c.name === 's')!.originalType).toBe('STRUCT(b BIGINT,  BIGINT)');
+    expectSame(await actions.getCellValue(0, 's'), { b: 2, '': 1 });
+    expectSame(await actions.getColumnValues('s'), [
+      { b: 2, '': 1 },
+      { b: 3, '': 4 },
+    ]);
+  });
+
+  it('keeps its value in a type holding a VARIANT', async () => {
+    const { actions, schema } = tableOn('empty_name_v');
+    expect(schema.find((c) => c.name === 'sv')!.originalType).toBe(
+      'STRUCT(b BIGINT,  BIGINT, v VARIANT)',
+    );
+    expectSame(await actions.getCellValue(1, 'sv'), { b: 3, '': 4, v: 7 });
+  });
+});
+
 describe('getColumnValues agrees with getCellValue', () => {
   /** Rows read one by one: every showcase row, and a few seeded ones. */
   const sampleRows = (rows: number): number[] =>

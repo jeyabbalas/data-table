@@ -155,6 +155,18 @@ const TO_JSON: readonly Vector[] = [
     text: '{"":170141183460469231731687303715884105727,"":340282366920938463463374607431768211455}',
   },
   {
+    name: 'struct empty name',
+    reader: 'to_json',
+    type: 'STRUCT(b BIGINT,  BIGINT)',
+    text: '{"b":2,"":1}',
+  },
+  {
+    name: 'struct empty name through variant',
+    reader: 'variant',
+    type: 'STRUCT(b BIGINT,  BIGINT, v VARIANT)',
+    text: '{"b":2,"":1,"v":7}',
+  },
+  {
     name: 'struct proto keys',
     reader: 'to_json',
     type: 'STRUCT(__proto__ INTEGER, constructor INTEGER, toJSON INTEGER, hasOwnProperty INTEGER)',
@@ -993,6 +1005,12 @@ describe("materialize, 'value' mode", () => {
     expect(read('union huge member')).toEqual({ h: 170141183460469231731687303715884105727n });
     expect(read('union double member')).toEqual({ d: NaN });
     expect(read('list of unions')).toEqual([{ num: 1 }, null, { str: '0' }]);
+  });
+
+  it('reads a STRUCT with a field named "" as an object, the field under ""', () => {
+    expect(read('struct empty name')).toEqual({ b: 2, '': 1 });
+    expect(read('struct empty name through variant')).toEqual({ b: 2, '': 1, v: 7 });
+    expect(read('struct empty name', 'export')).toEqual({ b: 2, '': 1 });
   });
 
   it('reads a STRUCT with unnamed fields as an array', () => {

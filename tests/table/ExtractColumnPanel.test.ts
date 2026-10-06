@@ -293,7 +293,8 @@ describe('ExtractColumnPanel', () => {
       expect(expression()).toBe(`"odd"['quote"d']`);
       expect(nameInput().value).toBe('odd_quote_d');
       pick('"": boolean');
-      expect(expression()).toBe(`"odd"['']`);
+      // DuckDB reads a field named '' only by struct_extract_at.
+      expect(expression()).toBe('struct_extract_at("odd", 3)');
       expect(nameInput().value).toBe('odd_field');
     });
 

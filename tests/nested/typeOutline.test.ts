@@ -171,6 +171,15 @@ describe('typeOutline — unnamed fields and odd names', () => {
     expect(outline('UNION("t\tab" INTEGER)', 'outline')).toBe('union(t ab)');
   });
 
+  it('shows the empty name as DuckDB writes it, as nothing after a named field', () => {
+    // The JSON {"b": 2, "": 1} loads as STRUCT(b BIGINT,  BIGINT).
+    expect(forms('STRUCT(b BIGINT,  BIGINT)')).toEqual([
+      'struct(2)',
+      '{b, ""}',
+      'b bigint · "" bigint',
+    ]);
+  });
+
   it('leaves markup in names as text: escaping is the caller’s', () => {
     const type = 'STRUCT("<img src=x onerror=alert(1)>" INTEGER)';
     expect(outline(type, 'outline')).toBe('{<img src=x onerror=alert(1)>}');

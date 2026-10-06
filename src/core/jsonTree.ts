@@ -685,8 +685,10 @@ function hasUnnamedField(type: DuckDBStructTypeNode): boolean {
  *
  * - LIST and ARRAY → an array.
  * - STRUCT → an object keyed by field name, fields matched to the JSON's
- *   entries by position (`to_json` keeps their order). A struct with an
- *   unnamed field (`row(1, 'a')`) → an array of its values in order.
+ *   entries by position (`to_json` keeps their order); a field named with
+ *   the empty string (`{"b": 2, "": 1}` loads as `STRUCT(b BIGINT,
+ *   BIGINT)`) under the key `''`. A struct with unnamed fields
+ *   (`row(1, 'a')`) → an array of its values in order.
  * - MAP → a `Map` in key order. Keys follow the key type: integers are
  *   numbers (bigints beyond ±(2^53−1)), FLOAT, DOUBLE and DECIMAL keys
  *   numbers, BOOLEAN keys booleans; every other key, STRUCT and LIST keys

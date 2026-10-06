@@ -14,7 +14,7 @@
  *
  * | Type | Step | SQL |
  * |---|---|---|
- * | STRUCT | a field's name, or its 1-based position (the only way to an unnamed field) | `E['name']`, `struct_extract(E, 2)` |
+ * | STRUCT | a field's name, or its 1-based position (the only way to an unnamed field) | `E['name']`, `struct_extract(E, 2)`; a field named `''`, `struct_extract_at(E, 2)` |
  * | LIST, ARRAY | a 1-based position, as in SQL | `E[3]` |
  * | MAP | a key, as text or as a number | `map_extract_value(E, 'k')` |
  * | UNION | a member's tag | `union_extract(E, 'num')` |
@@ -291,10 +291,12 @@ function walk(column: NestedPathColumn, path: readonly NestedPathStep[]): Walk {
           }
         }
         const field = type.fields[index]!;
-        sql =
-          field.name === null
-            ? `struct_extract(${sql}, ${index + 1})`
-            : `${sql}[${sqlString(field.name)}]`;
+        // DuckDB reads a field by name only when it has one: an empty name is
+        // an error in `E['']`, and a position one in `struct_extract` on a
+        // struct with names, so a field named '' is read by `struct_extract_at`.
+        if (field.name === null) sql = `struct_extract(${sql}, ${index + 1})`;
+        else if (field.name === '') sql = `struct_extract_at(${sql}, ${index + 1})`;
+        else sql = `${sql}[${sqlString(field.name)}]`;
         parts.push(namePart(field.name ?? String(index + 1), 'field'));
         type = field.type;
         break;
@@ -579,6 +581,7 @@ export function resolveNestedPath(
  * |---|---|---|
  * | struct field `['geo', 'lat']` of `point` | `"point"['geo']['lat']` | `point_geo_lat` |
  * | unnamed struct field `[2]` of `pair` | `struct_extract("pair", 2)` | `pair_2` |
+ * | field named `''`, `['']` or `[2]` of `s` | `struct_extract_at("s", 2)` | `s_field` |
  * | list element `[3]` of `tags` | `"tags"[3]` | `tags_3` |
  * | `tags`, `extract: 'length'` | `len("tags")` | `tags_length` |
  * | map value `['k']` of `m` | `map_extract_value("m", 'k')` | `m_k` |

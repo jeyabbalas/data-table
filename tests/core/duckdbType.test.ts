@@ -154,6 +154,23 @@ describe('parseDuckDBType', () => {
     expect(node.kind === 'struct' && node.fields.length).toBe(40);
   });
 
+  it('names a field DuckDB writes without a name, after a named first field, with ""', () => {
+    const names = (text: string) => {
+      const node = parseDuckDBType(text);
+      return node.kind === 'struct' ? node.fields.map((f) => f.name) : node.kind;
+    };
+    // The JSON {"b": 2, "": 1} loads as this: the empty name is written as nothing.
+    expect(names('STRUCT(b BIGINT,  BIGINT)')).toEqual(['b', '']);
+    expect(names('STRUCT(b BIGINT,  BIGINT, c INTEGER,  VARCHAR[])')).toEqual(['b', '', 'c', '']);
+    expect(names('STRUCT(b BIGINT,  TIMESTAMP WITH TIME ZONE)')).toEqual(['b', '']);
+    expect(names('STRUCT(b BIGINT,  STRUCT(x INTEGER))')).toEqual(['b', '']);
+    expect(names('STRUCT("" INTEGER, b BIGINT)')).toEqual(['', 'b']);
+    // DuckDB takes a struct whose first field's name is empty for unnamed,
+    // and writes it with types only: {"": 1, "b": 2} loads as STRUCT(BIGINT, BIGINT).
+    expect(names('STRUCT(BIGINT, BIGINT)')).toEqual([null, null]);
+    expect(names('STRUCT(INTEGER, VARCHAR)')).toEqual([null, null]);
+  });
+
   it('reads empty STRUCT() and UNION()', () => {
     expect(shape(parseDuckDBType('STRUCT()'))).toBe('struct{}');
     expect(shape(parseDuckDBType('UNION()[]'))).toBe('list<union{}>');

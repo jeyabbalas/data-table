@@ -60,7 +60,13 @@ export interface DuckDBArrayTypeNode {
 
 /** One field of a STRUCT. */
 export interface DuckDBStructField {
-  /** The field's name, `null` for an unnamed field (`STRUCT(INTEGER, VARCHAR)`). */
+  /**
+   * The field's name: `null` for a field of an unnamed struct
+   * (`STRUCT(INTEGER, VARCHAR)`, what `row(1, 'a')` makes), `''` for a
+   * field named with the empty string, which DuckDB writes as nothing in a
+   * struct whose first field has a name: `STRUCT(b BIGINT,  BIGINT)`, from
+   * the JSON `{"b": 2, "": 1}`.
+   */
   readonly name: string | null;
   readonly type: DuckDBTypeNode;
 }
@@ -316,8 +322,9 @@ function fail(): never {
  * arguments (`DECIMAL(18,4)`, `ENUM('a', 'b')`, `TIMESTAMP WITH TIME ZONE`),
  * `JSON`, `VARIANT`, lists and arrays (`INTEGER[]`, `FLOAT[768]`, stacked as
  * in `INTEGER[2][]`, a list of 2-integer arrays), `STRUCT(…)` with quoted,
- * unquoted or no field names, `MAP(K, V)`, `UNION(tag T, …)` and `LIST(T)`.
- * Keywords are matched in any case.
+ * unquoted or no field names (a field named with the empty string, which
+ * DuckDB writes as nothing, is named `''`), `MAP(K, V)`, `UNION(tag T, …)`
+ * and `LIST(T)`. Keywords are matched in any case.
  *
  * Never throws: text it cannot read, and types nested deeper than
  * `MAX_TYPE_DEPTH` (256) levels, come back as an `unknown` node. Results are
@@ -574,8 +581,14 @@ function parseOrFail(text: string): DuckDBTypeNode {
     pos++;
     if (next.kind === ',') {
       // Only a struct or a union takes another entry.
-      if (frame.kind === 'struct') frame.name = readFieldName();
-      else if (frame.kind === 'union') frame.tag = readTag();
+      if (frame.kind === 'struct') {
+        // DuckDB takes a struct for unnamed when its first field's name is
+        // empty, and then writes only the fields' types. Past a first field
+        // with a name, a field written without one is named '': DuckDB
+        // writes the empty name as nothing (`STRUCT(b BIGINT,  BIGINT)`).
+        const name = readFieldName();
+        frame.name = name === null && frame.fields[0]!.name !== null ? '' : name;
+      } else if (frame.kind === 'union') frame.tag = readTag();
       else fail();
       continue;
     }

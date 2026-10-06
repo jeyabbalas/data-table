@@ -253,6 +253,16 @@ describe('structs', () => {
     ]);
   });
 
+  it('keys a field named "" as "", and gives it the path [""]', () => {
+    // The JSON {"b": 2, "": 1} loads as STRUCT(b BIGINT,  BIGINT).
+    const root = tree('{"b":2,"":1}', 'STRUCT(b BIGINT,  BIGINT)');
+    expect(root.preview).toBe('{b: 2, "": 1}');
+    expect(kids(root).map((c) => [c.key, c.label, c.path])).toEqual([
+      [{ text: 'b', kind: 'field' }, 'b: 2', ['b']],
+      [{ text: '""', kind: 'field' }, '"": 1', ['']],
+    ]);
+  });
+
   it('matches fields by position whatever the JSON keys say', () => {
     // Through VARIANT, unnamed fields are keyed "1", "2"; key_order's JSON is {"2":…,"1":…}.
     const root = tree('[{"1":1,"2":"x"}]', 'STRUCT(VARIANT, VARCHAR)[]');

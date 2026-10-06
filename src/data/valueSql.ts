@@ -596,8 +596,12 @@ function hasUnnamedStruct(node: DuckDBTypeNode): boolean {
 /**
  * The SQL type of `node` with each unnamed struct field named by its
  * 1-based position: `STRUCT(VARIANT, VARCHAR)[]` becomes
- * `STRUCT("1" VARIANT, "2" VARCHAR)[]`. Everything else is as written.
- * Recursion is bounded by the parser's depth limit.
+ * `STRUCT("1" VARIANT, "2" VARCHAR)[]`. Everything else is as written, but
+ * a field named with the empty string, which SQL cannot write: it is named
+ * by its position too, and since a cast from one struct to another matches
+ * fields by name, its value reads as NULL. Only a type holding a VARIANT, an
+ * unnamed struct and such a field comes here with one. Recursion is bounded
+ * by the parser's depth limit.
  */
 function withNamedFields(node: DuckDBTypeNode): string {
   switch (node.kind) {
@@ -609,7 +613,7 @@ function withNamedFields(node: DuckDBTypeNode): string {
       return `STRUCT(${node.fields
         .map(
           (field, i) =>
-            `${quoteIdentifier(field.name ?? String(i + 1))} ${withNamedFields(field.type)}`,
+            `${quoteIdentifier(field.name || String(i + 1))} ${withNamedFields(field.type)}`,
         )
         .join(', ')})`;
     case 'map':

@@ -285,6 +285,22 @@ describe('nestedFieldExpression', () => {
       });
     });
 
+    it('reads a field named "" by struct_extract_at, by name or by position', () => {
+      // DuckDB refuses '' as a key and, on a struct with names, a position
+      // in struct_extract: struct_extract_at reads either.
+      const type = 'STRUCT(b BIGINT,  BIGINT)';
+      for (const step of ['', 2]) {
+        expect(build('s', type, [step])).toMatchObject({
+          expression: 'struct_extract_at("s", 2)',
+          name: 's_field',
+        });
+      }
+      expect(build('s', type, ['b']).expression).toBe(`"s"['b']`);
+      expect(build('s', `STRUCT(b BIGINT,  STRUCT(x INTEGER))`, ['', 'x']).expression).toBe(
+        `struct_extract_at("s", 2)['x']`,
+      );
+    });
+
     it('chains into the struct of a function result', () => {
       expect(build('u', 'UNION(p STRUCT(x INTEGER), n INTEGER)', ['p', 'x']).expression).toBe(
         `union_extract("u", 'p')['x']`,

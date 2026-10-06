@@ -7,8 +7,9 @@ const de = (word: string): string =>
 /**
  * French translation of every user-facing label the table renders on the
  * common interaction paths (filter panel, column-header menu, export dialog,
- * presets, stats line, screen-reader labels, and the value inspector and
- * extract panel of nested and JSON columns). Pass this as `messages` to
+ * presets, stats line and chart hover text, screen-reader labels and
+ * keyboard column layout, and the value inspector and extract panel of
+ * nested and JSON columns). Pass this as `messages` to
  * `createDataTable()`. Keys you don't override fall back to English.
  */
 export const frenchMessages: DeepPartial<Strings> = {
@@ -327,8 +328,23 @@ export const frenchMessages: DeepPartial<Strings> = {
     hiddenColumnsLabel: 'Colonnes masquées',
     showColumn: (column) => `Afficher ${column}`,
 
-    resizeHandleLabel: 'Redimensionner la colonne',
+    resizeHandleLabel: "Redimensionner la colonne (clavier : Maj+F2 sur l'en-tête)",
     loadingRowLabel: (rowNumber) => `Chargement de la ligne ${rowNumber}…`,
+
+    columnLayoutModeEntered: (column) =>
+      `${column} : mode disposition de la colonne. Gauche et Droite redimensionnent, Maj avec ` +
+      `Gauche et Droite déplace la colonne, Début et Fin donnent la largeur minimale et ` +
+      `maximale, Retour arrière rétablit la largeur, Entrée valide, Échap annule.`,
+    columnWidthAnnouncement: (column, px) => `${column} : ${px} pixels de large`,
+    columnWidthAtMinimum: (column, px) => `${column} : ${px} pixels de large, minimum`,
+    columnWidthAtMaximum: (column, px) => `${column} : ${px} pixels de large, maximum`,
+    columnMovedAnnouncement: (column, position, total) =>
+      `Colonne ${column} déplacée en position ${position} sur ${total}`,
+    columnMoveBlockedPinned: (column) =>
+      `La colonne ${column} est épinglée et ne peut pas être déplacée`,
+    columnLayoutCancelled: (column) =>
+      `Disposition ${de(column)} annulée, largeur et position rétablies`,
+    columnLayoutCommitted: (column) => `Disposition ${de(column)} validée`,
   },
 
   statistics: {
@@ -347,7 +363,19 @@ export const frenchMessages: DeepPartial<Strings> = {
     uniqueCount: (count) => `${count.toLocaleString()} unique`,
     uniquePercent: (count, pct) => `${count.toLocaleString()} unique (${pct} %)`,
     separator: ' · ',
+    binLabel: 'Intervalle :',
+    categoryLabel: 'Catégorie :',
+    selectedLabel: 'Sélection :',
+    nullBinLabel: 'vide',
     nonNullCategory: 'non null',
+    otherCategory: (count) =>
+      `Autres (${count.toLocaleString()} ${count < 2 ? 'valeur' : 'valeurs'})`,
+    allUniqueCategory: (count) => `Toutes uniques (${count.toLocaleString()})`,
+    selectionRowCount: (count, pct) =>
+      `${count.toLocaleString()} ${count < 2 ? 'ligne' : 'lignes'} (${pct})`,
+    matchCount: (count) =>
+      `${count.toLocaleString()} ${count < 2 ? 'correspond' : 'correspondent'}`,
+    valueListSuffix: (total) => `, … (${total.toLocaleString()} valeurs)`,
     chartFailed: 'Échec du chargement',
     noData: 'Aucune donnée',
   },

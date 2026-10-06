@@ -1,17 +1,4 @@
 {
   "mode": "pre",
-  "tag": "next",
-  "initialVersions": {
-    "@jeyabbalas/data-table": "0.8.0"
-  },
-  "changesets": [
-    "crossfilter-destroy-guard",
-    "filter-removal-callback",
-    "lazy-column-charts",
-    "loader-source-file-names",
-    "lossless-date-text",
-    "parquet-lazy-load",
-    "sorted-scroll-memory",
-    "timestamp-trailing-zeros"
-  ]
+  "tag": "next"
 }

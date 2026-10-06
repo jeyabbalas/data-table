@@ -330,6 +330,24 @@ const TO_JSON: readonly Vector[] = [
     text: '{"k":1,"u":4}',
   },
   {
+    name: 'variant union struct member named like a tag',
+    reader: 'variant',
+    type: 'STRUCT(u UNION(a STRUCT(b BIGINT), b DOUBLE), v VARIANT)',
+    text: '{"u":{"b":9007199254740993},"v":1}',
+  },
+  {
+    name: 'variant union struct member named like a text tag',
+    reader: 'variant',
+    type: 'STRUCT(u UNION(s STRUCT(n INTEGER), n VARCHAR), v VARIANT)',
+    text: '{"u":{"n":5},"v":1}',
+  },
+  {
+    name: 'variant union double member',
+    reader: 'variant',
+    type: 'STRUCT(u UNION(a STRUCT(b BIGINT), b DOUBLE), v VARIANT)',
+    text: '{"u":2.5,"v":"x"}',
+  },
+  {
     name: 'variant list of leaves',
     reader: 'variant',
     type: 'VARIANT[]',
@@ -1130,6 +1148,22 @@ describe("materialize, 'value' mode", () => {
     ]);
     // A UNION cast to VARIANT has lost its tag: its bare value.
     expect(read('variant struct with union')).toEqual({ k: 1, u: 4 });
+    // A struct member whose one field is named like a member is still the
+    // struct, read from its JSON: not that member, which would read
+    // 9007199254740993 as a DOUBLE, or 5 as text.
+    expect(read('variant union struct member named like a tag')).toEqual({
+      u: { b: 9007199254740993n },
+      v: 1,
+    });
+    expect(read('variant union struct member named like a text tag')).toEqual({
+      u: { n: 5 },
+      v: 1,
+    });
+    expect(read('variant union struct member named like a tag', 'export')).toEqual({
+      u: { b: '9007199254740993' },
+      v: 1,
+    });
+    expect(read('variant union double member')).toEqual({ u: 2.5, v: 'x' });
     expect(read('variant list of leaves')).toEqual([
       '2024-01-01',
       '\\xAA',

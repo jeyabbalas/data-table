@@ -679,6 +679,34 @@ describe('a struct field named ""', () => {
   });
 });
 
+describe('a union inside a type holding a VARIANT', () => {
+  beforeAll(async () => {
+    const union = 'UNION(a STRUCT(b BIGINT), b DOUBLE)';
+    await harness.conn.query(`
+      CREATE VIEW union_in_variant AS
+      SELECT 0::BIGINT AS "__rowid__",
+        {'u': union_value(a := {'b': 9007199254740993::BIGINT})::${union}, 'v': 1::VARIANT} AS s
+      UNION ALL
+      SELECT 1, {'u': union_value(b := 2.5)::${union}, 'v': 'x'::VARIANT}`);
+    relations.set('union_in_variant', {
+      schema: await describeSchema('union_in_variant'),
+      rows: 2,
+    });
+  });
+
+  it('reads a struct member as the struct, not as the member its field is named like', async () => {
+    // Through VARIANT the union loses its tag: {"u":{"b":9007199254740993},…}
+    // is member a's struct, whose field b is no DOUBLE.
+    const { actions } = tableOn('union_in_variant');
+    const values = [
+      { u: { b: 9007199254740993n }, v: 1 },
+      { u: 2.5, v: 'x' },
+    ];
+    expectSame(await actions.getCellValue(0, 's'), values[0]);
+    expectSame(await actions.getColumnValues('s'), values);
+  });
+});
+
 describe('getColumnValues agrees with getCellValue', () => {
   /** Rows read one by one: every showcase row, and a few seeded ones. */
   const sampleRows = (rows: number): number[] =>

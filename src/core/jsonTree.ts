@@ -21,10 +21,11 @@
  * standard JSON without building a tree.
  *
  * Nothing here recurses: a value nested 10,000 deep is read, materialized
- * and printed with explicit stacks. Imports only a type, so the worker can
- * use it too.
+ * and printed with explicit stacks. Imports only the type parser, so the
+ * worker can use it too.
  */
 
+import { containsKind } from './duckdbType';
 import type {
   DuckDBMapTypeNode,
   DuckDBStructTypeNode,
@@ -624,8 +625,41 @@ function mapKeyValue(text: string, keyType: DuckDBTypeNode): unknown {
   }
 }
 
-/** A MAP key node's text, for a MAP read through VARIANT (whose keys are typed JSON). */
-function keyText(node: JsonNode): string {
+/**
+ * Whether a value of `type` is read through VARIANT: `jsonValueSQL` writes
+ * one as `CAST(CAST(c AS VARIANT) AS JSON)` when the type holds a VARIANT
+ * inside (`VARIANT[]`, `STRUCT(v VARIANT)`), and so do {@link materialize}
+ * and the value inspector read its JSON. Through VARIANT a MAP is a list of
+ * `{"key": …, "value": …}` objects and a UNION its member's bare value,
+ * without the tag. A VARIANT or JSON column is not: its value is the JSON.
+ * A type the parser could not read is when its text names VARIANT.
+ *
+ * @example
+ * ```ts
+ * readsThroughVariant(parseDuckDBType('STRUCT(v VARIANT)[]')); // true
+ * readsThroughVariant(parseDuckDBType('VARIANT'));             // false
+ * readsThroughVariant(parseDuckDBType('INTEGER[]'));           // false
+ * ```
+ */
+export function readsThroughVariant(type: DuckDBTypeNode | undefined): boolean {
+  if (type === undefined || type.kind === 'variant' || type.kind === 'json') return false;
+  return type.kind === 'unknown'
+    ? /\bVARIANT\b/i.test(type.sqlType)
+    : containsKind(type, 'variant');
+}
+
+/**
+ * The text of a MAP key read through VARIANT, whose keys are typed JSON:
+ * a string's value, a number as written, `true`, `false` and `null`, and a
+ * STRUCT or LIST key as its JSON, which DuckDB also reads back as the key.
+ *
+ * @example
+ * ```ts
+ * mapKeyText(parseJsonTree('1.50').root);       // '1.50'
+ * mapKeyText(parseJsonTree('{"k":1}').root);    // '{"k":1}'
+ * ```
+ */
+export function mapKeyText(node: JsonNode): string {
   switch (node.kind) {
     case 'string':
       return node.value;
@@ -640,8 +674,19 @@ function keyText(node: JsonNode): string {
   }
 }
 
-/** The `key` and `value` of one item of a MAP read through VARIANT, or `undefined`. */
-function mapEntryOf(item: JsonNode): { key: JsonNode; value: JsonNode } | undefined {
+/**
+ * The `key` and `value` of one item of a MAP read through VARIANT,
+ * `{"key": …, "value": …}` with its two entries in either order; `undefined`
+ * for any other JSON (an item cut short, for one).
+ *
+ * @example
+ * ```ts
+ * mapEntryOf(parseJsonTree('{"key":"a","value":1}').root);
+ * // { key: { kind: 'string', value: 'a' }, value: { kind: 'number', raw: '1' } }
+ * mapEntryOf(parseJsonTree('{"key":"a"}').root); // undefined
+ * ```
+ */
+export function mapEntryOf(item: JsonNode): { key: JsonNode; value: JsonNode } | undefined {
   if (item.kind !== 'object' || item.entries.length !== 2) return undefined;
   const [first, second] = item.entries as [JsonEntry, JsonEntry];
   if (first.key === 'key' && second.key === 'value')
@@ -659,13 +704,17 @@ function isEntryList(node: JsonArrayNode): boolean {
   return true;
 }
 
-/** The member of `type` that `node`, `{"tag": value}`, holds. */
-function unionMemberOf(
-  type: DuckDBUnionTypeNode,
-  node: JsonObjectNode,
-): DuckDBUnionMember | undefined {
-  if (node.entries.length !== 1) return undefined;
-  const tag = node.entries[0]!.key;
+/**
+ * The member of `type` that `to_json`'s `{"tag": value}` names: the one
+ * with that tag exactly, else in any case, as `to_json` writes the tag.
+ *
+ * @example
+ * ```ts
+ * unionMember(parseDuckDBType('UNION(num INTEGER, str VARCHAR)') as DuckDBUnionTypeNode, 'NUM');
+ * // { tag: 'num', type: { kind: 'scalar', name: 'INTEGER', … } }
+ * ```
+ */
+export function unionMember(type: DuckDBUnionTypeNode, tag: string): DuckDBUnionMember | undefined {
   const exact = type.members.find((m) => m.tag === tag);
   if (exact) return exact;
   const lower = tag.toLowerCase();
@@ -723,9 +772,11 @@ function hasUnnamedField(type: DuckDBStructTypeNode): boolean {
  * `hasOwnProperty` hides the method, so test keys with `Object.hasOwn`.
  *
  * A MAP read through VARIANT (`CAST(CAST(c AS VARIANT) AS JSON)`, for types
- * that hold a VARIANT) arrives as `[{"key": k, "value": v}, …]` and is read
- * the same way, a STRUCT or LIST key then being its JSON text. A UNION read
- * that way has lost its tag and is its bare value.
+ * that hold a VARIANT: {@link readsThroughVariant}) arrives as
+ * `[{"key": k, "value": v}, …]` and is read the same way, a STRUCT or LIST
+ * key then being its JSON text. A UNION read that way has lost its tag, and
+ * its bare value is read from the JSON alone: a struct member is not taken
+ * for the member its one field's name happens to match.
  *
  * Iterative, so any depth of nesting is fine.
  *
@@ -747,6 +798,7 @@ export function materialize(
   mode: 'value' | 'export',
 ): unknown {
   const exporting = mode === 'export';
+  const throughVariant = readsThroughVariant(type);
   const tasks: FillTask[] = [];
 
   /**
@@ -795,10 +847,10 @@ export function materialize(
           tasks.push({ fill: FILL_MAP_OBJECT, node: json, type: as, out });
           return out;
         }
-        if (as?.kind === 'union') {
-          const member = unionMemberOf(as, json);
+        if (as?.kind === 'union' && !throughVariant && json.entries.length === 1) {
+          const entry = json.entries[0]!;
+          const member = unionMember(as, entry.key);
           if (member) {
-            const entry = json.entries[0]!;
             const out: Record<string, unknown> = {};
             setKey(out, entry.key, start(entry.value, member.type));
             return out;
@@ -867,7 +919,7 @@ export function materialize(
         const map = as as DuckDBMapTypeNode;
         for (const item of (json as JsonArrayNode).items) {
           const entry = mapEntryOf(item)!;
-          putMapEntry(out, keyText(entry.key), entry.value, map);
+          putMapEntry(out, mapKeyText(entry.key), entry.value, map);
         }
         break;
       }

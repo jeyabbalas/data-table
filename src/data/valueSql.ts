@@ -18,7 +18,6 @@
 
 import {
   childTypes,
-  containsKind,
   dataTypeOf,
   parseDuckDBType,
   type DuckDBArrayTypeNode,
@@ -27,6 +26,7 @@ import {
   type DuckDBStructTypeNode,
   type DuckDBTypeNode,
 } from '../core/duckdbType';
+import { readsThroughVariant } from '../core/jsonTree';
 import type { ColumnSchema } from '../core/types';
 import { quoteIdentifier } from '../filters/FilterSQL';
 
@@ -546,8 +546,9 @@ function shownTextBound(node: DuckDBTypeNode): number {
  *   (the cast writes a NULL as the text `null`). `to_json` of a VARIANT
  *   gives the text of the value as a JSON string (`"42"`).
  * - A type holding a VARIANT anywhere inside (`VARIANT[]`, `STRUCT(v
- *   VARIANT)`) goes through VARIANT first: `CAST(CAST(c AS VARIANT) AS
- *   JSON)`, NULL kept the same way. `to_json` and `CAST(c AS JSON)` of such
+ *   VARIANT)`; `readsThroughVariant`, which the readers of this JSON ask
+ *   too) goes through VARIANT first: `CAST(CAST(c AS VARIANT) AS JSON)`,
+ *   NULL kept the same way. `to_json` and `CAST(c AS JSON)` of such
  *   a type are wrong (`to_json([42::VARIANT])` is `["42"]`) or an INTERNAL
  *   error that invalidates the database. Through VARIANT, a MAP inside comes
  *   out as a list of `{"key": …, "value": …}` objects, a UNION as its
@@ -573,9 +574,7 @@ export function jsonValueSQL(column: ColumnSchema, quotedCol: string): string {
   if (node.kind === 'variant') {
     return `CASE WHEN ${c} IS NULL THEN NULL ELSE CAST(CAST(${c} AS JSON) AS VARCHAR) END`;
   }
-  const holdsVariant =
-    node.kind === 'unknown' ? /\bVARIANT\b/i.test(node.sqlType) : containsKind(node, 'variant');
-  if (!holdsVariant) return `CAST(to_json(${c}) AS VARCHAR)`;
+  if (!readsThroughVariant(node)) return `CAST(to_json(${c}) AS VARCHAR)`;
   const value = hasUnnamedStruct(node) ? `CAST(${c} AS ${withNamedFields(node)})` : c;
   return `CASE WHEN ${c} IS NULL THEN NULL ELSE CAST(CAST(CAST(${value} AS VARIANT) AS JSON) AS VARCHAR) END`;
 }

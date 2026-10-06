@@ -58,15 +58,19 @@
  * deep, costs only what is shown. Nothing here recurses over a whole value.
  */
 
-import { containsKind } from '../core/duckdbType';
 import type {
   DuckDBMapTypeNode,
   DuckDBStructField,
   DuckDBTypeNode,
   DuckDBUnionMember,
-  DuckDBUnionTypeNode,
 } from '../core/duckdbType';
-import { prettyJson } from '../core/jsonTree';
+import {
+  mapEntryOf,
+  mapKeyText,
+  prettyJson,
+  readsThroughVariant,
+  unionMember,
+} from '../core/jsonTree';
 import type { JsonEntry, JsonNode } from '../core/jsonTree';
 import { typeOutline } from './typeOutline';
 
@@ -673,14 +677,6 @@ function jsonShape(json: JsonNode): Shape | undefined {
   return undefined;
 }
 
-/** The member of `type` named by `tag`: exactly, else in any case (as `to_json` writes the tag). */
-function unionMember(type: DuckDBUnionTypeNode, tag: string): DuckDBUnionMember | undefined {
-  const exact = type.members.find((m) => m.tag === tag);
-  if (exact) return exact;
-  const lower = tag.toLowerCase();
-  return type.members.find((m) => m.tag.toLowerCase() === lower);
-}
-
 /**
  * Read `json` at a place whose DuckDB type is `type`. `inJson` is set inside
  * a JSON or VARIANT value, where keys and indexes are path steps;
@@ -754,34 +750,6 @@ function read(
   // JSON that does not fit its type, or a union read through VARIANT, which
   // lost its tag: read from the JSON alone. No path names anything inside.
   return { type: undefined, shape: jsonShape(json), jsonSteps: false };
-}
-
-/** The `key` and `value` of a map entry read through VARIANT, or `undefined`. */
-function mapEntryOf(item: JsonNode): { key: JsonNode; value: JsonNode } | undefined {
-  if (item.kind !== 'object' || item.entries.length !== 2) return undefined;
-  const [first, second] = item.entries as [JsonEntry, JsonEntry];
-  if (first.key === 'key' && second.key === 'value')
-    return { key: first.value, value: second.value };
-  if (first.key === 'value' && second.key === 'key')
-    return { key: second.value, value: first.value };
-  return undefined;
-}
-
-/** The text of a map key read through VARIANT, whose keys are typed JSON. */
-function entryKeyText(key: JsonNode): string {
-  switch (key.kind) {
-    case 'string':
-      return key.value;
-    case 'number':
-      return key.raw;
-    case 'boolean':
-      return key.value ? 'true' : 'false';
-    case 'null':
-      return 'null';
-    default:
-      // A STRUCT or LIST key: its JSON, which DuckDB also reads back as the key.
-      return prettyJson(key, 0);
-  }
 }
 
 /** A map key's text as a path step: a number for whole-number keys (while exact), else the text. */
@@ -952,7 +920,7 @@ function compactShape(shape: Shape, room: number, context: Context): string | un
       return joinItems('{', '}', items.length, room, (i, r) => {
         const entry = mapEntryOf(items[i]!);
         if (!entry) return compact(items[i]!, undefined, r, context);
-        const key = keyText(mapKeyShown(entryKeyText(entry.key), entry.key, map), cap);
+        const key = keyText(mapKeyShown(mapKeyText(entry.key), entry.key, map), cap);
         return keyed(key, ' → ', entry.value, map.value, r, context);
       });
     }
@@ -1323,7 +1291,7 @@ class TreeNode implements ValueTreeNode {
         const entry = mapEntryOf(item);
         // An item that is not an entry (a value cut short) shows as it is, by position.
         if (!entry) return typed({ text: String(i + 1), kind: 'position' }, item, undefined, null);
-        const text = entryKeyText(entry.key);
+        const text = mapKeyText(entry.key);
         const key: ValueTreeKey = {
           text: keyText(mapKeyShown(text, entry.key, shape.map), cap),
           kind: 'mapKey',
@@ -1429,11 +1397,7 @@ export function buildValueTree(
   messages: ValueTreeMessages,
   options: ValueTreeOptions = {},
 ): ValueTreeNode {
-  const throughVariant =
-    type !== undefined &&
-    type.kind !== 'variant' &&
-    type.kind !== 'json' &&
-    (type.kind === 'unknown' ? /\bVARIANT\b/i.test(type.sqlType) : containsKind(type, 'variant'));
+  const throughVariant = readsThroughVariant(type);
   const context: Context = {
     messages,
     bucketSize: wholeOption(options.bucketSize, 2, VALUE_TREE_BUCKET_SIZE),

@@ -2184,6 +2184,12 @@ export class StateActions {
    * own name (`total` to `Total`) is allowed. A new expression is checked as
    * it checks one too. A failed update changes nothing.
    *
+   * The filters on the column are dropped when its DuckDB type changes
+   * (`ColumnSchema.originalType`), since DuckDB casts their values to it: a
+   * VARCHAR made JSON would read a filter's `'active'` as malformed JSON.
+   * An integer of another width, or a DECIMAL of another precision or scale,
+   * keeps them: DuckDB compares numbers with those by value.
+   *
    * Runs in its turn, as {@link addDerivedColumn} does: a rename to a name an
    * add ahead of it takes gets `already exists`.
    */
@@ -2360,7 +2366,9 @@ export class StateActions {
    * replacement is atomic: if any pre-flight check or the final VIEW recreate
    * fails, the column reverts to its prior definition.
    *
-   * The new expression is checked as {@link addDerivedColumn} checks one.
+   * The new expression is checked as {@link addDerivedColumn} checks one,
+   * and the filters on the column are dropped as {@link updateDerivedColumn}
+   * drops them, when its DuckDB type changes.
    *
    * @example
    * const result = await table.actions.replaceDerivedColumn('tip_pct', {
@@ -3158,13 +3166,25 @@ function newColumnNameError(name: string, others: readonly string[]): string | n
 
 /**
  * Whether a derived column's new definition changed its type, so that the
- * filters on it no longer fit. Two nested types are both `'nested'`: a
- * STRUCT made a LIST is a change all the same, so they are compared by their
- * DuckDB types.
+ * filters on it no longer fit, and are dropped.
+ *
+ * DuckDB casts a filter's values to the column's type, so a filter is kept
+ * only when that type, the DuckDB type, is the same, and not merely the
+ * library's: a VARCHAR made JSON casts a value-count filter's `'active'` to
+ * JSON, and every query that filters fails (`Malformed JSON`); a cast to
+ * BIT, BIGNUM or GEOMETRY fails as well. A FLOAT compares `0.30000001`
+ * equal to `0.3`, where a DOUBLE does not; a STRUCT made a LIST, two
+ * `'nested'` types, has another shape. Integers and DECIMALs are the
+ * exception: DuckDB compares a number with an integer of any width, or a
+ * DECIMAL of any precision and scale, by its value (`5::TINYINT = 5.4` is
+ * false, as `5::BIGINT = 5.4` is), and the filters the filter panel and the
+ * charts make on them hold numbers. So an INTEGER made BIGINT keeps its
+ * filters.
  */
 function derivedTypeChanged(before: ColumnSchema, after: DerivedColumnInfo): boolean {
   if (before.type !== after.detectedType) return true;
-  return before.type === 'nested' && before.originalType !== after.detectedOriginalType;
+  if (before.type === 'integer' || before.type === 'decimal') return false;
+  return before.originalType !== after.detectedOriginalType;
 }
 
 // ---------------------------------------------------------------------------

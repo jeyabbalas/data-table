@@ -9,7 +9,8 @@
  * (`parseJsonTree`), and shows it as a keyboard tree (`TreeView` over
  * `buildValueTree`): keys, values, types, counts, and containers too big to
  * list at once in buckets. Copy JSON puts the whole value on the clipboard as
- * standard JSON; Ctrl/Cmd+C on a node, that node's.
+ * standard JSON; Ctrl/Cmd+C on a node, that node's. A value too long to show
+ * whole is read again for a copy of it, or of a node its cut runs through.
  *
  * It opens from a body cell — `F2` on the cursor, a double click, or the
  * cell's inspect icon — and `TableContainer` mounts it in `.dt-root`, beside
@@ -40,13 +41,14 @@ import {
 } from '../nested/extractExpression';
 import { columnTypeLabel, columnTypeTitle } from '../nested/typeOutline';
 import {
+  type ValueTreeBucket,
   type ValueTreeNode,
   type ValueTreePathStep,
   buildValueTree,
   defaultExpansion,
   nodeJsonText,
 } from '../nested/valueTreeModel';
-import { TreeView, type TreeViewNode, closeIcon, element } from './TreeView';
+import { TreeView, type TreeViewNode, activeElementOf, closeIcon, element } from './TreeView';
 
 /**
  * Characters of JSON (code points) read to show a value: 2 MiB. A longer
@@ -264,8 +266,11 @@ export class ValueInspector {
   private isOpen = false;
   private destroyed = false;
   private tree: TreeView<ValueTreeNode> | null = null;
-  /** The value shown, and whether it was cut at {@link INSPECTOR_DISPLAY_CHARS}. */
-  private loaded: { json: JsonNode; truncated: boolean } | null = null;
+  /**
+   * The value shown, whether it was cut at {@link INSPECTOR_DISPLAY_CHARS},
+   * and for a cut value the nodes the cut runs through, once asked for.
+   */
+  private loaded: { json: JsonNode; truncated: boolean; cut?: JsonNode[] } | null = null;
   /** What each node offers to add as a column; `null` for nothing. */
   private extractChoices = new WeakMap<ValueTreeNode, ExtractChoices | null>();
   /**
@@ -352,7 +357,7 @@ export class ValueInspector {
     this.copyButton.type = 'button';
     this.copyButton.textContent = m.copyJson;
     this.copyButton.disabled = true;
-    this.copyButton.addEventListener('click', () => void this.copyAll());
+    this.copyButton.addEventListener('click', () => this.copyAll());
     const closeButton = element('button', `${p}__button`);
     closeButton.type = 'button';
     closeButton.textContent = this.messages.common.close;
@@ -407,8 +412,13 @@ export class ValueInspector {
       shown.rowId === target.rowId
     ) {
       // Asked again, by the second click of a double click on the inspect
-      // icon say, whose press put focus on the cell: bring it back.
-      this.tree?.focus();
+      // icon say, whose press put focus on the cell: bring it back. To the
+      // tree, or to Retry after a failed read; while the value loads, to
+      // the panel, which hands it on as soon as either is there. Never left
+      // outside the open panel, where no key reaches it.
+      this.focusPending = true;
+      this.handOnFocus();
+      if (this.focusPending) this.element.focus({ preventScroll: true });
       return;
     }
     if (this.isOpen) this.modalHost.close();
@@ -479,12 +489,14 @@ export class ValueInspector {
 
     this.destroyTree();
     this.loaded = null;
+    // The last value's: nothing is there to add until this one is shown.
+    this.updateExtractButtons(undefined);
     this.noticeEl.textContent = '';
     this.setMessage('');
     // Hiding Retry while it has focus drops focus out of the panel, where
     // Escape no longer reaches it: the panel holds it instead, and hands it
     // to the tree when the value is back.
-    const retryHadFocus = this.retryButton.contains(this.element.ownerDocument.activeElement);
+    const retryHadFocus = this.retryButton.contains(activeElementOf(this.element));
     this.retryButton.hidden = true;
     if (retryHadFocus) {
       this.focusPending = true;
@@ -549,10 +561,11 @@ export class ValueInspector {
 
   private showLoadError(): void {
     this.endLoading();
+    this.updateExtractButtons(undefined);
     this.setMessage(this.messages.values.loadFailed);
     this.retryButton.hidden = false;
     // Focus still waiting on the panel for the tree goes to Retry instead.
-    if (this.focusPending && this.element.ownerDocument.activeElement === this.element) {
+    if (this.focusPending && activeElementOf(this.element) === this.element) {
       this.handOnFocus();
     }
   }
@@ -574,7 +587,7 @@ export class ValueInspector {
       actionTitle: this.extract?.labels.value,
       onActiveChange: (node) => this.updateExtractButtons(node.data),
       onCopy: (node) => {
-        if (node.data) void this.copy(nodeJsonText(node.data));
+        if (node.data) this.copyNode(node.data);
       },
       onAction: this.extract
         ? (node) => {
@@ -585,7 +598,7 @@ export class ValueInspector {
     this.tree = tree;
     this.body.replaceChildren(tree.getElement());
     this.updateExtractButtons(tree.getActive()?.data);
-    if (this.focusPending && this.element.ownerDocument.activeElement === this.element) {
+    if (this.focusPending && activeElementOf(this.element) === this.element) {
       this.handOnFocus();
     }
   }
@@ -739,47 +752,90 @@ export class ValueInspector {
    * again, up to {@link INSPECTOR_COPY_CHARS}; past that it is too large to
    * copy.
    */
-  private async copyAll(): Promise<void> {
-    const target = this.target;
+  private copyAll(): void {
     const loaded = this.loaded;
-    if (!target || !loaded) return;
-    if (!loaded.truncated) {
-      await this.copy(prettyJson(loaded.json));
-      return;
-    }
-    const seq = this.loadSeq;
-    let cell: CellJson | undefined;
-    try {
-      cell = await fetchCellJson(this.bridge, target.tableName, target.column, target.rowId, {
-        maxChars: INSPECTOR_COPY_CHARS,
-        signal: this.controller?.signal,
-      });
-    } catch {
-      if (seq === this.loadSeq) this.flash(this.messages.values.copyFailed);
-      return;
-    }
-    if (seq !== this.loadSeq) return;
-    if (!cell || cell.text === null) {
-      this.flash(this.messages.values.copyFailed);
-      return;
-    }
-    if (cell.truncated) {
-      this.flash(this.messages.values.tooLargeToCopy);
-      return;
-    }
-    await this.copy(prettyJson(parseJsonTree(cell.text).root));
+    if (!this.target || !loaded) return;
+    this.copy(
+      loaded.truncated
+        ? this.readWhole().then((json) => prettyJson(json))
+        : () => prettyJson(loaded.json),
+    );
   }
 
-  private async copy(text: string): Promise<void> {
-    const seq = this.loadSeq;
-    let copied = true;
-    try {
-      await copyToClipboard(text, 'text');
-    } catch {
-      copied = false;
+  /**
+   * Ctrl/Cmd+C on a node: its JSON. In a value shown cut short, a node the
+   * cut runs through, a container it left open or the value it fell in, is
+   * read again with the rest, as Copy JSON reads the whole value: the tree
+   * closed it where the text ended, and a string or number cut short looks
+   * whole there. Every other node lies wholly inside what was read, and is
+   * copied from the tree.
+   */
+  private copyNode(node: ValueTreeNode): void {
+    const loaded = this.loaded;
+    if (!loaded) return;
+    const cut = loaded.truncated ? (loaded.cut ??= cutPath(loaded.json)) : [];
+    const depth = cut.indexOf(node.json);
+    const bucket = node.bucket;
+    // A bucket spans some of its container's children: cut only when it
+    // holds the last of them.
+    if (depth < 0 || (bucket && bucket.end < childCount(node.json))) {
+      this.copy(() => nodeJsonText(node));
+      return;
     }
-    if (seq !== this.loadSeq) return;
-    this.flash(copied ? this.messages.values.copied : this.messages.values.copyFailed);
+    this.copy(
+      this.readWhole().then((root) => {
+        // The same node in the whole value: the same last children, down.
+        let json: JsonNode | undefined = root;
+        for (let level = 0; level < depth && json; level++) {
+          json = childAt(json, childCount(cut[level]!) - 1);
+        }
+        if (!json) throw new Error('The value read again is not the one shown');
+        return prettyJson(bucket ? sliceOf(json, bucket) : json);
+      }),
+    );
+  }
+
+  /**
+   * The value read again for a copy, up to {@link INSPECTOR_COPY_CHARS}: the
+   * one shown was cut short. Rejects with a {@link CopyFailure} when it is
+   * longer still, and as a copy that failed when it cannot be read.
+   */
+  private async readWhole(): Promise<JsonNode> {
+    const target = this.target;
+    if (!target) throw new Error('The panel is closed');
+    const cell = await fetchCellJson(this.bridge, target.tableName, target.column, target.rowId, {
+      maxChars: INSPECTOR_COPY_CHARS,
+      signal: this.controller?.signal,
+    });
+    if (!cell || cell.text === null) throw new Error('No value to copy');
+    if (cell.truncated) throw new CopyFailure(this.messages.values.tooLargeToCopy);
+    return parseJsonTree(cell.text).root;
+  }
+
+  /**
+   * Put text on the clipboard, and say how it went: "Copied", or why not.
+   * The text comes as a function, so that a value too large to write out
+   * (nested past what a string can hold) fails as a copy does; or as a
+   * promise, for a value read again, whose clipboard write starts at once
+   * all the same (see {@link writeWhenRead}).
+   */
+  private copy(text: (() => string) | Promise<string>): void {
+    const seq = this.loadSeq;
+    let written: Promise<void>;
+    try {
+      written = typeof text === 'function' ? copyToClipboard(text(), 'text') : writeWhenRead(text);
+    } catch (err) {
+      written = Promise.reject(err);
+    }
+    const m = this.messages.values;
+    const say = (message: string): void => {
+      // A load or a close since: the message is not about what is shown.
+      if (seq === this.loadSeq && !this.destroyed) this.flash(message);
+    };
+    written.then(
+      () => say(m.copied),
+      (err: unknown) => say(err instanceof CopyFailure ? err.message : m.copyFailed),
+    );
   }
 
   // =========================================
@@ -861,11 +917,74 @@ export class ValueInspector {
     this.element.style.display = 'none';
     this.destroyTree();
     this.loaded = null;
+    this.updateExtractButtons(undefined);
     this.extractChoices = new WeakMap();
     this.extracting = null;
     this.target = null;
     this.onOpenChange?.(null);
   }
+}
+
+/** A copy that did not happen, for the reason its message tells the user. */
+class CopyFailure extends Error {}
+
+/**
+ * Write text that is still being read. Safari allows a clipboard write only
+ * while the click or key press that asked is being handled: a write after
+ * the read's await fails with `NotAllowedError`. A `ClipboardItem` given the
+ * promise starts the write now, and takes the text when it comes. Without
+ * `ClipboardItem`, the text is written once it is read.
+ */
+function writeWhenRead(text: Promise<string>): Promise<void> {
+  const clipboard = navigator.clipboard;
+  if (typeof ClipboardItem !== 'function' || typeof clipboard?.write !== 'function') {
+    return text.then((value) => copyToClipboard(value, 'text'));
+  }
+  const blob = text.then((value) => new Blob([value], { type: 'text/plain' }));
+  // Seen here: a read that failed is told below, never left unhandled.
+  blob.catch(() => undefined);
+  return clipboard.write([new ClipboardItem({ 'text/plain': blob })]).then(
+    () => undefined,
+    // A read that failed fails the write too, and its reason is the one to tell.
+    (err: unknown) => text.then(() => Promise.reject(err)),
+  );
+}
+
+/**
+ * The JSON nodes of a value cut short that the cut may run through: the
+ * root, its last child, that one's last child, and so on down. Every
+ * container still open where the text ended is one of them, and so is the
+ * value it ended in; every other node ended before a comma or its own
+ * closing bracket, inside what was read.
+ */
+function cutPath(root: JsonNode): JsonNode[] {
+  const path: JsonNode[] = [];
+  for (let node: JsonNode | undefined = root; node; node = childAt(node, childCount(node) - 1)) {
+    path.push(node);
+  }
+  return path;
+}
+
+/** How many children a JSON array or object holds; 0 for anything else. */
+function childCount(json: JsonNode): number {
+  return json.kind === 'array'
+    ? json.items.length
+    : json.kind === 'object'
+      ? json.entries.length
+      : 0;
+}
+
+/** A JSON array's item or an object's entry's value at `index`. */
+function childAt(json: JsonNode, index: number): JsonNode | undefined {
+  if (json.kind === 'array') return json.items[index];
+  return json.kind === 'object' ? json.entries[index]?.value : undefined;
+}
+
+/** The part of a container a bucket spans, as `nodeJsonText` copies it. */
+function sliceOf(json: JsonNode, { start, end }: ValueTreeBucket): JsonNode {
+  if (json.kind === 'array') return { kind: 'array', items: json.items.slice(start, end) };
+  if (json.kind === 'object') return { kind: 'object', entries: json.entries.slice(start, end) };
+  return json;
 }
 
 /** How a value inside JSON or VARIANT is read as a column, by the kind of the one shown. */

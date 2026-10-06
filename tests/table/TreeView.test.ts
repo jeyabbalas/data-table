@@ -1323,3 +1323,23 @@ describe('TreeView — the helpers the panels share', () => {
     expect(closeIcon()).not.toBe(icon);
   });
 });
+
+describe('TreeView — inside a shadow root', () => {
+  it('moves focus up with the active item when a node collapses over it', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    const tree = new TreeView(food().roots, { label: 'Food', initiallyExpanded: () => true });
+    trees.push(tree);
+    shadow.appendChild(tree.getElement());
+    itemFor(tree, 'plantain').focus();
+    expect(shadow.activeElement).toBe(itemFor(tree, 'plantain'));
+
+    // A double click that comes without its two clicks: see "lazy children".
+    mouse('dblclick', itemFor(tree, 'fruits').querySelector('.dt-value-tree__content')!);
+
+    expect(tree.getActive()?.data).toBe('fruits');
+    expect(shadow.activeElement).toBe(itemFor(tree, 'fruits'));
+    expectInvariants(tree);
+  });
+});

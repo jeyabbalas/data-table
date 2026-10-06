@@ -472,8 +472,8 @@ export class TreeView<T = unknown> {
   }
 
   private containsFocus(): boolean {
-    const focused = this.element.ownerDocument.activeElement;
-    return focused instanceof Node && this.element.contains(focused);
+    const focused = activeElementOf(this.element);
+    return focused !== null && this.element.contains(focused);
   }
 
   // =========================================
@@ -717,6 +717,21 @@ export function closeIcon(): SVGSVGElement {
   );
   svg.appendChild(path);
   return svg;
+}
+
+/**
+ * The focused element as `node`'s own root sees it: inside a shadow root,
+ * `document.activeElement` is the shadow root's host. `null` for a node in
+ * no document.
+ *
+ * @example
+ * ```ts
+ * const inside = panel.contains(activeElementOf(panel));
+ * ```
+ */
+export function activeElementOf(node: Node): Element | null {
+  const root = node.getRootNode();
+  return 'activeElement' in root ? (root as Document | ShadowRoot).activeElement : null;
 }
 
 /** `rows` and their expanded descendants, in display order. Iterative: values nest deeply. */

@@ -906,3 +906,426 @@ describe('ValueInspector', () => {
     });
   });
 });
+
+describe('ValueInspector — focus while the value is not there yet', () => {
+  /** The second click of a double click on the inspect icon: its press focused the cell. */
+  function askAgain(inspector: ValueInspector): void {
+    cell.focus();
+    openOn(inspector);
+  }
+
+  it('brings focus back from the cell into the panel, which hands it to the tree', async () => {
+    const read = deferred<unknown[]>();
+    const { bridge, calls } = makeBridge(() => read.promise);
+    const inspector = mount(bridge);
+    grid.focus();
+    openOn(inspector);
+    await nextFrame();
+    expect(document.activeElement).toBe(panel(inspector));
+
+    askAgain(inspector);
+    expect(calls).toHaveLength(1);
+    expect(document.activeElement).toBe(panel(inspector));
+
+    read.resolve(jsonRow('["a"]'));
+    await settle();
+    expect(document.activeElement).toBe(items(inspector)[0]);
+    inspector.destroy();
+  });
+
+  it('brings it back to Retry after a failed read, and Escape closes the panel from there', async () => {
+    const { bridge } = makeBridge(() => {
+      throw new Error('boom');
+    });
+    const inspector = mount(bridge);
+    grid.focus();
+    openOn(inspector);
+    await settle();
+    await nextFrame();
+    const retry = q<HTMLButtonElement>(inspector, '.dt-value-inspector__retry');
+    expect(document.activeElement).toBe(retry);
+
+    askAgain(inspector);
+    expect(document.activeElement).toBe(retry);
+    retry.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    expect(inspector.getIsOpen()).toBe(false);
+    expect(document.activeElement).toBe(grid);
+    inspector.destroy();
+  });
+
+  it('hands focus to the tree inside a shadow root too', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.appendChild(root);
+    const read = deferred<unknown[]>();
+    const { bridge } = makeBridge(() => read.promise);
+    const inspector = mount(bridge);
+    grid.focus();
+    openOn(inspector);
+    await nextFrame();
+    expect(shadow.activeElement).toBe(panel(inspector));
+
+    read.resolve(jsonRow('["a","b"]'));
+    await settle();
+    expect(shadow.activeElement).toBe(items(inspector)[0]);
+    // And the tree's keys work from there.
+    items(inspector)[0]!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+    );
+    expect(shadow.activeElement).toBe(items(inspector)[1]);
+    inspector.destroy();
+  });
+
+  it('keeps focus in the panel inside a shadow root when Retry hides itself', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.appendChild(root);
+    let fail = true;
+    const read = deferred<unknown[]>();
+    const { bridge } = makeBridge(() => {
+      if (fail) throw new Error('boom');
+      return read.promise;
+    });
+    const inspector = mount(bridge);
+    grid.focus();
+    openOn(inspector);
+    await settle();
+    await nextFrame();
+    const retry = q<HTMLButtonElement>(inspector, '.dt-value-inspector__retry');
+    expect(shadow.activeElement).toBe(retry);
+
+    fail = false;
+    retry.click();
+    expect(retry.hidden).toBe(true);
+    expect(shadow.activeElement).toBe(panel(inspector));
+    read.resolve(jsonRow('["ok"]'));
+    await settle();
+    expect(shadow.activeElement).toBe(items(inspector)[0]);
+    inspector.destroy();
+  });
+});
+
+describe('ValueInspector — the extract buttons of a value not shown', () => {
+  const extract: ValueInspectorExtract = {
+    onExtract: () => undefined,
+    labels: {
+      value: 'Add as column',
+      length: 'Add length as column',
+      size: 'Add size as column',
+      tag: 'Add tag as column',
+    },
+  };
+  const shownButtons = (inspector: ValueInspector): string[] =>
+    Array.from(
+      panel(inspector).querySelectorAll<HTMLButtonElement>(
+        '.dt-value-inspector__button:not([hidden])',
+      ),
+      (b) => b.textContent ?? '',
+    );
+
+  it('hides them while another value loads, after its read fails, and once closed', async () => {
+    let next: () => unknown[] | Promise<unknown[]> = () => jsonRow('["a","b"]');
+    const { bridge } = makeBridge(() => next());
+    const inspector = mount(bridge, { extract });
+    openOn(inspector);
+    await settle();
+    // A list's root: its length.
+    expect(shownButtons(inspector)).toEqual(['Add length as column', 'Copy JSON', 'Close']);
+
+    const read = deferred<unknown[]>();
+    next = () => read.promise;
+    openOn(inspector, POINT, 4, 4);
+    expect(shownButtons(inspector)).toEqual(['Copy JSON', 'Close']);
+    read.resolve(jsonRow('{"x":1,"y":2,"tier":"a"}'));
+    await settle();
+    // A struct's root offers nothing; its fields offer their values.
+    expect(shownButtons(inspector)).toEqual(['Copy JSON', 'Close']);
+
+    next = () => jsonRow('["a","b"]');
+    openOn(inspector, TAGS, 5, 5);
+    await settle();
+    expect(shownButtons(inspector)).toContain('Add length as column');
+    next = () => {
+      throw new Error('boom');
+    };
+    openOn(inspector, POINT, 6, 6);
+    await settle();
+    expect(shownButtons(inspector)).toEqual(['Copy JSON', 'Close']);
+    expect(q(inspector, '.dt-value-inspector__retry').hidden).toBe(false);
+
+    inspector.close();
+    expect(
+      panel(inspector).querySelectorAll('.dt-value-inspector__button:not([hidden])'),
+    ).toHaveLength(2);
+    inspector.destroy();
+  });
+});
+
+describe('ValueInspector — copying a value shown cut short', () => {
+  /** A value whose first part is shown (`shown`), and whose whole `whole` a copy reads. */
+  function cutValue(shown: string, whole: string): ReturnType<typeof makeBridge> {
+    return makeBridge(({ sql }) =>
+      sql.includes(String(INSPECTOR_COPY_CHARS))
+        ? jsonRow(whole, 3_000_000)
+        : jsonRow(shown, 3_000_000),
+    );
+  }
+  const ctrlC = (item: HTMLElement): KeyboardEvent => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'c',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    item.dispatchEvent(event);
+    return event;
+  };
+  const itemLabelled = (inspector: ValueInspector, label: string): HTMLElement =>
+    items(inspector).find((item) => item.getAttribute('aria-label') === label)!;
+
+  it('reads the value again for a node the cut runs through, and copies that node whole', async () => {
+    const { bridge, calls } = cutValue('["a","b","c', '["a","b","cdef","d","e"]');
+    const inspector = mount(bridge);
+    openOn(inspector);
+    await settle();
+    expect(labels(inspector)).toEqual(['tags: [varchar], 3 items', '1: "a"', '2: "b"', '3: "c"']);
+
+    // The root: every item, the ones the tree never saw included.
+    ctrlC(items(inspector)[0]!);
+    await settle(10);
+    expect(calls).toHaveLength(2);
+    expect(writeText).toHaveBeenLastCalledWith('[\n  "a",\n  "b",\n  "cdef",\n  "d",\n  "e"\n]');
+    expect(message(inspector)).toBe('Copied');
+
+    // The string the cut fell in: whole.
+    ctrlC(itemLabelled(inspector, '3: "c"'));
+    await settle(10);
+    expect(calls).toHaveLength(3);
+    expect(writeText).toHaveBeenLastCalledWith('"cdef"');
+
+    // A string that ended before the cut: from the tree, no read.
+    ctrlC(itemLabelled(inspector, '1: "a"'));
+    await settle(10);
+    expect(calls).toHaveLength(3);
+    expect(writeText).toHaveBeenLastCalledWith('"a"');
+    inspector.destroy();
+  });
+
+  it('never copies a number cut short as if it were whole', async () => {
+    const nums: ColumnSchema = {
+      name: 'nums',
+      type: 'nested',
+      nullable: true,
+      originalType: 'BIGINT[]',
+    };
+    const { bridge } = cutValue('[1,2,12', '[1,2,1234567]');
+    const inspector = mount(bridge);
+    openOn(inspector, nums);
+    await settle();
+    expect(labels(inspector)[3]).toBe('3: 12');
+    ctrlC(items(inspector)[0]!);
+    await settle(10);
+    expect(writeText).toHaveBeenLastCalledWith('[\n  1,\n  2,\n  1234567\n]');
+    ctrlC(items(inspector)[3]!);
+    await settle(10);
+    expect(writeText).toHaveBeenLastCalledWith('1234567');
+    inspector.destroy();
+  });
+
+  it('copies a container the cut left alone from the tree, and the one it ran through whole', async () => {
+    const matrix: ColumnSchema = {
+      name: 'm',
+      type: 'nested',
+      nullable: true,
+      originalType: 'INTEGER[][]',
+    };
+    const { bridge, calls } = cutValue('[[1,2],[3,4', '[[1,2],[3,4,5]]');
+    const inspector = mount(bridge);
+    openOn(inspector, matrix);
+    await settle();
+    ctrlC(itemLabelled(inspector, '1: [integer], 2 items'));
+    await settle(10);
+    expect(calls).toHaveLength(1);
+    expect(writeText).toHaveBeenLastCalledWith('[\n  1,\n  2\n]');
+    ctrlC(itemLabelled(inspector, '2: [integer], 2 items'));
+    await settle(10);
+    expect(calls).toHaveLength(2);
+    expect(writeText).toHaveBeenLastCalledWith('[\n  3,\n  4,\n  5\n]');
+    inspector.destroy();
+  });
+
+  it('reads again for a bucket that holds the cut, and copies it from the tree when it does not', async () => {
+    const list: ColumnSchema = {
+      name: 'n',
+      type: 'nested',
+      nullable: true,
+      originalType: 'INTEGER[]',
+    };
+    // 250 numbers; the panel read the first 150, the last of them cut short.
+    const whole = JSON.stringify(Array.from({ length: 250 }, (_, i) => i));
+    const shown = whole.slice(0, whole.indexOf(',150,') - 1);
+    const { bridge, calls } = cutValue(shown, whole);
+    const inspector = mount(bridge);
+    openOn(inspector, list);
+    await settle();
+    expect(labels(inspector)).toEqual(['n: [integer], 150 items', '[1 … 100]', '[101 … 150]']);
+
+    ctrlC(itemLabelled(inspector, '[1 … 100]'));
+    await settle(10);
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(writeText.mock.lastCall![0] as string)).toEqual(
+      Array.from({ length: 100 }, (_, i) => i),
+    );
+
+    ctrlC(itemLabelled(inspector, '[101 … 150]'));
+    await settle(10);
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(writeText.mock.lastCall![0] as string)).toEqual(
+      Array.from({ length: 50 }, (_, i) => 100 + i),
+    );
+    inspector.destroy();
+  });
+
+  it('says a node of a value over 8 MiB is too large to copy, and copies nothing', async () => {
+    const { bridge } = makeBridge(() => jsonRow('["a","b","c', 9_000_000));
+    const inspector = mount(bridge);
+    openOn(inspector);
+    await settle();
+    ctrlC(items(inspector)[0]!);
+    await settle(10);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(message(inspector)).toBe('Too large to copy');
+    // A node wholly inside what was read still copies.
+    ctrlC(items(inspector)[1]!);
+    await settle(10);
+    expect(writeText).toHaveBeenLastCalledWith('"a"');
+    inspector.destroy();
+  });
+});
+
+describe('ValueInspector — copying from inside the click', () => {
+  /** A `ClipboardItem` stand-in that keeps what it was given. */
+  class FakeClipboardItem {
+    constructor(readonly items: Record<string, Promise<Blob>>) {}
+  }
+  let write: ReturnType<typeof vi.fn>;
+  let inClick = false;
+  let writesInClick = 0;
+
+  beforeEach(() => {
+    write = vi.fn(async (data: FakeClipboardItem[]) => {
+      if (inClick) writesInClick++;
+      await data[0]!.items['text/plain'];
+    });
+    writesInClick = 0;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText, write },
+    });
+    vi.stubGlobal('ClipboardItem', FakeClipboardItem);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** A cut value whose read for Copy JSON waits for `gate`. */
+  function slowCopyRead(whole: string, chars = whole.length) {
+    const gate = deferred<void>();
+    const { bridge, calls } = makeBridge(async ({ sql }) => {
+      if (!sql.includes(String(INSPECTOR_COPY_CHARS))) return jsonRow('["a"', 3_000_000);
+      await gate.promise;
+      return jsonRow(whole, chars);
+    });
+    return { bridge, calls, gate };
+  }
+
+  function clickCopyJson(inspector: ValueInspector): void {
+    inClick = true;
+    try {
+      q<HTMLButtonElement>(inspector, '.dt-value-inspector__button').click();
+    } finally {
+      inClick = false;
+    }
+  }
+
+  it('starts the write in the click, with the text to come, when ClipboardItem is there', async () => {
+    const { bridge, gate } = slowCopyRead('["a","b"]');
+    const inspector = mount(bridge);
+    openOn(inspector);
+    await settle();
+    clickCopyJson(inspector);
+    expect(writesInClick).toBe(1);
+    const item = write.mock.calls[0]![0][0] as FakeClipboardItem;
+    gate.resolve();
+    expect(await (await item.items['text/plain']!).text()).toBe('[\n  "a",\n  "b"\n]');
+    await settle(10);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(message(inspector)).toBe('Copied');
+    inspector.destroy();
+  });
+
+  it('says why when the value read again is too large, and the write gets no text', async () => {
+    const { bridge, gate } = slowCopyRead('["a","b"]', 9_000_000);
+    const inspector = mount(bridge);
+    openOn(inspector);
+    await settle();
+    clickCopyJson(inspector);
+    const item = write.mock.calls[0]![0][0] as FakeClipboardItem;
+    gate.resolve();
+    await expect(item.items['text/plain']).rejects.toThrow('Too large to copy');
+    await settle(10);
+    expect(message(inspector)).toBe('Too large to copy');
+    inspector.destroy();
+  });
+
+  it('writes the text once read where there is no ClipboardItem', async () => {
+    vi.stubGlobal('ClipboardItem', undefined);
+    const { bridge, gate } = slowCopyRead('["a","b"]');
+    const inspector = mount(bridge);
+    openOn(inspector);
+    await settle();
+    clickCopyJson(inspector);
+    expect(write).not.toHaveBeenCalled();
+    expect(writeText).not.toHaveBeenCalled();
+    gate.resolve();
+    await settle(10);
+    expect(writeText).toHaveBeenCalledWith('[\n  "a",\n  "b"\n]');
+    expect(message(inspector)).toBe('Copied');
+    inspector.destroy();
+  });
+});
+
+describe('ValueInspector — a value too deep to write out', () => {
+  it('says the copy failed, from Copy JSON and from Ctrl/Cmd+C', async () => {
+    const doc: ColumnSchema = { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' };
+    // Indented, this JSON would pass the longest string JavaScript holds.
+    const text = '['.repeat(20_000) + ']'.repeat(20_000);
+    const { bridge } = makeBridge(() => jsonRow(text));
+    const inspector = mount(bridge);
+    openOn(inspector, doc);
+    await settle();
+
+    q<HTMLButtonElement>(inspector, '.dt-value-inspector__button').click();
+    await settle(10);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(message(inspector)).toBe('Copy failed');
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'c',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    items(inspector)[0]!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    await settle(10);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(message(inspector)).toBe('Copy failed');
+    inspector.destroy();
+  });
+});

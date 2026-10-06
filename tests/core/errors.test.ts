@@ -134,11 +134,14 @@ describe('reconstructError', () => {
     expect(reconstructError({ code: 'DESTROYED', message: 'd' })).toBeInstanceOf(DestroyedError);
   });
 
-  it('maps BRIDGE_NOT_READY / INVARIANT to ConfigurationError', () => {
+  it('maps BRIDGE_NOT_READY / INVARIANT / CHUNK_LOAD_FAILED to ConfigurationError', () => {
     expect(reconstructError({ code: 'BRIDGE_NOT_READY', message: 'x' })).toBeInstanceOf(
       ConfigurationError,
     );
     expect(reconstructError({ code: 'INVARIANT', message: 'x' })).toBeInstanceOf(
+      ConfigurationError,
+    );
+    expect(reconstructError({ code: 'CHUNK_LOAD_FAILED', message: 'x' })).toBeInstanceOf(
       ConfigurationError,
     );
   });

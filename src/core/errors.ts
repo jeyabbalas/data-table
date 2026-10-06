@@ -18,7 +18,7 @@
  * | `DERIVED_*`   | {@link DerivedColumnError}   |
  * | `PERSIST_*` / `IDB_*` | {@link PersistenceError} |
  * | `ANNOTATION_*` | {@link AnnotationError}     |
- * | `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` / `BRIDGE_*` / `PRESET_*` / `INVARIANT` | {@link ConfigurationError} |
+ * | `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` / `BRIDGE_*` / `PRESET_*` / `INVARIANT` / `CHUNK_LOAD_FAILED` | {@link ConfigurationError} |
  * | `DESTROYED`   | {@link DestroyedError}       |
  *
  * {@link reconstructError} maps a plain `{ code, message, details }` payload
@@ -366,6 +366,7 @@ export function reconstructError(payload: ErrorPayload): DataTableError {
     code === 'CONTAINER_INVALID' ||
     code === 'OPTIONS_INVALID' ||
     code === 'INVARIANT' ||
+    code === 'CHUNK_LOAD_FAILED' ||
     code.startsWith('CONFIG_') ||
     code.startsWith('OPTIONS_') ||
     code.startsWith('CONTAINER_') ||

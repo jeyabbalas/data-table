@@ -20,6 +20,7 @@
 
 import type { DuckDBTypeNode } from '../core/duckdbType';
 import { ExportError } from '../core/errors';
+import { setOwnProperty } from '../core/ownProperty';
 import type { TableState } from '../core/State';
 import { readJsonValue } from '../data/cellValue';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -127,17 +128,7 @@ export function formatRowForJSON(
       type !== undefined && typeof value === 'string'
         ? readJsonValue(value, type, 'export')
         : formatValueForJSON(value);
-    if (col === '__proto__') {
-      // Assigning would set the object's prototype, not a key.
-      Object.defineProperty(result, col, {
-        value: formatted,
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      });
-    } else {
-      result[col] = formatted;
-    }
+    setOwnProperty(result, col, formatted);
   }
   return result;
 }

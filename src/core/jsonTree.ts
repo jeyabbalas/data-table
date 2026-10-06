@@ -33,6 +33,7 @@ import type {
   DuckDBUnionMember,
   DuckDBUnionTypeNode,
 } from './duckdbType';
+import { setOwnProperty } from './ownProperty';
 
 // ---------------------------------------------------------------------------
 // The tree
@@ -528,26 +529,6 @@ export function jsonNumberToJs(raw: string): number | bigint {
 // Materializing
 // ---------------------------------------------------------------------------
 
-/**
- * Set `key` on an object built by {@link materialize} as an own, enumerable
- * data property, the way `JSON.parse` does. Plain assignment would run the
- * `__proto__` setter (changing the object's prototype and losing the key)
- * or any other inherited accessor, so a key the object already answers to,
- * inherited or set before, is defined instead.
- */
-function setKey(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (key in target) {
-    Object.defineProperty(target, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  } else {
-    target[key] = value;
-  }
-}
-
 // How a container made by `materialize` is filled from its JSON.
 /** A JSON array → a JS array; the task's type is the element type. */
 const FILL_ITEMS = 0;
@@ -852,7 +833,7 @@ export function materialize(
           const member = unionMember(as, entry.key);
           if (member) {
             const out: Record<string, unknown> = {};
-            setKey(out, entry.key, start(entry.value, member.type));
+            setOwnProperty(out, entry.key, start(entry.value, member.type));
             return out;
           }
         }
@@ -872,7 +853,7 @@ export function materialize(
   ): void => {
     const converted = start(value, map.value);
     if (out instanceof Map) out.set(mapKeyValue(text, map.key), converted);
-    else setKey(out as Record<string, unknown>, text, converted);
+    else setOwnProperty(out as Record<string, unknown>, text, converted);
   };
 
   const result = start(node, type);
@@ -894,8 +875,8 @@ export function materialize(
           const entry = entries[k]!;
           const field = fields[k];
           // An entry beyond the type's fields keeps its own key, read from the JSON alone.
-          if (field) setKey(object, field.name!, start(entry.value, field.type));
-          else setKey(object, entry.key, start(entry.value, undefined));
+          if (field) setOwnProperty(object, field.name!, start(entry.value, field.type));
+          else setOwnProperty(object, entry.key, start(entry.value, undefined));
         }
         break;
       }
@@ -926,7 +907,7 @@ export function materialize(
       case FILL_OBJECT: {
         const object = out as Record<string, unknown>;
         for (const entry of (json as JsonObjectNode).entries) {
-          setKey(object, entry.key, start(entry.value, undefined));
+          setOwnProperty(object, entry.key, start(entry.value, undefined));
         }
         break;
       }

@@ -9,6 +9,7 @@ import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { maxSeverity } from '../annotations/severity';
 import type { Annotation } from '../annotations/types';
 import type { StateActions } from '../core/Actions';
+import { setOwnProperty } from '../core/ownProperty';
 import type { Signal } from '../core/Signal';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -878,21 +879,8 @@ export class TableBody {
       for (const key of Object.keys(cached)) {
         if (key !== ROWID_COLUMN && !columns.set.has(key)) delete cached[key];
       }
-      for (const key of missing) {
-        // Assigning a column named __proto__ would run Object.prototype's
-        // setter, dropping the value and maybe changing the row's prototype,
-        // so it is defined as the row's own, as the worker builds rows.
-        if (key === '__proto__') {
-          Object.defineProperty(cached, key, {
-            value: fresh[key],
-            writable: true,
-            enumerable: true,
-            configurable: true,
-          });
-        } else {
-          cached[key] = fresh[key];
-        }
-      }
+      // As the worker builds rows: a column named __proto__ stays a column.
+      for (const key of missing) setOwnProperty(cached, key, fresh[key]);
     }
     this.blockColumns.set(blockStart, columns.set);
   }

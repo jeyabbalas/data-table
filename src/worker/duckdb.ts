@@ -3,6 +3,7 @@
  */
 
 import * as duckdb from '@duckdb/duckdb-wasm';
+import { setOwnProperty } from '../core/ownProperty';
 import { duckdbWorkerSource } from './openFileFix';
 
 let db: duckdb.AsyncDuckDB | null = null;
@@ -198,27 +199,6 @@ function readArrowRow(obj: object): ArrowRowEntries | null {
     entries.push(step.value);
   }
   return { isStruct: Object.hasOwn(proto, ARROW_ROW_INDEX), entries };
-}
-
-/**
- * Set `key` on a plain object being built as an own, enumerable data
- * property, the way `JSON.parse` does. Assigning `__proto__` would run
- * `Object.prototype`'s setter instead, changing the object's prototype and
- * losing the key, so that key is defined. Every other inherited property is
- * a writable data property, which assignment shadows, and assigning is the
- * cheaper on rows a thousand columns wide.
- */
-function setOwnProperty(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (key === '__proto__') {
-    Object.defineProperty(target, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
-  } else {
-    target[key] = value;
-  }
 }
 
 /**

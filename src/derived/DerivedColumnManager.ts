@@ -26,9 +26,8 @@
  * @see DefaultExpressionEditor
  */
 
-import { collidingColumnName, columnNameKey } from '../core/columnNames';
+import { takenColumnName } from '../core/columnNames';
 import { ConfigurationError, DerivedColumnError } from '../core/errors';
-import { ROWID_COLUMN } from '../core/types';
 import type { ColumnSchema, DataType } from '../core/types';
 import { mapDuckDBType } from '../data/SchemaDetector';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -451,13 +450,10 @@ export class DerivedColumnManager {
 
     for (const def of defs) {
       try {
-        const taken =
-          columnNameKey(def.name) === ROWID_COLUMN
-            ? ROWID_COLUMN
-            : collidingColumnName(def.name, [
-                ...columnNames,
-                ...this.columns.map((c) => c.def.name),
-              ]);
+        const taken = takenColumnName(def.name, [
+          ...columnNames,
+          ...this.columns.map((c) => c.def.name),
+        ]);
         if (taken !== undefined) {
           throw new DerivedColumnError(
             `Column name "${def.name}" is taken by the column "${taken}"${taken === def.name ? '' : ' (column names ignore letter case)'}`,

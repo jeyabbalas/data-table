@@ -9,10 +9,10 @@
  */
 
 import type { StateActions } from '../core/Actions';
-import { parseDuckDBType } from '../core/duckdbType';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
+import { outlinedColumnType } from '../nested/typeOutline';
 import type { Filter } from './FilterTypes';
 
 /**
@@ -566,11 +566,9 @@ export class FilterPanelField {
       // find only the member the text reads as, and a VARIANT would fail on
       // values of other types. A JSON value too: compared as JSON, text that
       // is not JSON is a Conversion Error, and JSON that is compares as its
-      // text anyway. The pattern modes below already compare text.
-      if (
-        this.column.type === 'nested' ||
-        parseDuckDBType(this.column.originalType ?? '').kind === 'json'
-      ) {
+      // text anyway. The pattern modes below already compare text. These are
+      // the columns whose header shows a type outline.
+      if (outlinedColumnType(this.column) !== null) {
         return { type: 'point', column: col, value, valueType: 'text' };
       }
       return { type: 'point', column: col, value };

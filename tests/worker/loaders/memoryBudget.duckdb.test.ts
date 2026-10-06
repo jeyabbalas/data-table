@@ -229,6 +229,38 @@ describe('Parquet memory check (real DuckDB)', () => {
       60_000,
     );
 
+    it.each([
+      [
+        'a short list of long text and a long list of ids',
+        `{'chunks': [repeat(chr(97 + CAST(range % 26 AS INTEGER)), 5000),
+                     repeat('z', 4999) || CAST(range % 10 AS VARCHAR)],
+          'ids': list_transform(range(2000), lambda i: i + range)}`,
+        'budget_struct_lists',
+      ],
+      [
+        'a tag list and an embedding',
+        `{'tags': list_transform(range(5), lambda i:
+                    (['outdoor', 'portrait', 'sunset', 'city', 'people'])[1 + CAST((i + range) % 5 AS INTEGER)]),
+          'embedding': CAST(list_transform(range(768), lambda i: CAST(i AS FLOAT)) AS FLOAT[768])}`,
+        'budget_struct_embedding',
+      ],
+    ])(
+      'estimates 20,000 rows of a struct of %s within 3%',
+      async (_label, value, tableName) => {
+        // One items average for every list in the column, and one length
+        // for all its text, charged each list the other's: the first came
+        // out 189 times the table's 0.53 GB, and the load was refused; the
+        // second 1.7 times, which refused 600,000 rows that fit.
+        const { footprint, actual } = await estimateAndLoad(
+          `SELECT range AS id, ${value} AS doc FROM range(20000)`,
+          tableName,
+        );
+        expect(footprint.tableBytes / actual).toBeGreaterThan(0.97);
+        expect(footprint.tableBytes / actual).toBeLessThan(1.03);
+      },
+      120_000,
+    );
+
     it('errs high on VARIANT, by less than half', async () => {
       // Sized from its text: objects come out 1.3× here, 1.6× at 200,000 rows.
       const { footprint, actual } = await estimateAndLoad(

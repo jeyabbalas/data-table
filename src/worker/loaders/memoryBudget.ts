@@ -20,7 +20,8 @@
  *
  * Nested columns (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) are sized from
  * the columns DuckDB stores for them, which {@link storageColumns} reads
- * off the type, with list lengths and text lengths from the same sample.
+ * off the type, with the lengths of their lists and text from a sample:
+ * each list and each text value inside its own.
  *
  * The costs below were measured on DuckDB 1.5.4 (duckdb-wasm 1.33.1-dev57);
  * see docs/dev/memory-envelope.md. `memoryBudget.duckdb.test.ts` checks the
@@ -72,7 +73,7 @@ const LIST_OFFSET_BYTES = 8;
 /**
  * Items assumed per list or map the length sample does not measure: lists
  * and maps inside another list, map or array, and all of them when the
- * sample fails.
+ * sample fails or leaves their column out.
  */
 const DEFAULT_LIST_ITEMS = 4;
 /** Bytes assumed per text value when the sample does not measure them. */
@@ -193,26 +194,47 @@ const VARIANT_KEY_BYTES = 8;
 const VARIANT_NODE_DATA_BYTES = 8;
 
 /**
- * What the length sample measured about a nested column's values. The text
- * values inside it take `averageLength` (see {@link valueWidth}).
+ * The path of a node inside a column's type, which keys the lengths in
+ * {@link NestedLengths}: the index of each step down from the column's own
+ * type, whose path is ''. A STRUCT's children are its fields and a UNION's
+ * its members, in order; a LIST's or ARRAY's child is its element, and a
+ * MAP's are its key and its value. In `STRUCT(chunks VARCHAR[], ids
+ * BIGINT[])`, `chunks` is at `/0`, its text at `/0/0`, and `ids` at `/1`.
+ */
+function childPath(path: string, index: number): string {
+  return `${path}/${index}`;
+}
+
+/**
+ * What the length sample measured inside a nested column, keyed by each
+ * node's path (see {@link childPath}). Each list and each text node has its
+ * own: one average for the whole column charged every list in it the same
+ * items and every text value the same bytes, so a struct of two
+ * 5,000-character chunks and 2,000 ids came out at 189 times its size.
  */
 export interface NestedLengths {
   /**
-   * Average items per list or map at the column's outermost level of lists:
-   * the column itself, or a list or map reached through struct fields and
-   * union members. Lists and maps inside those hold
+   * Average items per list or map, for those at the column's outermost
+   * level of lists: the column itself, or a list or map reached through
+   * struct fields and union members. Lists and maps inside those hold
    * {@link DEFAULT_LIST_ITEMS} (4) items each.
    */
-  readonly items?: number;
-  /** VARIANT values inside, and values of a type the parser cannot read. */
-  readonly variant?: VariantLengths;
+  readonly items?: ReadonlyMap<string, number>;
+  /**
+   * Average bytes of the text values at each text node the sample reached:
+   * one outside any list, or the items of a list at the outermost level.
+   */
+  readonly text?: ReadonlyMap<string, number>;
+  /** VARIANT values, and values of a type the parser cannot read. */
+  readonly variant?: ReadonlyMap<string, VariantLengths>;
 }
 
 /**
  * The columns DuckDB stores for a table column of `columnType` (see
- * {@link StorageColumn}). Text values take `averageLength` bytes plus a
- * 4-byte offset wherever they sit; lists and maps take the items in
- * `lengths`, or {@link DEFAULT_LIST_ITEMS} (4) where it has none.
+ * {@link StorageColumn}). Each text value takes a 4-byte offset plus the
+ * bytes `lengths` has for its node, or `averageLength` where it has none;
+ * each list and map takes the items `lengths` has for it, or
+ * {@link DEFAULT_LIST_ITEMS} (4).
  */
 export function storageColumns(
   columnType: string,
@@ -233,8 +255,8 @@ export function storageColumns(
     add(perRow, width, width);
   };
 
-  const variant = (perRow: number): void => {
-    const { length, nodes } = lengths.variant ?? DEFAULT_VARIANT;
+  const variant = (perRow: number, path: string): void => {
+    const { length, nodes } = lengths.variant?.get(path) ?? DEFAULT_VARIANT;
     const children = Math.max(0, nodes - 1);
     mask(perRow); // the VARIANT
     mask(perRow); // its STRUCT
@@ -251,104 +273,51 @@ export function storageColumns(
     text(perRow, length + VARIANT_NODE_DATA_BYTES * nodes); // data: BLOB
   };
 
-  // `outermost`: no list, map or array encloses the node.
-  const visit = (node: DuckDBTypeNode, perRow: number, outermost: boolean): void => {
+  const visit = (node: DuckDBTypeNode, perRow: number, path: string): void => {
     switch (node.kind) {
       case 'scalar':
       case 'json':
-        if (textLength(node)) text(perRow, averageLength);
+        if (textLength(node)) text(perRow, lengths.text?.get(path) ?? averageLength);
         else scalar(perRow, node.sqlType);
         return;
       case 'list':
       case 'map': {
-        const items = outermost ? (lengths.items ?? DEFAULT_LIST_ITEMS) : DEFAULT_LIST_ITEMS;
+        const items = lengths.items?.get(path) ?? DEFAULT_LIST_ITEMS;
         offsets(perRow);
         if (node.kind === 'list') {
-          visit(node.element, perRow * items, false);
+          visit(node.element, perRow * items, childPath(path, 0));
           return;
         }
         mask(perRow * items); // each entry's STRUCT(key, value)
-        visit(node.key, perRow * items, false);
-        visit(node.value, perRow * items, false);
+        visit(node.key, perRow * items, childPath(path, 0));
+        visit(node.value, perRow * items, childPath(path, 1));
         return;
       }
       case 'array':
         mask(perRow);
-        visit(node.element, perRow * node.size, false);
+        visit(node.element, perRow * node.size, childPath(path, 0));
         return;
       case 'struct':
         mask(perRow);
-        for (const field of node.fields) visit(field.type, perRow, outermost);
+        node.fields.forEach((field, i) => visit(field.type, perRow, childPath(path, i)));
         return;
       case 'union':
         mask(perRow);
         add(perRow, 1, 1); // the tag
-        for (const member of node.members) visit(member.type, perRow, outermost);
+        node.members.forEach((member, i) => visit(member.type, perRow, childPath(path, i)));
         return;
       case 'variant':
-        variant(perRow);
+        variant(perRow, path);
         return;
       case 'unknown':
         // Text the parser cannot read: sized like a VARIANT if it looks nested.
-        if (dataTypeOf(node) === 'nested') variant(perRow);
+        if (dataTypeOf(node) === 'nested') variant(perRow, path);
         else scalar(perRow, node.sqlType);
         return;
     }
   };
-  visit(parseDuckDBType(columnType), 1, true);
+  visit(parseDuckDBType(columnType), 1, '');
   return columns;
-}
-
-/**
- * Bytes one value of `columnType` takes in DuckDB's column segments,
- * validity masks aside: the sum over the columns that store it (see
- * {@link storageColumns}). Text is a 4-byte offset plus its bytes, with
- * `averageLength` the mean byte length, inside nested values too; a LIST
- * adds an 8-byte offset to its items, an ARRAY `size` items, a STRUCT its
- * fields, a MAP its entries' keys and values, a UNION a tag byte and every
- * member. A `FLOAT[768]` embedding is 3,072 bytes.
- */
-export function valueWidth(
-  columnType: string,
-  averageLength = DEFAULT_TEXT_LENGTH,
-  lengths?: NestedLengths,
-): number {
-  return storageColumns(columnType, averageLength, lengths).reduce(
-    (sum, column) => sum + column.perRow * column.width,
-    0,
-  );
-}
-
-/**
- * Bytes of a column's first segment, sized for one vector of values. Text
- * columns hold 16-byte references there, however long their values; other
- * scalars hold `width`-byte values. A nested column's is that of its
- * outermost storage column: a LIST's or MAP's offsets (16-byte slots), or
- * none for a STRUCT, ARRAY, UNION or VARIANT, whose outermost column is a
- * validity mask.
- */
-export function firstSegmentBytes(columnType: string, width: number): number {
-  const node = parseDuckDBType(columnType);
-  if (dataTypeOf(node) === 'nested') return storageColumns(columnType)[0]!.headBytes;
-  const slot = textLength(node) ? REFERENCE_SLOT_BYTES : width;
-  return Math.min(BLOCK_BYTES, VECTOR_ROWS * slot);
-}
-
-/**
- * Size of an in-memory DuckDB table with `rows` rows and scalar columns of
- * the given value widths; see {@link estimateStorageBytes}. `headBytes`
- * gives each column's first segment, by default 2,048 values of its width.
- */
-export function estimateTableBytes(rows: number, widths: number[], headBytes?: number[]): number {
-  return estimateStorageBytes(
-    rows,
-    widths.map((width, i) => ({
-      perRow: 1,
-      width,
-      headBytes: headBytes?.[i] ?? Math.min(BLOCK_BYTES, VECTOR_ROWS * width),
-      leaf: true,
-    })),
-  );
 }
 
 /**
@@ -602,10 +571,15 @@ type ProbeKind =
 /** Per-row SQL over one nested column, which the sample sums. */
 interface LengthProbe {
   kind: ProbeKind;
+  /** The node it measures: see {@link childPath}. */
+  path: string;
   sql: string;
 }
 
-/** A nested column's lengths as sampled, with the average length of its text values. */
+/**
+ * A nested column's lengths as sampled, with the average length of all its
+ * text values: what the text the sample did not reach is charged.
+ */
 interface NestedSample {
   averageLength?: number;
   lengths: NestedLengths;
@@ -616,24 +590,27 @@ function sqlString(text: string): string {
 }
 
 /**
- * The probes that measure a nested column's {@link NestedLengths} and text:
- * the items of each list and map at its outermost level of lists, and the
- * bytes of the text and VARIANT values reached through struct fields, union
- * members and those items. Lists, maps and arrays deeper down are not
- * entered: their items take the defaults, and their text the average of
- * the text reached. A NULL value counts as empty, as DuckDB stores it.
+ * The probes that measure a nested column's {@link NestedLengths}, each for
+ * the node at its path: the items of each list and map at its outermost
+ * level of lists, and the bytes of the text and VARIANT values reached
+ * through struct fields, union members and those items. Lists, maps and
+ * arrays deeper down are not entered: their items take the defaults, and
+ * their text the average of the text reached. A NULL value counts as
+ * empty, as DuckDB stores it.
  */
 function lengthProbes(column: string, type: DuckDBTypeNode): LengthProbe[] {
   const probes: LengthProbe[] = [];
   /**
    * @param value - SQL for the node's value: a column, a field of one, or
    *   PROBE_ITEM inside `outer`.
+   * @param path - The node's path: see {@link childPath}.
    * @param outer - The outermost list holding the node (SQL for the list,
    *   and for its items per row), or null outside any.
    */
   const visit = (
     node: DuckDBTypeNode,
     value: string,
+    path: string,
     outer: { list: string; items: string } | null,
   ): void => {
     // `perValue` summed over the row: over its list's items, if any.
@@ -645,35 +622,41 @@ function lengthProbes(column: string, type: DuckDBTypeNode): LengthProbe[] {
     const length = textLength(node);
     if (length) {
       probes.push(
-        { kind: 'textBytes', sql: perRow(`coalesce(${length(value)}, 0)`) },
-        { kind: 'textValues', sql: values },
+        { kind: 'textBytes', path, sql: perRow(`coalesce(${length(value)}, 0)`) },
+        { kind: 'textValues', path, sql: values },
       );
       return;
     }
     switch (node.kind) {
       case 'struct':
         node.fields.forEach((field, i) => {
-          visit(field.type, `struct_extract_at(${value}, ${i + 1})`, outer);
+          visit(field.type, `struct_extract_at(${value}, ${i + 1})`, childPath(path, i), outer);
         });
         return;
       case 'union':
-        for (const member of node.members) {
-          visit(member.type, `union_extract(${value}, ${sqlString(member.tag)})`, outer);
-        }
+        node.members.forEach((member, i) => {
+          const extract = `union_extract(${value}, ${sqlString(member.tag)})`;
+          visit(member.type, extract, childPath(path, i), outer);
+        });
         return;
       case 'array':
-        if (!outer) visit(node.element, PROBE_ITEM, { list: value, items: String(node.size) });
+        if (!outer) {
+          const items = String(node.size);
+          visit(node.element, PROBE_ITEM, childPath(path, 0), { list: value, items });
+        }
         return;
       case 'list':
       case 'map': {
         if (outer) return;
         const items = `coalesce(${node.kind === 'list' ? 'len' : 'cardinality'}(${value}), 0)`;
-        probes.push({ kind: 'items', sql: items });
+        probes.push({ kind: 'items', path, sql: items });
         if (node.kind === 'list') {
-          visit(node.element, PROBE_ITEM, { list: value, items });
+          visit(node.element, PROBE_ITEM, childPath(path, 0), { list: value, items });
         } else {
-          visit(node.key, PROBE_ITEM, { list: `map_keys(${value})`, items });
-          visit(node.value, PROBE_ITEM, { list: `map_values(${value})`, items });
+          const keyList = { list: `map_keys(${value})`, items };
+          const valueList = { list: `map_values(${value})`, items };
+          visit(node.key, PROBE_ITEM, childPath(path, 0), keyList);
+          visit(node.value, PROBE_ITEM, childPath(path, 1), valueList);
         }
         return;
       }
@@ -685,9 +668,9 @@ function lengthProbes(column: string, type: DuckDBTypeNode): LengthProbe[] {
           `replace(replace(${text}, '[', ''), '{', '')`,
         )}`;
         probes.push(
-          { kind: 'variantLength', sql: perRow(`coalesce(strlen(${text}), 0)`) },
-          { kind: 'variantNodes', sql: perRow(`coalesce(${nodes}, 0)`) },
-          { kind: 'variantValues', sql: values },
+          { kind: 'variantLength', path, sql: perRow(`coalesce(strlen(${text}), 0)`) },
+          { kind: 'variantNodes', path, sql: perRow(`coalesce(${nodes}, 0)`) },
+          { kind: 'variantValues', path, sql: values },
         );
         return;
       }
@@ -695,14 +678,16 @@ function lengthProbes(column: string, type: DuckDBTypeNode): LengthProbe[] {
         return;
     }
   };
-  visit(type, quoteIdentifier(column), null);
+  visit(type, quoteIdentifier(column), '', null);
   return probes;
 }
 
 /**
  * Measure the nested columns' lengths from the first
- * {@link LENGTH_SAMPLE_ROWS} rows. Best effort, like the text sample: a
- * column the sample leaves out, or a sample that fails, keeps the defaults.
+ * {@link LENGTH_SAMPLE_ROWS} rows, node by node. Best effort, like the text
+ * sample: a column the sample leaves out, because its probes would take it
+ * past {@link MAX_LENGTH_PROBES}, or a sample that fails, keeps the
+ * defaults.
  */
 async function sampleNestedLengths(
   conn: AsyncDuckDBConnection,
@@ -733,26 +718,36 @@ async function sampleNestedLengths(
     const rows = Number(sample?.['n'] ?? 0);
     if (!sample || rows <= 0) return sampled;
     for (const { name, probes, first } of probed) {
-      const total = (kind: ProbeKind): number =>
-        probes.reduce(
-          (sum, probe, i) =>
-            probe.kind === kind ? sum + Number(sample[String(first + i)] ?? 0) : sum,
-          0,
-        );
-      const lists = probes.filter((probe) => probe.kind === 'items').length;
-      const textValues = total('textValues');
-      const variantValues = total('variantValues');
-      const lengths: { items?: number; variant?: VariantLengths } = {};
-      if (lists > 0) lengths.items = total('items') / (lists * rows);
-      if (variantValues > 0) {
-        lengths.variant = {
-          length: total('variantLength') / variantValues,
-          nodes: total('variantNodes') / variantValues,
-        };
+      // Each node's sums, by kind: a node has one probe of each kind it takes.
+      const nodes = new Map<string, Partial<Record<ProbeKind, number>>>();
+      probes.forEach((probe, i) => {
+        const sums = nodes.get(probe.path) ?? {};
+        sums[probe.kind] = Number(sample[String(first + i)] ?? 0);
+        nodes.set(probe.path, sums);
+      });
+      const items = new Map<string, number>();
+      const text = new Map<string, number>();
+      const variant = new Map<string, VariantLengths>();
+      let textBytes = 0;
+      let textValues = 0;
+      for (const [path, sums] of nodes) {
+        if (sums.items !== undefined) items.set(path, sums.items / rows);
+        if (sums.textValues) {
+          text.set(path, (sums.textBytes ?? 0) / sums.textValues);
+          textBytes += sums.textBytes ?? 0;
+          textValues += sums.textValues;
+        }
+        if (sums.variantValues) {
+          variant.set(path, {
+            length: (sums.variantLength ?? 0) / sums.variantValues,
+            nodes: (sums.variantNodes ?? 0) / sums.variantValues,
+          });
+        }
       }
+      const lengths = { items, text, variant };
       sampled.set(
         name,
-        textValues > 0 ? { lengths, averageLength: total('textBytes') / textValues } : { lengths },
+        textValues > 0 ? { lengths, averageLength: textBytes / textValues } : { lengths },
       );
     }
   } catch {

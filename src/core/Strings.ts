@@ -621,6 +621,11 @@ export interface Strings {
     expressionLabel: string;
     /** The extract panel's submit button. */
     addColumn: string;
+    /**
+     * Live-region text when the value inspector or the extract panel, which
+     * load on first use, could not be downloaded.
+     */
+    panelLoadFailed: string;
   };
 
   // =========================================
@@ -1076,6 +1081,7 @@ export const defaultStrings: Strings = {
     columnNameLabel: 'Column name',
     expressionLabel: 'Expression',
     addColumn: 'Add column',
+    panelLoadFailed: 'The panel could not be loaded. Reload the page to try again.',
   },
 
   errors: {

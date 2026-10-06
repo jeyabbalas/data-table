@@ -2,14 +2,19 @@
  * @vitest-environment jsdom
  *
  * The value inspector and the extract panel are lazy chunks. A load that
- * fails once (the network, a deploy that removed the old chunk) must not be
- * kept: the next F2 or click asks for the chunk again, and opens the panel.
+ * fails (the network, a CSP, a deploy that removed the old chunk) is said
+ * in the live region and handed to `onError` as a `CHUNK_LOAD_FAILED`
+ * error, never left as an unhandled rejection. It is not kept: the next F2
+ * or click asks for the chunk again, and opens the panel.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StateActions } from '@/core/Actions';
+import { ConfigurationError, type DataTableError } from '@/core/errors';
 import { __resetModalHostForTests } from '@/core/ModalHost';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
+import type { TableState } from '@/core/State';
+import { defaultStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { TableContainer } from '@/table/TableContainer';
@@ -54,26 +59,25 @@ function makeBridge(): WorkerBridge {
 }
 
 let table: TableContainer;
+let state: TableState;
+let onError: ReturnType<typeof vi.fn<(error: DataTableError) => void>>;
 
-/** The private loaders, called directly: a failure is a rejected promise the test can await. */
-interface Loaders {
-  showValueInspector(cell: { row: number; column: string }): Promise<void>;
-  handleExtractClick(column: string, anchor: HTMLElement): Promise<void>;
-}
+const announced = (): string => table.getElement().querySelector('.dt-announce')!.textContent ?? '';
 
 beforeEach(async () => {
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
   const container = document.createElement('div');
   document.body.appendChild(container);
   const bridge = makeBridge();
-  const state = createTableState();
+  state = createTableState();
   const actions = new StateActions(state, bridge);
   state.schema.set(SCHEMA);
   initializeColumnsFromSchema(state, SCHEMA);
   state.totalRows.set(20);
   state.filteredRows.set(20);
   state.tableName.set('t');
-  table = new TableContainer(container, state, actions, bridge);
+  onError = vi.fn();
+  table = new TableContainer(container, state, actions, bridge, { onError });
   const scroll = table.getElement().querySelector<HTMLElement>('.dt-body-scroll')!;
   Object.defineProperty(scroll, 'clientHeight', { configurable: true, value: 320 });
   await table.whenBodyReady();
@@ -97,33 +101,60 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/** The error `onError` was handed, once. */
+function reported(panel: string): DataTableError {
+  expect(onError).toHaveBeenCalledTimes(1);
+  const error = onError.mock.calls[0]![0];
+  expect(error).toBeInstanceOf(ConfigurationError);
+  expect(error.code).toBe('CHUNK_LOAD_FAILED');
+  expect(error.details).toEqual({ panel });
+  expect(error.cause).toBeInstanceOf(Error);
+  expect(error.message).toMatch(new RegExp(`^The ${panel} chunk did not load: `));
+  return error;
+}
+
 describe('TableContainer — a lazy panel whose chunk failed to load', () => {
-  it('loads the value inspector again on the next open', async () => {
+  it('says so on F2, reports it, and loads the value inspector again on the next open', async () => {
     vi.doMock('@/table/ValueInspector', () => {
       throw new Error('chunk offline');
     });
-    const loaders = table as unknown as Loaders;
-    await expect(loaders.showValueInspector({ row: 2, column: 'tags' })).rejects.toThrow();
+    const grid = table.getGridElement();
+    grid.focus();
+    state.focusedCell.set({ row: 2, column: 'tags' });
+    const f2 = (): KeyboardEvent => {
+      const event = new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true });
+      grid.dispatchEvent(event);
+      return event;
+    };
+    expect(f2().defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    reported('valueInspector');
+    // The key was claimed: the live region says why nothing opened.
+    expect(announced()).toBe(defaultStrings.values.panelLoadFailed);
     expect(table.getElement().querySelector('.dt-value-inspector')).toBeNull();
+    expect(document.activeElement).toBe(grid);
 
     vi.doUnmock('@/table/ValueInspector');
-    expect(table.openValueInspector({ row: 2, column: 'tags' })).toBe(true);
+    expect(f2().defaultPrevented).toBe(true);
     await vi.waitFor(
       () =>
         expect(table.getElement().querySelector('.dt-value-inspector [role="tree"]')).toBeTruthy(),
       { timeout: 5000 },
     );
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
-  it('loads the extract panel again on the next click', async () => {
+  it('says so on a click, reports it, and loads the extract panel again on the next click', async () => {
     vi.doMock('@/table/ExtractColumnPanel', () => {
       throw new Error('chunk offline');
     });
     const button = table
       .getElement()
       .querySelector<HTMLButtonElement>('.dt-col-header[data-column="tags"] .dt-col-extract-btn')!;
-    const loaders = table as unknown as Loaders;
-    await expect(loaders.handleExtractClick('tags', button)).rejects.toThrow();
+    button.click();
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    reported('extractPanel');
+    expect(announced()).toBe(defaultStrings.values.panelLoadFailed);
     expect(table.getElement().querySelector('.dt-extract-panel')).toBeNull();
 
     vi.doUnmock('@/table/ExtractColumnPanel');

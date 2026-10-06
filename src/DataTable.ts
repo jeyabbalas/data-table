@@ -628,6 +628,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     annotations: annotationStore,
     annotationPopover,
     columnHeaderTooltipPopover,
+    // A lazy panel whose chunk did not download (`CHUNK_LOAD_FAILED`).
+    onError: (error) => emitError({ error, source: 'unknown' }),
   });
 
   // -------- Instance id (multi-instance DOM ID isolation) --------

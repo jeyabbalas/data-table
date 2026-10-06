@@ -31,7 +31,9 @@
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { NestedFieldColumnOptions, StateActions } from '../core/Actions';
+import { ConfigurationError, type DataTableError } from '../core/errors';
 import { resolveInstanceId } from '../core/instanceId';
+import { isAnyModalOpen } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
@@ -153,6 +155,37 @@ export interface TableContainerOptions {
    * `TableBody`. Default: true. See {@link TableBodyOptions.prefetch}.
    */
   prefetch?: boolean | undefined;
+  /**
+   * Called with a failure nothing else hears of: a panel that loads on
+   * first use, the value inspector or the extract panel, whose chunk did
+   * not download. The error is a `ConfigurationError` with code
+   * `CHUNK_LOAD_FAILED`, `details.panel` (`'valueInspector'` or
+   * `'extractPanel'`) and the import's error as `cause`; the live region
+   * says it too. `createDataTable` emits it as the table's `error` event.
+   */
+  onError?: ((error: DataTableError) => void) | undefined;
+}
+
+/** The panels and modals the table opens, one at a time, named as their fields are. */
+type PanelName =
+  | 'filterPanel'
+  | 'derivedEditPanel'
+  | 'derivedModal'
+  | 'sqlFilterModal'
+  | 'presetPanel'
+  | 'valueInspector'
+  | 'extractPanel';
+
+/**
+ * The panel asked for last (see `TableContainer.makeWayFor`). A panel whose
+ * chunk is still loading opens only while its request is still this one.
+ */
+interface PanelRequest {
+  readonly panel: PanelName;
+  /** The value inspector's: the cell asked for. */
+  readonly cell?: { readonly row: number; readonly column: string } | undefined;
+  /** The value inspector's: whether focus was in the table when it was asked for. */
+  readonly focusInTable?: boolean | undefined;
 }
 
 /**
@@ -217,8 +250,13 @@ export class TableContainer {
   private valueInspector: ValueInspector | null = null;
   private valueInspectorModule: Promise<{ ValueInspector: typeof ValueInspector }> | null = null;
   // A cell F2 asked to inspect while its row was loading: the inspector
-  // opens on it once the row renders, unless the cursor has moved on.
+  // opens on it once the row renders, unless the user has gone elsewhere
+  // (see openPendingInspect).
   private pendingInspect: { row: number; column: string } | null = null;
+  // The panel asked for last, while it may still be waiting on its chunk.
+  // A newer request replaces it; the cursor leaving the inspector's cell,
+  // and a new filter, sort, selection or table, drop the inspector's.
+  private panelRequest: PanelRequest | null = null;
   // The header's extract panel, a lazy chunk too, built and torn down the same way.
   private extractPanel: ExtractColumnPanel | null = null;
   private extractPanelModule: Promise<{ ExtractColumnPanel: typeof ExtractColumnPanel }> | null =
@@ -293,6 +331,7 @@ export class TableContainer {
       fetchBlockSize: undefined as unknown as number,
       rowCacheRows: undefined as unknown as number,
       prefetch: undefined as unknown as boolean,
+      onError: undefined as unknown as (error: DataTableError) => void,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -1151,8 +1190,10 @@ export class TableContainer {
     // and the cursor or the selection moving elsewhere is the user going on
     // to another cell (a press on the inspected cell itself is not an
     // outside click, so this is what closes the panel for a click on it).
+    // Each also drops an open still waiting: the chunk loading, or F2's row.
     const closeInspector = (): void => {
       this.pendingInspect = null;
+      if (this.panelRequest?.panel === 'valueInspector') this.panelRequest = null;
       if (!this.destroyed) this.valueInspector?.close();
     };
     this.unsubscribes.push(
@@ -1161,12 +1202,14 @@ export class TableContainer {
       this.state.tableName.subscribe(closeInspector),
       this.state.selectedRows.subscribe(closeInspector),
       this.state.focusedCell.subscribe((cell) => {
+        const elsewhere = (at: { row: number; column: string }): boolean =>
+          cell?.row !== at.row || cell.column !== at.column;
         const pending = this.pendingInspect;
-        if (pending && (cell?.row !== pending.row || cell.column !== pending.column)) {
-          this.pendingInspect = null;
-        }
+        if (pending && elsewhere(pending)) this.pendingInspect = null;
+        const asked = this.panelRequest?.cell;
+        if (asked && elsewhere(asked)) this.panelRequest = null;
         const shown = this.valueInspector?.getShown();
-        if (shown && (cell?.row !== shown.row || cell.column !== shown.column)) closeInspector();
+        if (shown && elsewhere(shown)) closeInspector();
       }),
     );
 
@@ -1813,24 +1856,56 @@ export class TableContainer {
   }
 
   /**
+   * Make way for `panel`, one panel at a time: close every other panel and
+   * modal, and drop what was waiting to open, an inspector F2 asked for on
+   * a row still loading and a panel whose chunk is still loading. Every
+   * opener calls it first. Returns the opener's request: one whose chunk
+   * has to load first opens only if it is still the request asked for
+   * last.
+   */
+  private makeWayFor(
+    panel: PanelName,
+    inspect?: Pick<PanelRequest, 'cell' | 'focusInTable'>,
+  ): PanelRequest {
+    this.pendingInspect = null;
+    const request: PanelRequest = { panel, ...inspect };
+    this.panelRequest = request;
+    const panels: [PanelName, { close(): void } | null][] = [
+      ['filterPanel', this.filterPanel],
+      ['derivedEditPanel', this.derivedEditPanel],
+      ['derivedModal', this.derivedModal],
+      ['sqlFilterModal', this.sqlFilterModal],
+      ['presetPanel', this.presetPanel],
+      ['valueInspector', this.valueInspector],
+      ['extractPanel', this.extractPanel],
+    ];
+    for (const [name, other] of panels) if (name !== panel) other?.close();
+    return request;
+  }
+
+  /**
+   * A panel's chunk did not download: say so in the live region, and hand
+   * the error to the `onError` option, which `createDataTable` emits as the
+   * table's `error` event. F2 or the click asked for the panel and nothing
+   * else would tell of it.
+   */
+  private panelLoadFailed(panel: 'valueInspector' | 'extractPanel', cause: unknown): void {
+    this.announce(this.messages.values.panelLoadFailed);
+    this.resolvedOptions.onError?.(
+      new ConfigurationError(
+        `The ${panel} chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+        { code: 'CHUNK_LOAD_FAILED', cause, details: { panel } },
+      ),
+    );
+  }
+
+  /**
    * Handle filter button click from a column header.
    * Creates the FilterPanel lazily and toggles it for the clicked column.
    */
   private handleFilterClick(column: string, anchorElement: HTMLElement): void {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals if open
-    if (this.derivedEditPanel?.getIsOpen()) {
-      this.derivedEditPanel.close();
-    }
-    if (this.sqlFilterModal?.getIsOpen()) {
-      this.sqlFilterModal.close();
-    }
-    if (this.presetPanel?.getIsOpen()) {
-      this.presetPanel.close();
-    }
-    this.valueInspector?.close();
-    this.extractPanel?.close();
+    this.makeWayFor('filterPanel');
 
     // Create panel lazily on first click
     if (!this.filterPanel) {
@@ -1858,19 +1933,7 @@ export class TableContainer {
     anchorElement: HTMLElement,
   ): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals if open
-    if (this.filterPanel?.getIsOpen()) {
-      this.filterPanel.close();
-    }
-    if (this.sqlFilterModal?.getIsOpen()) {
-      this.sqlFilterModal.close();
-    }
-    if (this.presetPanel?.getIsOpen()) {
-      this.presetPanel.close();
-    }
-    this.valueInspector?.close();
-    this.extractPanel?.close();
+    this.makeWayFor('derivedEditPanel');
 
     if (!this.derivedEditPanel) {
       const { DerivedColumnEditPanel } = await import('../derived/DerivedColumnEditPanel');
@@ -1898,14 +1961,7 @@ export class TableContainer {
    */
   private async handleAddColumnClick(): Promise<void> {
     if (!this.actions) return;
-
-    // Close other floating panels/modals (mutual exclusion)
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
-    this.valueInspector?.close();
-    this.extractPanel?.close();
+    this.makeWayFor('derivedModal');
 
     if (!this.derivedModal) {
       const { DerivedColumnModal } = await import('../derived/DerivedColumnModal');
@@ -1958,14 +2014,7 @@ export class TableContainer {
    */
   private async openSQLFilterModal(): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
-    this.valueInspector?.close();
-    this.extractPanel?.close();
+    this.makeWayFor('sqlFilterModal');
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
@@ -1977,14 +2026,7 @@ export class TableContainer {
    */
   private async openSQLFilterModalForEdit(filterId: string): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
-    this.valueInspector?.close();
-    this.extractPanel?.close();
+    this.makeWayFor('sqlFilterModal');
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
@@ -2004,14 +2046,7 @@ export class TableContainer {
    */
   private async handlePresetsClick(): Promise<void> {
     if (!this.actions || !this.resolvedOptions.presetManager) return;
-
-    // Mutual exclusion: close other panels/modals
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    this.valueInspector?.close();
-    this.extractPanel?.close();
+    this.makeWayFor('presetPanel');
 
     if (!this.presetPanel) {
       const { FilterPresetPanel } = await import('../filters/FilterPresetPanel');
@@ -2052,12 +2087,20 @@ export class TableContainer {
    *
    * The panel is a lazy chunk: it opens a microtask later, after the cursor
    * keys have scrolled the cell into view, and the first time after the
-   * chunk loads.
+   * chunk loads. What happens meanwhile is the user going on, and the open
+   * waiting for it is dropped: a newer one, another panel opening, the
+   * cursor moving off the cell, a new filter, sort, selection or table, and,
+   * when focus was in the table, focus leaving it. Called from code, the
+   * cursor need not be on the cell, but moving it in the same task drops
+   * the open, as it closes the panel once open. A chunk that fails to load
+   * is announced and reported through the `onError` option.
    *
    * @param cell - The cell, by row (0-based, in the table as sorted and
    *   filtered) and column name.
    * @returns whether there is a value to inspect there: `false` for a column
    *   that is not nested or JSON, a NULL, a row not loaded or not rendered.
+   *   `true` still opens nothing when the open is dropped before the chunk
+   *   is there.
    *
    * @example
    * ```typescript
@@ -2067,15 +2110,11 @@ export class TableContainer {
   openValueInspector(cell: { row: number; column: string }): boolean {
     if (this.destroyed || !this.bridge || !this.actions) return false;
     if (!this.tableBody?.getInspectTarget(cell.row, cell.column)) return false;
-    this.pendingInspect = null;
-    // Mutual exclusion: one panel at a time
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
-    this.extractPanel?.close();
-    void this.showValueInspector(cell);
+    const request = this.makeWayFor('valueInspector', {
+      cell: { row: cell.row, column: cell.column },
+      focusInTable: this.focusInTable(),
+    });
+    void this.showValueInspector(request);
     return true;
   }
 
@@ -2083,9 +2122,9 @@ export class TableContainer {
    * F2 on a nested or JSON cell whose row is still loading, as after a jump
    * to the end of a large table or a scroll far past the row cache: keep the
    * request, and open the inspector once the row renders with a value there
-   * (see {@link openPendingInspect}). Moving the cursor, a filter, a sort or
-   * a selection drops it. `false` when there is nothing to wait for: a
-   * column that is not nested or JSON, or a NULL.
+   * (see {@link openPendingInspect}). Moving the cursor, another panel
+   * opening, a filter, a sort or a selection drops it. `false` when there is
+   * nothing to wait for: a column that is not nested or JSON, or a NULL.
    */
   private inspectOnceLoaded(cell: { row: number; column: string }): boolean {
     if (this.destroyed || this.tableBody?.inspectState(cell.row, cell.column) !== 'loading') {
@@ -2097,32 +2136,69 @@ export class TableContainer {
 
   /**
    * After the body renders rows: open the inspector F2 asked for on a row
-   * that was loading, once the row is there with a value, unless focus has
-   * left the table meanwhile. A row that turns out to hold NULL drops it.
+   * that was loading, once the row is there with a value. Only while the
+   * user is still where F2 left them: the cursor on that cell, focus on the
+   * grid or in its body, and no panel or dialog open, this table's or any
+   * other. A row that turns out to hold NULL drops the request, and so does
+   * the row leaving the rows rendered: the user has scrolled elsewhere, and
+   * the panel must not open on it whenever it comes back into view.
    */
   private openPendingInspect(): void {
     const pending = this.pendingInspect;
-    if (!pending || this.destroyed) return;
-    const state = this.tableBody?.inspectState(pending.row, pending.column) ?? 'none';
+    const body = this.tableBody;
+    if (!pending || !body || this.destroyed) return;
+    const { start, end } = body.getVisibleRange();
+    const rendered = pending.row >= start && pending.row < end;
+    const state = rendered ? body.inspectState(pending.row, pending.column) : 'none';
     if (state === 'loading') return;
     this.pendingInspect = null;
+    const cursor = this.state.focusedCell.get();
     const active = this.activeElementInRoot();
-    if (state === 'ready' && active !== null && this.element.contains(active)) {
+    if (
+      state === 'ready' &&
+      cursor?.row === pending.row &&
+      cursor.column === pending.column &&
+      (active === this.gridElement || (active !== null && this.bodyScroll.contains(active))) &&
+      !isAnyModalOpen()
+    ) {
       this.openValueInspector(pending);
     }
   }
 
-  /** Load the inspector's chunk if need be, then open it on the cell as it is by then. */
-  private async showValueInspector(cell: { row: number; column: string }): Promise<void> {
-    // A load that failed (the network, a deploy) is not kept: the next open
-    // asks for the chunk again.
-    const { ValueInspector } = await (this.valueInspectorModule ??=
-      import('./ValueInspector').catch((err: unknown) => {
-        this.valueInspectorModule = null;
-        throw err;
-      }));
+  /** Whether DOM focus is in the table: its root, or a panel mounted there. */
+  private focusInTable(): boolean {
+    const active = this.activeElementInRoot();
+    return active !== null && this.element.contains(active);
+  }
+
+  /**
+   * Load the inspector's chunk if need be, then open it on the cell as it is
+   * by then: unless the request was dropped meanwhile (see
+   * {@link openValueInspector}), or another panel or dialog is open.
+   */
+  private async showValueInspector(request: PanelRequest): Promise<void> {
+    // A load that failed (the network, a CSP, a deploy that removed the
+    // chunk) is not kept, so the next open asks for the chunk again. That
+    // fetches it again only where the browser lets it: Chrome keeps a failed
+    // module fetch for the life of the page, and answers every later import
+    // of it with the same error until a reload.
+    const loading = (this.valueInspectorModule ??= import('./ValueInspector'));
+    const loaded = await loading.catch((err: unknown) => {
+      if (this.valueInspectorModule === loading) this.valueInspectorModule = null;
+      if (!this.destroyed && this.panelRequest === request) {
+        this.panelRequest = null;
+        this.panelLoadFailed('valueInspector', err);
+      }
+      return null;
+    });
+    if (!loaded) return;
+    const { ValueInspector } = loaded;
     const bridge = this.bridge;
-    if (this.destroyed || !bridge) return;
+    const cell = request.cell;
+    if (this.destroyed || !bridge || !cell || this.panelRequest !== request) return;
+    this.panelRequest = null;
+    if (request.focusInTable && !this.focusInTable()) return;
+    if (isAnyModalOpen() && !this.valueInspector?.getIsOpen()) return;
     // Rendered again, scrolled, or sorted while the chunk loaded: read the
     // cell anew, and give up if it holds nothing to inspect now.
     const target = this.tableBody?.getInspectTarget(cell.row, cell.column);
@@ -2176,27 +2252,28 @@ export class TableContainer {
   /**
    * Handle the extract button of a nested or JSON column header: load the
    * extract panel's chunk on the first click, then toggle the panel under
-   * the button. Closes the other panels, and they close it.
+   * the button. Closes the other panels, and they close it, as does one
+   * opened while the chunk loads. A chunk that fails to load is announced
+   * and reported through the `onError` option.
    */
   private async handleExtractClick(column: string, anchorElement: HTMLElement): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals if open
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
-    this.valueInspector?.close();
+    const request = this.makeWayFor('extractPanel');
 
     if (!this.extractPanel) {
-      // As the inspector's: a load that failed is asked for again next time.
-      const { ExtractColumnPanel } = await (this.extractPanelModule ??=
-        import('./ExtractColumnPanel').catch((err: unknown) => {
-          this.extractPanelModule = null;
-          throw err;
-        }));
-      if (this.destroyed) return;
+      // As the inspector's: a load that failed is not kept.
+      const loading = (this.extractPanelModule ??= import('./ExtractColumnPanel'));
+      const loaded = await loading.catch((err: unknown) => {
+        if (this.extractPanelModule === loading) this.extractPanelModule = null;
+        if (!this.destroyed && this.panelRequest === request) {
+          this.panelRequest = null;
+          this.panelLoadFailed('extractPanel', err);
+        }
+        return null;
+      });
+      if (!loaded || this.destroyed) return;
       if (!this.extractPanel) {
+        const { ExtractColumnPanel } = loaded;
         this.extractPanel = new ExtractColumnPanel(this.state, {
           classPrefix: this.resolvedOptions.classPrefix,
           messages: this.messages,
@@ -2208,8 +2285,10 @@ export class TableContainer {
       }
     }
 
-    // The header may have been rebuilt while the chunk loaded.
-    if (this.destroyed || !this.extractPanel || !anchorElement.isConnected) return;
+    // Another panel asked for while the chunk loaded, or the header rebuilt.
+    if (this.destroyed || !this.extractPanel || this.panelRequest !== request) return;
+    this.panelRequest = null;
+    if (!anchorElement.isConnected) return;
     this.extractPanel.toggle(column, anchorElement);
   }
 

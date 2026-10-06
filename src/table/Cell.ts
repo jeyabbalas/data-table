@@ -201,7 +201,7 @@ export class CellRenderer {
         return this.formatTimestamp(value, originalType);
 
       case 'time':
-        return this.formatTimeValue(value);
+        return this.formatTimeValue(value, originalType);
 
       case 'interval':
         return this.formatInterval(value);
@@ -498,8 +498,11 @@ export class CellRenderer {
    * DuckDB returns TIME as "HH:MM:SS" or "HH:MM:SS.ffffff", or BigInt (microseconds since midnight).
    * Truncate microseconds to milliseconds and remove trailing zeros.
    * Examples: "14:30:45.100" → "14:30:45.1", "14:30:45.000" → "14:30:45"
+   *
+   * A TIME_NS or a TIME WITH TIME ZONE arrives as DuckDB's text (see
+   * `gridValueSQL`) and shows as that text, nanoseconds and offset kept.
    */
-  private formatTimeValue(value: unknown): string {
+  private formatTimeValue(value: unknown, originalType?: string): string {
     // DuckDB returns TIME as BigInt: microseconds since midnight
     if (typeof value === 'bigint' || typeof value === 'number') {
       const totalMicros = Number(value);
@@ -525,6 +528,9 @@ export class CellRenderer {
     }
 
     if (typeof value === 'string') {
+      // A TIME_NS's fraction of up to six digits would match below, and its
+      // nanoseconds would be cut to milliseconds only in those cells.
+      if (originalType?.trim().toUpperCase() === 'TIME_NS') return value;
       // Match TIME format: HH:MM:SS or HH:MM:SS.ffffff
       const match = value.match(/^(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/);
       if (match) {

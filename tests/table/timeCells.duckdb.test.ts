@@ -32,7 +32,8 @@ describe('time cells on real DuckDB', () => {
       `CREATE TABLE times AS SELECT * FROM (VALUES
         (0, CAST('03:04:05.123456789' AS TIME_NS), '14:05:06+05:30'::TIMETZ, TIME '03:04:05.123456'),
         (1, CAST('13:14:15' AS TIME_NS), '14:05:06.5-08'::TIMETZ, TIME '13:14:15'),
-        (2, NULL, NULL, NULL)
+        (2, NULL, NULL, NULL),
+        (3, CAST('23:59:59.123456' AS TIME_NS), '00:00:00.123456+00'::TIMETZ, TIME '23:59:59.999999')
       ) AS t("__rowid__", ns, tz, plain)`,
     );
     const columns = await bridge.query<{ column_name: string; column_type: string }>(
@@ -79,14 +80,25 @@ describe('time cells on real DuckDB', () => {
   });
 
   it('a TIME_NS cell shows the time with its nanoseconds', async () => {
-    expect(await cells('ns')).toEqual(['03:04:05.123456789', '13:14:15', 'null']);
+    // Six digits or nine: a TIME_NS cell keeps every digit DuckDB writes.
+    expect(await cells('ns')).toEqual([
+      '03:04:05.123456789',
+      '13:14:15',
+      'null',
+      '23:59:59.123456',
+    ]);
   });
 
   it('a TIME WITH TIME ZONE cell keeps its offset', async () => {
-    expect(await cells('tz')).toEqual(['14:05:06+05:30', '14:05:06.5-08', 'null']);
+    expect(await cells('tz')).toEqual([
+      '14:05:06+05:30',
+      '14:05:06.5-08',
+      'null',
+      '00:00:00.123456+00',
+    ]);
   });
 
   it('a TIME cell is read as it always was, to the millisecond', async () => {
-    expect(await cells('plain')).toEqual(['03:04:05.123', '13:14:15', 'null']);
+    expect(await cells('plain')).toEqual(['03:04:05.123', '13:14:15', 'null', '23:59:59.999']);
   });
 });

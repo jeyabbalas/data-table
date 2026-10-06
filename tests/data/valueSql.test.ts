@@ -213,8 +213,12 @@ describe('gridValueSQL', () => {
     expect(grid('JSON[]')).toBe(capped(LIST_TEXT));
   });
 
-  it('a BLOB shows its first 256 bytes and how many more, capped', () => {
-    expect(grid('BLOB')).toBe(capped(BLOB_TEXT));
+  it('a BLOB shows its first 256 bytes and how many more, cut between bytes', () => {
+    expect(grid('BLOB')).toBe(
+      `list_transform([${BLOB_TEXT}], lambda txt: CASE WHEN length(txt) > 1000` +
+        ` THEN regexp_replace(left(txt, 1000), '(….*|\\\\(x[0-9A-Fa-f]?)?)$', '') || '…'` +
+        ` ELSE txt END)[1]`,
+    );
   });
 
   it('BIT, GEOMETRY and BIGNUM, which Arrow carries as bytes, are cast and capped', () => {
@@ -229,6 +233,12 @@ describe('gridValueSQL', () => {
 
   it('INTERVAL keeps its plain cast', () => {
     expect(grid('INTERVAL')).toBe(CAST_TEXT);
+  });
+
+  it('TIME_NS and TIME WITH TIME ZONE, which Arrow carries as a cell cannot show them, are cast', () => {
+    for (const type of ['TIME_NS', 'TIME WITH TIME ZONE', 'TIMETZ']) {
+      expect(grid(type), type).toBe(CAST_TEXT);
+    }
   });
 
   it('scalars Arrow carries well are read as they are', () => {

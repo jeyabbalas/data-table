@@ -11,7 +11,10 @@
  *   without its closing bracket, then `, … +N]`; a map, `, … +N}`.
  * - A BLOB of more than BLOB_PREVIEW bytes shows the head's text, then `… +N`.
  * - Then any text of more than TEXT_CAP graphemes, as `Intl.Segmenter`
- *   counts them, keeps TEXT_CAP of them and gains `…`.
+ *   counts them, keeps TEXT_CAP of them and gains `…`. A BLOB's text, ASCII
+ *   but for the `…`, keeps the whole bytes in its first TEXT_CAP characters
+ *   instead: a `\`, `\x` or `\xA` left of an escape, and any part of the
+ *   `… +N`, go.
  *
  * INTERVAL and JSON columns are read whole and never capped: the grid casts
  * an INTERVAL plainly and reads JSON text as it is.
@@ -42,6 +45,14 @@ export function capGraphemes(text: string): string {
     count++;
   }
   return text;
+}
+
+/** A BLOB's text cut as a cell cuts it: between bytes, without its count. */
+function capBlob(text: string): string {
+  if (text.length <= TEXT_CAP) return text;
+  const head = text.slice(0, TEXT_CAP);
+  const count = head.indexOf('…');
+  return `${count >= 0 ? head.slice(0, count) : head.replace(/\\(x[0-9A-Fa-f]?)?$/, '')}…`;
 }
 
 /** How the grid shows a column's values. */
@@ -126,7 +137,7 @@ export async function expectedCellTexts(
       n > limit
         ? `${rule.kind === 'bytes' ? headText! : headText!.slice(0, -1)}${more(n - limit)}`
         : whole!;
-    expected.set(id, capGraphemes(text));
+    expected.set(id, rule.kind === 'bytes' ? capBlob(text) : capGraphemes(text));
   }
   return expected;
 }

@@ -67,6 +67,14 @@ const SCALAR_TEXT_NAMES = new Set([
   'ENUM',
 ]);
 
+/**
+ * Times that Arrow carries in a form a cell cannot show, read as DuckDB's
+ * short text as INTERVAL is: TIME_NS arrives in nanoseconds, which a cell
+ * would read as microseconds (`03:04:05.123456789` showed as
+ * `3068:05:23.456`), and TIME WITH TIME ZONE without its offset.
+ */
+const TEXT_TIME_NAMES = new Set(['TIME_NS', 'TIME WITH TIME ZONE', 'TIMETZ']);
+
 /** A plain or table-qualified quoted identifier: `"tags"`, `"t"."tags"`. */
 const QUOTED_IDENTIFIER = /^"(?:[^"]|"")*"(?:\."(?:[^"]|"")*")*$/;
 
@@ -90,7 +98,7 @@ function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
 
 /**
  * SQL for the text a grid cell shows for `column`, or `null` when the grid
- * reads the column as it is: numbers, text, JSON, dates, times and the
+ * reads the column as it is: numbers, text, JSON, dates, TIME and the
  * other scalars Arrow carries well. `quotedCol` is the column's quoted
  * identifier (or any expression); the result has no alias.
  *
@@ -106,29 +114,33 @@ function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
  *   rebuilt from the first 32 of `map_entries(c)`: `{k1=1, k2=2, … +568}`.
  * - A BLOB shows its first {@link BLOB_PREVIEW} bytes as DuckDB writes them
  *   (`\xAA` for a byte that is not printable ASCII), then the bytes left:
- *   `\x89PNG… +1834`.
+ *   `\x89PNG… +1834`. When that is more than {@link TEXT_CAP} characters, it
+ *   shows the whole bytes that fit and `…`, without the count (see
+ *   {@link blobText}).
  * - STRUCT, UNION, VARIANT, a type the parser could not read, BIT,
  *   GEOMETRY and BIGNUM (whose values Arrow carries as bytes) and ENUM
  *   (whose dictionary the worker's query path does not receive) show their
  *   whole text. INTERVAL keeps the plain cast it always had: Arrow carries
- *   it as an object, and its text is short.
+ *   it as an object, and its text is short. So do TIME_NS, which Arrow
+ *   carries in nanoseconds where a cell reads a time in microseconds, and
+ *   TIME WITH TIME ZONE, which Arrow carries without its offset.
  *
- * Each of those texts but INTERVAL's is then cut at {@link TEXT_CAP}
- * graphemes and given a `…`. The cut is by grapheme (`left_grapheme`), so
- * an emoji joined from several code points is kept whole, and `…` is added
- * only when something was cut: only text of more than TEXT_CAP bytes is
- * looked at, and then `strlen` of the kept part is compared with `strlen`
- * of the whole (byte counts DuckDB keeps with every string) rather than
- * `length`, which counts code points: 1,001 code points can be 999
- * graphemes. The cap is written as a lambda over a one-item list so that
- * the text is named once: written out in a `CASE`, the text appears five
- * times, and DuckDB's common-subexpression pass then took 150 ms to plan a
- * block of 40 such columns (18 ms as a lambda). The cap is left out when
- * the type alone keeps the text under {@link TEXT_CAP} characters: lists,
- * arrays and maps of booleans, dates, times and numbers up to BIGINT,
- * DOUBLE or DECIMAL(25,s), and structs, unions and fixed-size arrays built
- * only from those (see {@link shownTextBound}). Embeddings such as
- * `FLOAT[768]` are the common case.
+ * Each of those texts but INTERVAL's, the times' and a BLOB's is then cut
+ * at {@link TEXT_CAP} graphemes and given a `…`. The cut is by grapheme
+ * (`left_grapheme`), so an emoji joined from several code points is kept
+ * whole, and `…` is added only when something was cut: only text of more
+ * than TEXT_CAP bytes is looked at, and then `strlen` of the kept part is
+ * compared with `strlen` of the whole (byte counts DuckDB keeps with every
+ * string) rather than `length`, which counts code points: 1,001 code points
+ * can be 999 graphemes. The cap is written as a lambda over a one-item list
+ * so that the text is named once: written out in a `CASE`, the text appears
+ * five times, and DuckDB's common-subexpression pass then took 150 ms to
+ * plan a block of 40 such columns (18 ms as a lambda). The cap is left out
+ * when the type alone keeps the text under {@link TEXT_CAP} characters:
+ * lists, arrays and maps of booleans, dates, times and numbers up to
+ * BIGINT, DOUBLE or DECIMAL(25,s), and structs, unions and fixed-size
+ * arrays built only from those (see {@link shownTextBound}). Embeddings such
+ * as `FLOAT[768]` are the common case.
  *
  * The cap bounds the text a cell shows. What DuckDB formats before the cap
  * is bounded too, so that a long list inside a value costs a cell no more
@@ -195,18 +207,18 @@ export function gridValueSQL(column: ColumnSchema, quotedCol: string): string | 
     case 'json':
       return null;
     case 'scalar':
-      if (BLOB_NAMES.has(node.name)) {
-        text =
-          `CASE WHEN octet_length(${c}) > ${BLOB_PREVIEW}` +
-          ` THEN concat(CAST(${c}[1:${BLOB_PREVIEW}] AS VARCHAR), '… +', octet_length(${c}) - ${BLOB_PREVIEW})` +
-          ` ELSE CAST(${c} AS VARCHAR) END`;
-        break;
-      }
+      if (BLOB_NAMES.has(node.name)) return blobText(c);
       if (SCALAR_TEXT_NAMES.has(node.name)) {
         text = `CAST(${c} AS VARCHAR)`;
         break;
       }
-      if (node.name === 'INTERVAL' || column.type === 'interval') return `CAST(${c} AS VARCHAR)`;
+      if (
+        node.name === 'INTERVAL' ||
+        TEXT_TIME_NAMES.has(node.name) ||
+        column.type === 'interval'
+      ) {
+        return `CAST(${c} AS VARCHAR)`;
+      }
       return null;
   }
   return shownTextBound(node) > TEXT_CAP ? capText(text) : text;
@@ -222,6 +234,28 @@ function capText(text: string): string {
     `list_transform([${text}], lambda txt: CASE WHEN strlen(txt) > ${TEXT_CAP}` +
     ` AND strlen(left_grapheme(txt, ${TEXT_CAP})) < strlen(txt)` +
     ` THEN concat(left_grapheme(txt, ${TEXT_CAP}), '…') ELSE txt END)[1]`
+  );
+}
+
+/**
+ * The text of a BLOB cell: its first {@link BLOB_PREVIEW} bytes as DuckDB
+ * writes them, then `… +N` for the bytes left. DuckDB writes a byte that is
+ * not printable ASCII as four characters (`\xAA`, a backslash among them),
+ * so the text can pass {@link TEXT_CAP} characters. It is ASCII but for the
+ * `…`, so characters are graphemes, and the cut is at TEXT_CAP characters,
+ * less a `\`, `\x` or `\xA` it would leave of a byte's escape and anything
+ * of the `… +N` it reaches: the cell shows the whole bytes that fit, 250 to
+ * 256 of them, and `…`.
+ */
+function blobText(c: string): string {
+  const text =
+    `CASE WHEN octet_length(${c}) > ${BLOB_PREVIEW}` +
+    ` THEN concat(CAST(${c}[1:${BLOB_PREVIEW}] AS VARCHAR), '… +', octet_length(${c}) - ${BLOB_PREVIEW})` +
+    ` ELSE CAST(${c} AS VARCHAR) END`;
+  return (
+    `list_transform([${text}], lambda txt: CASE WHEN length(txt) > ${TEXT_CAP}` +
+    ` THEN regexp_replace(left(txt, ${TEXT_CAP}), '(….*|\\\\(x[0-9A-Fa-f]?)?)$', '') || '…'` +
+    ` ELSE txt END)[1]`
   );
 }
 

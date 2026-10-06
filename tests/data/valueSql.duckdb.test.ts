@@ -102,6 +102,18 @@ describe('valueSql on real DuckDB', () => {
     return rows.map((r) => r.t);
   }
 
+  /**
+   * A view of `values` as `type`, for the oracle, which reads a table by
+   * name (a view: an unnamed struct cannot be stored in a table).
+   */
+  async function viewOf(type: string, values: readonly string[]): Promise<string> {
+    const view = 'cut_values';
+    await bridge.query(
+      `CREATE OR REPLACE VIEW ${view} AS SELECT i AS "__rowid__", "v" FROM (${rowsOf(type, values)})`,
+    );
+    return view;
+  }
+
   beforeAll(async () => {
     harness = await createNodeDuckDB();
     bridge = makeNodeBridge(harness.conn);
@@ -184,6 +196,8 @@ describe('valueSql on real DuckDB', () => {
       'GEOMETRY',
       'BIGNUM',
       'INTERVAL',
+      'TIME_NS',
+      'TIME WITH TIME ZONE',
     ])('a NULL %s stays NULL', async (type) => {
       expect(await gridTexts(type, ['NULL'])).toEqual([null]);
     });
@@ -303,18 +317,6 @@ describe('valueSql on real DuckDB', () => {
       ['STRUCT(INTEGER, BIGINT[])', ['row(1, range(3000))', 'row(NULL, NULL)']],
     ];
 
-    /**
-     * A view of `values` as `type`, for the oracle, which reads a table by
-     * name (a view: an unnamed struct cannot be stored in a table).
-     */
-    async function viewOf(type: string, values: readonly string[]): Promise<string> {
-      const view = 'cut_values';
-      await bridge.query(
-        `CREATE OR REPLACE VIEW ${view} AS SELECT i AS "__rowid__", "v" FROM (${rowsOf(type, values)})`,
-      );
-      return view;
-    }
-
     it.each(CASES)(
       '%s: the cell is the whole value’s, cut by the cell rule',
       async (type, values) => {
@@ -389,6 +391,56 @@ describe('valueSql on real DuckDB', () => {
       const [text] = await gridTexts('BLOB', [`unhex(repeat('00', 1000))`]);
       // 256 bytes are 1,024 characters of `\x00`; the cap keeps 1,000.
       expect(text).toBe(`${'\\x00'.repeat(250)}…`);
+    });
+
+    it('the cap cuts a BLOB between bytes, never inside a byte’s escape', async () => {
+      const escaped = (n: number) => '\\xAA'.repeat(n);
+      const texts = await gridTexts(
+        'BLOB',
+        ['', 'a', 'ab', 'abc', 'abcd'].map((head) => `'${head}'::BLOB || unhex(repeat('AA', 300))`),
+      );
+      // 1,000 characters hold 250 escapes, and with each printable byte
+      // before them one more character: `\xAA` cut there would lose its end.
+      expect(texts).toEqual([
+        `${escaped(250)}…`,
+        `a${escaped(249)}…`,
+        `ab${escaped(249)}…`,
+        `abc${escaped(249)}…`,
+        `abcd${escaped(249)}…`,
+      ]);
+    });
+
+    it('a BLOB whose count does not fit keeps its whole preview, or as much as fits', async () => {
+      const escaped = (n: number) => '\\xAA'.repeat(n);
+      const texts = await gridTexts('BLOB', [
+        // 248 escapes and 8 letters: 256 bytes in 1,000 characters, then `… +1`.
+        `unhex(repeat('AA', 248)) || 'abcdefghi'::BLOB`,
+        // 247 escapes and 9 letters: 997 characters, then `… +12`, cut at `… +`.
+        `unhex(repeat('AA', 247)) || 'abcdefghi'::BLOB || unhex(repeat('00', 12))`,
+      ]);
+      expect(texts).toEqual([`${escaped(248)}abcdefgh…`, `${escaped(247)}abcdefghi…`]);
+    });
+
+    it('a BLOB cut by the cap is the cell rule’s', async () => {
+      const values = ['', 'a', 'abc', 'abcdefghi'].flatMap((head) => [
+        `'${head}'::BLOB || unhex(repeat('AA', 300))`,
+        `unhex(repeat('AA', 247)) || '${head}'::BLOB || unhex(repeat('00', 12))`,
+      ]);
+      const expected = await expectedCellTexts(bridge, await viewOf('BLOB', values), col('BLOB'));
+      expect(await gridTexts('BLOB', values)).toEqual(values.map((_, i) => expected.get(i)));
+    });
+
+    it('TIME_NS keeps its nanoseconds, and TIME WITH TIME ZONE its offset', async () => {
+      expect(
+        await gridTexts('TIME_NS', [`'03:04:05.123456789'`, `'13:14:15'`, `'00:00:00.5'`]),
+      ).toEqual(['03:04:05.123456789', '13:14:15', '00:00:00.5']);
+      expect(
+        await gridTexts('TIME WITH TIME ZONE', [
+          `'14:05:06+05:30'`,
+          `'14:05:06.123456-08'`,
+          `'23:59:59.999999-15:59:59'`,
+        ]),
+      ).toEqual(['14:05:06+05:30', '14:05:06.123456-08', '23:59:59.999999-15:59:59']);
     });
 
     it('BIT, GEOMETRY, BIGNUM and INTERVAL read as DuckDB writes them', async () => {

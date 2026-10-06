@@ -238,6 +238,7 @@ export const frenchMessages: DeepPartial<Strings> = {
     namePlaceholder: 'ex. prix_total',
     nameRequired: 'Le nom est requis',
     nameDuplicate: (name) => `Une colonne nommée « ${name} » existe déjà`,
+    nameReserved: (name) => `Le nom « ${name} » est réservé à l'identifiant de ligne`,
 
     typeLabel: 'Type de colonne',
     expressionModeLabel: 'Expression SQL',

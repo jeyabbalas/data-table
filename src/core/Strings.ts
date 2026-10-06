@@ -287,6 +287,11 @@ export interface Strings {
     namePlaceholder: string;
     nameRequired: string;
     nameDuplicate: (name: string) => string;
+    /**
+     * A new column name that spells `__rowid__` in any letter case: the
+     * synthetic row id's name, which no other column may take.
+     */
+    nameReserved: (name: string) => string;
 
     typeLabel: string;
     expressionModeLabel: string;
@@ -873,6 +878,7 @@ export const defaultStrings: Strings = {
     namePlaceholder: 'e.g. total_price',
     nameRequired: 'Name is required',
     nameDuplicate: (name) => `A column named "${name}" already exists`,
+    nameReserved: (name) => `Column name "${name}" is reserved for the synthetic row id`,
 
     typeLabel: 'Column type',
     expressionModeLabel: 'SQL Expression',

@@ -423,6 +423,27 @@ describe('DerivedColumnEditPanel', () => {
       panel.destroy();
     });
 
+    it('should say the row id name is reserved, in any letter case', () => {
+      const panel = createPanel();
+      panel.open('total', anchorEl);
+
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      nameInput.value = '__RowId__';
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      expect(nameError.style.display).not.toBe('none');
+      expect(nameError.textContent).toBe(
+        'Column name "__RowId__" is reserved for the synthetic row id',
+      );
+
+      panel.destroy();
+    });
+
     it('should allow a rename that only changes the letter case of its own name', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);

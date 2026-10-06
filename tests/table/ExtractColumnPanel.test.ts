@@ -646,7 +646,7 @@ describe('ExtractColumnPanel', () => {
       // The expression still stands: only the name is wrong.
       expect(expression()).toBe(`"point"['x']`);
       type(nameInput(), '__ROWID__');
-      expect(error()).toBe('A column named "__rowid__" already exists');
+      expect(error()).toBe('Column name "__ROWID__" is reserved for the synthetic row id');
       type(nameInput(), 'x_coord');
       expect(error()).toBeNull();
     });
@@ -980,7 +980,7 @@ describe('ExtractColumnPanel — its ids and the name rule', () => {
     state.schema.set(SCHEMA.filter((c) => c.name !== '__rowid__'));
     mount().open('point', anchor);
     type(nameInput(), '__RowId__');
-    expect(error()).toBe('A column named "__rowid__" already exists');
+    expect(error()).toBe('Column name "__RowId__" is reserved for the synthetic row id');
     expect(addButton().disabled).toBe(true);
   });
 });

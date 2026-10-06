@@ -13,9 +13,14 @@
  * a 768-float embedding some 15,000. `maxChars` cuts the text inside the
  * query, so no more than that crosses the worker boundary, and the length of
  * the whole text comes back beside it.
+ *
+ * {@link readJsonValue} turns such text into JS values, for value reads and
+ * JSON exports.
  */
 
+import type { DuckDBTypeNode } from '../core/duckdbType';
 import { QueryError } from '../core/errors';
+import { materialize, parseJsonTree } from '../core/jsonTree';
 import { ROWID_COLUMN, type ColumnSchema } from '../core/types';
 import { quoteIdentifier } from '../filters/FilterSQL';
 import { jsonValueSQL } from './valueSql';
@@ -177,4 +182,126 @@ export async function fetchCellJson(
     truncated: maxChars !== undefined && totalChars > maxChars,
     totalChars,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Reading the text
+// ---------------------------------------------------------------------------
+
+/**
+ * Scalar types whose every value the platform's `JSON.parse` reads as
+ * `materialize` does, by the upper-case name `parseDuckDBType` gives them:
+ * integers that cannot pass 2^53, FLOAT and DOUBLE, and BOOLEAN. Not the
+ * wider integers or DECIMAL, which `materialize` keeps exact, nor text,
+ * dates, times, UUIDs and the like, which `to_json` writes as strings or as
+ * numbers that `materialize` keeps as text.
+ */
+const NATIVE_SCALAR_NAMES: ReadonlySet<string> = new Set([
+  'BOOLEAN',
+  'BOOL',
+  'LOGICAL',
+  'TINYINT',
+  'INT1',
+  'SMALLINT',
+  'INT2',
+  'SHORT',
+  'INTEGER',
+  'INT4',
+  'INT',
+  'SIGNED',
+  'UTINYINT',
+  'USMALLINT',
+  'UINTEGER',
+  'FLOAT',
+  'FLOAT4',
+  'REAL',
+  'DOUBLE',
+  'FLOAT8',
+  'DOUBLE PRECISION',
+]);
+
+/** Whether `JSON.parse` reads values of a type as `materialize` does: see {@link readJsonValue}. */
+const nativeReadable = new WeakMap<DuckDBTypeNode, boolean>();
+
+/**
+ * Whether `type` is built only from lists, arrays and structs whose fields
+ * all have names, over {@link NATIVE_SCALAR_NAMES}. A MAP (a `Map`), a
+ * UNION (its tag), an unnamed struct (an array), a VARIANT, JSON and a type
+ * the parser could not read all come out of `materialize` other than
+ * `JSON.parse` would give them.
+ */
+function holdsNativeValuesOnly(type: DuckDBTypeNode): boolean {
+  const pending: DuckDBTypeNode[] = [type];
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    switch (node.kind) {
+      case 'scalar':
+        if (!NATIVE_SCALAR_NAMES.has(node.name)) return false;
+        break;
+      case 'list':
+      case 'array':
+        pending.push(node.element);
+        break;
+      case 'struct':
+        for (const field of node.fields) {
+          if (field.name === null) return false;
+          pending.push(field.type);
+        }
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Read a nested value's exact JSON text, as {@link jsonValueSQL} writes it,
+ * into JS values: what `materialize(parseJsonTree(text).root, type, mode)`
+ * gives, value for value.
+ *
+ * The lossless reader is needed for what `JSON.parse` gets wrong: integers
+ * past 2^53, a MAP's typed keys, a UNION's tag, an unnamed struct, and the
+ * bare `NaN`, `Infinity` and `-Infinity` that `to_json` writes for a FLOAT
+ * or DOUBLE that is not finite. A type that holds none of those, a list,
+ * array or named struct of integers up to UINTEGER, FLOATs, DOUBLEs and
+ * BOOLEANs, is read with `JSON.parse` instead, which gives the same values:
+ * `to_json` writes a FLOAT widened to a double's digits
+ * (`0.10000000149011612`), and both read a number's digits to the same
+ * double, `-0.0` as `-0` included. A value that `JSON.parse` rejects, one
+ * holding `NaN`, say, is read losslessly after all. A `FLOAT[768]`
+ * embedding reads about twice as fast.
+ *
+ * @param type - The column's parsed type (`parseDuckDBType(originalType)`).
+ * @param mode - As `materialize` takes it: `'value'` for value reads,
+ *   `'export'` for JSON export files.
+ *
+ * @example
+ * ```ts
+ * const type = parseDuckDBType('FLOAT[]');
+ * readJsonValue('[0.10000000149011612,-0.0]', type, 'value'); // [0.10000000149011612, -0] (JSON.parse)
+ * readJsonValue('[NaN,1.0]', type, 'value'); // [NaN, 1] (lossless)
+ * readJsonValue('[9007199254740993]', parseDuckDBType('BIGINT[]'), 'value'); // [9007199254740993n]
+ * ```
+ */
+export function readJsonValue(
+  text: string,
+  type: DuckDBTypeNode | undefined,
+  mode: 'value' | 'export',
+): unknown {
+  if (type !== undefined) {
+    let native = nativeReadable.get(type);
+    if (native === undefined) {
+      native = holdsNativeValuesOnly(type);
+      nativeReadable.set(type, native);
+    }
+    if (native) {
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        // NaN or ±Infinity, which JSON cannot hold, or text cut short.
+      }
+    }
+  }
+  return materialize(parseJsonTree(text).root, type, mode);
 }

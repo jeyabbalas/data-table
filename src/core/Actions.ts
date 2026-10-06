@@ -7,7 +7,7 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { fetchCellJson, rowIdLiteral } from '../data/cellValue';
+import { fetchCellJson, readJsonValue, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
 import { jsonValueSQL } from '../data/valueSql';
@@ -29,7 +29,6 @@ import {
   QueryError,
   SQLValidationError,
 } from './errors';
-import { materialize, parseJsonTree } from './jsonTree';
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import {
@@ -2867,7 +2866,7 @@ export class StateActions {
       this.throwIfDestroyed('getCellValue');
       if (cell === undefined) throw rowNotFound(rowId);
       if (cell.text === null) return null;
-      return materialize(parseJsonTree(cell.text).root, typeNodeOf(entry), 'value');
+      return readJsonValue(cell.text, typeNodeOf(entry), 'value');
     }
 
     const sql =
@@ -3221,9 +3220,9 @@ function derivedTypeChanged(before: ColumnSchema, after: DerivedColumnInfo): boo
  *
  * - `'raw'`: as the query returns it.
  * - `'json'`: a nested value, as exact JSON text (`jsonValueSQL`), which
- *   `materialize` turns into JS values. Arrow's own nested values are wrong
- *   for DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT cannot
- *   cross Arrow at all.
+ *   `readJsonValue` turns into JS values. Arrow's own nested values are
+ *   wrong for DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT
+ *   cannot cross Arrow at all.
  * - `'text'`: DuckDB's text, kept as text: see {@link TEXT_READ_NAMES}.
  * - `'integer-text'`: DuckDB's text, parsed as a bigint. The worker posts a
  *   BIGINT or UBIGINT as the nearest number, which past 2^53 is another
@@ -3426,9 +3425,7 @@ function readValue(value: unknown, read: ValueRead, type: DuckDBTypeNode | undef
   if (value === null || value === undefined) return null;
   switch (read) {
     case 'json':
-      return typeof value === 'string'
-        ? materialize(parseJsonTree(value).root, type, 'value')
-        : value;
+      return typeof value === 'string' ? readJsonValue(value, type, 'value') : value;
     case 'integer-text': {
       const n = toBigInt(value);
       if (n === undefined) return value;

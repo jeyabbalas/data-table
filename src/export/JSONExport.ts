@@ -20,8 +20,8 @@
 
 import type { DuckDBTypeNode } from '../core/duckdbType';
 import { ExportError } from '../core/errors';
-import { materialize, parseJsonTree } from '../core/jsonTree';
 import type { TableState } from '../core/State';
+import { readJsonValue } from '../data/cellValue';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { resolveColumns, fetchAllRows, exportJsonColumns } from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
@@ -109,9 +109,10 @@ export function formatValueForJSON(value: unknown): unknown {
  *
  * @param jsonColumns - Columns whose values are a nested value's JSON text,
  *   each with its parsed DuckDB type (`exportJsonColumns` in
- *   ExportQuery.ts). Each is written as a real structure, read by
- *   `materialize` in its `'export'` mode: see the module comment. A NULL is
- *   `null`.
+ *   ExportQuery.ts). Each is written as a real structure, read as
+ *   `materialize` reads it in its `'export'` mode (`readJsonValue`, which
+ *   uses `JSON.parse` where that gives the same values): see the module
+ *   comment. A NULL is `null`.
  */
 export function formatRowForJSON(
   row: Record<string, unknown>,
@@ -124,7 +125,7 @@ export function formatRowForJSON(
     const type = jsonColumns?.get(col);
     const formatted =
       type !== undefined && typeof value === 'string'
-        ? materialize(parseJsonTree(value).root, type, 'export')
+        ? readJsonValue(value, type, 'export')
         : formatValueForJSON(value);
     if (col === '__proto__') {
       // Assigning would set the object's prototype, not a key.

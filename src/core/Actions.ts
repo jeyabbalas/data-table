@@ -1891,6 +1891,12 @@ export class StateActions {
    * DuckDB would read `label`'s values for it. `__rowid__` is reserved, in
    * any case.
    *
+   * An expression must give one value for each row. One that returns
+   * several rows for a row, or none, such as `unnest(tags)`, is refused, and
+   * so is an aggregate without a window, such as `sum(price)` (write
+   * `sum(price) OVER ()`): each with a message that says what to write
+   * instead. A failed add changes nothing.
+   *
    * Runs in its turn: derived-column changes, undo, redo, reset and loads run
    * one at a time, in call order, and an add is validated against the columns
    * the changes ahead of it leave. A second add of one name gets `already
@@ -2149,7 +2155,8 @@ export class StateActions {
    *
    * A new name is checked as {@link addDerivedColumn} checks one, against
    * the other columns: a rename that only changes the case of the column's
-   * own name (`total` to `Total`) is allowed.
+   * own name (`total` to `Total`) is allowed. A new expression is checked as
+   * it checks one too. A failed update changes nothing.
    *
    * Runs in its turn, as {@link addDerivedColumn} does: a rename to a name an
    * add ahead of it takes gets `already exists`.
@@ -2326,6 +2333,8 @@ export class StateActions {
    * `details.reasons` maps each dependent name to the DuckDB error. The
    * replacement is atomic: if any pre-flight check or the final VIEW recreate
    * fails, the column reverts to its prior definition.
+   *
+   * The new expression is checked as {@link addDerivedColumn} checks one.
    *
    * @example
    * const result = await table.actions.replaceDerivedColumn('tip_pct', {

@@ -413,8 +413,8 @@ describe('replaceDerivedColumn', () => {
     // Reset call history so the assertions below count only post-replace SQL.
     mockBridge.query.mockClear();
 
-    // Throw on the first CREATE TABLE __dt_vec_ during replace, succeed
-    // on the second (the rollback restore of the old helper).
+    // Throw on the first CREATE TABLE __dt_vec_ during replace, the new
+    // helper table's.
     let helperCreateCount = 0;
     mockBridge.query.mockImplementation(async (sql: string) => {
       const trimmed = sql.trim();
@@ -446,15 +446,17 @@ describe('replaceDerivedColumn', () => {
     // Old definition preserved in state.
     expect(state.derivedColumns.get()).toEqual(before);
 
-    // Rollback ran: a second CREATE TABLE __dt_vec_ was issued (the
-    // restore of the old helper). Without the A2 fix, only one CREATE
-    // TABLE __dt_vec_ would have been attempted before the throw
-    // propagated, leaving DuckDB in a broken state.
+    // The old helper table was never touched: the new one is made under a
+    // name of its own, beside it, and the old one goes only once a VIEW
+    // reads the new one. Neither is the VIEW rebuilt.
     const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
       (args) => args[0] as string,
     );
-    const helperCreates = calls.filter((sql) => /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim()));
-    expect(helperCreates.length).toBeGreaterThanOrEqual(2);
+    expect(calls.filter((sql) => sql.includes('"__dt_vec_0_v_0__"'))).toEqual([]);
+    expect(calls.filter((sql) => /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim()))).toEqual([
+      expect.stringContaining('"__dt_vec_0_v_1__"'),
+    ]);
+    expect(calls.filter((sql) => sql.startsWith('CREATE OR REPLACE VIEW'))).toEqual([]);
   });
 
   // 7b. Atomicity — VIEW recreate failure rolls state back

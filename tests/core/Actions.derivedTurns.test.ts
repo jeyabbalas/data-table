@@ -505,7 +505,7 @@ describe('a load while derived-column changes wait or run', () => {
     // The running add's three statements, then the old manager's DROP: none
     // for the changes that waited.
     expect(h.queries.slice(sentBefore).map((q) => q.sql.slice(0, 32))).toEqual([
-      expect.stringMatching(/^SELECT NULL FROM \(SELECT \(id \* 3/),
+      expect.stringMatching(/^SELECT NULL FROM \(SELECT \*, \(id /),
       expect.stringMatching(/^DESCRIBE SELECT \(id \* 3\) AS v/),
       expect.stringMatching(/^CREATE OR REPLACE VIEW/),
       expect.stringMatching(/^DROP VIEW IF EXISTS/),

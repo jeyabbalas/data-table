@@ -1507,18 +1507,25 @@ describe('KeyboardNavigator — F2 opens the value inspector on a body cell', ()
     cleanup();
   });
 
-  it('brings a cursor scrolled out of view back, and asks again', () => {
-    // Rows 0–9 in view; the cursor at row 500 has no rendered cell yet.
-    let rendered = false;
-    const { actions, root, open, scrollToRow, cleanup } = setupInspector(() => rendered);
-    scrollToRow.mockImplementation(() => {
-      rendered = true;
-    });
+  it('brings a cursor scrolled out of view back when the inspector opens on it', () => {
+    // Rows 0–9 in view; the cursor at row 500, whose row may still be loading.
+    const { actions, root, open, scrollToRow, cleanup } = setupInspector(() => true);
     actions.setFocusedCell({ row: 500, column: 'c' });
     const event = press(root);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(scrollToRow).toHaveBeenCalledTimes(1);
     expect(scrollToRow).toHaveBeenCalledWith(500, 'end');
-    expect(open).toHaveBeenCalledTimes(2);
     expect(event.defaultPrevented).toBe(true);
+    cleanup();
+  });
+
+  it('leaves the view where it is on a cell out of view with nothing to inspect', () => {
+    const { actions, root, open, scrollToRow, cleanup } = setupInspector(() => false);
+    actions.setFocusedCell({ row: 500, column: 'a' });
+    const event = press(root);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(scrollToRow).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
     cleanup();
   });
 

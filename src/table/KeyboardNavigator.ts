@@ -116,10 +116,11 @@ export interface KeyboardNavigatorOptions {
   revealControl?: ((control: HTMLElement) => void) | undefined;
   /**
    * Open the value inspector on a body cell, for `F2` on the cursor. Returns
-   * `true` when it opened (the key is then the inspector's), and `false` for
-   * a cell with nothing to inspect: a scalar column, a NULL, a row not loaded
-   * yet. `F2` then does what it does without this option. `TableContainer`
-   * passes its `openValueInspector`.
+   * `true` when it opens, now or once the cell's row has loaded (the key is
+   * then the inspector's, and the cell is scrolled into view), and `false`
+   * for a cell with nothing to inspect: a scalar column, or a NULL. `F2`
+   * then does nothing, and scrolls nothing. `TableContainer` passes its
+   * `openValueInspector`, falling back to waiting for a row still loading.
    *
    * @internal
    */
@@ -335,9 +336,10 @@ export class KeyboardNavigator {
 
     // F2 on a body cell holding a nested or JSON value opens the value
     // inspector on it, the dialog its `aria-haspopup` and `aria-keyshortcuts`
-    // announce. The cell is scrolled into view first when the user has
-    // scrolled away from it, which also renders it. A cell with nothing to
-    // inspect leaves F2 to the branches below, which do nothing on the body.
+    // announce, and brings the cell into view, as the panel opens beside it;
+    // a row scrolled away and dropped is fetched again, and the panel opens
+    // once it is there. A cell with nothing to inspect leaves F2 to the
+    // branches below, which do nothing on the body: the view stays put.
     if (
       e.key === 'F2' &&
       focused &&
@@ -346,19 +348,12 @@ export class KeyboardNavigator {
       !e.shiftKey &&
       !e.ctrlKey &&
       !e.metaKey &&
-      !e.altKey
+      !e.altKey &&
+      this.openCellInspector({ row: focused.row, column: focused.column })
     ) {
-      const cell = { row: focused.row, column: focused.column };
-      let opened = this.openCellInspector(cell);
-      if (!opened && this.scrollFocusedCellIntoView(cell.row, cell.column)) {
-        opened = this.openCellInspector(cell);
-      }
-      if (opened) {
-        e.preventDefault();
-        // The panel opens beside the cell: bring it into view under it.
-        this.scrollFocusedCellIntoView(cell.row, cell.column);
-        return;
-      }
+      e.preventDefault();
+      this.scrollFocusedCellIntoView(focused.row, focused.column);
+      return;
     }
 
     // F2 on a header cell hands real DOM focus to its first button —

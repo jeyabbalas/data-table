@@ -232,12 +232,14 @@ describe('TableContainer — the value inspector', () => {
       expect(valueReads).toHaveLength(0);
     });
 
-    it('leaves F2 alone on a cell with nothing to inspect, loaded or not', () => {
+    it('leaves F2 alone on a cell with nothing to inspect, loaded or not, and the view too', () => {
+      const scrollToRow = vi.spyOn(table.getTableBody()!.getVirtualScroller(), 'scrollToRow');
       actions.setFocusedCell({ row: 1, column: 'tags' }); // NULL
       expect(f2().defaultPrevented).toBe(false);
-      actions.setFocusedCell({ row: 300, column: 'name' }); // scalar, not fetched
+      actions.setFocusedCell({ row: 300, column: 'name' }); // scalar, not fetched, out of view
       expect(f2().defaultPrevented).toBe(false);
       expect(isShown()).toBe(false);
+      expect(scrollToRow).not.toHaveBeenCalled();
     });
   });
 

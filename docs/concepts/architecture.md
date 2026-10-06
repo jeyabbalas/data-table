@@ -341,13 +341,13 @@ when its block arrives (a row whose cache entry was evicted or
 invalidated demotes back to a placeholder — stale paint never persists).
 Fetching is reconciliation that happens after the paint, never a
 precondition for it; the full state machine is documented at
-[`src/table/TableBody.ts:251-292`](../../src/table/TableBody.ts).
+[`src/table/TableBody.ts:252-293`](../../src/table/TableBody.ts).
 
 Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:955-1075`](../../src/table/TableBody.ts)) keeps
+([`src/table/TableBody.ts:943-1063`](../../src/table/TableBody.ts)) keeps
 at most 2 block fetches in flight — the worker executes serially, so
 that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
@@ -371,7 +371,7 @@ Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
 rounded up to whole blocks with a floor of 4 blocks). Over the cap,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:1316-1368`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:1304-1356`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -440,7 +440,7 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1461`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1449`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was

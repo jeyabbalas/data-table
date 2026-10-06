@@ -11,4 +11,5 @@ tests/fixtures/datasets
 *.tsv
 *.parquet
 .changeset/*.md
+.changeset/pre/*.md
 CHANGELOG.md

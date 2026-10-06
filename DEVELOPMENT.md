@@ -4,8 +4,8 @@ Everything you need to hack on `@jeyabbalas/data-table` locally. For contributio
 
 ## Prerequisites
 
-- **Node** ≥ 20 (declared in `package.json` `engines`). CI runs on **Node 20**; running Node 20 locally matches CI closest and is recommended. `.npmrc` sets `engine-strict=true`, so an older Node fails `npm install` outright rather than warning.
-- **npm** 10 or newer (ships with Node 20+).
+- **Node** ≥ 22.13 for development. CI runs on **Node 22**; running Node 22 locally matches CI closest and is recommended (`.nvmrc`). Some dev dependencies, such as `@changesets/cli` 3, need it, and `.npmrc` sets `engine-strict=true`, so an older Node fails `npm install` outright rather than warning. The published library still supports Node ≥ 20 (`package.json` `engines`).
+- **npm** 10.9 or newer (ships with Node 22.13+).
 - **Git**.
 - A modern Chromium-, Gecko-, or WebKit-based browser for the dev server. DuckDB-WASM does not require cross-origin isolation headers (no COOP/COEP) for this library's use cases — plain `http://localhost` works.
 
@@ -233,8 +233,9 @@ does two independent things on every push:
    `publishConfig.provenance` in `package.json`.
 2. **Opens or updates the "Version Packages" PR** from any pending
    `.changeset/*.md` files, via `changesets/action`. That action is
-   deliberately invoked _without_ a `publish:` input — publishing is step
-   (1)'s job — so there is no second publish attempt and no spurious red.
+   deliberately invoked _without_ a `publish-script:` input — publishing is
+   step (1)'s job — so there is no second publish attempt and no spurious
+   red.
 
 The workflow does **not** create git tags. See "Tagging the release" below.
 
@@ -340,10 +341,13 @@ the default install. It uses changesets' pre mode:
    release, and testers install `@jeyabbalas/data-table@next`.
 3. While pre mode is on, each version PR you merge publishes the next
    `-next.N`. Tag it as in "Tagging the release", passing `--prerelease`
-   instead of `--latest`.
+   instead of `--latest`. Each prerelease moves the changesets it
+   published into `.changeset/pre/`, where they can still be edited
+   before the stable release.
 4. To release the stable version, run `npx changeset pre exit` on a
-   branch and merge it. The next version PR bumps to `X.Y.Z` and
-   publishes under `latest`.
+   branch and merge it. The next version PR bumps to `X.Y.Z`, writes
+   every changeset, those in `.changeset/pre/` included, into its
+   `CHANGELOG.md` section, and publishes under `latest`.
 
 ### Manual fallback
 

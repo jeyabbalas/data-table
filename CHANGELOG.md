@@ -1,5 +1,422 @@
 # Changelog
 
+## 0.9.0-next.1
+
+### Minor Changes
+
+- dcf3f82: ### Changed
+
+  - Body rows render only the columns near the view. That is the pinned columns, the columns in view and a viewport's width either side, and the columns holding the keyboard cursor or DOM focus. A spacer stands in for the rest, so the scroll width and every column's position stay the same.
+    - **Fewer cells:** at 1,000 columns in a 1,200 px view, a row holds about two dozen cells instead of 1,000.
+    - **Scrolling sideways:** cells are added and removed as columns come within reach. The cells of columns that stay are left in place, and a reorder never moves the cell holding focus, so a clicked cell keeps focus through both.
+    - **Code that looks up body cells in the DOM** finds only these. The cursor's cell is among them whenever its row is rendered, so `aria-activedescendant` keeps resolving.
+
+- f374500: ### Fixed
+
+  - A header chart whose data fails to load no longer keeps the detail of the bar or segment under the pointer, or of its brush or selection, in its stats slot. Nothing is drawn after a failure, so nothing is hovered and no detail shows. A selection's detail comes back with the next fetch that lands.
+  - Its stats slot no longer keeps the stats the chart reported for the filters before. It shows the table-wide row count, kept current, until the chart reports stats again. A failure of a refetch a newer one superseded, or of a chart already destroyed, is reported but leaves the slot alone.
+  - A column whose custom chart reports no stats of its own keeps its table-wide row count current through filter changes. It kept the count from when the chart was made.
+  - `error` events with `source: 'visualization'` now always name the column, in `error.details.column`, and the stage that failed, when the chart reported it, in `error.details.stage`. Before, only some of the charts' queries put the column on the error, and a chart that threw while being built never did. The event carries a copy of the error the chart reported, a native error of the same class, so an error that several charts pass on names each one's column.
+
+  ### Added
+  - A chart whose data failed to load no longer looks like one still loading. Its stats slot says "Failed to load" (`messages.statistics.chartFailed`) beneath the row count until the chart reports stats again, for a chart that reports them, and a built-in chart's `<canvas>` carries a `data-fetch-failed` attribute until a fetch lands.
+  - `VisualizationOptions.onError`'s context has `superseded: true` for a filter update that failed after a newer one had started.
+  - `BaseVisualization.reportsDefaultStats`, true for the built-in charts, says a chart reports its stats through `onDefaultStatsChange` each time a fetch lands. The stats slot says a chart's fetch failed only for a chart that reports stats, since only new stats take the line back. A custom chart that reports its stats after every fetch can set it, so that a failure of its first fetch is said too.
+
+- 3506285: ### Added
+
+  - `messages.statistics.noData`, the "No data" a header chart draws for a column with no values and no nulls, as an empty table has. The histograms and the value counts drew it in English whatever `messages` said.
+
+  ### Fixed
+  - A header chart's labels, cut to fit, are cut between graphemes. The cut dropped one UTF-16 unit at a time, so it could stop inside a character: a value-count segment for `📍 Paris 🚀🚀` read `📍 Paris �…`, half an emoji drawn as the replacement character, and a flag or an emoji joined with ZWJ could be split, or a decomposed letter lose its accent.
+
+- bdbc4ec: ### Fixed
+
+  - Charts no longer refetch while a derived-column change can drop or rebuild the relation they query.
+    - **Before:** a filter changed during a removal, an edit or a replacement, an undo or redo, a reset or a session restore made every chart in view query the VIEW the change had dropped, and each reported an `error` event with `source: 'visualization'`.
+    - **Now:** their refetches wait for the change to settle, as the filtered-row count already did. A chart whose filters changed more than once meanwhile refetches once, with the filters in force then. Adding a derived column holds nothing back.
+  - Custom stats panels likewise: `updateFilters` waits out such a change, so a panel that queries the relation no longer reports an `error` event with `source: 'stats-panel'` for each filter change made during one.
+
+  ### Added
+  - `StatsPanelCoordinator` takes the table's actions as an optional third argument. Given them, as the facade gives them, a broadcast waits out a derived-column change that can drop or rebuild the relation, and then goes once to the panels still registered. For `/advanced` users who drive the coordinator directly.
+
+- f3bf86a: ### Changed
+
+  - Hiding, showing, moving or pinning a column keeps every other column's chart and custom stats panel. Only the column shown gets new ones.
+    - **What it saves:** a change queries only for the charts and panels of the columns it brings near the view, such as the column shown. Before, every change rebuilt every chart and panel near the view, about 20 queries at 1,000 columns.
+    - **Charts:** a brush or selection is never lost to another column's change.
+  - Custom stats panels live only while their column is near the view, the same columns body rows render.
+    - **Lifecycle:** a panel is built as its column comes within about a viewport of the view, and destroyed once the column moves away. It used to exist for every column, and every column change rebuilt them all.
+    - **`update()` on mount:** a panel built while its column's chart is live is passed the chart's latest stats, not `null`.
+    - **A panel that throws** in its constructor is not tried again until new data arrives or its column's header is rebuilt.
+
+- f851432: ### Changed
+
+  - Row fetches select only the columns near the view.
+    - **Which columns:** around the columns rows render, a fetch selects as many again on either side, rounded out to steps of 16 columns, so a short sideways scroll reuses rows already fetched.
+    - **At 1,000 columns:** in a 1,200 px view a fetch selects 32 to about 100 columns instead of 1,000. In Chrome, a 128-row block takes a median of 7.8 ms with 96 of 1,000 columns selected, against 76 ms with all of them. Most of that time went into converting the block to JavaScript objects.
+  - Scrolling sideways past what the rows were fetched with reads the new columns for those rows by their row id, without filtering or sorting the table again.
+    - **Until they arrive:** the cells stay empty with the class `dt-cell--pending`, and the row carries `aria-busy="true"`.
+    - **The keyboard cursor:** it is named by `aria-activedescendant` once its cell has its value, so a screen reader announces the value rather than an empty cell.
+
+- 34e040c: ### Changed
+
+  - Header cells, body cells, rows and the table root are `box-sizing: border-box`, so a column's width and a row's height include their padding and border. On a page without a global `box-sizing` reset, columns are narrower than before by their side padding and border: 25 px at the default 16 px root font size, so a column is 150 px wide by default where it took 175 px. Pages with a reset, such as Tailwind's or Bootstrap's, look the same.
+
+  ### Fixed
+  - On pages without a `box-sizing` reset, every calculation that places columns treated them as narrower than they drew, by 25 px per column at the default font size. `End` and the arrow keys could leave the cursor's column off-screen (on 1,000 columns, `End` stopped more than 100 columns short of the last); pinned columns overlapped and the pinned divider sat inside the last pinned column; with a filter matching no rows, the body scrolled only as far as the declared widths reached, well short of the last headers; and in a table narrower than 550 px, where the header padding shrinks, headers drifted 8 px per column from their cells.
+  - On pages without a reset, each row also took 1 px more than `rowHeight`, so rows drifted 1 px per row from where the scroller placed them and walking the cursor down with the arrow keys could leave its row partly below the view. The table overflowed its container by 2 px.
+  - Starting a resize drag no longer widens the column before the pointer moves. On pages without a reset it added the padding and border.
+
+- 92c2198: ### Changed
+
+  - Hiding, showing, moving or pinning a column updates the header and the body in place instead of rebuilding them.
+    - **Headers:** every other column keeps its `ColumnHeader`, and DOM focus on one of its buttons stays put. A column's header is rebuilt only when its schema entry changes, as when a derived column is edited or new data is loaded. Header ids and `aria-colindex` follow the columns to their new places.
+    - **Body:** the rows stay. A hide or a move fetches nothing, and a column shown is read by itself, by row id, for the rows already fetched.
+    - **At 1,000 columns:**
+      - Hiding a column takes 24 ms instead of 182 ms, and the next frame follows 59 ms after it instead of 830 ms.
+      - Moving a column takes 28 ms instead of 175 ms.
+      - Measured in Chrome on a 50K × 1,000 Parquet file.
+    - **Charts and custom stats panels** are still rebuilt on every column change.
+    - **Pinning** animates only the headers near the view.
+
+- 3506285: ### Fixed
+
+  - A session restore, an undo and a redo apply the name rule an added derived column does. A derived column named as a column of the table in any letter case, as a column restored before it, or as `__rowid__`, is not brought back: a console warning gives a `DerivedColumnError` coded `DUPLICATE_NAME`, and the filters, sort and layout saved for it are dropped.
+    - **Before:** the VIEW renamed such a column, `Total` beside `total` to `Total_1`, and every read of `"Total"`, the grid's included, returned `total`'s values. A derived `Total` saved on one file and restored on another that has a column `total` did this, and so did a 0.8 session that holds `LABEL` beside `label`.
+  - A derived column that a restore, an undo or a redo cannot bring back no longer takes a base column of the same name out of the grid. Its filters, sort, order, width and visibility were dropped by name, so a column of exactly that name in the new data stayed in the schema but left the column order and the visible columns, and lost its width.
+  - An undo or a redo that cannot bring a derived column back drops the filters, sort and layout it had, as a session restore already did.
+
+  ### Added
+  - `DerivedColumnManager.restoreColumns(defs, columnNames?)` (`/advanced`) takes the names of the table's own columns, and skips a derived column named as one of them, ignoring ASCII letter case, with the `DUPLICATE_NAME` warning.
+
+- 870cb19: ### Changed
+
+  - Column headers far from the view leave out their buttons. Every visible column keeps its header: name, type, stats line, chart slot, id, `aria-colindex`, label and sort state. Only the columns near the view, the ones body rows render cells for, get the pin, hide, filter and sort buttons and the drag and resize handles.
+    - **At 1,000 columns:** the header holds about 10,500 elements instead of 36,000, and switching the colour scheme restyles the table in 21 ms instead of 110 ms (Chrome, 50K × 1,000 Parquet file).
+    - **Where they are needed, they are there:** the keyboard cursor's column and the column holding DOM focus have their buttons wherever they are, and so does a column being resized or dragged, or whose filter panel or derived-column editor is open. Closing the panel gives focus back to the button that opened it.
+    - **Code that looks up header buttons in the DOM,** such as `.dt-col-sort-btn`, or `ColumnHeader.getControls()` through `TableContainer.getColumnHeaders()`, finds them only for those columns. `getStatsElement()` and `getVizContainer()` still answer for every column, and a `ColumnHeader` you create yourself still has all its buttons.
+
+- 84bc227: ### Added
+
+  - `sourceOptions` on `createDataTable()` and `table.loadData()` says how a source is read, per format: a CSV's `delimiter`, `header`, `skip`, `nullValues` and `sampleSize`; a JSON source's `format`, `sampleSize` and `maxDepth`; the Parquet `columns` to load; and the `timezone` DuckDB works in. `WorkerBridge.loadData()` takes the same fields next to `format`. The loaders had most of these options, but no public path reached them. New types: `SourceOptions`, `CSVSourceOptions`, `JSONSourceOptions` and `ParquetSourceOptions`.
+  - A `sampleSize` of `-1` has DuckDB type CSV or JSON columns from every row, for a file whose odd values come after the rows it samples by default.
+  - A load of some Parquet columns counts only those in the memory check before the load: the scan and prefetch estimates leave out the columns DuckDB does not read.
+
+  ### Fixed
+  - `LOAD_INVALID_OPTIONS` and `LOAD_INVALID_TIMEZONE`, documented but unreachable, now reject a bad `sourceOptions` value before the source is read, with `details.option` naming it, and the table keeps the data it had. A time zone DuckDB does not know rejects as `LOAD_INVALID_TIMEZONE`, listing the zones it suggests, and Parquet `columns` the file lacks as `LOAD_INVALID_OPTIONS`, naming them.
+  - `loadProgress` never fired: nothing passed the worker's progress messages on. The table now emits one per message, between `loadStart` and `loadComplete` or `loadError`, for the initial `source` load and for `table.loadData()`. An `onProgress` passed to `table.loadData()` or `actions.loadData()` is called with them too.
+
+- 804d9c7: ### Added
+
+  - Nested columns have a type of their own. `DataType` gains `'nested'`: `ColumnSchema.type` is `'nested'` for every LIST (`INTEGER[]`), fixed-size ARRAY (`FLOAT[768]`), STRUCT, MAP, UNION and VARIANT column, and `ColumnSchema.originalType` says which. A JSON column stays `'string'`. `/advanced` exports `isNestedType(type)`, beside `isCategoricalType`, and `parseDuckDBType(originalType)`, which reads a DuckDB type into a `DuckDBTypeNode` tree (struct fields, list elements, map keys and values, union members), and never throws: text it cannot read is an `unknown` node.
+  - A value inspector shows a nested or JSON cell's whole value. `F2` on the keyboard cursor, a double click, or a click on the cell's inspect icon (shown at its end on hover and on the cursor's cell) opens a panel beside the cell, on any non-NULL value of a nested or JSON column. It reads the exact value by `__rowid__` and shows it as a keyboard tree (the WAI-ARIA tree pattern): keys, values in their types' styles, each container's type, count and preview, map entries as `key → value`, and containers too big to list at once in buckets of 100. Copy JSON copies the whole value as standard JSON, and `Ctrl/Cmd+C` the active item's. The panel shows the first 2,097,152 characters of a value's JSON text; when the value shown was cut short, Copy JSON, and `Ctrl/Cmd+C` on an item the cut runs through, read the value again, up to 8,388,608 characters, and past that the panel says "Too large to copy". `Escape` closes it, as do a press outside it and a filter, sort, selection or data change, and focus goes back to the grid with the cursor where it was. `F2` on a row still loading opens the panel once the row arrives, if the cursor and focus are still there. An open still waiting, for its row or for the panel's chunk, is dropped when the user moves on: the cursor leaves the cell, focus leaves the table, another panel opens, or a filter, sort, selection or the data changes. Inspectable cells carry `aria-haspopup="dialog"` and `aria-keyshortcuts="F2"`; the icon is drawn by the stylesheet and adds no element and no tab stop. The panel is a lazy chunk, loaded the first time a table opens it. `TableContainer.openValueInspector({ row, column })` opens it from code (`table.container`), on a row the grid has rendered with its values, and returns `false` for any other row, a NULL, or a column that is neither nested nor JSON; its strings are new `messages.values` keys (`inspectorTitle`, `copyJson`, …).
+  - "Extract field → column" from the table. A nested or JSON column's header has an extract button, after its filter button and in the `F2` cycle, that opens a panel: a keyboard tree of the column's type (struct fields at any depth, a union's tag and members, a list's or array's length and element, a map's size and value), a field for each 1-based position or map key on the way to the part picked, a JSON path and a "Read as" choice for a part that is JSON or VARIANT, the new column's name, and the SQL it will read. Add column, `Enter` in a text or number field or `Ctrl/Cmd+Enter` adds it. The value inspector's "Add as column", "Add length as column", "Add size as column" and "Add tag as column" buttons, its row "+" and `Ctrl/Cmd+Enter` add the active node the same way. Either way the column goes right after its source as one undo entry, the cursor moves to it, it scrolls into view and the live region says "Column point_x added"; a failure shows in the panel that asked. An add still running is made once, however often it is asked for, and a panel opened again on its column says it is adding. Once the panel that asked is closed, the add still lands and is announced, but the cursor, the view and focus stay where the user went. Both are part of the `derivedColumns` UI, so `derivedColumns: false` removes them (`TableContainerOptions.extractColumns` on `/advanced`); the inspector still opens, and `actions.addNestedFieldColumn` works either way. `TableContainer.extractColumn(request)` is the same add from code, with the cursor and the announcement, and gives a request for an add under way that add's promise. The panel is a lazy chunk too, and new `messages.values` keys hold its strings (`extractTitle`, `addColumn`, …).
+  - `actions.getCellValue(rowId, column, { signal })` reads one cell exactly, by its `__rowid__` (a number or a bigint): a list as an array, a struct as an object, a MAP as a `Map` with typed keys in order, a UNION as `{ [tag]: value }`, an integer inside as a number when exact and a bigint beyond 2^53, a `BIGINT`…`UHUGEINT` column's value as a bigint, DECIMAL and FLOAT values as numbers, dates, UUIDs, intervals and BLOBs inside as DuckDB's text. One query, which skips the query cache and runs ahead of queued chart and stats queries, though behind the grid's row fetches. It rejects with `QueryError` `COLUMN_NOT_FOUND` (also before any data is loaded: the schema is empty until then), `INVALID_ROWID` (also when no row has the rowid) or `QUERY_ABORTED`. New type: `GetCellValueOptions`.
+  - `actions.addNestedFieldColumn(column, path, { name, extract, jsonLeaf })` adds a column that reads one part of a nested or JSON column: a struct's field, a list's element, a map's value, a union's member, a key or index inside JSON, or with `extract` a list's `'length'`, a map's size or a union's `'tag'`. It writes the expression (`"point"['x']`, `len("tags")`, `json_extract_string("doc", '$."a.b"[0]')`) and adds it as an ordinary derived column, with the chart, stats and filters of its type. The path is read against the column's type: struct fields by name (ignoring ASCII letter case) or 1-based position, list positions from 1, map keys, union tags, then JSON keys (matched exactly) and indexes from 0. The default name needs no quoting (`point_x`, `tags_length`, `doc_a_b_0`, with `_2` when taken); the column goes right after its source, past the extracts already made of it, so `point, point_x, point_y` stay together; one undo entry. It resolves `{ success: false, error }` for a path that does not fit, naming the step. New type: `NestedFieldColumnOptions`.
+  - `valueType: 'text'` on point, set and not-set filters, and on their serialized forms. It compares the column's DuckDB text, `CAST(col AS VARCHAR)`, which is the text the grid shows, with each value as text: `{ type: 'point', column: 'tags', value: '[red, green]', valueType: 'text' }` matches the cell that reads `[red, green]`. `IS NULL` still tests the column itself. Sessions, presets and undo keep it, and undo tells a text filter from a value filter. On preset import, a range, point, set or not-set filter whose `valueType` is not the one its type reads (`'interval'` for a range, `'text'` for the others) is dropped, like a filter of an unknown type, and the rest of the preset imports; a preset left with no valid filter is skipped.
+  - `NestedSummaryVisualization`, the header chart of nested columns (the default registry's `nested-summary` entry, priority 0), and its stats, `NestedColumnStats`: `kind: 'nested'`, the row and null counts, and `outline`, the type summary that `formatDefaultStats` writes, escaped, as line 2 (`x double · y double · tier varchar`). Both on `/advanced`, with the `NestedSummaryData` type; `statsKindForDataType('nested')` is `'nested'`.
+  - `messages.values` says nested types in words, for the column header's accessible name (`typeList`, `typeArray`, `typeStruct`, `typeMap`, `typeUnion`, `typeJson`, `typeVariant`), and holds the value inspector's and the extract panel's strings. `messages.statistics.nonNullCategory` labels the non-null segment of the summary chart.
+  - A value inspector or extract panel whose chunk does not download says so in the live region, "The panel could not be loaded. Reload the page to try again." (`messages.values.panelLoadFailed`), and the table emits an `error` event with `source: 'unknown'`: a `ConfigurationError` coded `CHUNK_LOAD_FAILED`, with `details.panel` (`'valueInspector'` or `'extractPanel'`) and the import's error as `cause`. The next open asks for the chunk again, though Chrome repeats the failure until the page reloads. A `TableContainer` built from `/advanced` hands the error to its new `onError` option.
+  - `QueryOptions.priority` takes `'elevated'`, between `'high'` and `'normal'`: such a query runs after the queued viewport row fetches and ahead of queued chart, stats and other `'normal'` work. `getCellValue` and the value inspector's read use it, so a loop of reads leaves scrolling alone.
+
+  ### Changed
+  - A nested or JSON column's header shows a short outline of its DuckDB type: `[integer]`, `struct(3)`, `{varchar → integer}`, `float[768]`, `union(2)`, `json`, `variant`. It is cut with `…` when the column is narrower, and its title holds the full type. The header's accessible name says the type in words, "tags, list of integer", and the filter panel's type badge shows the same outline. Both said `string`.
+  - A nested column's header chart is a summary: a bar of its non-null and null shares with the type outline under it (`{x, y, tier}`), and with filters on, the share of each that passes them. Each label's ink is picked against what shows under it, so a translucent `--dt-primary` or `--dt-accent` keeps it readable. It has no click-to-filter, brush or keyboard selection; a nested column is filtered from its filter panel.
+    - **Before:** it was the value counts, which group the values by their text: 18 to 21 s on a 200,000-row `FLOAT[768]` column, with the worker, and so the grid, frozen meanwhile.
+    - **Now:** it counts, with no GROUP BY and no cast of the values: `COUNT(*)` and `COUNT(c)`, which reads only the column's validity, over the table and, with filters on, over the rows passing them. The filters go in a `WHERE` clause, as in every other query, so a raw-SQL filter counts the rows the grid shows. That column takes 58 ms with a filter on. JSON columns keep the value counts.
+  - CSV export and the clipboard's TSV write a nested value as standard JSON: `[56,3,91]`, `{"x":1.25,"tier":"bronze"}`, a MAP as an object in key order, a UNION as `{"tag":value}`, with every digit kept and `NaN` and `±Infinity` as `null`. They wrote a struct as `[object Object]`, and so did JSON export, as a string. JSON export now writes real arrays and objects: a MAP as an object keyed by each key's text, a UNION as `{"tag": value}`, an unnamed struct as an array, an integer inside past 2^53 as a string of its digits, and `NaN` and `±Infinity` as `null`. Both write `INTERVAL`, `BLOB`, `BIT`, `GEOMETRY`, `BIGNUM` and `ENUM` values as DuckDB's text, and a JSON column's value as its text, and both sort by value, as the grid does. Parquet export writes every column natively, as before.
+    - A type that holds a VARIANT (`VARIANT[]`, `STRUCT(v VARIANT)`) is read through VARIANT. A UNION inside it then loses its tag and is its member's value, in exports, value reads and the inspector alike, and CSV and the clipboard write a MAP inside it as a list of `{"key": …, "value": …}` objects.
+    - Parquet keeps a few types only in part: an ARRAY loads back as a LIST, a `HUGEINT` or `UHUGEINT` as a `DOUBLE`, an `INTERVAL` to the millisecond, and an `ENUM` inside a struct or a `BIT` inside a list as `VARCHAR`. A UNION or an unnamed STRUCT column exports, but its file does not load again, and a VARIANT inside a list or struct does not export.
+    - A CSV or JSON export is built as one string, which a large nested column can make longer than the browser allows a string to be: a `FLOAT[768]` value is some 15,000 characters of JSON, so a few tens of thousands of rows of one pass the limit. Export such columns to Parquet.
+  - Filter chips show each value up to 60 characters, cut between graphemes with `…`, and the chip's title holds each value whole. A nested value's whole text was the chip's text, which a screen reader read out in full.
+  - A Parquet source holding JSON, as a column of its own or inside a list, struct or map, loads DuckDB's `json` extension with the table, so its cells and filters read the same from the first query. JSON inside a list reads `[1, NULL, null]`, where DuckDB writes `[1, NULL, 'null']` until the extension is loaded. An exact filter on a JSON column added without `valueType: 'text'` refuses text that is not JSON from the start, where it used to match nothing until the first JSON read and then fail every grid query. DuckDB-WASM fetches the extension from DuckDB's extension repository, as it already did for a JSON source; where it cannot, the table loads as before.
+
+  ### Fixed
+  - A VARIANT column no longer fails what reads it. `getColumnValues`, the CSV, JSON and clipboard exports, and the validation of a derived column whose expression is a VARIANT all failed with `Unsupported Arrow type VARIANT`.
+  - An "exact" filter on a nested column, set from its filter panel, compares the value's text (`valueType: 'text'`), and matches the cell that shows that text.
+    - **Before:** DuckDB cast the text to the column's type. Text that did not read as a list, struct or map was a Conversion Error that broke the grid's queries until the filter was removed; a UNION found only the member the text read as (`0` matched the text `'0'`, not the integer `0`, though both show `0`); and a VARIANT failed on values of any other type.
+    - **Now:** every value matches by its text, as the pattern modes already did.
+  - An "exact" filter on a JSON column, set from its filter panel, compares the text too.
+    - **Before:** an exact filter on a JSON column with text that is not JSON was a Conversion Error (`Malformed JSON`) that broke the grid's queries.
+    - **Now:** the filter panel compares the text, which is how valid JSON compared anyway: `{"a": 1}` matches only that spacing. A filter added in code needs `valueType: 'text'` for this. One saved without it, on a JSON column of the table, gets it when a preset loads it, imported or not, and when a session restore brings it back, undo and redo entries included, so a filter saved by 0.8 matches the rows it matched.
+  - `bridge.query` returns STRUCT and MAP values intact. A field or key named `size` read as the entry count; one named `toJSON` or `constructor` as a function, which the worker could not post; `__proto__` was lost, or became the object's prototype; an unnamed STRUCT's fields, all named `''`, overwrote one another or made the query fail; and a STRUCT with `months` and `days` fields turned into interval text. An unnamed STRUCT now arrives as an array, and a BLOB as a `Uint8Array` of its own bytes, not a view of the whole result batch. `WorkerBridge.query`'s documentation says what Arrow still loses, `DECIMAL`, `HUGEINT` and `INTERVAL` values inside a nested value, which `CAST(to_json(c) AS VARCHAR)` reads exactly, and a VARIANT, or a value holding one, which cannot cross Arrow at all: select a VARIANT as `CAST(c AS JSON)`, or read it with `getCellValue` or `getColumnValues`.
+  - `ENUM` values read through `bridge.query`, on their own or inside a LIST or STRUCT, are no longer `null` in a query's result. A single `SELECT`, `WITH`, `FROM` or `VALUES` query whose result holds one is read again through DuckDB's query path that carries ENUM dictionaries; that second read cannot be cancelled. Any other statement runs once, so that it does not take effect twice, and its ENUM values stay `null`: an `INSERT`, `UPDATE` or `DELETE … RETURNING`, several statements in one text, and a query that calls `nextval` (one called through a view or a macro is not seen, and advances its sequence twice). `CAST(e AS VARCHAR)` reads an ENUM's text in one run.
+  - A derived column whose name differs from another column's only in letter case is refused.
+    - **Before:** `LABEL` added beside `label` was accepted, the derived columns' VIEW renamed it `LABEL_1`, and reads of `"LABEL"`, the grid's included, returned `label`'s values, since DuckDB matches names ignoring case.
+    - **Now:** `addDerivedColumn`, `updateDerivedColumn` and `addNestedFieldColumn` compare names as DuckDB does, ignoring the case of ASCII letters, and resolve `{ success: false, error }` with `already exists as "label"`. The add-column dialog, the edit panel and the extract panel say so as you type: `PRICE` beside `price` shows "A column named "price" already exists". A rename that changes only the case of a column's own name is still allowed, and `__rowid__` is reserved in any case.
+  - A derived column on an empty table gets its expression's type. It was `VARCHAR` whatever the expression: the type was read from the first row, and there was none.
+  - The memory check before a Parquet load sizes nested columns from how DuckDB stores them.
+    - **Before:** every nested value counted 40 bytes, so a `FLOAT[768]` column was estimated at 3% of its size and a table that could not fit was loaded anyway. A `VARCHAR[]` or `JSON[]` column, or a JSON column read from Parquet, also failed the sample that measures text, and every text column then counted 8 bytes.
+    - **Now:** lists, arrays, structs, maps, unions and VARIANT are sized from DuckDB's storage layout, with the items of each list or map and the length of each text inside them sampled on their own, so a struct holding a short list of long text beside a long list of ids is sized list by list. An embedding table is estimated within 1% and a table of `VARCHAR[]` and long text within 2%; VARIANT errs high.
+
+  ### Changed (breaking)
+  - Nested columns report `type: 'nested'`, not `'string'`.
+    - **Before:** filters, the column header, the stats and the charts treated lists and structs as text, and a custom visualization or stats panel whose `isApplicable` accepted `'string'` was built for nested columns too.
+    - **Now:** such a registration no longer receives them. Accept `'nested'` as well, or test with `isNestedType`, to keep them; JSON columns are still `'string'`. TypeScript code that switches over `DataType` exhaustively needs a `'nested'` case, and so does a switch over a stats panel's `stats.kind`, since `ColumnStatsData` gains `NestedColumnStats`.
+  - `getColumnValues` returns every value exactly, some in a new form: a MAP as a `Map`, a UNION as `{ [tag]: value }`, and a `TIME WITH TIME ZONE` or `TIME_NS` value as DuckDB's text.
+    - **Before:** values came as Arrow carries them. A MAP came as a plain object, a UNION as its member's value, and a `TIME WITH TIME ZONE` or `TIME_NS` value as a number, of microseconds or nanoseconds since midnight, a time zone's offset dropped. A `DECIMAL` inside a struct read as a meaningless number (`1.25` as `6.2e-322`), and so did a `HUGEINT`; an `INTERVAL` came as numbers that do not hold it, `ENUM` values as `null`, and a VARIANT column failed the query. A `BIGINT` past 2^53 was rounded before it reached the `BigInt64Array`, and a `UINTEGER` past 2^31 − 1 turned negative in an `Int32Array`.
+    - **Now:** a nested column is read as exact JSON text and its values returned as `getCellValue` returns them: arrays, objects (an unnamed struct as an array), a `Map` for each MAP value, `{ [tag]: value }` for a UNION, integers as numbers when exact and as bigints beyond. `BIGINT`, `UBIGINT`, `HUGEINT` and `UHUGEINT` keep every digit: a `BigInt64Array` when every value fits one, else an `unknown[]` of numbers and bigints. A `UINTEGER` past 2^31 − 1 gives an `unknown[]` of numbers. A `DECIMAL` is the double nearest its value. `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`, `TIME WITH TIME ZONE` and `TIME_NS` values are DuckDB's text: `'1 year 2 months 3 days'`, `'POINT (1 2)'`, `'03:04:05+02'`, `'03:04:05.123456789'`. A `BIGINT`-family column is now read as text and parsed, which is slower than reading numbers, and a nested column's values skip the query cache.
+  - If you self-host the worker script (`bridgeOptions.workerUrl` or `workerFactory`), copy the new worker file when you upgrade: the fixes to `bridge.query` results above are made in it, and so is the load of DuckDB's `json` extension with a Parquet source that holds JSON.
+  - Offline, or under a CSP that blocks DuckDB's extension repository, serve DuckDB's `json` extension yourself when your data has nested columns. `getCellValue` and `getColumnValues` on a nested column, the value inspector, and CSV, JSON and clipboard exports that include one read its values as JSON, through the extension; 0.8 read them as Arrow carries them, without it. The CSP and offline guide says how to serve it.
+
+  ### Migration
+  - A custom visualization or stats panel registered for `'string'`, or a switch over `DataType`, that handled lists and structs: see [Nested and `TIME_NS` columns have types of their own](./docs/migration-guides/from-0.8-to-0.9.md#1-nested-and-time_ns-columns-have-types-of-their-own).
+  - Code that reads MAP, UNION, `TIME WITH TIME ZONE` or `TIME_NS` values with `getColumnValues`: see [`getColumnValues` returns MAP, UNION and time values in new forms](./docs/migration-guides/from-0.8-to-0.9.md#2-getcolumnvalues-returns-map-union-and-time-values-in-new-forms).
+  - A self-hosted worker file, or an offline or strict-CSP deployment with nested data: see [Self-hosted workers and offline deployments](./docs/migration-guides/from-0.8-to-0.9.md#3-self-hosted-workers-and-offline-deployments).
+
+- 3506285: ### Fixed
+
+  - A `TIME WITH TIME ZONE` cell shows DuckDB's text, offset kept: `14:05:06+05:30`, `14:05:06.5-08`. It showed the time alone, `14:05:06`. A `TIME` cell still shows to the millisecond.
+
+  ### Changed (breaking)
+  - A `TIME_NS` column loads as `type: 'time'`, not `'string'`, so it gets a time column's chart, stats and filter controls, and its cell shows DuckDB's text with every digit, `03:04:05.123456789`, where it showed the nanoseconds since midnight as a number, `11045123456789`. A custom visualization or stats panel whose `isApplicable` accepts `'string'` no longer receives it; accept `'time'` as well to keep it.
+
+  ### Migration
+  - A `'string'` registration, or code reading `ColumnSchema.type`, that handled `TIME_NS` columns: see [Nested and `TIME_NS` columns have types of their own](./docs/migration-guides/from-0.8-to-0.9.md#1-nested-and-time_ns-columns-have-types-of-their-own).
+
+### Patch Changes
+
+- b4ad31d: ### Fixed
+
+  - A `TableBody` used without `TableContainer` (from `/advanced`) fetches its rows again when the schema changes. Editing a derived column's expression used to leave the values fetched before it on screen.
+
+- 807818c: ### Fixed
+
+  - A request to the DuckDB worker no longer waits for good on a reply that will never come:
+    - An error the worker does not catch, during init or later, now rejects every pending request with a `WorkerInitError` whose code is `WORKER_CRASHED`, and terminates the worker. Every later call rejects at once with the same code, instead of being posted to a worker that will not answer, until `bridge.initialize()` starts a new one. Tables sharing the bridge all get this error.
+    - A message from the worker that cannot be deserialized (`messageerror`), or that has no string id, rejects every pending request with `WORKER_PROTOCOL_VIOLATION`, since there is no telling whose reply it was, and cancels them in the worker, which carries on. A load rejected this way may still have created its table in DuckDB.
+    - A result reply without its payload rejects its request with `WORKER_PROTOCOL_VIOLATION`.
+    - A request whose payload cannot be cloned, such as a detached `ArrayBuffer`, still rejects with the clone error, and no longer leaves its entry and its abort listener behind.
+    - `terminate()` while `initialize()` waits for the worker now rejects it at once with `WORKER_TERMINATED`, instead of leaving it to time out 30 s later.
+    - A worker script that fails to load now says so, with its URL when the bridge was given one, instead of "Worker error: undefined".
+  - A table whose worker fails reports it once, as an `error` event with `source: 'query'` and code `WORKER_CRASHED`, and stops fetching rows. It drops the errors that follow from it, those of the charts, panels and loads that fail after it, which carry the failure in their `cause` chain; a failed load still rejects and fires `loadError`. The data is gone with the worker: destroy the table and create it again, which starts a new one.
+
+- 529e430: ### Fixed
+
+  - Header histograms no longer show "No data" before their first query returns. Every histogram built at load, or as its column scrolled into view, showed it until its data arrived, which on a large table could take seconds. A chart's area now stays blank until its data lands, and "No data" appears only for a column with no values and no nulls.
+  - A histogram whose query fails now stays blank, as value counts already did, instead of showing "No data". The error still reaches the `error` event with `source: 'visualization'`.
+
+- dff2e7d: ### Fixed
+
+  - Hiding a pinned column no longer leaves the pinned columns after it offset by its width. The next pinned column stuck that far from the left edge, over the column beside it, and the pinned divider sat past the pinned block. With every pinned column hidden, the divider no longer stays on screen.
+  - Resizing a pinned column moves the pinned columns after it, and the divider, with it. They kept their old offsets, so when scrolled sideways they overlapped the resized column or left a gap beside it.
+  - Pinned columns are offset in the order they appear. The order they were pinned in was used instead, which differs once `setColumnOrder` has moved them.
+  - Keyboard navigation counts only visible pinned columns in the width of the pinned block, matching where the pinned columns are now drawn. Counting hidden ones scrolled a column that much too far.
+  - A column whose stored width is not a finite, non-negative number, for example from `setColumnWidth` or a restored session, is drawn 150 px wide in both the header and the body. The browser dropped the invalid width and left whatever width the element had before. Stored widths are drawn rounded to whole pixels.
+
+- a2105fe: ### Changed
+
+  - A column width under 50 px is drawn 50 px wide, the same minimum as resizing by drag or keyboard. Only `setColumnWidth` or a restored session can set such a width. A cell cannot be narrower than its padding and border, so a smaller width took more room than it said. With rows rendering only some columns, that left the cells after it out of line with their headers.
+
+- b4ad31d: ### Fixed
+
+  - `setColumnOrder` counts a column name given twice once, at its first place. A repeated name used to put the column in the order twice.
+
+- 24b2ed2: ### Fixed
+
+  - Keys that act on the keyboard cursor now scroll it into view. Once the user had scrolled away from the cursor with the mouse, `F2` put focus on a header button out of sight, `Shift+F2` opened column layout mode on a column nobody could see, and `Enter` or `Space` sorted a column, or `Enter` selected a row, off-screen.
+  - In column layout mode (`Shift+F2`), widening a column at the right edge no longer pushes it out of view, and `Escape` after moving a column scrolls back to where the column returns.
+  - A column wider than the table's view no longer jumps between its two edges on every key press that keeps the cursor on it; the view shows the column's start and stays put.
+
+- 3506285: ### Fixed
+
+  - A derived column whose expression does not give one value per row is refused with `EXPRESSION_INVALID`, and the message says what to write instead.
+    - **Before:** validation bound the expression alone, which takes both kinds. `unnest("tags")`, and a macro over it such as `generate_subscripts`, gave the VIEW a row for each element and none for an empty list, with `__rowid__` repeated: the grid's blocks stayed placeholders and a filtered count read `3 / 2 rows`. A bare aggregate such as `sum(price)` passed validation but not the VIEW build, and stayed in the list of derived columns, so every later add, extract and removal failed until an undo, a redo or a new load.
+    - **Now:** validation binds the expression as the VIEW will. An `unnest` asks for a list function such as `list_transform`, or a subquery; an aggregate asks for a window, `sum(x) OVER ()`. Window functions, list comprehensions, lambdas and an `unnest` inside a subquery still work. A saved session, an undo or a redo that holds such a column leaves it out, with a console warning.
+  - Every derived-column change is all or nothing. When an add, an edit, a replacement or a removal fails, the derived columns and the VIEW are as they were.
+  - Editing a vector column no longer breaks the VIEW. An update dropped the column's helper table before it checked the new definition, so values of the wrong length, or any edit of a vector column into an expression, left the VIEW reading a table that was gone, and every query failed. An update or a replacement now makes its new helper table beside the old one, and drops the one no column reads once the VIEW is built.
+
+- c3161a7: ### Fixed
+
+  - Derived-column changes no longer interfere when one starts before another has landed. Adds, edits, replacements and removals, `undo`, `redo`, `resetToInitial` and `loadData` now run one at a time, in call order, and each validates against the columns the one before it left. Previously a removal landing while a vector add was still inserting could leave `state.tableName` naming a VIEW not yet created, an edit could drop a column added while it ran from `state.schema`, and an undo pressed during an add undid the entry below it.
+  - An undo pressed while an add runs now waits for the add and undoes it. An edit made while a derived-column change runs, such as a filter added during a slow vector add, keeps its own undo entry.
+  - A derived-column change, undo, redo or reset that is still waiting or running when `loadData` or `clearSession` is called no longer applies to the new or emptied table. An add or update resolves `{ success: false }`, a replacement resolves a `NOT_FOUND` error, a removal rejects with one, and an undo, redo or reset resolves `false`. `loadData` also waits for the previous data's derived-column tables to be dropped before it resolves, and `clearSession` now drops them too.
+  - An `undo`, `redo` or `resetToInitial` called while a load is under way now resolves `false` instead of acting on the session the load restores.
+
+  ### Changed
+  - A second add of a name that an earlier add is still adding now waits for that add and gets `Column name "X" already exists`, instead of `is already being added` at once. The same applies to a rename to that name.
+
+- 56d3fae: ### Fixed
+
+  - A restored session whose filter or sort names a derived column now counts and reads its rows once that column is back. The filters, sort and column layout are restored in one change with the derived columns. Before, they were written first, so the filtered-row count and the first row reads ran against the base table, which lacks the column, and failed. With `visualizations: false` nothing counted again, and the rows past the true count stayed placeholders.
+  - A restored session none of whose derived columns can be rebuilt, for example because an expression names a column the data no longer has, no longer keeps filters, a sort or columns that name them.
+  - A saved session that cannot be read no longer makes the load reject. The load logs a console warning and goes ahead without the session, and whatever part of it was already written is taken back. Before, a snapshot with malformed fields rejected the load when it had no derived columns, and was reported as a derived-column failure when it had some.
+  - A derived column that a restored session cannot rebuild no longer leaves its header tooltip behind for a later column of the same name.
+
+- 3506285: ### Fixed
+
+  - Editing or replacing a derived column drops its filters whenever its DuckDB type changes, unless both types are integers or both are DECIMALs, which DuckDB compares by value.
+    - **Before:** the filters went only when `ColumnSchema.type` changed. An edit from `json_extract_string` to `json_extract`, `VARCHAR` to `JSON`, kept a set filter `['active']` from a value-count bar, which DuckDB then read as JSON, and every grid, count and chart query failed with `Malformed JSON` until the chip was removed. A change to `BIT`, `BIGNUM` or `GEOMETRY` failed the same way, and a STRUCT made a LIST, or `INTEGER[]` made `BIGINT[]`, kept filters made for another shape.
+    - **Now:** `DOUBLE` made `FLOAT`, `TIMESTAMP` made `TIMESTAMP WITH TIME ZONE` and any change between nested types drop the filters too. `INTEGER` made `BIGINT`, or `DECIMAL(12,3)` made `DECIMAL(13,4)`, keeps them.
+
+- 9a6ca83: ### Fixed
+
+  - `createDataTable`'s documentation now says what it does with `source`: it awaits that first load, and the first fetches of its rows and of the charts in view, and rejects with the load's error if the load fails, without tearing down the table it mounted. The API reference and AGENTS.md said the initial load was not awaited. The `tableName` and `sourceFormat` options now say they apply to `source` only, and the docs that recommend loading with `loadData()` instead pass them to it.
+  - The loading guide's rules for string sources: a string is fetched when it looks like a URL or path (a scheme, `//`, `/`, `./` or `../`), loaded inline when it spans lines or starts with `[` or `{`, and otherwise rejected with `SOURCE_AMBIGUOUS`. It said any string not starting with `http` was parsed as CSV or JSON.
+  - The loading guide's `ProgressInfo` details: `percent` runs 0–100 (it said 0–1), and the worker's stages are `reading`, `parsing` and `indexing` (it listed `analyzing` too).
+
+- 8caa5d2: ### Fixed
+
+  - A column dragged by its handle now drops where the pointer is after the table scrolls beneath it. Wheeling or swiping sideways with the button held takes a column somewhere out of view; letting go without moving the pointer used to drop it where the pointer had been before the scroll, usually right back where it started. The drop indicator now stays under the pointer as the headers scroll, including in a table inside a shadow root.
+
+- 67e4dd1: ### Fixed
+
+  - A column let go over the pinned columns, while the table is scrolled sideways, now lands at the pinned block's edge, before the first unpinned column in view. It used to land among the columns scrolled out of view beneath the pinned block, wherever the pointer met their hidden headers, and so vanished from view. Drops are now found from the column layout and the header scroll rather than from header positions, and the drop indicator marks where the column will land.
+  - A drag whose mouse button is released outside the browser, after switching to another window, now ends without moving the column. It stayed alive, with its indicator following the pointer, until the next click anywhere dropped the column there. A drag also ends, without a drop, when the window loses focus, the page is hidden or the browser cancels the pointer.
+  - The drop indicator now marks the right place in a table inside a scaled element, under a CSS `transform` or `zoom`. It was placed in screen pixels inside the scaled header row, far from the gap it marked.
+
+- 3506285: ### Fixed
+
+  - CSV, JSON and clipboard exports no longer fill the query cache. Their batches went through it and stayed until the next filter, sort or derived-column change: 460 MB after a 30,000-row CSV export of a `FLOAT[768]` column. A long export also pushed the charts' and stats' results out of the cache. The batches now skip it, as a nested column's `getColumnValues` and the value inspector's reads do.
+
+  ### Changed
+  - Export batches, clipboard copies and pages of `getColumnValues` (`limit`, `offset`) that DuckDB has to order pick their rows by `__rowid__` first, then read the values of those rows alone. In one `SELECT`, DuckDB worked out the values of every row before it kept the page, the JSON of each nested value included. A 10-row copy at row 30,000 of 100,000 `FLOAT[768]` rows takes 4 ms, a 10,000-row export batch of them about 0.5 s, and `getColumnValues(name, { scope: 'filtered', limit: 1000 })` over 60,000 of them 55 ms.
+
+- 3506285: ### Fixed
+
+  - CSV and JSON exports and the clipboard write a `TIME WITH TIME ZONE` value as DuckDB's text, offset kept (`12:34:56+05:30`), and a `TIME_NS` value as its text, every digit kept (`03:04:05.123456789`). They wrote a `TIME WITH TIME ZONE` as microseconds since midnight, the offset dropped: `12:34:56+05:30`, `12:34:56+00` and `12:34:56-08` were all `45296000000`. A `TIME_NS` they wrote as nanoseconds.
+  - They write a `DECIMAL` as the double nearest its value: `0.35`, not `0.35000000000000003`, and `19.99`, not `19.990000000000002`. A DECIMAL was multiplied by 10^-scale on its way out of DuckDB, which missed the nearest double for 13% of the `DECIMAL(10,2)` values from 0 to 200. The rows are still filtered and sorted by the values themselves.
+
+- cf8d9ca: ### Changed
+
+  - The table's grid is laid out left to right on a right-to-left page too. Pinned columns, keyboard scrolling and sideways scrolling all place columns by their left offsets, which a right-to-left grid reversed. On a page marked right to left with a `dir` attribute, each cell value and column name still takes its direction from its own text, as with `dir="auto"`. Right-to-left layouts are still not supported.
+
+- 7abf85c: ### Fixed
+
+  - A smooth sideways scroll of the table body, such as a host's `scrollTo({ left, behavior: 'smooth' })`, no longer stops a pixel or two in. At a device pixel ratio of 2, Chrome can deliver the header's scroll event for a sync a frame late, after the body has moved on, and the table then wrote the header's older position back into the body, which cancelled the animation. The table now drops a scroll event that finds a scroller where the table itself last put it, to within a pixel, so the header follows the body without pulling it back. An animated scroll of the header, such as a fling over it or a host's `scrollTo` on it, is no longer pulled back by the body in the same way.
+  - The scroll to a derived column just added no longer stops short of it on a busy machine. It used to turn off the header's sync until the body seemed to stop, and stalled frames made it look stopped mid-way.
+
+- 47f1ac9: ### Fixed
+
+  - The column header now scrolls exactly as far as the body. The header keeps a gap beside it for the body's vertical scrollbar, and the gap was a fixed 17px whatever the scrollbar measured. Overlay scrollbars (the macOS default) take no width, and neither does a table with too few rows to scroll, so the header's viewport was up to 17px narrower than the body's (2px with classic 15px scrollbars). At the far right the last header was cut off, and moving the keyboard cursor onto a header at the right edge left part of it hidden. A scrollbar wider than 17px did the opposite: the header could not scroll as far as the body and pulled it back, so the last few pixels of the table could not be reached. The gap now matches the body's scrollbar as measured, before the first paint, so `--dt-scrollbar-width` no longer has a visible effect.
+
+- a5b9459: ### Fixed
+
+  - Hiding or removing the column the keyboard cursor is on moves the cursor to the column in its place, not to the first column. That is the next column still shown, or the one before it when it was the last. For a pinned column it is another pinned column, which is always in view, or with none left, the first column at the left of the view. A derived column renamed while the cursor is on it keeps the cursor. The first column was far from where the user was: hiding a column far to the right, from its header's hide button for example, left the cursor off-screen with the view unchanged, and the next arrow key jumped the table back to its start.
+
+- 97dd322: ### Fixed
+
+  - A `createDataTable({ source })` whose load fails no longer leaves the table behind. It used to reject with the table still mounted in the container and, when it had created them, its worker running and its session store open, and the caller never got a handle to `destroy()` them. It now tears the table down as `destroy()` would, then rejects with the load's error. A `bridge` or `persistence.sessionStore` passed in stays open, though a table the load finished creating in that bridge is dropped, and the saved session is not written. The container is left ready for another `createDataTable`.
+
+- c5778ae: ### Fixed
+
+  - The published `dist/visualizations/LazyVizController.d.ts` type-checks again. It had lost its `ColumnSchema` import, because the build drops whatever an `@internal` tag is attached to and a tag in a file's opening comment is attached to the first import. No public entry point reaches that module, so only code that imported it directly saw the error. `npm run build` now type-checks every emitted declaration file.
+
+- 15b5e66: ### Fixed
+
+  - The SQL filter modal shows its Remove section when it edits an expression filter. The stylesheet hid the section in both modes, and opening a filter for editing only cleared an inline style, so the modal never offered Remove; the filter's chip was the only way to remove it. The section is also `hidden` outside edit mode, so a table with a class prefix of its own never shows it when creating a filter.
+  - Closing the SQL filter modal after editing a filter gives focus back to the filter bar's Expression button. Focus used to drop to the page: the filter's chip, which opened the modal, takes no focus, and updating or removing the filter rebuilds it. `SQLFilterModal.openForEdit()` takes an optional `returnFocus` for hosts that open it themselves.
+  - Delete confirmations keep keyboard focus in their dialog, in the SQL filter modal, the derived-column editor and the filter-preset panel. The Remove or Delete button hides itself to show the confirmation, which took focus with it to the page, where `Tab` and `Escape` no longer reached the dialog. Focus now moves to the confirmation's Cancel or No, and back to Remove or Delete if you cancel, or if deleting a derived column fails. Deleting a filter preset, which rebuilds the list and leaves the panel open, puts focus on the next preset's Delete button, else the previous one's, else the name field.
+  - Two tables on one page no longer share the radio buttons of their dialogs. The export dialog's format and scope, and the derived-column modal's mode, were named after the class prefix alone, and radio buttons that share a name form one group across the page: adding the second table's export dialog, with its defaults checked, unchecked the first's, which then opened with no format or scope checked. Each dialog now names its radio groups after its table's instance id. An export dialog or derived-column modal constructed without an `instanceId` generates its own, for its element ids too.
+
+- d562f40: ### Fixed
+
+  - The action buttons of a column narrower than them no longer spill over the next header at rest. A header's five buttons need about 135 px, and a column can be 50 px wide. Past the header's edge, they sat under the next header, which covered them and took their clicks. A narrow pinned column was worse: its buttons lay over the first unpinned header and took the clicks meant for it. The action bar now clips its buttons at the header's edge.
+    - **Every action stays reachable.** Once the pointer has rested on the bar for 200 ms, or at once when keyboard focus is in it (`F2`), the bar shows every button, running on over the next header's bar. `F2` scrolls the table so the button it focuses is in view. The last column's bar runs on leftward instead, over its own header and the one before, so it neither leaves the view nor widens the header's scroll range.
+    - **While shown, a narrow column's bar sits on top of the next header's first buttons,** visibly, until the pointer leaves it. A pointer passing along the row of bars without pausing reveals nothing, so a click there lands on the button under it.
+
+- 18fb096: ### Fixed
+
+  - A list or fixed-size array column (`INTEGER[]`, `VARCHAR[3]`, …) no longer leaves rows loading for good.
+    - **Before:** the worker could not send a list value to the page, and the query waited for a reply that never came. On a wide table, dragging the horizontal scrollbar to the list columns blanked every body cell, and no scroll brought them back. `loadData` on a JSON file with an array field in its first screen never resolved. `bridge.query`, `actions.getColumnValues` and the CSV, JSON and clipboard exports hung the same way on a list column.
+    - **Now:** list values reach the page as arrays: `bridge.query` returns `BIGINT[]` items as numbers and `STRUCT(…)[]` items as objects, and the exports and `getColumnValues` read list columns without hanging.
+  - A worker error whose code is not a string, such as a `DOMException`'s number, now rejects its query with a `QueryError` whose code is `QUERY_RUNTIME`. The bridge threw `code.startsWith is not a function` instead, and the query stayed pending for good. An error reply the bridge cannot read at all rejects with `WORKER_PROTOCOL_VIOLATION`.
+  - Nested columns (lists, arrays, structs, maps, unions, VARIANT) show in the grid as DuckDB's text for them: `[56, 3, 91]`, `{'x': 1.25, 'y': 0.58, 'tier': bronze}`, `{k1=1, k2=2}`. Sorting a nested column still orders by value.
+    - **Before:** a struct cell showed `[object Object]`, and so did a BLOB, BIT, GEOMETRY or BIGNUM cell; an ENUM cell was empty, its values read as `null`; and a table with a VARIANT column failed every row fetch with `Unsupported Arrow type VARIANT`.
+    - **Now:** each shows DuckDB's text, bounded in what it shows and in what DuckDB formats for it. A list, a map, or an array of more than 32 items shows its first 32 and then how many more: `[1, 2, …, 32, … +968]`, `{k1=1, … +568}`. DuckDB formats only the items a cell shows, and no more than the first 1,001 of each list, array or map inside a value, so a long list inside a value costs little: a 128-row block of `STRUCT(id BIGINT, v DOUBLE[])` with 200,000-item lists takes 34 ms. A union, a VARIANT and a map's keys are formatted whole. Text past 1,000 graphemes is cut and ends `…`, only when something was cut, and never inside an emoji. A BLOB shows its first 256 bytes, then `… +N`. DuckDB writes a byte that is not printable ASCII as four characters (`\x89`), and when that makes the text longer than 1,000 characters, the cell shows the whole bytes that fit, 250 to 256 of them, and `…`, without the count. A 128-row block of a `FLOAT[768]` embedding column is about 50 KB, where its whole text was 1.18 MB.
+  - A table with numeric `months` and `days` columns no longer shows `null` in every cell. Each of its rows was taken for an interval value and turned into text such as `1 year 1 month 1 day`.
+
+- 8c751eb: ### Fixed
+
+  - Opening a filter panel now moves focus into it. The panel gave focus to its first control, the Clear button, which is hidden until the column has a filter, and focusing a hidden button does nothing, so focus stayed on the header's filter button, outside the panel. With the hidden button counted as the panel's first control, `Shift+Tab` from the Close button also walked out of the panel. Panels and dialogs now skip controls that a stylesheet hides, using `checkVisibility()` where the browser has it and computed styles where it does not.
+  - `Tab` no longer walks out of an open filter panel from its last control. The panel ends with the null filter's three radio buttons, which the browser treats as one stop, at the checked radio. The focus trap waited for focus on the group's last radio instead, so from any other one `Tab` left the panel.
+  - Clearing a column's filter with the keyboard no longer drops focus out of the filter panel. The Clear button hides itself, and it took focus with it to the page, where `Escape` no longer closed the panel; focus now moves to the Close button first.
+
+- 4058b57: ### Fixed
+
+  - Closing a filter panel or a derived-column editor gives focus back to the header button that opened it for the column it shows. After switching the panel to another column by clicking that column's button, focus used to go back to the first column's button, which could be far out of view.
+
+- 82a8adf: ### Fixed
+
+  - Showing a hidden column no longer puts it in front of a column pinned while it was hidden. It went back next to the neighbours it had when hidden; if one of them had been pinned since, the restored column landed before the pinned block, the pinned divider cut through it, and `aria-colindex` stopped ascending along the header row (3, 1, 4). An unpinned column now goes after the pinned columns, and a pinned one back to its place in pin order among them.
+  - A column shown back next to its old neighbours also moves there in `columnOrder` when a reorder since then had filed it elsewhere, so `visibleColumns` always follows `columnOrder`. `aria-colindex` is numbered from `columnOrder` and could descend after such a show.
+  - Pinning or unpinning a column changes `pinnedColumns`, `columnOrder` and `visibleColumns` in one update. A `pinnedColumns` subscriber no longer sees the pinned column outside the pinned block, and a `TableBody` used directly no longer fetches its rows again on a pin change.
+  - `toggleColumnPin` ignores a column name the table does not have. It pinned it and added it to `columnOrder`, where the phantom shifted every later column's `aria-colindex`. A stale pinned name is unpinned without being added.
+
+- 534055a: ### Fixed
+
+  - `setColumnOrder` keeps the pinned columns first, hidden pinned columns included.
+    - **What went wrong:** an order that put a pinned column after an unpinned one left it sticky at the left edge over another column, and out of step with the pinned divider.
+    - **How it happened:** besides code calling `setColumnOrder`, dragging or moving a column to the front with the keyboard while a pinned column was hidden did it. Pinning another column then put it after the moved one.
+    - **The pinned columns' order:** they keep the order given, and a pinned column hidden and shown again goes back to its place among them.
+    - **One update:** `columnOrder`, `visibleColumns` and `pinnedColumns` change together, so a subscriber to any of them sees the others already updated.
+  - A restored session keeps the pinned columns first too, and shows its columns in the order the table last showed them, with hidden ones kept beside their old neighbours.
+    - **Undo and redo:** the entries saved with the session get the same fix.
+    - **Old sessions:** sessions saved before the column actions kept pinned columns first could restore a pinned column out of place, or undo back to one, with `aria-colindex` descending along a row. A pinned column in such a session now moves into the pinned block.
+
+- 3506285: ### Fixed
+
+  - A column named `__proto__`, which a CSV header can give a table, keeps its values. Rows were built by assigning each column to a plain object, and assigning `__proto__` sets the object's prototype instead of a property: the column's cells showed `[object Object]`, CSV and JSON exports wrote it, and `getColumnValues` of selected rows read it the same way. When the column held a STRUCT, the assignment of the next column threw `'set' on proxy: trap returned falsish`, so a query that read a column after it failed, the grid's row fetches and `bridge.query('SELECT * …')` included.
+
+  ### Changed
+  - `bridge.query` builds each row from the result's columns by position, rather than from Arrow's row objects, which reads a result about three times as fast: 2,000 rows of 1,000 columns in 0.41 s against 1.11 s, and a 128-row block of 30 columns in 1.4 ms against 2.5 ms.
+
+- cd45424: ### Fixed
+
+  - Loading a Parquet `File`, `Blob` or URL no longer fails once DuckDB's memory has grown past 2 GiB, which a few large loads in one page reach. Such a load failed with "too small to be a Parquet file" or "Prefetch registered for bytes outside file … file size: 0", and so did every load after it: duckdb-wasm's runtime lost the size of any file it opened at a memory address above 2 GiB. The library now corrects this in DuckDB's worker.
+
+- 16d217b: ### Fixed
+
+  - A row fetch that fails, or comes back short, is no longer issued again at once.
+    - **Before:** the body repeated it as fast as DuckDB answered, for as long as the failure lasted, and logged `Error fetching rows` each time: thousands of failed queries in a browser test that held a derived-column change for a second.
+    - **Now:** the same fetch waits 250 ms, then twice as long after each failure in a row, up to 8 s. A fetch of other columns or rows goes ahead at once, and a filter, sort or data change starts afresh.
+  - Rows are not fetched, and filtered rows not counted, while a derived-column change can drop or rebuild the relation they come from: a removal, an edit or a replacement, an undo or redo, a reset, or a session restore rebuilding its derived columns.
+    - **Before:** a scroll during one read from the VIEW it had dropped, or read a column it was removing, and every read failed. A filter added during one kept the row count from before it, and the rows past the true count stayed placeholders.
+    - **Now:** both run once the change settles, whether it succeeded or failed. Adding a derived column leaves the relation readable until its last statement, so rows scrolled to or sorted while one is added load at once.
+  - A table body whose row count dropped below the rows in view while its first fetch was in flight, as when a filter's count lands at zero, no longer asks for the same empty block over and over in one call stack until the stack overflows.
+  - A derived column added while another of the same name is still being added is refused. The two shared a vector column's helper table, each dropping the other's.
+
+- 5cc24ee: ### Fixed
+
+  - A sideways scroll right after a filter change now stays where the user put it. For a second after a filter change, a table scrolled sideways put its horizontal position back every frame, which undid any scroll made in that second. A wheel scroll straight after brushing a chart went nowhere, and moving the keyboard cursor with `End` could leave it off-screen. The hold now ends at the first wheel, key press, click or touch in the table.
+  - Hiding, showing, pinning or moving a column now puts the scroll position back as soon as the table is rebuilt, not a frame later. The table no longer flashes to its first column for a frame. The late restore also undid a scroll made right after the rebuild: moving a column to the far right with `Shift+F2` and then `Shift+End` left it off-screen. And it lost the position when the table was rebuilt twice in a row, as when a derived column is added: the table jumped back to its first column.
+  - Adding a column with the + button now scrolls the table all the way to it. The smooth scroll to the right end was cut off after 600ms, before a wide table got there, and the new column was left out of view.
+
+- 3506285: ### Fixed
+
+  - In a table mounted inside a shadow root, the panels and dialogs keep `Tab` inside them and give focus back to the control that opened them. They took the focused element from `document.activeElement`, which there is the shadow root's host, so `Tab` jumped to a panel's first control every time and `Shift+Tab` to its last, and closing one gave focus back to nothing inside the table. The filter, preset and derived-column panels, the SQL filter and the export dialog all did this.
+
+- f854109: ### Fixed
+
+  - The first time a column was hidden, shown or moved after scrolling sideways, every column header slid in from where it was when the data loaded. The pin animation's saved positions are now used only by the change that saved them.
+
+- 0e34cbe: ### Fixed
+
+  - A smooth sideways scroll no longer builds a custom stats panel for every column it passes. The scroll to a derived column just added, across a 1,000-column table, built about 500 panels, and the charts at the far end waited more than 10 seconds behind their queries. A panel is now built once the columns near the view have held still for 150 ms. A column that scrolls away still loses its panel at once.
+
+  ### Changed
+  - While a column's panel waits to be built, its stats slot shows the table-wide row count, and its chart keeps its stats out of the slot. The panel's first `update()` receives them, and `setHoverStats()` the detail the chart shows then, such as a committed selection's. The slot no longer shows the chart's stats just before the panel replaces them.
+  - A column that leaves the view's reach gets its stats slot back as it is without a panel, its chart's stats or the table-wide count, instead of whatever the destroyed panel left.
+
+- 90a6a79: ### Fixed
+
+  - Two tables sharing a `WorkerBridge`, each with a vector derived column of the same name, no longer share one DuckDB helper table. Before, the second add replaced the first table's values with its own, and removing the column from either table broke the other's VIEW. Helper tables are now named per derived-column manager, and a manager is numbered per bridge. That also keeps a table's new helper tables apart from those of the manager it replaced on a new load or an undo.
+  - Destroying a derived-column manager, which a reset, a new load or an undo of a derived column does, now drops a helper table left by a vector add or edit that failed part-way through, instead of leaving it in DuckDB.
+  - `destroy()` on a table sharing its bridge now drops the table's derived-column VIEW and vector helper tables as well as its base table. It waits for a derived-column change still running to finish first, so the change cannot rebuild one after the drop. Before, they stayed in DuckDB for as long as the bridge lived.
+  - A `loadData()` still in flight when `clearSession()` is called no longer fires `loadComplete` with an empty `tableName` and a `rowCount` of 0 after the clear. The clear now deletes the snapshot of the table it empties, which is the one the load made. That table is also dropped once a load lands or on `destroy()`, instead of being left in DuckDB for good.
+  - A load that a newer `loadData()` or `clearSession()` supersedes before it ends now fires neither `loadComplete` nor `loadError`. Its promise still resolves, or rejects if the load itself failed. Each `loadStart` is followed by at most one of the two.
+  - A load that a newer `loadData()` supersedes no longer leaves its base table in DuckDB for good, even after `destroy()`; with 200K rows × 1,000 columns that was about 1.5 GB. `destroy()` during a load in flight, on a shared bridge, now drops both the table the load was replacing and the one it makes once it lands, instead of leaving both. Each load now reports the table it replaces as its turn begins, so whatever happens to the load, the next successful load or `destroy()` drops it.
+  - Two loads of the same `tableName`, neither awaited, no longer risk one dropping the table the other has just made.
+  - A table destroyed while a session restore rebuilds its derived columns no longer logs "Failed to restore derived columns"; the load rejects with `DestroyedError`, as a load destroyed at any other point does.
+  - `clearSession()` and `resetToInitial()` now fire `derivedChange` (with `kind: 'updated'`) when they drop the derived columns, so a SQL editor refreshing its completions on that event no longer offers the dropped columns.
+
+- 0ad8272: ### Fixed
+
+  - The rows in view now follow the table body's height, not only its scroll position.
+    - **Before:** a container that grew taller showed blank space below the rows rendered for its old height until the next scroll, one that shrank went on rendering rows out of view, and a table mounted hidden, in a closed tab or a collapsed panel, showed no rows once it was shown.
+    - **Now:** the rows in view are worked out again whenever the body resizes, whatever resized it: the container, the window, or a filter bar that wraps onto another line.
+
 ## 0.9.0-next.0
 
 ### Minor Changes

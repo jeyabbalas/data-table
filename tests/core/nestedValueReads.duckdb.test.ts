@@ -81,19 +81,21 @@ beforeAll(async () => {
       CAST(h AS HUGEINT) AS h, CAST(ub AS UBIGINT) AS ub, CAST(bi AS BIGINT) AS bi,
       CAST(ui AS UINTEGER) AS ui, CAST(d4 AS DECIMAL(18,4)) AS d4, CAST(d2 AS DECIMAL(10,2)) AS d2,
       CAST(d38 AS DECIMAL(38,18)) AS d38, CAST(bn AS BIGNUM) AS bn, CAST(bl AS BLOB) AS bl,
-      CAST(u AS UUID) AS u, CAST(j AS JSON) AS j, CAST(dt AS DATE) AS dt
+      CAST(u AS UUID) AS u, CAST(j AS JSON) AS j, CAST(dt AS DATE) AS dt,
+      CAST(tns AS TIME_NS) AS tns
     FROM (VALUES
       (0, '14 months 3 days 04:05:06', 'b', '10101', 'POINT(1 2)', '03:04:05.5+02:30',
        '340282366920938463463374607431768211455', '170141183460469231731687303715884105727',
        '18446744073709551615', '9007199254740993', '4294967295', '1.2345', '1.25',
        '-12345678901234567890.123456789012345678', '123456789012345678901234567890',
-       '\\xAA\\xBB', '11fde503-bf17-47ee-b458-3ce648530d3d', '{"a": [1, 2.50]}', '2024-01-02'),
+       '\\xAA\\xBB', '11fde503-bf17-47ee-b458-3ce648530d3d', '{"a": [1, 2.50]}', '2024-01-02',
+       '03:04:05.123456789'),
       (1, '1 day', 'a', '1', 'LINESTRING(0 0, 1 1)', '00:00:00+00', '12', '-12', '12',
        '-9223372036854775808', '7', '0.0001', '-2.50', '1', '-1', '',
-       '00000000-0000-0000-0000-000000000000', '[]', '1970-01-01'),
+       '00000000-0000-0000-0000-000000000000', '[]', '1970-01-01', '00:00:00'),
       (2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL)
-    ) AS v(r, iv, e, b, g, ttz, uh, h, ub, bi, ui, d4, d2, d38, bn, bl, u, j, dt)`);
+       NULL, NULL, NULL, NULL)
+    ) AS v(r, iv, e, b, g, ttz, uh, h, ub, bi, ui, d4, d2, d38, bn, bl, u, j, dt, tns)`);
   relations.set('scalars', { schema: await describeSchema('scalars'), rows: 3 });
 }, 60_000);
 
@@ -552,6 +554,8 @@ describe.each([
     ['b', ['10101', '1']],
     ['g', ['POINT (1 2)', 'LINESTRING (0 0, 1 1)']],
     ['ttz', ['03:04:05.5+02:30', '00:00:00+00']],
+    // Arrow's number for a TIME_NS is nanoseconds, where a 'time' column's is microseconds.
+    ['tns', ['03:04:05.123456789', '00:00:00']],
     ['bn', ['123456789012345678901234567890', '-1']],
     ['u', ['11fde503-bf17-47ee-b458-3ce648530d3d', '00000000-0000-0000-0000-000000000000']],
     ['j', ['{"a": [1, 2.50]}', '[]']],

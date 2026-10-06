@@ -2618,10 +2618,10 @@ export class StateActions {
    *   inside as numbers when exact and bigints beyond, DECIMAL, FLOAT and
    *   DOUBLE as numbers (`NaN`, `±Infinity` and `-0` kept), and dates,
    *   times, UUIDs, INTERVALs, BLOBs, ENUMs and BITs as DuckDB's text.
-   * - `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY` and `TIME WITH TIME
-   *   ZONE` values are DuckDB's text: `'1 year 2 months 3 days'`,
-   *   `'POINT (1 2)'`, `'03:04:05+02'`. Arrow returns them as bytes, numbers
-   *   or `null` that do not hold them.
+   * - `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`, `TIME WITH TIME
+   *   ZONE` and `TIME_NS` values are DuckDB's text: `'1 year 2 months 3
+   *   days'`, `'POINT (1 2)'`, `'03:04:05+02'`, `'03:04:05.123456789'`.
+   *   Arrow returns them as bytes, numbers or `null` that do not hold them.
    * - Other values come as the DuckDB worker returns them: text for
    *   `VARCHAR`, `UUID` and `JSON`, a `Uint8Array` for a `BLOB`, epoch
    *   milliseconds for `DATE` and `TIMESTAMP`, microseconds since midnight
@@ -2803,9 +2803,10 @@ export class StateActions {
    * Any other column's value is the one {@link getColumnValues} returns for
    * the row: a `bigint` for `BIGINT`, `UBIGINT`, `HUGEINT` and `UHUGEINT`; a
    * number for the other integers and for `FLOAT`, `DOUBLE` and `DECIMAL`;
-   * DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY` and
-   * `TIME WITH TIME ZONE`; a `JSON` column's text; a `Uint8Array` for a
-   * `BLOB`. SQL NULL, at the top or anywhere inside, is `null`.
+   * DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`,
+   * `TIME WITH TIME ZONE` and `TIME_NS`; a `JSON` column's text; a
+   * `Uint8Array` for a `BLOB`. SQL NULL, at the top or anywhere inside, is
+   * `null`.
    *
    * One query by `__rowid__`. It skips the query cache and runs ahead of
    * queued chart and stats queries.
@@ -3241,7 +3242,8 @@ type ValueRead = 'raw' | 'json' | 'text' | 'integer-text' | 'decimal-text' | 'do
  * meaningless numbers; a BIT and a BIGNUM as their storage bytes; a
  * GEOMETRY as WKB bytes, where the grid, the exports and a geometry inside
  * a nested value all give its text, `POINT (1 2)`; a TIME WITH TIME ZONE as
- * microseconds since midnight, its offset lost; and an ENUM as `null`
+ * microseconds since midnight, its offset lost; a TIME_NS as nanoseconds,
+ * where a `'time'` column's number is microseconds; and an ENUM as `null`
  * through the worker's cancellable query path (`conn.send`), which every
  * `bridge.query` takes. DuckDB's text for each is exact. A BLOB arrives
  * intact, as a `Uint8Array`, and stays one.
@@ -3256,6 +3258,7 @@ const TEXT_READ_NAMES: ReadonlySet<string> = new Set([
   'GEOMETRY',
   'TIME WITH TIME ZONE',
   'TIMETZ',
+  'TIME_NS',
   'ENUM',
 ]);
 

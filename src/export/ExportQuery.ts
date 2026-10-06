@@ -90,8 +90,10 @@ export function isContiguousRange(
  * upper-case name `parseDuckDBType` gives them. Arrow carries their values
  * in a form no file can use: an INTERVAL as an `Int32Array` that does not
  * hold it (apache-arrow 17), and a BLOB, BIT, GEOMETRY or BIGNUM as bytes,
- * which a CSV cell would print as `170,187`. An ENUM value read through the
- * worker's cancellable query path (`conn.send`, as every `bridge.query`
+ * which a CSV cell would print as `170,187`. A TIME WITH TIME ZONE arrives
+ * as microseconds since midnight, its offset lost (`12:34:56+05:30` as
+ * 45296000000), and a TIME_NS as nanoseconds. An ENUM value read through
+ * the worker's cancellable query path (`conn.send`, as every `bridge.query`
  * runs) comes back `null` (duckdb-wasm 1.33), while its text is exact.
  */
 const TEXT_SCALAR_NAMES: ReadonlySet<string> = new Set([
@@ -107,10 +109,23 @@ const TEXT_SCALAR_NAMES: ReadonlySet<string> = new Set([
   'BIGNUM',
   'VARINT',
   'ENUM',
+  'TIME WITH TIME ZONE',
+  'TIMETZ',
+  'TIME_NS',
 ]);
 
+/**
+ * The most digits a DECIMAL may have for `CAST(c AS DOUBLE)` to be the
+ * double nearest its value: DuckDB divides the unscaled integer by a power
+ * of ten, which rounds once while that integer is below 2^53. A wider
+ * DECIMAL is read through its text, which DuckDB's parser rounds to the
+ * nearest double; the plain cast of one misses it for some values (9 % of
+ * DECIMAL(18,17) and 10 % of DECIMAL(28,10) values measured).
+ */
+const EXACT_DOUBLE_DIGITS = 15;
+
 /** How a CSV or JSON export reads a column: see {@link exportColumnRead}. */
-export type ExportColumnRead = 'raw' | 'text' | 'json';
+export type ExportColumnRead = 'raw' | 'text' | 'json' | 'double';
 
 /**
  * How a CSV or JSON export reads `column`:
@@ -120,8 +135,15 @@ export type ExportColumnRead = 'raw' | 'text' | 'json';
  *   `{"num":42}` for a UNION. Arrow's own nested values are wrong for
  *   DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT cannot cross
  *   Arrow at all.
- * - `'text'`: INTERVAL, BLOB, BIT, GEOMETRY, BIGNUM and ENUM, as DuckDB's
- *   text, `CAST(c AS VARCHAR)`; see {@link TEXT_SCALAR_NAMES}.
+ * - `'text'`: INTERVAL, BLOB, BIT, GEOMETRY, BIGNUM, ENUM, TIME WITH TIME
+ *   ZONE and TIME_NS, as DuckDB's text, `CAST(c AS VARCHAR)`; see
+ *   {@link TEXT_SCALAR_NAMES}.
+ * - `'double'`: a DECIMAL, as the double nearest its value (see
+ *   {@link EXACT_DOUBLE_DIGITS}), so that `0.35` is written `0.35`. Arrow's
+ *   DECIMAL numbers, with duckdb-wasm's `castDecimalToDouble`, which
+ *   multiplies by 10^-scale, miss it for many values, 13 % of the
+ *   DECIMAL(10,2) values from 0 to 200: `0.35000000000000003`,
+ *   `19.990000000000002`.
  * - `'raw'`: everything else, as the query returns it. A JSON column is
  *   already text, and stays as it is.
  *
@@ -133,9 +155,22 @@ export function exportColumnRead(column: ColumnSchema): ExportColumnRead {
   // JavaScript may leave it out.
   const node = parseDuckDBType(column.originalType ?? '');
   if (column.type === 'nested' || dataTypeOf(node) === 'nested') return 'json';
-  if (node.kind === 'scalar') return TEXT_SCALAR_NAMES.has(node.name) ? 'text' : 'raw';
+  if (node.kind === 'scalar') {
+    if (TEXT_SCALAR_NAMES.has(node.name)) return 'text';
+    return node.dataType === 'decimal' ? 'double' : 'raw';
+  }
   // A type the parser could not read follows the library's type for it.
   return node.kind === 'unknown' && column.type === 'interval' ? 'text' : 'raw';
+}
+
+/** SQL for a DECIMAL column's value as the double nearest it, without an alias. */
+function decimalAsDouble(column: ColumnSchema, quoted: string): string {
+  const node = parseDuckDBType(column.originalType ?? '');
+  // `DECIMAL` alone is DECIMAL(18,3).
+  const precision = node.kind === 'scalar' && node.args.length > 0 ? Number(node.args[0]) : 18;
+  return precision <= EXACT_DOUBLE_DIGITS
+    ? `CAST(${quoted} AS DOUBLE)`
+    : `CAST(CAST(${quoted} AS VARCHAR) AS DOUBLE)`;
 }
 
 /**
@@ -181,6 +216,8 @@ function selectList(
           return `${jsonValueSQL(column, quoted)} AS ${quoted}`;
         case 'text':
           return `CAST(${quoted} AS VARCHAR) AS ${quoted}`;
+        case 'double':
+          return `${decimalAsDouble(column, quoted)} AS ${quoted}`;
         default:
           return quoted;
       }
@@ -415,8 +452,9 @@ const EXPORT_QUERY_OPTIONS = { cache: false } as const;
  * optimization for selected rows, and abort checking.
  *
  * Columns are read as {@link exportColumnRead} says for `context.schema`:
- * a nested column's value arrives as its JSON text, an INTERVAL, BLOB, BIT,
- * GEOMETRY, BIGNUM or ENUM value as DuckDB's text.
+ * a nested column's value arrives as its JSON text; an INTERVAL, BLOB, BIT,
+ * GEOMETRY, BIGNUM, ENUM, TIME WITH TIME ZONE or TIME_NS value as DuckDB's
+ * text; a DECIMAL as the double nearest its value.
  *
  * The batches skip the bridge's query cache ({@link EXPORT_QUERY_OPTIONS}).
  */

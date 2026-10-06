@@ -580,6 +580,96 @@ describe('scalars read as text', () => {
   });
 });
 
+describe('scalars Arrow carries inexactly', () => {
+  let t: ExportTable;
+
+  beforeAll(async () => {
+    // Arrow gives a TIME WITH TIME ZONE as microseconds since midnight, the
+    // offset lost; a TIME_NS as nanoseconds; and, with castDecimalToDouble,
+    // a DECIMAL as a double that is not the nearest one for many values
+    // (0.35 as 0.35000000000000003). The widest DECIMALs are ones DuckDB's
+    // own cast to DOUBLE rounds wrong too.
+    await harness.conn.query(
+      `CREATE OR REPLACE TABLE exact_scalars AS SELECT
+         CAST(r AS BIGINT) AS "__rowid__", CAST(r AS BIGINT) AS id,
+         CAST(tz AS TIMETZ) AS tz, CAST(tns AS TIME_NS) AS tns,
+         CAST(d2 AS DECIMAL(10,2)) AS d2, CAST(d4 AS DECIMAL(18,4)) AS d4,
+         CAST(d17 AS DECIMAL(18,17)) AS d17, CAST(d38 AS DECIMAL(38,18)) AS d38
+       FROM (VALUES
+         (0, '12:34:56+05:30', '03:04:05.123456789', '0.35', '1.2345',
+          '3.79371274909505664', '-14562988237691892737.177349146278896538'),
+         (1, '12:34:56+00', '00:00:00', '19.99', '0.0003', '1.55763871152627520', '0.1'),
+         (2, '12:34:56-08', '23:59:59.999999999', '-0.70', '2.5', '-0.15379371274909505', '-1'),
+         (3, NULL, NULL, NULL, NULL, NULL, NULL)
+       ) AS v(r, tz, tns, d2, d4, d17, d38)`,
+    );
+    t = { name: 'exact_scalars', schema: await describeSchema('exact_scalars') };
+  });
+
+  /** Each value as `getColumnValues` reads it: DuckDB's text, and a DECIMAL's nearest double. */
+  const EXPECTED = {
+    tz: ['12:34:56+05:30', '12:34:56+00', '12:34:56-08', null],
+    tns: ['03:04:05.123456789', '00:00:00', '23:59:59.999999999', null],
+    d2: [0.35, 19.99, -0.7, null],
+    d4: [1.2345, 0.0003, 2.5, null],
+    d17: [
+      Number('3.79371274909505664'),
+      Number('1.55763871152627520'),
+      Number('-0.15379371274909505'),
+      null,
+    ],
+    d38: [Number('-14562988237691892737.177349146278896538'), 0.1, -1, null],
+  };
+
+  it('reads TIME WITH TIME ZONE and TIME_NS as text, a DECIMAL as the nearest double', () => {
+    expect(Object.fromEntries(t.schema.map((c) => [c.name, exportColumnRead(c)]))).toEqual({
+      __rowid__: 'raw',
+      id: 'raw',
+      tz: 'text',
+      tns: 'text',
+      d2: 'double',
+      d4: 'double',
+      d17: 'double',
+      d38: 'double',
+    });
+  });
+
+  it('writes them to JSON and CSV as getColumnValues reads them', async () => {
+    const ndjson = await exportToJSON(t.name, { scope: 'all', format: 'ndjson' }, contextFor(t));
+    const rows = ndjson.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+    const csv = parseDelimited(await exportToCSV(t.name, { scope: 'all' }, contextFor(t)), ',');
+    for (const [name, values] of Object.entries(EXPECTED)) {
+      expect(
+        rows.map((row) => row[name]),
+        name,
+      ).toEqual(values);
+      expect(columnOf(csv, name), name).toEqual(
+        values.map((v) => (v === null ? '' : neutralizeFormulaPrefix(String(v)))),
+      );
+    }
+  });
+
+  it.each([
+    { column: 'tz', direction: 'asc', where: '"d2" >= 0' },
+    { column: 'd2', direction: 'desc', where: '"tz" IS NOT NULL' },
+    { column: 'd38', direction: 'asc', where: '"d38" < 0.5' },
+  ] as const)('sorts and filters by the value, not the text: $column', async (s) => {
+    const filter: Filter = { type: 'raw-sql', column: '__raw_sql_x__', id: 'x', sql: s.where };
+    const sort: SortColumn = { column: s.column, direction: s.direction };
+    const expected = await select<{ id: number }>(
+      `SELECT "id" FROM "exact_scalars" WHERE ${s.where} ` +
+        `ORDER BY ${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}, "__rowid__" ASC`,
+    );
+    const context = contextFor(t, { filters: [filter], sortColumns: [sort] });
+    const csv = parseDelimited(
+      await exportToCSV(t.name, { scope: 'filtered', columns: ['id', s.column] }, context),
+      ',',
+    );
+    expect(columnOf(csv, 'id').map(Number)).toEqual(expected.map((row) => Number(row.id)));
+    expect(expected.length).toBeGreaterThan(1);
+  });
+});
+
 describe('batches read their values for their own rows only', () => {
   const ROWS = 25_000;
   let t: ExportTable;

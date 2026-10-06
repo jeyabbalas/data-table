@@ -54,6 +54,11 @@ const SCHEMA: ColumnSchema[] = [
   column('mood', "ENUM('sad', 'it''s ok')"),
   column('my "col"', 'INTEGER[]'),
   column('x,y', 'VARCHAR'),
+  column('tz', 'TIME WITH TIME ZONE'),
+  column('tns', 'TIME_NS'),
+  column('wide', 'DECIMAL(18,17)'),
+  column('dec', 'DECIMAL'),
+  column('tm', 'TIME'),
 ];
 
 describe('exportColumnRead', () => {
@@ -63,7 +68,7 @@ describe('exportColumnRead', () => {
       id: 'raw',
       name: 'raw',
       price: 'raw',
-      amount: 'raw',
+      amount: 'double',
       day: 'raw',
       at: 'raw',
       flag: 'raw',
@@ -86,6 +91,11 @@ describe('exportColumnRead', () => {
       mood: 'text',
       'my "col"': 'json',
       'x,y': 'raw',
+      tz: 'text',
+      tns: 'text',
+      wide: 'double',
+      dec: 'double',
+      tm: 'raw',
     });
   });
 
@@ -147,9 +157,19 @@ describe('projections in the export query builders', () => {
   });
 
   it('reads plain scalars as they are', () => {
-    const scalars = ['id', 'name', 'price', 'amount', 'day', 'at', 'flag', 'uid', 'doc', 'x,y'];
+    const scalars = ['id', 'name', 'price', 'day', 'at', 'flag', 'uid', 'doc', 'x,y', 'tm'];
     expect(buildSelectQuery('t', scalars, [], [], SCHEMA)).toBe(
-      'SELECT "id", "name", "price", "amount", "day", "at", "flag", "uid", "doc", "x,y" ' +
+      'SELECT "id", "name", "price", "day", "at", "flag", "uid", "doc", "x,y", "tm" ' +
+        'FROM "t" ORDER BY "t"."__rowid__" ASC',
+    );
+  });
+
+  it('reads a DECIMAL as the nearest double, past 15 digits through its text', () => {
+    expect(buildSelectQuery('t', ['amount', 'wide', 'dec', 'tz', 'tns'], [], [], SCHEMA)).toBe(
+      'SELECT CAST("amount" AS DOUBLE) AS "amount", ' +
+        'CAST(CAST("wide" AS VARCHAR) AS DOUBLE) AS "wide", ' +
+        'CAST(CAST("dec" AS VARCHAR) AS DOUBLE) AS "dec", ' +
+        'CAST("tz" AS VARCHAR) AS "tz", CAST("tns" AS VARCHAR) AS "tns" ' +
         'FROM "t" ORDER BY "t"."__rowid__" ASC',
     );
   });

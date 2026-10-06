@@ -171,12 +171,16 @@ export class SQLValidationError extends DataTableError {
 /**
  * Derived-column expression / vector / lifecycle error.
  *
+ * The derived-column actions resolve with their failures rather than throw:
+ * `replaceDerivedColumn` with this error, `addDerivedColumn` and
+ * `updateDerivedColumn` with its message. A derived column a restored
+ * session, an undo or a redo cannot bring back is reported with it in a
+ * `console.warn`, coded `DUPLICATE_NAME` for a name another column has.
+ *
  * @example
- * try { await table.actions.addDerivedColumn(def); }
- * catch (err) {
- *   if (err instanceof DerivedColumnError && err.code === 'DUPLICATE_NAME') {
- *     toast('A column with that name already exists.');
- *   }
+ * const result = await table.actions.replaceDerivedColumn('tip_pct', def);
+ * if (!result.success && result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
+ *   console.warn('It would break:', result.error.details?.dependentsAffected);
  * }
  */
 export class DerivedColumnError extends DataTableError {

@@ -216,6 +216,17 @@ describe('projections in the export query builders', () => {
     );
   });
 
+  it('buildSelectedRowsQuery can sort by the schema and still read every column as it is', () => {
+    // getColumnValues and the Parquet export read the values themselves.
+    const sort: SortColumn[] = [{ column: 'v', direction: 'asc' }];
+    expect(buildSelectedRowsQuery('t', ['tags', 'v'], [], sort, [1, 3], undefined, SCHEMA)).toBe(
+      'WITH numbered AS (SELECT "tags", "v", ' +
+        'ROW_NUMBER() OVER(ORDER BY create_sort_key("t"."v", \'ASC NULLS LAST\'), "t"."__rowid__" ASC)' +
+        ' - 1 AS __row_idx__ FROM "t") ' +
+        'SELECT "tags", "v" FROM numbered WHERE __row_idx__ IN (1, 3) ORDER BY __row_idx__ ASC',
+    );
+  });
+
   it('reads a column the schema does not know as it is', () => {
     expect(buildSelectQuery('t', ['tags', 'ghost'], [], [], SCHEMA)).toBe(
       `SELECT ${JSON_TAGS}, "ghost" FROM "t" ORDER BY "t"."__rowid__" ASC`,
@@ -271,5 +282,19 @@ describe('buildParquetQuery reads nested columns natively', () => {
     expect(sql).not.toContain('to_json');
     expect(sql).not.toContain('AS VARCHAR');
     expect(sql).not.toContain('create_sort_key');
+  });
+
+  it('numbers selected rows sorted by a VARIANT by its sort key, reading every column as it is', () => {
+    const sql = buildParquetQuery(
+      't',
+      columns,
+      { scope: 'selected', columns: 'all' },
+      context({ sortColumns: [{ column: 'v', direction: 'desc' }], selectedRows: new Set([0, 7]) }),
+    );
+    expect(sql).toContain(
+      'ROW_NUMBER() OVER(ORDER BY create_sort_key("t"."v", \'DESC NULLS LAST\'), "t"."__rowid__" ASC)',
+    );
+    expect(sql).toContain('SELECT "id", "tags", "point", "v", "span", "bytes" FROM numbered');
+    expect(sql).not.toContain('to_json');
   });
 });

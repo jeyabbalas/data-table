@@ -317,15 +317,23 @@ export function buildBaseQuery(
  * Build a query for the rows at `indices` (0-based positions in the sorted,
  * filtered view), in that view's order.
  *
+ * A sort column whose type is or holds a VARIANT is ordered in the window
+ * by `create_sort_key(c, 'ASC NULLS LAST')`: a window's ORDER BY compares
+ * VARIANT values one by one and throws on two of different kinds ("Can't
+ * compare values of type BIGINT and type VARCHAR", DuckDB 1.5.4), where a
+ * plain ORDER BY, as the grid sorts, orders them by their sort keys. The
+ * key gives the same order. The sort columns' types are looked up in
+ * `sortSchema`; with neither it nor `schema`, every sort column is ordered
+ * as it is.
+ *
  * @param schema - Read columns as {@link exportColumnRead} says, in the
  *   outer SELECT only: the `numbered` CTE reads them as they are, so that
  *   `ROW_NUMBER()` numbers rows by the values. Without it, every column is
- *   read as it is. With it, too, a sort column whose type is or holds a
- *   VARIANT is ordered in the window by `create_sort_key(c, 'ASC NULLS
- *   LAST')`: a window's ORDER BY compares VARIANT values one by one and
- *   throws on two of different kinds ("Can't compare values of type BIGINT
- *   and type VARCHAR", DuckDB 1.5.4), where a plain ORDER BY, as the grid
- *   sorts, orders them by their sort keys. The key gives the same order.
+ *   read as it is.
+ * @param sortSchema - Where to find the sort columns' types. Defaults to
+ *   `schema`. A caller that reads the columns as they are passes it alone:
+ *   `getColumnValues`, which reads the value itself in a query around this
+ *   one, and the Parquet export, which writes every column natively.
  */
 export function buildSelectedRowsQuery(
   tableName: string,
@@ -334,6 +342,7 @@ export function buildSelectedRowsQuery(
   sortColumns: SortColumn[],
   indices: number[],
   schema?: readonly ColumnSchema[],
+  sortSchema: readonly ColumnSchema[] | undefined = schema,
 ): string {
   const columnList = columns.map(quoteIdentifier).join(', ');
 
@@ -345,9 +354,9 @@ export function buildSelectedRowsQuery(
   // `__rowid__` (their direction stays authoritative). Qualified with the
   // table as in buildOrderByClause.
   const sortKeyColumns = new Set<string>();
-  if (schema) {
+  if (sortSchema) {
     for (const sort of sortColumns) {
-      const column = schema.find((c) => c.name === sort.column);
+      const column = sortSchema.find((c) => c.name === sort.column);
       if (column && holdsVariant(column)) sortKeyColumns.add(sort.column);
     }
   }

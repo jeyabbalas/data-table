@@ -39,7 +39,9 @@ const DEFAULT_PARQUET_OPTIONS: ParquetExportOptions = {
  *
  * Every column is selected as it is: Parquet holds lists, structs and maps
  * natively, so no schema is passed to the builders, which would read nested
- * columns as JSON text for CSV and JSON exports.
+ * columns as JSON text for CSV and JSON exports. The schema goes only to
+ * the numbering of selected rows that are not one run, to sort by a
+ * VARIANT's sort key there (see `buildSelectedRowsQuery`).
  */
 export function buildParquetQuery(
   tableName: string,
@@ -78,6 +80,8 @@ export function buildParquetQuery(
       context.filters,
       context.sortColumns,
       sortedIndices,
+      undefined,
+      context.schema,
     );
   }
 

@@ -680,25 +680,41 @@ describe('Parquet export', () => {
     unnamed_struct: { reloadError: /A table cannot be created from an unnamed struct/ },
   };
 
-  it('cannot write rows picked out of a sort by a VARIANT whose values differ in kind', async () => {
-    // A selection that is not one run of rows is numbered by ROW_NUMBER()
-    // OVER (ORDER BY …), and a window cannot compare VARIANT values of
-    // different kinds. CSV and JSON exports order such a column by its sort
-    // key (see buildSelectedRowsQuery); the Parquet path passes no schema,
-    // since a schema would also read nested columns as JSON text.
-    const t = table('sqlOnly');
-    const context = contextFor(t, {
-      sortColumns: [{ column: 'variant_value', direction: 'asc' }],
-      selectedRows: new Set([0, 2]),
-    });
-    await expect(
-      exportToParquet(t.name, { scope: 'selected', columns: ['id'] }, context),
-    ).rejects.toThrow(/Can't compare values of type/);
-    // One run of rows is read with ORDER BY … LIMIT, which sorts by value.
-    context.selectedRows = new Set([0, 1]);
-    const bytes = await exportToParquet(t.name, { scope: 'selected', columns: ['id'] }, context);
-    expect(bytes.byteLength).toBeGreaterThan(0);
-  });
+  it.each([
+    ['not one run', [0, 2, 9, 40]],
+    ['one run', [3, 4, 5]],
+  ])(
+    'writes selected rows (%s) of a sort by a VARIANT whose values differ in kind, in order',
+    async (_, positions) => {
+      // A selection that is not one run of rows is numbered by ROW_NUMBER()
+      // OVER (ORDER BY …), and a window cannot compare VARIANT values of
+      // different kinds; the column is numbered by its sort key instead (see
+      // buildSelectedRowsQuery). One run is read with ORDER BY … LIMIT.
+      const t = table('sqlOnly');
+      const sort: SortColumn = { column: 'variant_value', direction: 'asc' };
+      const context = contextFor(t, { sortColumns: [sort], selectedRows: new Set(positions) });
+      const bytes = await exportToParquet(
+        t.name,
+        { scope: 'selected', columns: ['id', 'variant_value'] },
+        context,
+      );
+      const back = await bridge.loadData(toArrayBuffer(bytes), {
+        format: 'parquet',
+        tableName: `parquet_variant_sorted_${positions.length}`,
+      });
+      const order = await select<{ id: number }>(
+        `SELECT "id" FROM ${quoteIdentifier(t.name)} ` +
+          `ORDER BY "variant_value" ASC, "__rowid__" ASC`,
+      );
+      const written = await select<{ id: number }>(
+        `SELECT "id" FROM ${quoteIdentifier(back.tableName)} ORDER BY "__rowid__"`,
+      );
+      expect(written.map((row) => Number(row.id))).toEqual(
+        positions.map((p) => Number(order[p]!.id)),
+      );
+      expect(back.schema.find((c) => c.name === 'variant_value')?.originalType).toBe('VARIANT');
+    },
+  );
 
   it('covers every SQL-only column', () => {
     expect(Object.keys(SQL_ONLY_PARQUET).sort()).toEqual(

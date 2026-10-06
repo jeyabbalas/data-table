@@ -710,6 +710,35 @@ describe('getColumnValues agrees with getCellValue', () => {
   });
 });
 
+describe('getColumnValues of selected rows, sorted by a VARIANT whose values differ in kind', () => {
+  // variant_value holds numbers, text, lists, structs and NULL. A window's
+  // ORDER BY cannot compare two of different kinds; the grid's plain ORDER
+  // BY can, and the selection's positions are positions in that order.
+  const CASES = [
+    ['asc', 'one run', [0, 1, 2, 3]],
+    ['desc', 'one run', [5, 6, 7]],
+    ['asc', 'not one run', [0, 3, 7, 11, 19, SQL_ONLY_ROWS - 1]],
+    ['desc', 'not one run', [1, 4, 13, 30]],
+  ] as const;
+
+  it.each(CASES)('%s, %s: every column, in the order the grid shows', async (direction, _, at) => {
+    const { state, actions, schema } = tableOn('sql_only_v');
+    actions.setSort([{ column: 'variant_value', direction }]);
+    state.selectedRows.set(new Set(at));
+    const order = await executeQueryCancellable<{ r: number }>(
+      `SELECT "__rowid__" AS r FROM "sql_only_v" ` +
+        `ORDER BY "variant_value" ${direction.toUpperCase()}, "__rowid__" ASC`,
+    );
+    const rowIds = at.map((position) => Number(order[position]!.r));
+    for (const column of schema) {
+      const values = await actions.getColumnValues(column.name, { scope: 'selected' });
+      const expected: unknown[] = [];
+      for (const rowId of rowIds) expected.push(await actions.getCellValue(rowId, column.name));
+      expectSame(Array.from(values as ArrayLike<unknown>), expected, column.name);
+    }
+  });
+});
+
 describe('the JSON channel', () => {
   it.each(['nested_parquet', 'nested_json', 'sql_only_v'])(
     'prints every nested value of %s as standard JSON',

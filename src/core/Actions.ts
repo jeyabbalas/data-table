@@ -2714,12 +2714,17 @@ export class StateActions {
           );
         }
       }
+      // The column is selected as it is, and read below; the schema says
+      // only how to sort: a VARIANT sort column is numbered by its sort key,
+      // as the export of a selection numbers it.
       const baseSql = buildSelectedRowsQuery(
         tbl,
         [name],
         this.state.filters.get(),
         this.state.sortColumns.get(),
         indices,
+        undefined,
+        schema,
       );
       if (read === 'raw') {
         sql = pagination ? `SELECT * FROM (${baseSql})${pagination}` : baseSql;

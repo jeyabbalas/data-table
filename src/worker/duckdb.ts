@@ -321,19 +321,45 @@ function convertArrowRow({ isStruct, entries }: ArrowRowEntries): unknown {
 }
 
 /**
- * Convert a result row (`row.toJSON()`) for posting to the main thread: each
- * column's value through {@link convertBigInts}.
+ * What {@link convertBatch} reads of an Arrow `RecordBatch`: its row count,
+ * its columns' names, and each column's vector. Spelled out, because
+ * `apache-arrow` is only a transitive dependency.
+ */
+export interface ResultBatch {
+  readonly numRows: number;
+  readonly schema: { readonly fields: readonly { readonly name: string }[] };
+  getChildAt(index: number): { get(index: number): unknown } | null;
+}
+
+/**
+ * Convert a result's record batch to rows for posting to the main thread,
+ * appended to `rows`: each a plain object whose own properties are the
+ * result's columns, each value converted by {@link convertBigInts}.
+ *
+ * Each row is read by position, from the columns' vectors. Arrow's own
+ * `StructRow.toJSON()` assigns each column to a plain object, so a column
+ * named `__proto__` became the object's prototype instead of a property,
+ * and when it held a STRUCT, the next column's assignment could throw
+ * (`'set' on proxy: trap returned falsish`). Reading the vectors also
+ * skips the proxy Arrow builds for each row, and is about three times as
+ * fast, on rows a thousand columns wide as on narrow ones. As with
+ * `toJSON()`, of two columns with one name the later one's value is kept.
  *
  * Column by column, so the row itself is never taken for an interval: a
  * table with numeric `months` and `days` columns would have every row turned
  * into an interval string.
  */
-export function convertRow(row: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(row)) {
-    setOwnProperty(result, key, convertBigInts(value));
+export function convertBatch<T = Record<string, unknown>>(batch: ResultBatch, rows: T[] = []): T[] {
+  const names = batch.schema.fields.map((field) => field.name);
+  const columns = names.map((_, index) => batch.getChildAt(index)!);
+  for (let row = 0; row < batch.numRows; row += 1) {
+    const record: Record<string, unknown> = {};
+    for (let column = 0; column < columns.length; column += 1) {
+      setOwnProperty(record, names[column]!, convertBigInts(columns[column]!.get(row)));
+    }
+    rows.push(record as T);
   }
-  return result;
+  return rows;
 }
 
 /**
@@ -355,8 +381,11 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
     });
   }
 
-  const result = await conn.query(sql);
-  return result.toArray().map((row) => convertRow(row.toJSON()) as T);
+  const rows: T[] = [];
+  for (const batch of (await conn.query(sql)).batches) {
+    convertBatch(batch, rows);
+  }
+  return rows;
 }
 
 /**
@@ -371,8 +400,8 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
  * cancellable pending phase, whereas streaming mode would end the
  * cancellable window at the first result batch.
  *
- * Result rows are materialized exactly like {@link executeQuery}'s
- * (`row.toJSON()` → `convertRow`), so the two are interchangeable.
+ * Result rows are materialized exactly like {@link executeQuery}'s, by
+ * {@link convertBatch}, so the two are interchangeable.
  */
 export async function executeQueryCancellable<T = Record<string, unknown>>(
   sql: string,
@@ -399,15 +428,12 @@ export async function executeQueryCancellable<T = Record<string, unknown>>(
   await reader.open();
   if (reader.schema.fields.some((field) => holdsDictionary(field.type))) {
     await reader.return();
-    const result = await conn.query(sql);
-    return result.toArray().map((row) => convertRow(row.toJSON()) as T);
+    return executeQuery<T>(sql);
   }
 
   const rows: T[] = [];
   for await (const batch of reader) {
-    for (const row of batch.toArray()) {
-      rows.push(convertRow(row.toJSON()) as T);
-    }
+    convertBatch(batch, rows);
   }
   return rows;
 }

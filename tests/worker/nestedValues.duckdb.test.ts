@@ -254,6 +254,26 @@ describe('nested values on real DuckDB', () => {
     await harness?.cleanup();
   });
 
+  it('both query paths read a table with a __proto__ column alike', async () => {
+    // A CSV header can name a column __proto__, and SELECT * reads it.
+    await harness.conn.query(
+      `CREATE TABLE proto_cols AS
+       SELECT range AS id, 'v' || range AS "__proto__", {'a': range} AS s FROM range(3)`,
+    );
+    const sql = 'SELECT * FROM proto_cols ORDER BY id';
+    const rows = await executeQueryCancellable(sql);
+    expect(rows).toEqual(await executeQuery(sql));
+    expect(structuredClone(rows)).toEqual(
+      [0, 1, 2].map((i) =>
+        Object.fromEntries([
+          ['id', i],
+          ['__proto__', `v${i}`],
+          ['s', { a: i }],
+        ]),
+      ),
+    );
+  });
+
   it('the cases have the types they claim', async () => {
     for (const c of CASES) {
       const [row] = await executeQuery<{ column_type: string }>(`DESCRIBE SELECT ${c.sql} AS v`);
@@ -294,6 +314,43 @@ describe('nested values on real DuckDB', () => {
         `SELECT 1 AS id, 14 AS months, 3 AS days, CAST(5 AS BIGINT) AS nanoseconds, 'x' AS note`,
       );
       expect(rows).toEqual([{ id: 1, months: 14, days: 3, nanoseconds: 5, note: 'x' }]);
+    });
+
+    it('a column named __proto__ stays a column', async () => {
+      // Arrow's row.toJSON() assigns each column to a plain object, which
+      // for __proto__ sets the prototype: the column was lost.
+      const rows = await run(
+        `SELECT 'hello' AS "__proto__", 'x' AS b UNION ALL SELECT NULL, 'y' ORDER BY b`,
+      );
+      expect(rows).toEqual([
+        Object.fromEntries([
+          ['__proto__', 'hello'],
+          ['b', 'x'],
+        ]),
+        Object.fromEntries([
+          ['__proto__', null],
+          ['b', 'y'],
+        ]),
+      ]);
+      const [cloned] = structuredClone(rows);
+      expect(Object.hasOwn(cloned!, '__proto__')).toBe(true);
+      expect(Object.getPrototypeOf(cloned)).toBe(Object.prototype);
+    });
+
+    it('a STRUCT column named __proto__ leaves the next column readable', async () => {
+      // Assigned, the STRUCT became the row's prototype, and its proxy
+      // refused the next column: "'set' on proxy: trap returned falsish".
+      const rows = await run(`SELECT {'a': 1} AS "__proto__", 2 AS b`);
+      expect(structuredClone(rows)).toEqual([
+        Object.fromEntries([
+          ['__proto__', { a: 1 }],
+          ['b', 2],
+        ]),
+      ]);
+    });
+
+    it('of two columns with one name, the later is kept', async () => {
+      expect(await run(`SELECT 1 AS a, 'x' AS b, 3 AS a`)).toEqual([{ a: 3, b: 'x' }]);
     });
 
     it('a BLOB comes out of the result in a buffer of its own', async () => {

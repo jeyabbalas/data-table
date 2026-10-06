@@ -10,14 +10,14 @@ import { describe, it, expect, afterEach } from 'vitest';
 
 import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 
-import { executeQueryCancellable, __setConnForTests } from '@/worker/duckdb';
+import { executeQueryCancellable, __setConnForTests, type ResultBatch } from '@/worker/duckdb';
 import { isCancelRejection } from '@/worker/dispatcher';
 
 /**
  * Stands in for the Arrow RecordBatchStreamReader from `conn.send()`: `open()`
  * reads the schema (no dictionary-encoded fields here), then the batches.
  */
-function asReader(batches: AsyncGenerator<{ toArray: () => unknown[] }>) {
+function asReader(batches: AsyncGenerator<ResultBatch>) {
   return Object.assign(batches, {
     schema: { fields: [] as { type: { typeId: number } }[] },
     open: async function (this: unknown) {
@@ -26,12 +26,22 @@ function asReader(batches: AsyncGenerator<{ toArray: () => unknown[] }>) {
   });
 }
 
+/** A record batch of rows, read column by column as `convertBatch` reads one. */
+function batchOf(rows: Record<string, unknown>[]): ResultBatch {
+  const names = Object.keys(rows[0] ?? {});
+  return {
+    numRows: rows.length,
+    schema: { fields: names.map((name) => ({ name })) },
+    getChildAt: (index) => ({ get: (row) => rows[row]?.[names[index]!] }),
+  };
+}
+
 /** A reader over rows, batch by batch. */
 function makeReader(batches: Record<string, unknown>[][]) {
   return asReader(
     (async function* () {
       for (const rows of batches) {
-        yield { toArray: () => rows.map((r) => ({ toJSON: () => ({ ...r }) })) };
+        yield batchOf(rows);
       }
     })(),
   );
@@ -93,7 +103,7 @@ describe('executeQueryCancellable', () => {
       send: async () =>
         asReader(
           (async function* () {
-            yield { toArray: () => [{ toJSON: () => ({ id: 1n, name: 'a' }) }] };
+            yield batchOf([{ id: 1n, name: 'a' }]);
             throw new Error('query was canceled');
           })(),
         ),

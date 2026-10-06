@@ -5,7 +5,7 @@
  * value-counts SQL paths end-to-end without spinning up the worker IPC.
  *
  * Mirrors the conversion the production worker dispatcher performs in
- * `src/worker/duckdb.ts:executeQuery` (`convertRow`) so result shapes match
+ * `src/worker/duckdb.ts:executeQuery` (`convertBatch`) so result shapes match
  * what `bridge.query<T>(sql)` consumers see at runtime: BigInt → Number,
  * MonthDayNano interval objects → string, list values → arrays, STRUCT and
  * MAP values → objects, everything else preserved.
@@ -35,7 +35,7 @@ import type { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import { reconstructError } from '@/core/errors';
 import { validateSourceOptions } from '@/data/sourceOptions';
 import { toErrorPayload } from '@/worker/dispatcher';
-import { convertRow } from '@/worker/duckdb';
+import { convertBatch } from '@/worker/duckdb';
 import { loadCSV } from '@/worker/loaders/csv';
 import { loadJSON } from '@/worker/loaders/json';
 import { loadParquet } from '@/worker/loaders/parquet';
@@ -64,8 +64,9 @@ import type { LoadDataResult, LoadOptions, WorkerBridge } from '@/data/WorkerBri
 export function makeNodeBridge(conn: AsyncDuckDBConnection, db?: AsyncDuckDB): WorkerBridge {
   const stub: Pick<WorkerBridge, 'query' | 'exportToBuffer' | 'loadData'> = {
     async query<T = Record<string, unknown>>(sql: string): Promise<T[]> {
-      const result = await conn.query(sql);
-      return result.toArray().map((row) => convertRow(row.toJSON()) as T);
+      const rows: T[] = [];
+      for (const batch of (await conn.query(sql)).batches) convertBatch(batch, rows);
+      return rows;
     },
     async exportToBuffer(
       sql: string,

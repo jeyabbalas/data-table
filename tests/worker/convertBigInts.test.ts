@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertBigInts, convertRow } from '@/worker/duckdb';
+import { convertBatch, convertBigInts, type ResultBatch } from '@/worker/duckdb';
 
 const kEntries = Symbol('entries');
 
@@ -382,43 +382,88 @@ describe('convertBigInts', () => {
   });
 });
 
-describe('convertRow', () => {
-  it('converts each column value', () => {
+/**
+ * A stand-in for an Arrow `RecordBatch`, as `convertBatch` reads one: the
+ * columns' names, and a vector for each holding its values, row by row.
+ */
+function fakeBatch(columns: [string, unknown[]][]): ResultBatch {
+  return {
+    numRows: columns[0]?.[1].length ?? 0,
+    schema: { fields: columns.map(([name]) => ({ name })) },
+    getChildAt: (index) => {
+      const values = columns[index]?.[1];
+      return values ? { get: (row) => values[row] } : null;
+    },
+  };
+}
+
+describe('convertBatch', () => {
+  it('converts each column value of each row', () => {
+    const duration = { months: 0, days: 0, nanoseconds: 7_200_000_000_000n };
     expect(
-      convertRow({
-        id: 1n,
-        name: 'test',
-        duration: { months: 0, days: 0, nanoseconds: 7_200_000_000_000n },
-      }),
-    ).toEqual({ id: 1, name: 'test', duration: '02:00:00' });
+      convertBatch(
+        fakeBatch([
+          ['id', [1n, 2n]],
+          ['name', ['test', null]],
+          ['duration', [duration, null]],
+        ]),
+      ),
+    ).toEqual([
+      { id: 1, name: 'test', duration: '02:00:00' },
+      { id: 2, name: null, duration: null },
+    ]);
+  });
+
+  it('appends to the rows it is given', () => {
+    const rows = [{ id: 0 }];
+    expect(convertBatch(fakeBatch([['id', [1n]]]), rows)).toBe(rows);
+    expect(rows).toEqual([{ id: 0 }, { id: 1 }]);
   });
 
   it('keeps a row with numeric months and days columns a row', () => {
     // convertBigInts would take the row itself for an interval value.
     const row = { id: 1n, months: 14, days: 3, nanoseconds: 0n };
     expect(convertBigInts(row)).toBe('1 year 2 months 3 days');
-    expect(convertRow(row)).toEqual({ id: 1, months: 14, days: 3, nanoseconds: 0 });
-    expect(convertRow({ months: 2n, days: 5n })).toEqual({ months: 2, days: 5 });
+    expect(
+      convertBatch(
+        fakeBatch([
+          ['id', [1n]],
+          ['months', [14]],
+          ['days', [3]],
+          ['nanoseconds', [0n]],
+        ]),
+      ),
+    ).toEqual([{ id: 1, months: 14, days: 3, nanoseconds: 0 }]);
+    expect(
+      convertBatch(
+        fakeBatch([
+          ['months', [2n]],
+          ['days', [5n]],
+        ]),
+      ),
+    ).toEqual([{ months: 2, days: 5 }]);
   });
 
   it('keeps a STRUCT column with months and days fields a record', () => {
-    const row = {
-      id: 1n,
-      span: new FakeStructRow([
-        ['months', 14],
-        ['days', 3],
+    const span = new FakeStructRow([
+      ['months', 14],
+      ['days', 3],
+    ]);
+    const converted = convertBatch(
+      fakeBatch([
+        ['id', [1n]],
+        ['span', [span]],
       ]),
-    };
-    const converted = convertRow(row);
-    expect(converted).toEqual({ id: 1, span: { months: 14, days: 3 } });
+    );
+    expect(converted).toEqual([{ id: 1, span: { months: 14, days: 3 } }]);
     expect(structuredClone(converted)).toEqual(converted);
   });
 
   it('keeps a __proto__ column a column', () => {
-    const converted = convertRow(
-      Object.fromEntries([
-        ['__proto__', 5n],
-        ['b', 2],
+    const [converted] = convertBatch(
+      fakeBatch([
+        ['__proto__', [5n]],
+        ['b', [2]],
       ]),
     );
     expect(converted).toEqual(
@@ -428,5 +473,24 @@ describe('convertRow', () => {
       ]),
     );
     expect(Object.getPrototypeOf(converted)).toBe(Object.prototype);
+  });
+
+  it('keeps the later of two columns with one name, where the first stood', () => {
+    // As Arrow's row.toJSON() did, which the rows were read with before.
+    const [converted] = convertBatch(
+      fakeBatch([
+        ['a', [1]],
+        ['b', ['x']],
+        ['a', [3]],
+      ]),
+    );
+    expect(Object.entries(converted!)).toEqual([
+      ['a', 3],
+      ['b', 'x'],
+    ]);
+  });
+
+  it('reads no rows from an empty batch', () => {
+    expect(convertBatch(fakeBatch([['id', []]]))).toEqual([]);
   });
 });

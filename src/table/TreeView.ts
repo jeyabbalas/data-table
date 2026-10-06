@@ -36,9 +36,6 @@
  * count siblings — the children of one parent — wherever they come from.
  */
 
-/** Base (BEM block) class name used when the caller gives none. */
-const DEFAULT_CLASS_NAME = 'value-tree';
-
 /**
  * A pause this long, in milliseconds, ends a type-ahead word: the next
  * character starts a new one. The APG leaves the number open; half a second
@@ -52,25 +49,18 @@ const TYPEAHEAD_RESET_MS = 500;
  *
  * @example
  * const node: TreeViewNode<string> = {
- *   id: 'point',
  *   label: 'point: struct, 2 fields',
  *   render: (content) => {
  *     content.textContent = 'point';
  *   },
  *   children: () => [
- *     { id: 'point.x', label: 'x: 1.25', render: (el) => (el.textContent = 'x: 1.25') },
- *     { id: 'point.y', label: 'y: 0.58', render: (el) => (el.textContent = 'y: 0.58') },
+ *     { label: 'x: 1.25', render: (el) => (el.textContent = 'x: 1.25'), data: 'point.x' },
+ *     { label: 'y: 0.58', render: (el) => (el.textContent = 'y: 0.58'), data: 'point.y' },
  *   ],
  *   data: 'point',
  * };
  */
 export interface TreeViewNode<T = unknown> {
-  /**
-   * Names the node in {@link TreeView.setActive}, {@link TreeView.expand} and
-   * {@link TreeView.collapse}. Unique within the tree; when two nodes share an
-   * id, those methods address the one loaded first.
-   */
-  id: string;
   /**
    * The item's accessible name (`aria-label`), and the text type-ahead
    * matches. It replaces the row's content for assistive technology, so say
@@ -96,30 +86,20 @@ export interface TreeViewNode<T = unknown> {
    * is only rendered when `onAction` is set. Default `false`.
    */
   actionable?: boolean | undefined;
-  /**
-   * `title` of this node's action button, in place of
-   * {@link TreeViewOptions.actionTitle}.
-   */
-  actionTitle?: string | undefined;
   /** Caller payload, handed back on the node in every callback. */
   data?: T | undefined;
 }
 
 /** Construction options for {@link TreeView}. */
 export interface TreeViewOptions<T = unknown> {
-  /** CSS class prefix (default: 'dt') */
-  classPrefix?: string | undefined;
   /**
-   * Base (BEM block) class name, without the prefix (default:
-   * `'value-tree'`). Every class the tree writes derives from it:
-   * `${prefix}-${className}` on the tree, and `__item`, `__twisty`,
+   * CSS class prefix (default: 'dt'). Every class the tree writes derives
+   * from it: `${prefix}-value-tree` on the tree, and `__item`, `__twisty`,
    * `__content` and `__add` on the parts of each row.
    */
-  className?: string | undefined;
-  /** Accessible name of the tree (`aria-label`). Give this or `labelledBy`. */
+  classPrefix?: string | undefined;
+  /** Accessible name of the tree (`aria-label`). */
   label?: string | undefined;
-  /** Id of the element that names the tree (`aria-labelledby`). */
-  labelledBy?: string | undefined;
   /**
    * Which nodes start expanded. Asked once for each expandable node while the
    * tree is built, parents before children, with the node's 1-based level
@@ -130,9 +110,9 @@ export interface TreeViewOptions<T = unknown> {
   /** `title` of the hover action buttons (see {@link TreeViewNode.actionable}). */
   actionTitle?: string | undefined;
   /**
-   * The active node changed — by keyboard, pointer, focus,
-   * {@link TreeView.setActive}, or a collapse that hid it. Not called for the
-   * node that is active when the tree is built: read {@link TreeView.getActive}.
+   * The active node changed — by keyboard, pointer, focus, or a collapse that
+   * hid it. Not called for the node that is active when the tree is built:
+   * read {@link TreeView.getActive}.
    */
   onActiveChange?: ((node: TreeViewNode<T>) => void) | undefined;
   /**
@@ -204,7 +184,6 @@ export class TreeView<T = unknown> {
   private readonly base: string;
   private readonly roots: Row<T>[];
   private readonly rowsByItem = new WeakMap<Element, Row<T>>();
-  private readonly rowsById = new Map<string, Row<T>>();
   private readonly actionTitle: string | undefined;
   private readonly onActiveChange: ((node: TreeViewNode<T>) => void) | undefined;
   private readonly onCopy: ((node: TreeViewNode<T>) => void) | undefined;
@@ -221,7 +200,7 @@ export class TreeView<T = unknown> {
   private destroyed = false;
 
   constructor(roots: readonly TreeViewNode<T>[], options: TreeViewOptions<T> = {}) {
-    this.base = `${options.classPrefix ?? 'dt'}-${options.className ?? DEFAULT_CLASS_NAME}`;
+    this.base = `${options.classPrefix ?? 'dt'}-value-tree`;
     this.actionTitle = options.actionTitle;
     this.onActiveChange = options.onActiveChange;
     this.onCopy = options.onCopy;
@@ -231,9 +210,6 @@ export class TreeView<T = unknown> {
     this.element.className = this.base;
     this.element.setAttribute('role', 'tree');
     if (options.label !== undefined) this.element.setAttribute('aria-label', options.label);
-    if (options.labelledBy !== undefined) {
-      this.element.setAttribute('aria-labelledby', options.labelledBy);
-    }
 
     this.roots = this.buildRows(roots, null);
 
@@ -288,56 +264,10 @@ export class TreeView<T = unknown> {
     return this.active?.item ?? null;
   }
 
-  /**
-   * Make the node with this id the active one: expand its collapsed
-   * ancestors, scroll it into view, and move DOM focus to it when focus is
-   * already inside the tree ({@link TreeView.focus} moves it from anywhere).
-   * Returns `false`, changing nothing, when no loaded node has this id.
-   */
-  setActive(id: string): boolean {
-    if (this.destroyed) return false;
-    const row = this.rowsById.get(id);
-    if (!row) return false;
-    const ancestors: Row<T>[] = [];
-    for (let parent = row.parent; parent; parent = parent.parent) ancestors.push(parent);
-    // Top down: each expansion then inserts into a visible parent.
-    for (let i = ancestors.length - 1; i >= 0; i--) this.expandRow(ancestors[i]);
-    this.activate(row, this.containsFocus());
-    return true;
-  }
-
   /** Move DOM focus to the active item, scrolling it into view. */
   focus(): void {
     if (this.destroyed || !this.active) return;
     this.focusItem(this.active);
-  }
-
-  /**
-   * Expand the node with this id, loading its children on first expansion. A
-   * node inside a collapsed ancestor is marked expanded and shows its
-   * children once the ancestor opens. Returns `false` when no loaded node has
-   * this id or the node is an end node.
-   */
-  expand(id: string): boolean {
-    if (this.destroyed) return false;
-    const row = this.rowsById.get(id);
-    if (!row?.node.children) return false;
-    this.expandRow(row);
-    return true;
-  }
-
-  /**
-   * Collapse the node with this id. When the active item was below it, the
-   * node becomes the active one (and takes DOM focus if the tree had it).
-   * Returns `false` when no loaded node has this id or the node is an end
-   * node.
-   */
-  collapse(id: string): boolean {
-    if (this.destroyed) return false;
-    const row = this.rowsById.get(id);
-    if (!row?.node.children) return false;
-    this.collapseRow(row);
-    return true;
   }
 
   /** Remove the listeners and detach the tree element. */
@@ -358,15 +288,7 @@ export class TreeView<T = unknown> {
 
   private buildRows(specs: readonly TreeViewNode<T>[], parent: Row<T> | null): Row<T>[] {
     const level = parent ? parent.level + 1 : 1;
-    const rows = specs.map((node, index) =>
-      this.createRow(node, parent, level, index + 1, specs.length),
-    );
-    // Registered once every row is built, so a `render` that throws leaves
-    // no ids behind that point at rows nobody can reach.
-    for (const row of rows) {
-      if (!this.rowsById.has(row.node.id)) this.rowsById.set(row.node.id, row);
-    }
-    return rows;
+    return specs.map((node, index) => this.createRow(node, parent, level, index + 1, specs.length));
   }
 
   private createRow(
@@ -410,8 +332,7 @@ export class TreeView<T = unknown> {
       action.className = `${this.base}__add`;
       action.setAttribute('aria-hidden', 'true');
       action.setAttribute('tabindex', '-1');
-      const title = node.actionTitle ?? this.actionTitle;
-      if (title !== undefined) action.setAttribute('title', title);
+      if (this.actionTitle !== undefined) action.setAttribute('title', this.actionTitle);
       item.appendChild(action);
     }
 

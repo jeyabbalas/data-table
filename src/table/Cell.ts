@@ -5,8 +5,8 @@
  * cell element updates with appropriate CSS classes.
  */
 
-import { parseDuckDBType } from '../core/duckdbType';
 import type { ColumnSchema, DataType } from '../core/types';
+import { outlinedColumnType } from '../nested/typeOutline';
 import { MONTH_SECONDS, YEAR_SECONDS } from '../visualizations/histogram/IntervalHistogramData';
 
 /** `isInspectableColumn`'s answers, by schema entry: it runs for every cell rendered. */
@@ -19,6 +19,10 @@ const inspectableColumns = new WeakMap<ColumnSchema, boolean>();
  * such a value: a nested one's text is bounded, and any text runs on past
  * the column's edge. The inspector shows all of it, as a tree.
  *
+ * The columns whose header shows a type outline (`outlinedColumnType`): the
+ * header's extract button, the cells' inspect icon and the outline go
+ * together.
+ *
  * @example
  * ```ts
  * isInspectableColumn({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // true
@@ -30,9 +34,7 @@ export function isInspectableColumn(column: ColumnSchema | undefined): boolean {
   if (!column) return false;
   let inspectable = inspectableColumns.get(column);
   if (inspectable === undefined) {
-    inspectable =
-      column.type === 'nested' ||
-      (column.type === 'string' && parseDuckDBType(column.originalType ?? '').kind === 'json');
+    inspectable = outlinedColumnType(column) !== null;
     inspectableColumns.set(column, inspectable);
   }
   return inspectable;

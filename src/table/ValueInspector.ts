@@ -613,7 +613,6 @@ export class ValueInspector {
   private viewNode(node: ValueTreeNode): TreeViewNode<ValueTreeNode> {
     const children = node.children;
     return {
-      id: node.id,
       label: node.label,
       render: (content) => this.renderNode(content, node),
       children: children ? () => children().map((child) => this.viewNode(child)) : undefined,

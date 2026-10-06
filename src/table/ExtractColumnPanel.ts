@@ -732,7 +732,6 @@ export class ExtractColumnPanel {
     const typeLabel = end ? '' : typeOutline(part.type, 'label');
     const expands = !end && hasPartsOf(part.type);
     return {
-      id: part.id,
       label: end ? part.key : `${part.key}: ${typeLabel}`,
       render: (content) => {
         const t = `${this.prefix}-value-tree`;

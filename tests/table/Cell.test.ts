@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CellRenderer, isInspectableColumn, type CellOptions } from '@/table/Cell';
 import type { ColumnSchema } from '@/core/types';
+import { outlinedColumnType } from '@/nested/typeOutline';
 
 describe('CellRenderer', () => {
   let renderer: CellRenderer;
@@ -555,6 +556,19 @@ describe('CellRenderer', () => {
         }),
       ).toBe(false);
       expect(isInspectableColumn(undefined)).toBe(false);
+    });
+
+    it('takes exactly the columns whose header shows a type outline, schemas built by hand included', () => {
+      const answers: string[] = [];
+      for (const type of ['nested', 'string', 'integer'] as const) {
+        for (const originalType of ['VARCHAR[]', 'JSON', 'VARCHAR', 'INTEGER', 'STRUCT(a', '']) {
+          const column: ColumnSchema = { name: 'c', type, nullable: true, originalType };
+          if (isInspectableColumn(column) !== (outlinedColumnType(column) !== null)) {
+            answers.push(`${type} ${originalType}`);
+          }
+        }
+      }
+      expect(answers).toEqual([]);
     });
 
     it('marks a cell with the class, aria-haspopup and aria-keyshortcuts, and unmarks it', () => {

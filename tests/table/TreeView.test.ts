@@ -24,7 +24,6 @@ type Spec = TreeViewNode<string>;
 /** An end node whose row shows its label. */
 function leaf(id: string, label: string = id, extra: Partial<Spec> = {}): Spec {
   return {
-    id,
     label,
     render: (content) => {
       content.textContent = label;
@@ -42,7 +41,6 @@ function branch(
   extra: Partial<Spec> = {},
 ): Spec & { children: ReturnType<typeof vi.fn<() => Spec[]>> } {
   return {
-    id,
     label,
     render: (content) => {
       content.textContent = label;
@@ -225,7 +223,7 @@ describe('TreeView — structure', () => {
     const { roots } = food();
     const tree = mount(roots, {
       label: 'Food',
-      initiallyExpanded: (node) => node.id === 'fruits',
+      initiallyExpanded: (node) => node.data === 'fruits',
     });
     const el = tree.getElement();
 
@@ -263,27 +261,20 @@ describe('TreeView — structure', () => {
     expect(item.getAttribute('style')).toBe('--dt-tree-level: 1;');
   });
 
-  it('derives every class name from classPrefix and className', () => {
+  it('derives every class name from classPrefix', () => {
     const tree = mount([branch('point', [leaf('x', 'x', { actionable: true })])], {
       classPrefix: 'acme',
-      className: 'extract-tree',
       initiallyExpanded: () => true,
       onAction: () => {},
     });
     const el = tree.getElement();
 
-    expect(el.className).toBe('acme-extract-tree');
-    expect(el.querySelectorAll('.acme-extract-tree__item')).toHaveLength(2);
-    expect(el.querySelectorAll('.acme-extract-tree__twisty')).toHaveLength(2);
-    expect(el.querySelectorAll('.acme-extract-tree__content')).toHaveLength(2);
-    expect(el.querySelectorAll('.acme-extract-tree__add')).toHaveLength(1);
+    expect(el.className).toBe('acme-value-tree');
+    expect(el.querySelectorAll('.acme-value-tree__item')).toHaveLength(2);
+    expect(el.querySelectorAll('.acme-value-tree__twisty')).toHaveLength(2);
+    expect(el.querySelectorAll('.acme-value-tree__content')).toHaveLength(2);
+    expect(el.querySelectorAll('.acme-value-tree__add')).toHaveLength(1);
     expect(el.querySelector('[class*="dt-"]')).toBeNull();
-  });
-
-  it('names the tree with aria-labelledby when given an id', () => {
-    const tree = mount([leaf('a')], { label: undefined, labelledBy: 'inspector-title' });
-    expect(tree.getElement().getAttribute('aria-labelledby')).toBe('inspector-title');
-    expect(tree.getElement().hasAttribute('aria-label')).toBe(false);
   });
 
   it('never parses markup out of a label', () => {
@@ -308,7 +299,7 @@ describe('TreeView — roving tab stop', () => {
     const onActiveChange = vi.fn();
     const tree = mount(food().roots, { onActiveChange });
 
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expect(tree.getActive()?.data).toBe('fruits');
     expectInvariants(tree);
     expect(onActiveChange).not.toHaveBeenCalled();
@@ -345,7 +336,7 @@ describe('TreeView — roving tab stop', () => {
       new Set(['tabindex', 'aria-selected']),
     );
     expect(new Set(records.slice(0, 4).map((r) => r.target)).size).toBe(2);
-    expect(tree.getActive()?.id).toBe('r29.99');
+    expect(tree.getActive()?.data).toBe('r29.99');
     expectInvariants(tree);
     // Headroom: 3,000 rows are slow to build in jsdom, slower under coverage.
   }, 20_000);
@@ -356,9 +347,9 @@ describe('TreeView — roving tab stop', () => {
 
     itemFor(tree, 'vegetables').focus();
 
-    expect(tree.getActive()?.id).toBe('vegetables');
+    expect(tree.getActive()?.data).toBe('vegetables');
     expect(onActiveChange).toHaveBeenCalledTimes(1);
-    expect(onActiveChange.mock.calls[0]![0].id).toBe('vegetables');
+    expect(onActiveChange.mock.calls[0]![0].data).toBe('vegetables');
     expectInvariants(tree);
   });
 });
@@ -367,7 +358,7 @@ describe('TreeView — APG keys', () => {
   it('↓ and ↑ walk the visible items without opening or closing any', () => {
     const onActiveChange = vi.fn();
     const tree = mount(food().roots, {
-      initiallyExpanded: (node) => node.id === 'fruits',
+      initiallyExpanded: (node) => node.data === 'fruits',
       onActiveChange,
     });
     tree.focus();
@@ -376,7 +367,7 @@ describe('TreeView — APG keys', () => {
     for (let i = 0; i < 5; i++) {
       const event = press('ArrowDown');
       expect(event.defaultPrevented).toBe(true);
-      visited.push(tree.getActive()!.id);
+      visited.push(tree.getActive()!.data);
       expectFocusOnActive(tree);
       expectInvariants(tree);
     }
@@ -385,8 +376,8 @@ describe('TreeView — APG keys', () => {
 
     press('ArrowUp');
     press('ArrowUp');
-    expect(tree.getActive()?.id).toBe('cherry');
-    expect(onActiveChange.mock.calls.map(([node]) => node.id)).toEqual([
+    expect(tree.getActive()?.data).toBe('cherry');
+    expect(onActiveChange.mock.calls.map(([node]) => node.data)).toEqual([
       ...visited,
       'vegetables',
       'cherry',
@@ -401,10 +392,10 @@ describe('TreeView — APG keys', () => {
     tree.focus();
 
     expect(press('ArrowUp').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     press('End');
     expect(press('ArrowDown').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('grains');
+    expect(tree.getActive()?.data).toBe('grains');
     expect(onActiveChange).toHaveBeenCalledTimes(1);
     expectInvariants(tree);
   });
@@ -414,7 +405,7 @@ describe('TreeView — APG keys', () => {
     tree.focus();
 
     expect(press('ArrowRight').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expect(outline(tree)).toEqual([
       'fruits 1/3 [-]',
       '  apple 1/3',
@@ -427,39 +418,38 @@ describe('TreeView — APG keys', () => {
     expectInvariants(tree);
 
     press('ArrowRight');
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
     expectFocusOnActive(tree);
 
     const before = outline(tree);
     expect(press('ArrowRight').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
     expect(outline(tree)).toEqual(before);
     expectInvariants(tree);
   });
 
   it('← closes an open node, moves a child to its parent, and does nothing on a closed root', () => {
     const tree = mount(food().roots, { initiallyExpanded: () => true });
-    tree.focus();
-    expect(tree.setActive('cavendish')).toBe(true);
+    itemFor(tree, 'cavendish').focus();
 
     press('ArrowLeft');
-    expect(tree.getActive()?.id).toBe('banana');
+    expect(tree.getActive()?.data).toBe('banana');
     expectFocusOnActive(tree);
 
     press('ArrowLeft');
-    expect(tree.getActive()?.id).toBe('banana');
+    expect(tree.getActive()?.data).toBe('banana');
     expect(itemFor(tree, 'banana').getAttribute('aria-expanded')).toBe('false');
     expect(items(tree).map((i) => i.getAttribute('aria-label'))).not.toContain('cavendish');
     expectInvariants(tree);
 
     press('ArrowLeft');
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     press('ArrowLeft');
     expect(itemFor(tree, 'fruits').getAttribute('aria-expanded')).toBe('false');
 
     const before = outline(tree);
     expect(press('ArrowLeft').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expect(outline(tree)).toEqual(before);
     expectFocusOnActive(tree);
     expectInvariants(tree);
@@ -470,10 +460,10 @@ describe('TreeView — APG keys', () => {
     tree.focus();
 
     expect(press('End').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('grains');
+    expect(tree.getActive()?.data).toBe('grains');
     expectFocusOnActive(tree);
     expect(press('Home').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expectFocusOnActive(tree);
     expectInvariants(tree);
   });
@@ -483,13 +473,13 @@ describe('TreeView — APG keys', () => {
     const tree = mount(roots);
     tree.focus();
     press('ArrowDown');
-    expect(tree.getActive()?.id).toBe('vegetables');
+    expect(tree.getActive()?.data).toBe('vegetables');
 
     // Shift+8 on many layouts.
     const event = press('*', { shiftKey: true });
 
     expect(event.defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('vegetables');
+    expect(tree.getActive()?.data).toBe('vegetables');
     expectFocusOnActive(tree);
     expect(outline(tree)).toEqual([
       'fruits 1/3 [-]',
@@ -504,7 +494,7 @@ describe('TreeView — APG keys', () => {
     expectInvariants(tree);
 
     // From inside fruits, only fruits' children are its siblings.
-    tree.setActive('apple');
+    itemFor(tree, 'apple').focus();
     press('*');
     expect(itemFor(tree, 'banana').getAttribute('aria-expanded')).toBe('true');
     expect(outline(tree)).toHaveLength(10);
@@ -523,7 +513,7 @@ describe('TreeView — APG keys', () => {
     expect(itemFor(tree, 'fruits').getAttribute('aria-expanded')).toBe('true');
     expect(press(' ').defaultPrevented).toBe(true);
     expect(itemFor(tree, 'fruits').getAttribute('aria-expanded')).toBe('false');
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expectFocusOnActive(tree);
     expectInvariants(tree);
   });
@@ -558,7 +548,7 @@ describe('TreeView — APG keys', () => {
     // Caps Lock.
     expect(press('C', { ctrlKey: true }).defaultPrevented).toBe(true);
     expect(onCopy).toHaveBeenCalledTimes(3);
-    expect(onCopy.mock.calls.every(([node]) => node.id === 'vegetables')).toBe(true);
+    expect(onCopy.mock.calls.every(([node]) => node.data === 'vegetables')).toBe(true);
 
     expect(press('c', { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
     expect(press('c', { ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
@@ -605,7 +595,7 @@ describe('TreeView — APG keys', () => {
     expect(press('Enter', { ctrlKey: true }).defaultPrevented).toBe(true);
     expect(press('Enter', { metaKey: true }).defaultPrevented).toBe(true);
     expect(onAction).toHaveBeenCalledTimes(2);
-    expect(onAction.mock.calls.every(([node]) => node.id === 'x')).toBe(true);
+    expect(onAction.mock.calls.every(([node]) => node.data === 'x')).toBe(true);
 
     press('ArrowDown');
     const event = press('Enter', { ctrlKey: true });
@@ -637,7 +627,7 @@ describe('TreeView — APG keys', () => {
       expect(event.defaultPrevented).toBe(false);
     }
     expect(onHostKey).toHaveBeenCalledTimes(3);
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     document.removeEventListener('keydown', onHostKey);
   });
 
@@ -659,7 +649,7 @@ describe('TreeView — APG keys', () => {
       expect(press(key, init).defaultPrevented).toBe(false);
     }
     expect(onHostKey).toHaveBeenCalledTimes(7);
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     document.removeEventListener('keydown', onHostKey);
   });
 
@@ -688,7 +678,7 @@ describe('TreeView — APG keys', () => {
 
   it('leaves keys typed into a field inside a row to the field', () => {
     const withField: Spec = {
-      id: 'field',
+      data: 'field',
       label: 'field',
       render: (content) => content.appendChild(document.createElement('input')),
     };
@@ -698,7 +688,7 @@ describe('TreeView — APG keys', () => {
 
     expect(press('ArrowDown', {}, input).defaultPrevented).toBe(false);
     expect(press('n', {}, input).defaultPrevented).toBe(false);
-    expect(tree.getActive()?.id).toBe('field');
+    expect(tree.getActive()?.data).toBe('field');
   });
 
   it('leaves Escape to the panel hosting the tree', () => {
@@ -730,12 +720,12 @@ describe('TreeView — type-ahead', () => {
     tree.focus();
 
     expect(press('b').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('banana');
+    expect(tree.getActive()?.data).toBe('banana');
     expectFocusOnActive(tree);
 
     vi.advanceTimersByTime(600);
     press('a');
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
     expectInvariants(tree);
   });
 
@@ -746,9 +736,9 @@ describe('TreeView — type-ahead', () => {
 
     press('b');
     press('b');
-    expect(tree.getActive()?.id).toBe('blueberry');
+    expect(tree.getActive()?.data).toBe('blueberry');
     press('b');
-    expect(tree.getActive()?.id).toBe('banana');
+    expect(tree.getActive()?.data).toBe('banana');
     expectInvariants(tree);
   });
 
@@ -758,19 +748,19 @@ describe('TreeView — type-ahead', () => {
     tree.focus();
 
     press('a');
-    expect(tree.getActive()?.id).toBe('apricot');
+    expect(tree.getActive()?.data).toBe('apricot');
     vi.advanceTimersByTime(600);
     press('a');
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
     // "ap" still fits apple, so it stays; "apr" moves on.
     press('p');
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
     press('r');
-    expect(tree.getActive()?.id).toBe('apricot');
+    expect(tree.getActive()?.data).toBe('apricot');
     // Shift for capitals, matched without case.
     vi.advanceTimersByTime(600);
     press('C', { shiftKey: true });
-    expect(tree.getActive()?.id).toBe('cherry');
+    expect(tree.getActive()?.data).toBe('cherry');
     expectInvariants(tree);
   });
 
@@ -781,25 +771,25 @@ describe('TreeView — type-ahead', () => {
 
     press('b');
     press('l');
-    expect(tree.getActive()?.id).toBe('blueberry');
+    expect(tree.getActive()?.data).toBe('blueberry');
     vi.advanceTimersByTime(600);
     press('a');
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
 
     // Without the reset on ArrowDown, "bc" would match nothing.
     vi.advanceTimersByTime(600);
     press('b');
     press('ArrowDown');
-    expect(tree.getActive()?.id).toBe('blueberry');
+    expect(tree.getActive()?.data).toBe('blueberry');
     press('c');
-    expect(tree.getActive()?.id).toBe('cherry');
+    expect(tree.getActive()?.data).toBe('cherry');
   });
 
   it('claims a character that matches nothing, and stays put', () => {
     const tree = mount(fruitBowl());
     tree.focus();
     expect(press('z').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
   });
 
   it('only searches visible items', () => {
@@ -807,7 +797,7 @@ describe('TreeView — type-ahead', () => {
     tree.focus();
     press('c');
     // carrot and cherry are inside collapsed nodes.
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
   });
 });
 
@@ -837,12 +827,13 @@ describe('TreeView — lazy children', () => {
     const render = vi.fn((content: HTMLElement) => {
       content.textContent = 'apple';
     });
-    const fruits = branch('fruits', [{ id: 'apple', label: 'apple', render }]);
+    const fruits = branch('fruits', [{ label: 'apple', render }]);
     const tree = mount([fruits]);
+    tree.focus();
 
     for (let i = 0; i < 3; i++) {
-      tree.expand('fruits');
-      tree.collapse('fruits');
+      press('ArrowRight');
+      press('ArrowLeft');
     }
     expect(render).toHaveBeenCalledTimes(1);
     expect(fruits.children).toHaveBeenCalledTimes(1);
@@ -851,8 +842,9 @@ describe('TreeView — lazy children', () => {
   it('brings expanded descendants back when an ancestor opens again', () => {
     const tree = mount(food().roots, { initiallyExpanded: () => true });
     const before = outline(tree);
+    tree.focus();
 
-    tree.collapse('fruits');
+    press('ArrowLeft');
     expect(outline(tree)).toEqual([
       'fruits 1/3 [+]',
       'vegetables 2/3 [-]',
@@ -860,7 +852,7 @@ describe('TreeView — lazy children', () => {
       '  potato 2/2',
       'grains 3/3',
     ]);
-    tree.expand('fruits');
+    press('ArrowRight');
 
     expect(outline(tree)).toEqual(before);
     expectInvariants(tree);
@@ -889,20 +881,23 @@ describe('TreeView — lazy children', () => {
     expectInvariants(tree);
   });
 
+  // Every collapse the keys and clicks make is of the active row itself (a
+  // twisty click activates its row first). A double click that comes
+  // without its two clicks, from assistive technology or automation, is
+  // the one that collapses a row the active item is under.
   it('moves the active item, and focus, up to a node that collapses over it', () => {
     const onActiveChange = vi.fn();
     const tree = mount(food().roots, { initiallyExpanded: () => true, onActiveChange });
-    tree.focus();
-    tree.setActive('plantain');
+    itemFor(tree, 'plantain').focus();
     expectFocusOnActive(tree);
     onActiveChange.mockClear();
 
-    tree.collapse('fruits');
+    mouse('dblclick', itemFor(tree, 'fruits').querySelector('.dt-value-tree__content')!);
 
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expectFocusOnActive(tree);
     expect(onActiveChange).toHaveBeenCalledTimes(1);
-    expect(onActiveChange.mock.calls[0]![0].id).toBe('fruits');
+    expect(onActiveChange.mock.calls[0]![0].data).toBe('fruits');
     expectInvariants(tree);
   });
 
@@ -910,12 +905,12 @@ describe('TreeView — lazy children', () => {
     const elsewhere = document.createElement('button');
     document.body.appendChild(elsewhere);
     const tree = mount(food().roots, { initiallyExpanded: () => true });
-    tree.setActive('plantain');
+    itemFor(tree, 'plantain').focus();
     elsewhere.focus();
 
-    tree.collapse('banana');
+    mouse('dblclick', itemFor(tree, 'banana').querySelector('.dt-value-tree__content')!);
 
-    expect(tree.getActive()?.id).toBe('banana');
+    expect(tree.getActive()?.data).toBe('banana');
     expect(document.activeElement).toBe(elsewhere);
     expectInvariants(tree);
   });
@@ -926,8 +921,8 @@ describe('TreeView — lazy children', () => {
     const later = branch('b', [branch('b1', [leaf('b1x')])]);
     const tree = mount([deep, later], {
       initiallyExpanded: (node, level) => {
-        asked.push([node.id, level]);
-        return node.id === 'a' || level === 2;
+        asked.push([node.data, level]);
+        return node.data === 'a' || level === 2;
       },
     });
 
@@ -939,7 +934,7 @@ describe('TreeView — lazy children', () => {
     expect(outline(tree)).toEqual(['a 1/2 [-]', '  a1 1/1 [-]', '    a1x 1/1', 'b 2/2 [+]']);
 
     // Nodes loaded later start collapsed, whatever the policy would say.
-    tree.expand('b');
+    mouse('click', itemFor(tree, 'b').querySelector('.dt-value-tree__twisty')!);
     expect(outline(tree)).toEqual([
       'a 1/2 [-]',
       '  a1 1/1 [-]',
@@ -972,7 +967,7 @@ describe('TreeView — lazy children', () => {
   it('keeps children() to one call when a row fails to render', () => {
     let broken = true;
     const flaky: Spec = {
-      id: 'flaky',
+      data: 'flaky',
       label: 'flaky',
       render: (content) => {
         if (broken) throw new Error('render failed');
@@ -981,13 +976,23 @@ describe('TreeView — lazy children', () => {
     };
     const parent = branch('parent', [flaky]);
     const tree = mount([parent]);
+    tree.focus();
+    // The throw escapes the key's listener, which reports it rather than
+    // throwing to the dispatcher.
+    const errors: unknown[] = [];
+    const onError = (e: ErrorEvent): void => {
+      errors.push(e.error);
+      e.preventDefault();
+    };
+    window.addEventListener('error', onError);
 
-    expect(() => tree.expand('parent')).toThrow('render failed');
+    press('ArrowRight');
+    expect(errors).toEqual([new Error('render failed')]);
     expect(outline(tree)).toEqual(['parent 1/1 [+]']);
-    expect(tree.setActive('flaky')).toBe(false);
 
     broken = false;
-    expect(tree.expand('parent')).toBe(true);
+    press('ArrowRight');
+    window.removeEventListener('error', onError);
     expect(outline(tree)).toEqual(['parent 1/1 [-]', '  flaky 1/1']);
     expect(parent.children).toHaveBeenCalledTimes(1);
     expectInvariants(tree);
@@ -1000,7 +1005,7 @@ describe('TreeView — lazy children', () => {
     press('ArrowRight');
     expect(outline(tree)).toEqual(['empty 1/2 [-]', 'next 2/2']);
     expect(press('ArrowRight').defaultPrevented).toBe(true);
-    expect(tree.getActive()?.id).toBe('empty');
+    expect(tree.getActive()?.data).toBe('empty');
     expectInvariants(tree);
   });
 });
@@ -1063,22 +1068,6 @@ describe('TreeView — bucketed containers', () => {
     for (const bucket of buckets) expect(bucket.children).toHaveBeenCalledTimes(1);
     expect(list.children).toHaveBeenCalledTimes(1);
   });
-
-  it('keeps bucket positions right for a node revealed by setActive', () => {
-    const { list } = bucketedList(250);
-    const tree = mount([list], { initiallyExpanded: () => true });
-    tree.collapse('list.201-250');
-    tree.collapse('list');
-
-    expect(tree.setActive('list.230')).toBe(true);
-
-    expect(tree.getActive()?.label).toBe('230: v230');
-    expect(tree.getActiveItem()!.getAttribute('aria-posinset')).toBe('30');
-    expect(tree.getActiveItem()!.getAttribute('aria-setsize')).toBe('50');
-    expect(tree.getActiveItem()!.getAttribute('aria-level')).toBe('3');
-    expect(outline(tree)).toHaveLength(1 + 3 + 250);
-    expectInvariants(tree);
-  });
 });
 
 describe('TreeView — pointer', () => {
@@ -1088,7 +1077,7 @@ describe('TreeView — pointer', () => {
 
     mouse('click', itemFor(tree, 'vegetables').querySelector('.dt-value-tree__content')!);
 
-    expect(tree.getActive()?.id).toBe('vegetables');
+    expect(tree.getActive()?.data).toBe('vegetables');
     expectFocusOnActive(tree);
     expect(itemFor(tree, 'vegetables').getAttribute('aria-expanded')).toBe('false');
     expect(onActiveChange).toHaveBeenCalledTimes(1);
@@ -1101,14 +1090,14 @@ describe('TreeView — pointer', () => {
     mouse('click', itemFor(tree, 'fruits').querySelector('.dt-value-tree__twisty')!);
     expect(itemFor(tree, 'fruits').getAttribute('aria-expanded')).toBe('true');
     mouse('click', itemFor(tree, 'vegetables').querySelector('.dt-value-tree__twisty')!);
-    expect(tree.getActive()?.id).toBe('vegetables');
+    expect(tree.getActive()?.data).toBe('vegetables');
     expect(itemFor(tree, 'vegetables').getAttribute('aria-expanded')).toBe('true');
     mouse('click', itemFor(tree, 'vegetables').querySelector('.dt-value-tree__twisty')!);
     expect(itemFor(tree, 'vegetables').getAttribute('aria-expanded')).toBe('false');
 
     const before = outline(tree);
     mouse('click', itemFor(tree, 'apple').querySelector('.dt-value-tree__twisty')!);
-    expect(tree.getActive()?.id).toBe('apple');
+    expect(tree.getActive()?.data).toBe('apple');
     expect(outline(tree)).toEqual(before);
     expectFocusOnActive(tree);
     expectInvariants(tree);
@@ -1116,12 +1105,11 @@ describe('TreeView — pointer', () => {
 
   it('a twisty click collapsing over the active item leaves one tab stop', () => {
     const tree = mount(food().roots, { initiallyExpanded: () => true });
-    tree.focus();
-    tree.setActive('cavendish');
+    itemFor(tree, 'cavendish').focus();
 
     mouse('click', itemFor(tree, 'fruits').querySelector('.dt-value-tree__twisty')!);
 
-    expect(tree.getActive()?.id).toBe('fruits');
+    expect(tree.getActive()?.data).toBe('fruits');
     expectFocusOnActive(tree);
     expectInvariants(tree);
   });
@@ -1159,10 +1147,7 @@ describe('TreeView — action button', () => {
   function actionTree(onAction: (node: Spec) => void) {
     return mount(
       [
-        branch('point', [leaf('x', 'x', { actionable: true })], 'point', {
-          actionable: true,
-          actionTitle: 'Add point as column',
-        }),
+        branch('point', [leaf('x', 'x', { actionable: true })], 'point', { actionable: true }),
         leaf('plain'),
       ],
       { actionTitle: 'Add as column', onAction, initiallyExpanded: () => true },
@@ -1179,12 +1164,11 @@ describe('TreeView — action button', () => {
       expect(button.getAttribute('tabindex')).toBe('-1');
       expect(button.parentElement!.lastElementChild).toBe(button);
     }
-    expect(itemFor(tree, 'point').querySelector('.dt-value-tree__add')!.getAttribute('title')).toBe(
-      'Add point as column',
-    );
-    expect(itemFor(tree, 'x').querySelector('.dt-value-tree__add')!.getAttribute('title')).toBe(
-      'Add as column',
-    );
+    for (const label of ['point', 'x']) {
+      expect(itemFor(tree, label).querySelector('.dt-value-tree__add')!.getAttribute('title')).toBe(
+        'Add as column',
+      );
+    }
     expect(itemFor(tree, 'plain').querySelector('.dt-value-tree__add')).toBeNull();
     expectInvariants(tree);
   });
@@ -1207,8 +1191,8 @@ describe('TreeView — action button', () => {
     mouse('click', button);
 
     expect(onAction).toHaveBeenCalledTimes(1);
-    expect(onAction.mock.calls[0]![0].id).toBe('point');
-    expect(tree.getActive()?.id).toBe('point');
+    expect(onAction.mock.calls[0]![0].data).toBe('point');
+    expect(tree.getActive()?.data).toBe('point');
     expect(onActiveChange).toHaveBeenCalledTimes(1);
     expectFocusOnActive(tree);
     expect(itemFor(tree, 'point').getAttribute('aria-expanded')).toBe('false');
@@ -1216,89 +1200,6 @@ describe('TreeView — action button', () => {
     mouse('dblclick', button);
     expect(itemFor(tree, 'point').getAttribute('aria-expanded')).toBe('false');
     expectInvariants(tree);
-  });
-});
-
-describe('TreeView — programmatic control', () => {
-  it('setActive selects a visible node, and moves focus only when the tree has it', () => {
-    const onActiveChange = vi.fn();
-    const elsewhere = document.createElement('button');
-    document.body.appendChild(elsewhere);
-    const tree = mount(food().roots, { onActiveChange });
-    elsewhere.focus();
-
-    expect(tree.setActive('grains')).toBe(true);
-    expect(tree.getActive()?.id).toBe('grains');
-    expect(document.activeElement).toBe(elsewhere);
-    expect(onActiveChange).toHaveBeenCalledTimes(1);
-    expectInvariants(tree);
-
-    tree.focus();
-    expectFocusOnActive(tree);
-    expect(tree.setActive('vegetables')).toBe(true);
-    expectFocusOnActive(tree);
-    expect(onActiveChange).toHaveBeenCalledTimes(2);
-
-    // Already active: no change to report.
-    expect(tree.setActive('vegetables')).toBe(true);
-    expect(onActiveChange).toHaveBeenCalledTimes(2);
-  });
-
-  it('setActive opens the collapsed ancestors of a loaded node', () => {
-    const tree = mount(food().roots, { initiallyExpanded: () => true });
-    tree.collapse('banana');
-    tree.collapse('fruits');
-
-    expect(tree.setActive('plantain')).toBe(true);
-
-    expect(outline(tree).slice(0, 6)).toEqual([
-      'fruits 1/3 [-]',
-      '  apple 1/3',
-      '  banana 2/3 [-]',
-      '    cavendish 1/2',
-      '    plantain 2/2',
-      '  cherry 3/3',
-    ]);
-    expect(tree.getActive()?.id).toBe('plantain');
-    expectInvariants(tree);
-  });
-
-  it('setActive, expand and collapse answer false for nodes they cannot reach', () => {
-    const tree = mount(food().roots);
-
-    // banana is not loaded until fruits first opens.
-    expect(tree.setActive('banana')).toBe(false);
-    expect(tree.expand('banana')).toBe(false);
-    expect(tree.setActive('nope')).toBe(false);
-    expect(tree.expand('grains')).toBe(false);
-    expect(tree.collapse('grains')).toBe(false);
-    expect(tree.getActive()?.id).toBe('fruits');
-    expectInvariants(tree);
-  });
-
-  it('expand marks a hidden node open, to show once its ancestors open', () => {
-    const tree = mount(food().roots, { initiallyExpanded: (node) => node.id === 'fruits' });
-    tree.collapse('fruits');
-
-    expect(tree.expand('banana')).toBe(true);
-    expect(outline(tree)).toEqual(['fruits 1/3 [+]', 'vegetables 2/3 [+]', 'grains 3/3']);
-
-    tree.expand('fruits');
-    expect(outline(tree).slice(0, 5)).toEqual([
-      'fruits 1/3 [-]',
-      '  apple 1/3',
-      '  banana 2/3 [-]',
-      '    cavendish 1/2',
-      '    plantain 2/2',
-    ]);
-    expectInvariants(tree);
-  });
-
-  it('addresses the first node loaded when two share an id', () => {
-    const tree = mount([leaf('dup', 'first'), leaf('dup', 'second'), leaf('last')]);
-    tree.setActive('last');
-    tree.setActive('dup');
-    expect(tree.getActive()?.label).toBe('first');
   });
 });
 
@@ -1338,10 +1239,7 @@ describe('TreeView — destroy', () => {
     expect(mouse('mousedown', button).defaultPrevented).toBe(false);
     expect(onAction).not.toHaveBeenCalled();
     expect(onActiveChange).not.toHaveBeenCalled();
-    expect(tree.getActive()?.id).toBe('a');
-    expect(tree.setActive('b')).toBe(false);
-    expect(tree.expand('a')).toBe(false);
-    expect(tree.collapse('a')).toBe(false);
+    expect(tree.getActive()?.data).toBe('a');
     expect(() => tree.destroy()).not.toThrow();
   });
 });
@@ -1372,8 +1270,8 @@ describe('TreeView — axe', () => {
     );
     trees.push(tree);
     panel.appendChild(tree.getElement());
-    tree.focus();
-    tree.setActive('list.12');
+    itemFor(tree, '12: v12').focus();
+    expect(tree.getActive()?.data).toBe('list.12');
     expect(items(tree).length).toBeGreaterThan(40);
 
     const results = await axe.run(panel, {

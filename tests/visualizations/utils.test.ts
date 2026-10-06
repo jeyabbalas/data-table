@@ -4,11 +4,15 @@
  * Verifies that inter-slot gaps map to the nearest slot (at the gap midpoint)
  * so hover/click never falls into an interaction dead zone, while points
  * outside the [min, max] extent still return null.
+ *
+ * truncateText — the cut text of a chart's labels: the type outline under a
+ * nested column's bar, the value counts' segments, the histograms' axes.
+ * It cuts between graphemes, at every width.
  */
 
 import { describe, it, expect } from 'vitest';
 
-import { findSlotAtX } from '../../src/visualizations/utils';
+import { findSlotAtX, truncateText } from '../../src/visualizations/utils';
 
 describe('findSlotAtX', () => {
   // Two 10px slots with a 4px gap between them: [0,10] gap [14,24].
@@ -77,5 +81,88 @@ describe('findSlotAtX', () => {
     for (let x = 4; x <= 126; x += 0.25) {
       expect(findSlotAtX(bars, x, 4, 126)).not.toBeNull();
     }
+  });
+});
+
+describe('truncateText', () => {
+  /**
+   * A context measuring 5 px per UTF-16 unit, so half a surrogate pair is
+   * narrower than the whole one, as the replacement character is narrower
+   * than an emoji on a real canvas. It records what it measures.
+   */
+  function context(): { ctx: CanvasRenderingContext2D; measured: string[] } {
+    const measured: string[] = [];
+    const ctx = {
+      measureText: (text: string) => {
+        measured.push(text);
+        return { width: text.length * 5 };
+      },
+    } as unknown as CanvasRenderingContext2D;
+    return { ctx, measured };
+  }
+
+  /** Man, ZWJ, woman, ZWJ, girl: one grapheme of 8 UTF-16 units. */
+  const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  const graphemes = (text: string): string[] =>
+    Array.from(segmenter.segment(text), ({ segment }) => segment);
+
+  it.each([
+    ['an astral character', '{📍, x, tier}'],
+    ['a ZWJ emoji sequence', `trip ${FAMILY} 2024`],
+    ['flags', '🇫🇷🇩🇪🇮🇹 eu'],
+    ['NFD accents', 'e\u0301te\u0301 a\u0300 Paris'],
+  ])('cuts text with %s between graphemes, at every width', (_, text) => {
+    const whole = graphemes(text);
+    const { ctx } = context();
+    for (let width = 0; width <= (text.length + 1) * 5; width += 0.5) {
+      const cut = truncateText(ctx, text, width);
+      if (cut === text) {
+        expect(text.length * 5).toBeLessThanOrEqual(width);
+        continue;
+      }
+      // Whole graphemes of the text and `…`, as many as fit, or nothing.
+      const kept = cut === '' ? [] : graphemes(cut.slice(0, -1));
+      if (cut !== '') expect(cut.endsWith('…'), `${width} px: ${cut}`).toBe(true);
+      expect(kept, `${width} px: ${cut}`).toEqual(whole.slice(0, kept.length));
+      expect(cut.length * 5).toBeLessThanOrEqual(width);
+      const longer = whole.slice(0, kept.length + 1).join('') + '…';
+      expect(longer.length * 5, `${width} px: ${cut}`).toBeGreaterThan(width);
+    }
+  });
+
+  it('keeps a grapheme whole or drops it, and never ends on half of one', () => {
+    const { ctx } = context();
+    // '{\uD83D…' would be 15 px; '{📍…' is 20.
+    expect(truncateText(ctx, '{📍, x}', 15)).toBe('{…');
+    expect(truncateText(ctx, '{📍, x}', 20)).toBe('{📍…');
+    // A family is 8 units: kept whole, never as man + ZWJ.
+    expect(truncateText(ctx, `${FAMILY} trip`, 40)).toBe('');
+    expect(truncateText(ctx, `${FAMILY} trip`, 45)).toBe(`${FAMILY}…`);
+    // A flag is two regional indicators, never one.
+    expect(truncateText(ctx, '🇫🇷🇩🇪', 15)).toBe('');
+    expect(truncateText(ctx, '🇫🇷🇩🇪', 25)).toBe('🇫🇷…');
+    // A decomposed é keeps its accent.
+    expect(truncateText(ctx, 'e\u0301te\u0301', 10)).toBe('');
+    expect(truncateText(ctx, 'e\u0301te\u0301', 15)).toBe('e\u0301…');
+  });
+
+  it('returns the text when it fits, and nothing when no width is given', () => {
+    const { ctx } = context();
+    expect(truncateText(ctx, 'tier', 20)).toBe('tier');
+    expect(truncateText(ctx, 'tier', 19)).toBe('ti…');
+    expect(truncateText(ctx, 'tier', 0)).toBe('');
+    expect(truncateText(ctx, '', 10)).toBe('');
+  });
+
+  it('measures the text, then once per grapheme it drops', () => {
+    // 20 families: 20 graphemes, 160 UTF-16 units.
+    const text = FAMILY.repeat(20);
+    const { ctx, measured } = context();
+    // Two families and `…` are 85 px.
+    expect(truncateText(ctx, text, 100)).toBe(FAMILY.repeat(2) + '…');
+    expect(measured).toHaveLength(1 + 18);
+    expect(measured[0]).toBe(text);
   });
 });

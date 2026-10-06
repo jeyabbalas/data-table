@@ -107,9 +107,41 @@ export function drawSegmentRect(
   ctx.fill();
 }
 
+let graphemeSegmenter: Intl.Segmenter | null | undefined;
+
+/**
+ * Where each character of `text` ends, in UTF-16 units, first to last.
+ * Characters are graphemes where the runtime has `Intl.Segmenter`, so an
+ * emoji sequence, a flag or a letter with its accent is one character,
+ * else code points, as the filter chips cut their values.
+ */
+function characterEnds(text: string): number[] {
+  if (graphemeSegmenter === undefined) {
+    graphemeSegmenter =
+      typeof Intl === 'object' && typeof Intl.Segmenter === 'function'
+        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+        : null;
+  }
+  const ends: number[] = [];
+  if (graphemeSegmenter) {
+    for (const { index, segment } of graphemeSegmenter.segment(text)) {
+      ends.push(index + segment.length);
+    }
+  } else {
+    let end = 0;
+    for (const point of text) ends.push((end += point.length));
+  }
+  return ends;
+}
+
 /**
  * Truncate text to fit within maxWidth, appending ellipsis (…) if needed.
  * Returns empty string if nothing fits.
+ *
+ * The cut falls between characters, never inside one: an emoji sequence, a
+ * flag or a letter with its combining accent is kept whole or dropped
+ * whole. Cutting UTF-16 units could end the text on half a surrogate pair,
+ * which a canvas draws as the replacement character, U+FFFD.
  */
 export function truncateText(
   ctx: CanvasRenderingContext2D,
@@ -119,9 +151,12 @@ export function truncateText(
   if (maxWidth <= 0) return '';
   if (ctx.measureText(text).width <= maxWidth) return text;
   const ellipsis = '\u2026';
-  let truncated = text;
-  while (truncated.length > 0 && ctx.measureText(truncated + ellipsis).width > maxWidth) {
-    truncated = truncated.slice(0, -1);
+  // Drop characters from the end until the rest and the ellipsis fit: one
+  // measure per character dropped, and the text segmented once.
+  const ends = characterEnds(text);
+  for (let i = ends.length - 2; i >= 0; i--) {
+    const truncated = text.slice(0, ends[i]) + ellipsis;
+    if (ctx.measureText(truncated).width <= maxWidth) return truncated;
   }
-  return truncated.length > 0 ? truncated + ellipsis : '';
+  return '';
 }

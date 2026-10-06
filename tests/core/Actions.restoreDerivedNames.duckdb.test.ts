@@ -115,6 +115,40 @@ describe('a restored derived column named as another column, ignoring case', () 
     expect(await filteredCount(second.state)).toBe(2);
   });
 
+  it('leaves the base column of its exact name where the snapshot put it', async () => {
+    // Session 1: a derived total, sized and sorted, saved with its undo stack.
+    const first = await restore('price,qty\n2,3\n5,7\n', 'exact', null);
+    await first.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'total',
+      expression: 'price * qty',
+    });
+    first.actions.setColumnWidth('total', 180);
+    first.actions.toggleSort('price');
+    const saved = snapshotFromState(first.state, first.undoManager);
+
+    // Session 2: the data has a base column total.
+    const second = await restore('price,qty,total\n2,3,999\n5,7,888\n', 'exact', saved);
+    expect(second.warnings).toEqual([expect.stringContaining('"total"')]);
+    expect(derivedNames(second.state)).toEqual([]);
+    expect(second.state.columnOrder.get()).toEqual(['__rowid__', 'price', 'qty', 'total']);
+    expect(second.state.visibleColumns.get()).toEqual(['price', 'qty', 'total']);
+    expect(second.state.columnWidths.get().get('total')).toBe(180);
+    expect(await second.actions.getColumnValues('total')).toEqual(new BigInt64Array([999n, 888n]));
+
+    // An undo to the state that had the derived total keeps the base one too.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(second.actions.undo()).resolves.toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+    expect(derivedNames(second.state)).toEqual([]);
+    expect(second.state.columnOrder.get()).toContain('total');
+    expect(second.state.visibleColumns.get()).toContain('total');
+    expect(await second.actions.getColumnValues('total')).toEqual(new BigInt64Array([999n, 888n]));
+  });
+
   it('is dropped from a 0.8.x session, which took LABEL beside label', async () => {
     const snapshot: SessionSnapshot = {
       version: 5,

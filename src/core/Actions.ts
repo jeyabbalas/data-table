@@ -1792,9 +1792,14 @@ export class StateActions {
    * Remove all state references to the given column names, their header
    * tooltips included: a later column of the same name would show them.
    * Used when derived columns fail to restore or are reset.
-   * Caller must handle derivedColumns signal and schema separately.
+   * Caller must handle derivedColumns signal and schema separately, and
+   * update the schema first: a name a column of the schema has keeps its
+   * references, which are that column's. A derived `total` restored beside
+   * a base `total` is dropped, and the base column keeps its place.
    */
-  private stripDerivedColumnRefs(names: Set<string>): void {
+  private stripDerivedColumnRefs(gone: Set<string>): void {
+    const columns = new Set(this.state.schema.get().map((c) => c.name));
+    const names = new Set([...gone].filter((name) => !columns.has(name)));
     if (names.size === 0) return;
     batch(() => {
       this.state.filters.set(this.state.filters.get().filter((f) => !names.has(f.column)));

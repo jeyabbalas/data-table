@@ -157,16 +157,19 @@ describe('fetchCellJson', () => {
     });
   });
 
-  it('runs at high priority, skips the query cache, and passes the signal on', async () => {
+  it('runs at elevated priority, skips the query cache, and passes the signal on', async () => {
     const { bridge, query } = bridgeReturning([]);
     const controller = new AbortController();
     await fetchCellJson(bridge, 't', TAGS, 0, { signal: controller.signal });
     await fetchCellJson(bridge, 't', TAGS, 0);
     expect(query.mock.calls[0]!.slice(1)).toEqual([
       controller.signal,
-      { priority: 'high', cache: false },
+      { priority: 'elevated', cache: false },
     ]);
-    expect(query.mock.calls[1]!.slice(1)).toEqual([undefined, { priority: 'high', cache: false }]);
+    expect(query.mock.calls[1]!.slice(1)).toEqual([
+      undefined,
+      { priority: 'elevated', cache: false },
+    ]);
   });
 
   it('rejects as the query does', async () => {

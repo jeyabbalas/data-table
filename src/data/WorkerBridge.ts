@@ -59,11 +59,22 @@ export interface QueryOptions {
    */
   cache?: boolean;
   /**
-   * Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
-   * stats/histogram queries) in the worker's serial dispatch queue —
-   * intended for viewport row fetches. Default `'normal'`.
+   * Where the query goes in the worker's serial dispatch queue, which runs
+   * one query at a time, the queued `'high'` ones first, then the
+   * `'elevated'` ones, then the `'normal'` ones, each in the order posted:
+   *
+   * - `'high'`: viewport row fetches, the rows the grid is waiting to show.
+   * - `'elevated'`: an interactive read of a few values that someone is
+   *   waiting on, such as `actions.getCellValue` or the value inspector's
+   *   read of one cell. It runs ahead of queued chart and stats queries,
+   *   and behind the viewport's row fetches.
+   * - `'normal'` (the default): background work, such as column charts,
+   *   stats, prefetches and exports.
+   *
+   * A query that is already running is never interrupted by one of higher
+   * priority.
    */
-  priority?: 'high' | 'normal';
+  priority?: 'high' | 'elevated' | 'normal';
 }
 
 /**

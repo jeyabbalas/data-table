@@ -152,13 +152,13 @@ describe('StateActions.getCellValue', () => {
   });
 
   describe('a scalar column', () => {
-    it('selects the value by rowid, at high priority, past the query cache', async () => {
+    it('selects the value by rowid, at elevated priority, past the query cache', async () => {
       mock.setRows(async () => [{ val: 7 }]);
       await expect(actions.getCellValue(3, 'id')).resolves.toBe(7);
       expect(mock.calls[0]).toEqual({
         sql: 'SELECT "id" AS val FROM "t" WHERE "__rowid__" = 3',
         signal: undefined,
-        options: { priority: 'high', cache: false },
+        options: { priority: 'elevated', cache: false },
       });
     });
 
@@ -227,7 +227,7 @@ describe('StateActions.getCellValue', () => {
   });
 
   describe('a nested column', () => {
-    it('reads the exact JSON text by rowid, uncapped, at high priority, past the cache', async () => {
+    it('reads the exact JSON text by rowid, uncapped, at elevated priority, past the cache', async () => {
       mock.setRows(async () => [{ json: '["a",null,"b"]', chars: 14 }]);
       await expect(actions.getCellValue(2, 'tags')).resolves.toEqual(['a', null, 'b']);
       expect(mock.calls[0]).toEqual({
@@ -235,7 +235,7 @@ describe('StateActions.getCellValue', () => {
           'SELECT CAST(to_json("tags") AS VARCHAR) AS "json",' +
           ' length(CAST(to_json("tags") AS VARCHAR)) AS "chars" FROM "t" WHERE "__rowid__" = 2',
         signal: undefined,
-        options: { priority: 'high', cache: false },
+        options: { priority: 'elevated', cache: false },
       });
     });
 

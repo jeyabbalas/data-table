@@ -174,7 +174,7 @@ describe('ValueInspector', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.sql).toContain('WHERE "__rowid__" = 3');
     expect(calls[0]!.sql).toContain(String(INSPECTOR_DISPLAY_CHARS));
-    expect(calls[0]!.options).toEqual({ priority: 'high', cache: false });
+    expect(calls[0]!.options).toEqual({ priority: 'elevated', cache: false });
     expect(q(inspector, '.dt-value-inspector__status').getAttribute('role')).toBe('status');
     expect(q<HTMLButtonElement>(inspector, '.dt-value-inspector__button').disabled).toBe(false);
     inspector.destroy();

@@ -41,15 +41,21 @@ interface QueueEntry {
   respond: Respond;
   /** Resolves the promise `handleMessage` returned for THIS message. */
   done: () => void;
+  /** A query posted at `'elevated'` priority: see the queues below. */
+  elevated: boolean;
 }
 
 /**
- * Messages are serialized through an explicit two-priority FIFO: `high`
- * for viewport row fetches, `normal` for everything else. `pump()` runs
- * exactly one task at a time (`running`); `cancel` messages bypass the
- * queue entirely — a queued target is removed without touching DuckDB,
- * the running target is interrupted via the connection's pending-query
- * cancel.
+ * Messages are serialized through an explicit FIFO of three priorities:
+ * `high` for viewport row fetches, `elevated` for a read a user is waiting
+ * on (`actions.getCellValue`, the value inspector), `normal` for
+ * everything else. `high` entries have a queue of their own; an
+ * `elevated` one goes into the normal queue, ahead of every `normal`
+ * entry and behind the `elevated` ones before it, so that it jumps chart
+ * and stats work but never a row fetch. `pump()` runs exactly one task at
+ * a time (`running`); `cancel` messages bypass the queue entirely — a
+ * queued target is removed without touching DuckDB, the running target is
+ * interrupted via the connection's pending-query cancel.
  *
  * Why serialization does not hurt: SQL execution already serializes
  * inside duckdb-wasm's single-threaded WASM worker, so concurrent
@@ -68,7 +74,9 @@ interface QueueEntry {
  *
  * Priority starvation is accepted by design: only viewport row fetches
  * should be posted with `priority: 'high'`, and those are bounded by
- * scroll activity.
+ * scroll activity. `elevated` reads come one per user action; a host that
+ * loops over `getCellValue` holds chart and stats work back meanwhile,
+ * but not the grid's rows.
  */
 let highQueue: QueueEntry[] = [];
 let normalQueue: QueueEntry[] = [];
@@ -194,8 +202,22 @@ export function handleMessage(message: WorkerMessage, respond: Respond): Promise
   }
 
   return new Promise<void>((resolve) => {
-    const high = type === 'query' && (payload as QueryPayload | undefined)?.priority === 'high';
-    (high ? highQueue : normalQueue).push({ message, type, respond, done: resolve });
+    const priority = type === 'query' ? (payload as QueryPayload | undefined)?.priority : undefined;
+    const entry: QueueEntry = {
+      message,
+      type,
+      respond,
+      done: resolve,
+      elevated: priority === 'elevated',
+    };
+    if (priority === 'high') {
+      highQueue.push(entry);
+    } else if (entry.elevated) {
+      const at = normalQueue.findIndex((queued) => !queued.elevated);
+      normalQueue.splice(at === -1 ? normalQueue.length : at, 0, entry);
+    } else {
+      normalQueue.push(entry);
+    }
     pump();
   });
 }

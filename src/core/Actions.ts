@@ -2815,7 +2815,8 @@ export class StateActions {
    * `null`.
    *
    * One query by `__rowid__`. It skips the query cache and runs ahead of
-   * queued chart and stats queries.
+   * queued chart and stats queries, though not of the grid's row fetches
+   * (`priority: 'elevated'`): a loop of reads leaves scrolling alone.
    *
    * @param rowId - The row's `__rowid__`: a non-negative integer, as a
    *   number or as the bigint `getColumnValues('__rowid__')` gives.
@@ -2880,7 +2881,7 @@ export class StateActions {
       `SELECT ${valueReadSQL(read, entry, quoteIdentifier(column))} AS val` +
       ` FROM ${quoteIdentifier(tbl)} WHERE ${quoteIdentifier(ROWID_COLUMN)} = ${id}`;
     const rows = await this.bridge.query<Record<string, unknown>>(sql, signal, {
-      priority: 'high',
+      priority: 'elevated',
       cache: false,
     });
     this.throwIfDestroyed('getCellValue');

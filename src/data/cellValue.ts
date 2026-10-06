@@ -122,7 +122,9 @@ export function rowIdLiteral(rowId: number | bigint): string {
  *
  * Without `maxChars`, `J` itself is selected. The query skips the bridge's
  * result cache, which must not keep texts that can run to megabytes, and
- * runs ahead of queued normal-priority work (column charts, stats).
+ * runs at `'elevated'` priority: ahead of queued normal-priority work
+ * (column charts, stats), behind the grid's row fetches, so that a loop of
+ * reads does not hold up scrolling.
  *
  * @returns `undefined` when no row has that rowid; `{ text: null,
  *   truncated: false, totalChars: 0 }` when the value is SQL NULL.
@@ -166,7 +168,7 @@ export async function fetchCellJson(
     ` FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier(ROWID_COLUMN)} = ${id}`;
 
   const rows = await bridge.query<{ json: unknown; chars: unknown }>(sql, signal, {
-    priority: 'high',
+    priority: 'elevated',
     cache: false,
   });
   const row = rows[0];

@@ -10,6 +10,11 @@
  * scalars; the grid shows DuckDB's text for them, and
  * `ColumnSchema.originalType` says which container a column is. A `JSON`
  * column is `'string'`.
+ *
+ * @example
+ * // The columns whose values are lists, structs, maps and the like
+ * const nested = table.state.schema.get().filter((column) => column.type === 'nested');
+ * nested.map((column) => column.originalType); // ['VARCHAR[]', 'STRUCT(x DOUBLE, y DOUBLE)']
  */
 export type DataType =
   | 'integer'

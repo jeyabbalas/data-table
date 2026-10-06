@@ -89,11 +89,19 @@ describe('StateActions.getColumnValues', () => {
     });
   });
 
-  it('throws NO_TABLE when called before a table is loaded', async () => {
+  it('throws NO_TABLE when the schema names the column but no table is loaded', async () => {
     state.tableName.set(null);
     await expect(actions.getColumnValues('id')).rejects.toMatchObject({
       code: 'NO_TABLE',
     });
+  });
+
+  it('throws COLUMN_NOT_FOUND before any data is loaded: the schema is empty', async () => {
+    const fresh = new StateActions(createTableState(), harness.bridge as any);
+    await expect(fresh.getColumnValues('__rowid__')).rejects.toMatchObject({
+      code: 'COLUMN_NOT_FOUND',
+    });
+    expect(harness.queryCalls).toHaveLength(0);
   });
 
   // -------------------------------------------------------------------------

@@ -79,9 +79,17 @@ describe('StateActions.getCellValue', () => {
       expect(mock.calls).toHaveLength(0);
     });
 
-    it('throws NO_TABLE before any data is loaded', async () => {
+    it('throws NO_TABLE when the schema names the column but no table is loaded', async () => {
       state.tableName.set(null);
       await expect(actions.getCellValue(0, 'id')).rejects.toMatchObject({ code: 'NO_TABLE' });
+      expect(mock.calls).toHaveLength(0);
+    });
+
+    it('throws COLUMN_NOT_FOUND before any data is loaded: the schema is empty', async () => {
+      const fresh = new StateActions(createTableState(), mock.bridge as never);
+      await expect(fresh.getCellValue(0, 'id')).rejects.toMatchObject({
+        code: 'COLUMN_NOT_FOUND',
+      });
       expect(mock.calls).toHaveLength(0);
     });
 

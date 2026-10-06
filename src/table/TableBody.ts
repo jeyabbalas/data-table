@@ -878,7 +878,21 @@ export class TableBody {
       for (const key of Object.keys(cached)) {
         if (key !== ROWID_COLUMN && !columns.set.has(key)) delete cached[key];
       }
-      for (const key of missing) cached[key] = fresh[key];
+      for (const key of missing) {
+        // Assigning a column named __proto__ would run Object.prototype's
+        // setter, dropping the value and maybe changing the row's prototype,
+        // so it is defined as the row's own, as the worker builds rows.
+        if (key === '__proto__') {
+          Object.defineProperty(cached, key, {
+            value: fresh[key],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          });
+        } else {
+          cached[key] = fresh[key];
+        }
+      }
     }
     this.blockColumns.set(blockStart, columns.set);
   }
@@ -890,8 +904,8 @@ export class TableBody {
    *
    * Every visible column when rows render every visible column. With a column
    * window, a 1,000-column table's block selects some hundred columns rather
-   * than all of them, and converting a block to JavaScript objects, most of a
-   * fetch's time, shrinks with it.
+   * than all of them, so DuckDB reads, and the worker converts to JavaScript
+   * objects, that many fewer.
    */
   private fetchColumns(): FetchColumns {
     const layout = getColumnLayout(this.state);

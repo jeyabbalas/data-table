@@ -4,10 +4,11 @@
  * Provides SQL query builders, batching, contiguous-range optimization, and
  * column resolution used by both CSV and JSON exporters.
  *
- * CSV and JSON exports read some columns as text rather than as the values
- * Arrow returns (see {@link exportColumnRead}): nested values as exact JSON,
- * and a few scalars as DuckDB's text. Parquet export reads every column as
- * it is, since a Parquet file holds nested values natively.
+ * CSV and JSON exports read some columns in another form than the values
+ * Arrow returns (see {@link exportColumnRead}): nested values as exact
+ * JSON, a few scalars as DuckDB's text, and a DECIMAL as the double nearest
+ * its value. Parquet export reads every column as it is, since a Parquet
+ * file holds nested values natively.
  */
 
 import { containsKind, dataTypeOf, parseDuckDBType, type DuckDBTypeNode } from '../core/duckdbType';

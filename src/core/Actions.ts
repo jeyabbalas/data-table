@@ -17,6 +17,7 @@ import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
+import { jsonFiltersAsText } from '../filters/jsonFilters';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
@@ -1198,6 +1199,11 @@ export class StateActions {
    * undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
    * entire pre-load state atomically.
    *
+   * A point, set or not-set filter on a JSON column without `valueType` is
+   * given `valueType: 'text'` (`jsonFiltersAsText`): compared as JSON,
+   * text that is not JSON would fail every query, and a preset saved before
+   * 0.9, or imported, may hold such a filter.
+   *
    * Columns the preset does not carry forward have lost their filter, so they
    * are notified — outside the suppression window, since the callback may
    * legitimately want to record an undo entry of its own.
@@ -1209,7 +1215,7 @@ export class StateActions {
     this.suppressUndoCapture = true;
     try {
       batch(() => {
-        this.state.filters.set(filters);
+        this.state.filters.set(jsonFiltersAsText(filters, this.state.schema.get()));
         if (sortColumns) {
           this.state.sortColumns.set(sortColumns);
         }

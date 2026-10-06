@@ -19,6 +19,7 @@ import type { UndoManager, StateSnapshot } from '../core/UndoManager';
 import type { VectorColumnDef } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { Filter } from '../filters/FilterTypes';
+import { jsonFiltersAsText } from '../filters/jsonFilters';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
@@ -266,7 +267,12 @@ export function snapshotFromState(
  * Restore TableState from a SessionSnapshot.
  *
  * Validates all snapshot data against the current schema — columns that no
- * longer exist are silently dropped. The snapshot's column order is made
+ * longer exist are silently dropped. A point, set or not-set filter on a
+ * JSON column without `valueType` gets `valueType: 'text'`, in the filters
+ * and in the undo and redo entries ({@link jsonFiltersAsText}): one saved
+ * before 0.9 would otherwise fail every query on text that is not JSON.
+ * Only the schema's columns are known here, not the derived columns the
+ * snapshot brings back. The snapshot's column order is made
  * consistent ({@link consistentColumnOrder}): the visible columns as the
  * table showed them, the hidden ones beside their old neighbours, the pinned
  * ones first. New schema columns not present in the snapshot then go into
@@ -299,9 +305,14 @@ export function restoreStateFromSnapshot(
   // Filters: deserialize and drop stale column references.
   // Raw SQL filters use synthetic column keys that aren't in the schema —
   // they must bypass column validation to survive session restore.
-  const filters = snapshot.filters
-    .map(deserializeFilter)
-    .filter((f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)));
+  const filters = jsonFiltersAsText(
+    snapshot.filters
+      .map(deserializeFilter)
+      .filter(
+        (f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)),
+      ),
+    schemaColumns,
+  );
 
   // Sort: drop stale column references
   const sortColumns = snapshot.sortColumns.filter((s) => validColumns.has(s.column));
@@ -408,13 +419,13 @@ export function restoreStateFromSnapshot(
         hydratedPool.set(key, entry.values.slice());
       }
     }
+    const restore = (s: SerializedStateSnapshot): StateSnapshot => {
+      const entry = deserializeStateSnapshot(s, validColumns, hydratedPool);
+      return { ...entry, filters: jsonFiltersAsText(entry.filters, schemaColumns) };
+    };
     const deserialized = {
-      undoStack: snapshot.undoStack.map((s) =>
-        deserializeStateSnapshot(s, validColumns, hydratedPool),
-      ),
-      redoStack: (snapshot.redoStack ?? []).map((s) =>
-        deserializeStateSnapshot(s, validColumns, hydratedPool),
-      ),
+      undoStack: snapshot.undoStack.map(restore),
+      redoStack: (snapshot.redoStack ?? []).map(restore),
     };
     undoManager.loadStacks(deserialized.undoStack, deserialized.redoStack);
   }

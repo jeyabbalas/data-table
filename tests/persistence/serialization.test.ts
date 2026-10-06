@@ -1333,3 +1333,62 @@ describe('filters with valueType survive the session and the undo stacks', () =>
     expect(restored.filters.get()).toEqual(filters.slice(0, 2));
   });
 });
+
+// =========================================
+// Exact filters on JSON columns saved without valueType
+// =========================================
+
+describe('exact filters on a JSON column saved without valueType', () => {
+  // A session from before 0.9 can hold `"doc" = 'abc'`: with DuckDB's json
+  // extension loaded, text that is not JSON fails every query that filter
+  // is in. Restored, it compares the column's text instead.
+  const jsonSchema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+    { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+  ];
+  const saved: Filter[] = [
+    { type: 'point', column: 'doc', value: 'abc' },
+    { type: 'set', column: 'doc', values: ['{"a": 1}'], includeNull: true },
+    { type: 'point', column: 'tags', value: '[a, b]' },
+  ];
+  const restoredFilters: Filter[] = [
+    { type: 'point', column: 'doc', value: 'abc', valueType: 'text' },
+    { type: 'set', column: 'doc', values: ['{"a": 1}'], includeNull: true, valueType: 'text' },
+    // A nested column's filter compares by value, as it did.
+    { type: 'point', column: 'tags', value: '[a, b]' },
+  ];
+
+  function entry(filters: Filter[]): SerializedStateSnapshot {
+    return serializeStateSnapshot({
+      filters,
+      sortColumns: [],
+      visibleColumns: ['id', 'doc', 'tags'],
+      columnOrder: ['id', 'doc', 'tags'],
+      columnWidths: new Map(),
+      pinnedColumns: [],
+      hiddenColumnInfo: new Map(),
+      derivedColumns: [],
+    });
+  }
+
+  it('gives them valueType text, in the filters and in the undo and redo entries', () => {
+    const state = setupState(jsonSchema);
+    const undoManager = new UndoManager();
+    restoreStateFromSnapshot(
+      state,
+      createTestSnapshot({
+        filters: saved.map((f) => ({ ...f })) as SessionSnapshot['filters'],
+        visibleColumns: ['id', 'doc', 'tags'],
+        columnOrder: ['id', 'doc', 'tags'],
+        undoStack: [entry(saved.slice(0, 1))],
+        redoStack: [entry(saved)],
+      }),
+      undoManager,
+    );
+    expect(state.filters.get()).toEqual(restoredFilters);
+    const { undoStack, redoStack } = undoManager.getStacks();
+    expect(undoStack[0]!.filters).toEqual(restoredFilters.slice(0, 1));
+    expect(redoStack[0]!.filters).toEqual(restoredFilters);
+  });
+});

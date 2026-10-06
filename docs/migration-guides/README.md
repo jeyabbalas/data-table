@@ -23,9 +23,10 @@ Start new guides by copying [`_TEMPLATE.md`](./_TEMPLATE.md).
 
 ## Available migrations
 
-| From   | To     | Released      | Guide                                                                                                           |
-| ------ | ------ | ------------- | --------------------------------------------------------------------------------------------------------------- |
-| `v0.5` | `v0.6` | see CHANGELOG | [`from-0.5-to-0.6.md`](./from-0.5-to-0.6.md) — ARIA grid moves to `.dt-grid`; `role="cell"` → `role="gridcell"` |
+| From   | To     | Released      | Guide                                                                                                                                   |
+| ------ | ------ | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `v0.5` | `v0.6` | see CHANGELOG | [`from-0.5-to-0.6.md`](./from-0.5-to-0.6.md) — ARIA grid moves to `.dt-grid`; `role="cell"` → `role="gridcell"`                         |
+| `v0.8` | `v0.9` | see CHANGELOG | [`from-0.8-to-0.9.md`](./from-0.8-to-0.9.md) — nested columns are `'nested'`; new `getColumnValues` forms; replace a self-hosted worker |
 
 Pre-`v0.5` breaking changes were tracked per review phase rather than per
 version; those guides are the `phase-*.md` files in this directory.

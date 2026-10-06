@@ -30,8 +30,10 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import type { StateActions } from '../core/Actions';
+import type { NestedFieldColumnOptions, StateActions } from '../core/Actions';
+import { ConfigurationError, type DataTableError } from '../core/errors';
 import { resolveInstanceId } from '../core/instanceId';
+import { isAnyModalOpen } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
@@ -46,15 +48,18 @@ import { FilterPanel } from '../filters/FilterPanel';
 import type { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { SQLFilterModal } from '../filters/SQLFilterModal';
+import { columnTypeLabel } from '../nested/typeOutline';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { ColumnReorder } from './ColumnReorder';
 import { ColumnWindowController } from './ColumnWindowController';
+import type { ExtractColumnPanel } from './ExtractColumnPanel';
 import { HiddenColumnsGutter } from './HiddenColumnsGutter';
 import { HEADER_ROW_INDEX, KeyboardNavigator } from './KeyboardNavigator';
 import { TableBody } from './TableBody';
+import type { ValueInspector } from './ValueInspector';
 
 /**
  * Options for configuring the TableContainer
@@ -87,6 +92,16 @@ export interface TableContainerOptions {
    * match. The facade ties both to the public `derivedColumns` option.
    */
   showDerivedColumnEditIcon?: boolean | undefined;
+  /**
+   * "Extract field → column" (default: true): the extract button on every
+   * nested and JSON column header, whose panel adds a column that reads a
+   * part of that column, and the value inspector's "add as column" buttons,
+   * row "+" and Ctrl/Cmd+Enter. Both add through
+   * `actions.addNestedFieldColumn`, which works either way. Like
+   * `showAddColumnButton`, the facade ties it to the public `derivedColumns`
+   * option.
+   */
+  extractColumns?: boolean | undefined;
   /** Show "Expression" filter button in filter bar for SQL WHERE conditions (default: true) */
   showExpressionFilter?: boolean | undefined;
   /** FilterPresetManager instance — enables the Presets button and preset panel */
@@ -140,6 +155,49 @@ export interface TableContainerOptions {
    * `TableBody`. Default: true. See {@link TableBodyOptions.prefetch}.
    */
   prefetch?: boolean | undefined;
+  /**
+   * Called with a failure nothing else hears of: a panel that loads on
+   * first use, the value inspector or the extract panel, whose chunk did
+   * not download. The error is a `ConfigurationError` with code
+   * `CHUNK_LOAD_FAILED`, `details.panel` (`'valueInspector'` or
+   * `'extractPanel'`) and the import's error as `cause`; the live region
+   * says it too. `createDataTable` emits it as the table's `error` event.
+   */
+  onError?: ((error: DataTableError) => void) | undefined;
+}
+
+/** The panels and modals the table opens, one at a time, named as their fields are. */
+type PanelName =
+  | 'filterPanel'
+  | 'derivedEditPanel'
+  | 'derivedModal'
+  | 'sqlFilterModal'
+  | 'presetPanel'
+  | 'valueInspector'
+  | 'extractPanel';
+
+/** What `TableContainer.extractColumn` resolves to. */
+type ExtractResult = { success: boolean; name?: string; error?: string };
+
+/** An "extract field → column" add still running (see `TableContainer.extractColumn`). */
+interface RunningExtract {
+  readonly promise: Promise<ExtractResult>;
+  /** The panel waiting on it; `null` for an add asked for from code. */
+  asker: 'valueInspector' | 'extractPanel' | null;
+  /** The panel that asked has closed since, by the user's doing. */
+  abandoned: boolean;
+}
+
+/**
+ * The panel asked for last (see `TableContainer.makeWayFor`). A panel whose
+ * chunk is still loading opens only while its request is still this one.
+ */
+interface PanelRequest {
+  readonly panel: PanelName;
+  /** The value inspector's: the cell asked for. */
+  readonly cell?: { readonly row: number; readonly column: string } | undefined;
+  /** The value inspector's: whether focus was in the table when it was asked for. */
+  readonly focusInTable?: boolean | undefined;
 }
 
 /**
@@ -199,6 +257,29 @@ export class TableContainer {
   private derivedModal: DerivedColumnModal | null = null;
   private sqlFilterModal: SQLFilterModal | null = null;
   private presetPanel: FilterPresetPanel | null = null;
+  // The value inspector, a lazy chunk: built on the first open, and rebuilt
+  // after a render, which tears it down with the other panels.
+  private valueInspector: ValueInspector | null = null;
+  private valueInspectorModule: Promise<{ ValueInspector: typeof ValueInspector }> | null = null;
+  // A cell F2 asked to inspect while its row was loading: the inspector
+  // opens on it once the row renders, unless the user has gone elsewhere
+  // (see openPendingInspect).
+  private pendingInspect: { row: number; column: string } | null = null;
+  // The panel asked for last, while it may still be waiting on its chunk.
+  // A newer request replaces it; the cursor leaving the inspector's cell,
+  // and a new filter, sort, selection or table, drop the inspector's.
+  private panelRequest: PanelRequest | null = null;
+  // The "extract field → column" adds still running, by what they add: an
+  // identical request gets the same one.
+  private extracts = new Map<string, RunningExtract>();
+  // Set while the table itself closes the panels, not the user: a render
+  // tearing them down, or the relation changing under them, as adding a
+  // derived column renames it to its VIEW (see closeForTable).
+  private closingForTable = false;
+  // The header's extract panel, a lazy chunk too, built and torn down the same way.
+  private extractPanel: ExtractColumnPanel | null = null;
+  private extractPanelModule: Promise<{ ExtractColumnPanel: typeof ExtractColumnPanel }> | null =
+    null;
   private addColumnButton: AddColumnButton | null = null;
   private wrapperElement: HTMLElement | null = null;
   private hiddenColumnsGutter: HiddenColumnsGutter | null = null;
@@ -255,6 +336,7 @@ export class TableContainer {
       editorFactory: undefined as unknown as ExpressionEditorFactory,
       showAddColumnButton: true,
       showDerivedColumnEditIcon: true,
+      extractColumns: true,
       showExpressionFilter: true,
       presetManager: undefined as unknown as FilterPresetManager,
       portalTarget: undefined as unknown as HTMLElement,
@@ -268,6 +350,7 @@ export class TableContainer {
       fetchBlockSize: undefined as unknown as number,
       rowCacheRows: undefined as unknown as number,
       prefetch: undefined as unknown as boolean,
+      onError: undefined as unknown as (error: DataTableError) => void,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -458,6 +541,7 @@ export class TableContainer {
         getColumnHeaders: () => this.columnHeaders,
         revealColumn: (column) => this.columnWindow.revealColumn(column),
         revealControl: (control) => this.columnWindow.revealHeaderElement(control),
+        openCellInspector: (cell) => this.openValueInspector(cell) || this.inspectOnceLoaded(cell),
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
@@ -1120,6 +1204,34 @@ export class TableContainer {
     });
     this.unsubscribes.push(unsubLiveSort);
 
+    // The value inspector shows one value of one row, titled with the row's
+    // position. A new filter, sort or relation moves or replaces that row,
+    // and the cursor or the selection moving elsewhere is the user going on
+    // to another cell (a press on the inspected cell itself is not an
+    // outside click, so this is what closes the panel for a click on it).
+    // Each also drops an open still waiting: the chunk loading, or F2's row.
+    const closeInspector = (): void => {
+      this.pendingInspect = null;
+      if (this.panelRequest?.panel === 'valueInspector') this.panelRequest = null;
+      if (!this.destroyed) this.valueInspector?.close();
+    };
+    this.unsubscribes.push(
+      this.state.filters.subscribe(closeInspector),
+      this.state.sortColumns.subscribe(closeInspector),
+      this.state.tableName.subscribe(() => this.closeForTable(closeInspector)),
+      this.state.selectedRows.subscribe(closeInspector),
+      this.state.focusedCell.subscribe((cell) => {
+        const elsewhere = (at: { row: number; column: string }): boolean =>
+          cell?.row !== at.row || cell.column !== at.column;
+        const pending = this.pendingInspect;
+        if (pending && elsewhere(pending)) this.pendingInspect = null;
+        const asked = this.panelRequest?.cell;
+        if (asked && elsewhere(asked)) this.panelRequest = null;
+        const shown = this.valueInspector?.getShown();
+        if (shown && elsewhere(shown)) closeInspector();
+      }),
+    );
+
     // Clamp focused cell when row count shrinks. A header cursor
     // (row === HEADER_ROW_INDEX) is exempt — the header row exists
     // independently of how many data rows survive the filter.
@@ -1216,6 +1328,10 @@ export class TableContainer {
           onFilterClick: (column, buttonEl) => this.handleFilterClick(column, buttonEl),
           onDerivedIconClick: (column, buttonEl) =>
             void this.handleDerivedIconClick(column, buttonEl),
+          onExtractClick:
+            this.resolvedOptions.extractColumns !== false
+              ? (column, buttonEl) => void this.handleExtractClick(column, buttonEl)
+              : undefined,
           colIndex,
           messages: this.messages,
           showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
@@ -1427,6 +1543,21 @@ export class TableContainer {
       this.derivedEditPanel = null;
     }
 
+    // Destroy the value inspector (recreated on the next open). Focus goes
+    // back to the grid.
+    this.closeForTable(() => {
+      this.valueInspector?.destroy();
+      this.valueInspector = null;
+    });
+    this.pendingInspect = null;
+
+    // Destroy the extract panel (recreated on the next extract click). Focus
+    // goes back to its button; `extractColumn` takes it on from there.
+    this.closeForTable(() => {
+      this.extractPanel?.destroy();
+      this.extractPanel = null;
+    });
+
     if (schema.length === 0 || !tableName) {
       // No data loaded - show placeholder
       this.destroyColumnHeaders();
@@ -1466,7 +1597,7 @@ export class TableContainer {
             const nameEl = document.createElement('strong');
             nameEl.textContent = colSchema.name;
             const typeEl = document.createElement('small');
-            typeEl.textContent = colSchema.type;
+            typeEl.textContent = columnTypeLabel(colSchema);
             colEl.replaceChildren(nameEl, document.createElement('br'), typeEl);
             headerRowEl.appendChild(colEl);
           }
@@ -1508,11 +1639,15 @@ export class TableContainer {
               fetchBlockSize: this.resolvedOptions.fetchBlockSize,
               rowCacheRows: this.resolvedOptions.rowCacheRows,
               prefetch: this.resolvedOptions.prefetch,
-              onRowsRendered: () => this.syncActiveDescendant(),
+              onRowsRendered: () => {
+                this.syncActiveDescendant();
+                this.openPendingInspect();
+              },
               // Where the body parks real DOM focus when it is about to detach the
               // row holding it. Passed explicitly rather than rediscovered with
               // `closest('.dt-grid')` so the dependency is visible at the wiring.
               gridElement: this.gridElement,
+              onInspectCell: (cell) => void this.openValueInspector(cell),
             },
           );
           this.bodySchema = schema;
@@ -1740,22 +1875,56 @@ export class TableContainer {
   }
 
   /**
+   * Make way for `panel`, one panel at a time: close every other panel and
+   * modal, and drop what was waiting to open, an inspector F2 asked for on
+   * a row still loading and a panel whose chunk is still loading. Every
+   * opener calls it first. Returns the opener's request: one whose chunk
+   * has to load first opens only if it is still the request asked for
+   * last.
+   */
+  private makeWayFor(
+    panel: PanelName,
+    inspect?: Pick<PanelRequest, 'cell' | 'focusInTable'>,
+  ): PanelRequest {
+    this.pendingInspect = null;
+    const request: PanelRequest = { panel, ...inspect };
+    this.panelRequest = request;
+    const panels: [PanelName, { close(): void } | null][] = [
+      ['filterPanel', this.filterPanel],
+      ['derivedEditPanel', this.derivedEditPanel],
+      ['derivedModal', this.derivedModal],
+      ['sqlFilterModal', this.sqlFilterModal],
+      ['presetPanel', this.presetPanel],
+      ['valueInspector', this.valueInspector],
+      ['extractPanel', this.extractPanel],
+    ];
+    for (const [name, other] of panels) if (name !== panel) other?.close();
+    return request;
+  }
+
+  /**
+   * A panel's chunk did not download: say so in the live region, and hand
+   * the error to the `onError` option, which `createDataTable` emits as the
+   * table's `error` event. F2 or the click asked for the panel and nothing
+   * else would tell of it.
+   */
+  private panelLoadFailed(panel: 'valueInspector' | 'extractPanel', cause: unknown): void {
+    this.announce(this.messages.values.panelLoadFailed);
+    this.resolvedOptions.onError?.(
+      new ConfigurationError(
+        `The ${panel} chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+        { code: 'CHUNK_LOAD_FAILED', cause, details: { panel } },
+      ),
+    );
+  }
+
+  /**
    * Handle filter button click from a column header.
    * Creates the FilterPanel lazily and toggles it for the clicked column.
    */
   private handleFilterClick(column: string, anchorElement: HTMLElement): void {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals if open
-    if (this.derivedEditPanel?.getIsOpen()) {
-      this.derivedEditPanel.close();
-    }
-    if (this.sqlFilterModal?.getIsOpen()) {
-      this.sqlFilterModal.close();
-    }
-    if (this.presetPanel?.getIsOpen()) {
-      this.presetPanel.close();
-    }
+    this.makeWayFor('filterPanel');
 
     // Create panel lazily on first click
     if (!this.filterPanel) {
@@ -1783,17 +1952,7 @@ export class TableContainer {
     anchorElement: HTMLElement,
   ): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals if open
-    if (this.filterPanel?.getIsOpen()) {
-      this.filterPanel.close();
-    }
-    if (this.sqlFilterModal?.getIsOpen()) {
-      this.sqlFilterModal.close();
-    }
-    if (this.presetPanel?.getIsOpen()) {
-      this.presetPanel.close();
-    }
+    this.makeWayFor('derivedEditPanel');
 
     if (!this.derivedEditPanel) {
       const { DerivedColumnEditPanel } = await import('../derived/DerivedColumnEditPanel');
@@ -1821,12 +1980,7 @@ export class TableContainer {
    */
   private async handleAddColumnClick(): Promise<void> {
     if (!this.actions) return;
-
-    // Close other floating panels/modals (mutual exclusion)
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    this.makeWayFor('derivedModal');
 
     if (!this.derivedModal) {
       const { DerivedColumnModal } = await import('../derived/DerivedColumnModal');
@@ -1879,12 +2033,7 @@ export class TableContainer {
    */
   private async openSQLFilterModal(): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion: close other panels/modals
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    this.makeWayFor('sqlFilterModal');
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
@@ -1896,12 +2045,7 @@ export class TableContainer {
    */
   private async openSQLFilterModalForEdit(filterId: string): Promise<void> {
     if (!this.actions) return;
-
-    // Mutual exclusion
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
-    if (this.presetPanel?.getIsOpen()) this.presetPanel.close();
+    this.makeWayFor('sqlFilterModal');
 
     const modal = await this.ensureSqlFilterModal();
     if (this.destroyed || !modal) return;
@@ -1921,12 +2065,7 @@ export class TableContainer {
    */
   private async handlePresetsClick(): Promise<void> {
     if (!this.actions || !this.resolvedOptions.presetManager) return;
-
-    // Mutual exclusion: close other panels/modals
-    if (this.filterPanel?.getIsOpen()) this.filterPanel.close();
-    if (this.derivedEditPanel?.getIsOpen()) this.derivedEditPanel.close();
-    if (this.sqlFilterModal?.getIsOpen()) this.sqlFilterModal.close();
-    if (this.derivedModal?.getIsOpen()) this.derivedModal.close();
+    this.makeWayFor('presetPanel');
 
     if (!this.presetPanel) {
       const { FilterPresetPanel } = await import('../filters/FilterPresetPanel');
@@ -1955,6 +2094,382 @@ export class TableContainer {
 
     if (presetsBtn) {
       this.presetPanel.toggle(presetsBtn);
+    }
+  }
+
+  /**
+   * Open the value inspector on a body cell: the whole of a nested (LIST,
+   * ARRAY, STRUCT, MAP, UNION, VARIANT) or JSON value as a keyboard tree, in
+   * a panel beside the cell. What `F2` on the cursor, a double click and the
+   * cell's inspect icon do. Closes the other panels; Escape closes it, and
+   * focus goes back to the grid with the cursor where it was.
+   *
+   * The panel is a lazy chunk: it opens a microtask later, after the cursor
+   * keys have scrolled the cell into view, and the first time after the
+   * chunk loads. What happens meanwhile is the user going on, and the open
+   * waiting for it is dropped: a newer one, another panel opening, the
+   * cursor moving off the cell, a new filter, sort, selection or table, and,
+   * when focus was in the table, focus leaving it. Called from code, the
+   * cursor need not be on the cell, but moving it in the same task drops
+   * the open, as it closes the panel once open. A chunk that fails to load
+   * is announced and reported through the `onError` option.
+   *
+   * @param cell - The cell, by row (0-based, in the table as sorted and
+   *   filtered) and column name.
+   * @returns whether there is a value to inspect there: `false` for a column
+   *   that is not nested or JSON, a NULL, a row not loaded or not rendered.
+   *   `true` still opens nothing when the open is dropped before the chunk
+   *   is there.
+   *
+   * @example
+   * ```typescript
+   * container.openValueInspector({ row: 12, column: 'tags' });
+   * ```
+   */
+  openValueInspector(cell: { row: number; column: string }): boolean {
+    if (this.destroyed || !this.bridge || !this.actions) return false;
+    if (!this.tableBody?.getInspectTarget(cell.row, cell.column)) return false;
+    const request = this.makeWayFor('valueInspector', {
+      cell: { row: cell.row, column: cell.column },
+      focusInTable: this.focusInTable(),
+    });
+    void this.showValueInspector(request);
+    return true;
+  }
+
+  /**
+   * F2 on a nested or JSON cell whose row is still loading, as after a jump
+   * to the end of a large table or a scroll far past the row cache: keep the
+   * request, and open the inspector once the row renders with a value there
+   * (see {@link openPendingInspect}). Moving the cursor, another panel
+   * opening, a filter, a sort or a selection drops it. `false` when there is
+   * nothing to wait for: a column that is not nested or JSON, or a NULL.
+   */
+  private inspectOnceLoaded(cell: { row: number; column: string }): boolean {
+    if (this.destroyed || this.tableBody?.inspectState(cell.row, cell.column) !== 'loading') {
+      return false;
+    }
+    this.pendingInspect = { row: cell.row, column: cell.column };
+    return true;
+  }
+
+  /**
+   * After the body renders rows: open the inspector F2 asked for on a row
+   * that was loading, once the row is there with a value. Only while the
+   * user is still where F2 left them: the cursor on that cell, focus on the
+   * grid or in its body, and no panel or dialog open, this table's or any
+   * other. A row that turns out to hold NULL drops the request, and so does
+   * the row leaving the rows rendered: the user has scrolled elsewhere, and
+   * the panel must not open on it whenever it comes back into view.
+   */
+  private openPendingInspect(): void {
+    const pending = this.pendingInspect;
+    const body = this.tableBody;
+    if (!pending || !body || this.destroyed) return;
+    const { start, end } = body.getVisibleRange();
+    const rendered = pending.row >= start && pending.row < end;
+    const state = rendered ? body.inspectState(pending.row, pending.column) : 'none';
+    if (state === 'loading') return;
+    this.pendingInspect = null;
+    const cursor = this.state.focusedCell.get();
+    const active = this.activeElementInRoot();
+    if (
+      state === 'ready' &&
+      cursor?.row === pending.row &&
+      cursor.column === pending.column &&
+      (active === this.gridElement || (active !== null && this.bodyScroll.contains(active))) &&
+      !isAnyModalOpen()
+    ) {
+      this.openValueInspector(pending);
+    }
+  }
+
+  /** Whether DOM focus is in the table: its root, or a panel mounted there. */
+  private focusInTable(): boolean {
+    const active = this.activeElementInRoot();
+    return active !== null && this.element.contains(active);
+  }
+
+  /**
+   * Load the inspector's chunk if need be, then open it on the cell as it is
+   * by then: unless the request was dropped meanwhile (see
+   * {@link openValueInspector}), or another panel or dialog is open.
+   */
+  private async showValueInspector(request: PanelRequest): Promise<void> {
+    // A load that failed (the network, a CSP, a deploy that removed the
+    // chunk) is not kept, so the next open asks for the chunk again. That
+    // fetches it again only where the browser lets it: Chrome keeps a failed
+    // module fetch for the life of the page, and answers every later import
+    // of it with the same error until a reload.
+    const loading = (this.valueInspectorModule ??= import('./ValueInspector'));
+    const loaded = await loading.catch((err: unknown) => {
+      if (this.valueInspectorModule === loading) this.valueInspectorModule = null;
+      if (!this.destroyed && this.panelRequest === request) {
+        this.panelRequest = null;
+        this.panelLoadFailed('valueInspector', err);
+      }
+      return null;
+    });
+    if (!loaded) return;
+    const { ValueInspector } = loaded;
+    const bridge = this.bridge;
+    const cell = request.cell;
+    if (this.destroyed || !bridge || !cell || this.panelRequest !== request) return;
+    this.panelRequest = null;
+    if (request.focusInTable && !this.focusInTable()) return;
+    if (isAnyModalOpen() && !this.valueInspector?.getIsOpen()) return;
+    // Rendered again, scrolled, or sorted while the chunk loaded: read the
+    // cell anew, and give up if it holds nothing to inspect now.
+    const target = this.tableBody?.getInspectTarget(cell.row, cell.column);
+    const column = this.state.schema.get().find((c) => c.name === cell.column);
+    const tableName = this.state.tableName.get();
+    if (!target || !column || !tableName) return;
+    if (!this.valueInspector) {
+      const v = this.messages.values;
+      this.valueInspector = new ValueInspector({
+        bridge,
+        classPrefix: this.resolvedOptions.classPrefix,
+        messages: this.messages,
+        colorSchemeSource: this.element,
+        // Not the cell: a pooled cell can hold another row by the time the
+        // panel closes. The grid keeps the cursor.
+        returnFocus: this.gridElement,
+        onOpenChange: this.extractingPanelOpenChange('valueInspector'),
+        instanceId: this.resolvedOptions.instanceId,
+        // "Add as column": the column goes in after its source, and the
+        // cursor to the same row in it.
+        extract:
+          this.resolvedOptions.extractColumns !== false
+            ? {
+                onExtract: (request) =>
+                  this.addExtract(
+                    {
+                      column: request.column,
+                      path: request.path,
+                      extract: request.extract,
+                      jsonLeaf: request.jsonLeaf,
+                      row: request.row,
+                    },
+                    'valueInspector',
+                  ),
+                labels: {
+                  value: v.addAsColumn,
+                  length: v.addLengthAsColumn,
+                  size: v.addSizeAsColumn,
+                  tag: v.addTagAsColumn,
+                },
+              }
+            : undefined,
+      });
+      this.element.appendChild(this.valueInspector.getElement());
+    }
+    this.valueInspector.open({
+      tableName,
+      column,
+      rowId: target.rowId,
+      row: cell.row,
+      anchor: target.cell,
+    });
+  }
+
+  /**
+   * Handle the extract button of a nested or JSON column header: load the
+   * extract panel's chunk on the first click, then toggle the panel under
+   * the button. Closes the other panels, and they close it, as does one
+   * opened while the chunk loads. A chunk that fails to load is announced
+   * and reported through the `onError` option.
+   */
+  private async handleExtractClick(column: string, anchorElement: HTMLElement): Promise<void> {
+    if (!this.actions) return;
+    const request = this.makeWayFor('extractPanel');
+
+    if (!this.extractPanel) {
+      // As the inspector's: a load that failed is not kept.
+      const loading = (this.extractPanelModule ??= import('./ExtractColumnPanel'));
+      const loaded = await loading.catch((err: unknown) => {
+        if (this.extractPanelModule === loading) this.extractPanelModule = null;
+        if (!this.destroyed && this.panelRequest === request) {
+          this.panelRequest = null;
+          this.panelLoadFailed('extractPanel', err);
+        }
+        return null;
+      });
+      if (!loaded || this.destroyed) return;
+      if (!this.extractPanel) {
+        const { ExtractColumnPanel } = loaded;
+        this.extractPanel = new ExtractColumnPanel(this.state, {
+          classPrefix: this.resolvedOptions.classPrefix,
+          instanceId: this.resolvedOptions.instanceId,
+          messages: this.messages,
+          colorSchemeSource: this.element,
+          onSubmit: (request) => this.addExtract(request, 'extractPanel'),
+          onOpenChange: this.extractingPanelOpenChange('extractPanel'),
+        });
+        this.element.appendChild(this.extractPanel.getElement());
+      }
+    }
+
+    // Another panel asked for while the chunk loaded, or the header rebuilt.
+    if (this.destroyed || !this.extractPanel || this.panelRequest !== request) return;
+    this.panelRequest = null;
+    if (!anchorElement.isConnected) return;
+    this.extractPanel.toggle(column, anchorElement);
+  }
+
+  /**
+   * Add a column that reads one part of a nested or JSON column, as
+   * `actions.addNestedFieldColumn(column, path, options)` does, and show it:
+   * the cursor goes to the new column, in `row` when given (where the value
+   * inspector asked from) or else on its header (where the header's extract
+   * panel asked from), the view scrolls to it, its header flashes as any
+   * newly shown column's does, and the live region says it was added. Focus
+   * still in the table goes to the grid, which carries the cursor.
+   *
+   * What the extract panel and the value inspector's "add as column" call.
+   * The work is here, not in them: the new column re-renders the table,
+   * which tears both panels down. A failure leaves them up, and they show
+   * its reason; with neither open any more, the live region says it. The
+   * same request (column, path, options and name) while one is still
+   * running gets that one's promise, and adds no second column. When the
+   * panel that asked was closed before the add landed, the live region
+   * still says the column was added, but the cursor, the view and focus
+   * stay where they are.
+   *
+   * @param request - The column, the path into it and the options
+   *   `addNestedFieldColumn` takes, and the body row (0-based, as sorted and
+   *   filtered) for the cursor.
+   * @returns what `addNestedFieldColumn` resolves to: the new column's name,
+   *   or why there is none.
+   *
+   * @example
+   * ```typescript
+   * await container.extractColumn({ column: 'point', path: ['x'] }); // cursor on point_x's header
+   * await container.extractColumn({ column: 'tags', path: [], extract: 'length', row: 12 });
+   * ```
+   */
+  extractColumn(
+    request: NestedFieldColumnOptions & {
+      column: string;
+      path: readonly (string | number)[];
+      row?: number | undefined;
+    },
+  ): Promise<{ success: boolean; name?: string; error?: string }> {
+    return this.addExtract(request, null);
+  }
+
+  /**
+   * {@link extractColumn}, for the value inspector, the extract panel, or
+   * code (`asker` null). A request for an add still running, the same
+   * column, path, options and name, gets that add's promise: one column,
+   * however often it is asked for. Once the panel that asked has closed (by
+   * the user's doing, not the re-render the new column causes), the add
+   * still lands and the live region says so, but the cursor, the view and
+   * focus stay where the user has since put them.
+   */
+  private addExtract(
+    request: Parameters<TableContainer['extractColumn']>[0],
+    asker: RunningExtract['asker'],
+  ): Promise<ExtractResult> {
+    const actions = this.actions;
+    if (this.destroyed || !actions) {
+      return Promise.resolve({ success: false, error: 'TableContainer is destroyed' });
+    }
+    const { column, path, row, ...options } = request;
+    let key = '';
+    try {
+      key = JSON.stringify([
+        column,
+        path,
+        options.extract ?? 'value',
+        options.jsonLeaf ?? null,
+        options.name ?? null,
+      ]);
+    } catch {
+      // A step no add takes (a bigint): the action says why, as for any other.
+    }
+    const running = this.extracts.get(key);
+    if (running) {
+      // Asked again: whoever asked last is waiting on it now.
+      running.asker = asker;
+      running.abandoned = false;
+      return running.promise;
+    }
+    const run = async (): Promise<ExtractResult> => {
+      let result: ExtractResult;
+      try {
+        result = await actions.addNestedFieldColumn(column, path, options);
+      } catch (err) {
+        result = { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+      this.extracts.delete(key);
+      if (this.destroyed) return result;
+      const name = result.name;
+      if (!result.success || name === undefined) {
+        if (!this.extractPanel?.getIsOpen() && !this.valueInspector?.getIsOpen()) {
+          this.announce(this.messages.values.extractFailed(result.error ?? ''));
+        }
+        return result;
+      }
+      if (!add.abandoned) this.showExtracted(name, row);
+      this.announce(this.messages.values.columnAdded(name));
+      return result;
+    };
+    const add: RunningExtract = { promise: run(), asker, abandoned: false };
+    if (key) this.extracts.set(key, add);
+    return add.promise;
+  }
+
+  /**
+   * Put the cursor on a column just added, in `row` or else on its header,
+   * bring the column into view, and give focus to the grid.
+   */
+  private showExtracted(name: string, row: number | undefined): void {
+    if (this.state.visibleColumns.get().includes(name)) {
+      this.actions?.setFocusedCell({ row: row ?? HEADER_ROW_INDEX, column: name });
+      this.columnWindow.revealColumn(name);
+    }
+    // The add re-rendered the table, which closed the panel that asked and
+    // gave focus back to the extract button it opened from (the inspector
+    // gives it to the grid). The grid takes it from there, the cursor on the
+    // new column; focus the user has since moved anywhere else stays put.
+    const active = this.activeElementInRoot();
+    if (
+      this.gridSemanticsActive &&
+      (active === null ||
+        active === this.element.ownerDocument.body ||
+        (active !== this.gridElement && this.gridElement.contains(active)))
+    ) {
+      this.gridElement.focus({ preventScroll: true });
+    }
+  }
+
+  /**
+   * The `onOpenChange` of a panel that adds columns: hold its column while
+   * it is open (see {@link holdWhileOpen}), and once the user closes it, by
+   * a button, Escape, a press outside, another panel or the cursor moving
+   * on, let go of the adds it asked for: they land without moving the
+   * cursor, the view or focus. Not when the table closes it (see
+   * {@link closeForTable}): the add that re-renders the table, renaming the
+   * relation to its VIEW, is the one the panel waits on.
+   */
+  private extractingPanelOpenChange(
+    asker: 'valueInspector' | 'extractPanel',
+  ): (column: string | null) => void {
+    const hold = this.holdWhileOpen();
+    return (column) => {
+      hold(column);
+      if (column !== null || this.closingForTable) return;
+      for (const add of this.extracts.values()) if (add.asker === asker) add.abandoned = true;
+    };
+  }
+
+  /** Run `close`, which closes panels for the table's own reasons rather than the user's. */
+  private closeForTable(close: () => void): void {
+    this.closingForTable = true;
+    try {
+      close();
+    } finally {
+      this.closingForTable = false;
     }
   }
 
@@ -2175,6 +2690,18 @@ export class TableContainer {
     if (this.derivedEditPanel) {
       this.derivedEditPanel.destroy();
       this.derivedEditPanel = null;
+    }
+
+    // Destroy the value inspector, which aborts its read
+    if (this.valueInspector) {
+      this.valueInspector.destroy();
+      this.valueInspector = null;
+    }
+
+    // Destroy the extract panel
+    if (this.extractPanel) {
+      this.extractPanel.destroy();
+      this.extractPanel = null;
     }
 
     // Destroy add column button

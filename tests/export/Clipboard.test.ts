@@ -206,4 +206,42 @@ describe('copyRowsToClipboard', () => {
     // Field with tab should be wrapped in quotes
     expect(tsv).toContain('"has\ttab"');
   });
+
+  it('copies nested values as standard JSON', async () => {
+    // A nested column is read as its exact JSON text, as in a CSV export,
+    // and written as standard JSON: NaN and ±Infinity become null, strings
+    // and digits stay as they are.
+    const nestedSchema: ColumnSchema[] = [
+      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+      {
+        name: 'point',
+        type: 'nested',
+        nullable: true,
+        originalType: 'STRUCT(x DOUBLE, tier VARCHAR)',
+      },
+      { name: 'big', type: 'nested', nullable: true, originalType: 'HUGEINT[]' },
+    ];
+    initializeColumnsFromSchema(state, nestedSchema);
+    mockBridge.query.mockResolvedValueOnce([
+      {
+        id: 1,
+        tags: '["a\\tb","NaN"]',
+        point: '{"x":NaN,"tier":"gold"}',
+        big: '[170141183460469231731687303715884105727]',
+      },
+      { id: 4, tags: null, point: '{"x":-Infinity,"tier":null}', big: '[]' },
+    ]);
+
+    await copyRowsToClipboard([0, 3], state, mockBridge);
+
+    const sql = mockBridge.query.mock.calls[0][0] as string;
+    expect(sql).toContain('SELECT "id", CAST(to_json("tags") AS VARCHAR) AS "tags"');
+    const tsv = mockWriteText.mock.calls[0][0] as string;
+    expect(tsv.split('\n')).toEqual([
+      'id\ttags\tpoint\tbig',
+      '1\t"[""a\\tb"",""NaN""]"\t"{""x"":null,""tier"":""gold""}"\t[170141183460469231731687303715884105727]',
+      '4\t\t"{""x"":null,""tier"":null}"\t[]',
+    ]);
+  });
 });

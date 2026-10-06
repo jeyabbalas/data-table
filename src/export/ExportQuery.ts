@@ -3,9 +3,17 @@
  *
  * Provides SQL query builders, batching, contiguous-range optimization, and
  * column resolution used by both CSV and JSON exporters.
+ *
+ * CSV and JSON exports read some columns in another form than the values
+ * Arrow returns (see {@link exportColumnRead}): nested values as exact
+ * JSON, a few scalars as DuckDB's text, and a DECIMAL as the double nearest
+ * its value. Parquet export reads every column as it is, since a Parquet
+ * file holds nested values natively.
  */
 
+import { dataTypeOf, holdsVariant, parseDuckDBType, type DuckDBTypeNode } from '../core/duckdbType';
 import { ROWID_COLUMN, type ColumnSchema, type Filter, type SortColumn } from '../core/types';
+import { jsonValueSQL } from '../data/valueSql';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { quoteIdentifier, filtersToWhereClause } from '../filters/FilterSQL';
 
@@ -75,11 +83,184 @@ export function isContiguousRange(
 }
 
 // ---------------------------------------------------------------------------
+// How each column is read
+// ---------------------------------------------------------------------------
+
+/**
+ * Scalar types a CSV or JSON export reads as DuckDB's text, by the
+ * upper-case name `parseDuckDBType` gives them. Arrow carries their values
+ * in a form no file can use: an INTERVAL as an `Int32Array` that does not
+ * hold it (apache-arrow 17), and a BLOB, BIT, GEOMETRY or BIGNUM as bytes,
+ * which a CSV cell would print as `170,187`. A TIME WITH TIME ZONE arrives
+ * as microseconds since midnight, its offset lost (`12:34:56+05:30` as
+ * 45296000000), and a TIME_NS as nanoseconds. An ENUM value read through
+ * the worker's cancellable query path (`conn.send`, as every `bridge.query`
+ * runs) comes back `null` (duckdb-wasm 1.33), while its text is exact.
+ */
+const TEXT_SCALAR_NAMES: ReadonlySet<string> = new Set([
+  'INTERVAL',
+  'BLOB',
+  'BYTEA',
+  'BINARY',
+  'VARBINARY',
+  'BIT',
+  'BITSTRING',
+  'BIT VARYING',
+  'GEOMETRY',
+  'BIGNUM',
+  'VARINT',
+  'ENUM',
+  'TIME WITH TIME ZONE',
+  'TIMETZ',
+  'TIME_NS',
+]);
+
+/**
+ * The most digits a DECIMAL may have for `CAST(c AS DOUBLE)` to be the
+ * double nearest its value: DuckDB divides the unscaled integer by a power
+ * of ten, which rounds once while that integer is below 2^53. A wider
+ * DECIMAL is read through its text, which DuckDB's parser rounds to the
+ * nearest double; the plain cast of one misses it for some values (9 % of
+ * DECIMAL(18,17) and 10 % of DECIMAL(28,10) values measured).
+ */
+const EXACT_DOUBLE_DIGITS = 15;
+
+/** How a CSV or JSON export reads a column: see {@link exportColumnRead}. */
+export type ExportColumnRead = 'raw' | 'text' | 'json' | 'double';
+
+/**
+ * How a CSV or JSON export reads `column`:
+ *
+ * - `'json'`: a nested value (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT), as
+ *   exact JSON text from `jsonValueSQL`: `[1.25,2.5]`, `{"x":1,"tier":"b"}`,
+ *   `{"num":42}` for a UNION. Arrow's own nested values are wrong for
+ *   DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT cannot cross
+ *   Arrow at all.
+ * - `'text'`: INTERVAL, BLOB, BIT, GEOMETRY, BIGNUM, ENUM, TIME WITH TIME
+ *   ZONE and TIME_NS, as DuckDB's text, `CAST(c AS VARCHAR)`; see
+ *   {@link TEXT_SCALAR_NAMES}.
+ * - `'double'`: a DECIMAL, as the double nearest its value (see
+ *   {@link EXACT_DOUBLE_DIGITS}), so that `0.35` is written `0.35`. Arrow's
+ *   DECIMAL numbers, with duckdb-wasm's `castDecimalToDouble`, which
+ *   multiplies by 10^-scale, miss it for many values, 13 % of the
+ *   DECIMAL(10,2) values from 0 to 200: `0.35000000000000003`,
+ *   `19.990000000000002`.
+ * - `'raw'`: everything else, as the query returns it. A JSON column is
+ *   already text, and stays as it is.
+ *
+ * The type is read from `originalType`; a column the library types
+ * `'nested'` is read as JSON whatever that says.
+ */
+export function exportColumnRead(column: ColumnSchema): ExportColumnRead {
+  // `originalType` is required by the type, but a schema built by hand in
+  // JavaScript may leave it out.
+  const node = parseDuckDBType(column.originalType ?? '');
+  if (column.type === 'nested' || dataTypeOf(node) === 'nested') return 'json';
+  if (node.kind === 'scalar') {
+    if (TEXT_SCALAR_NAMES.has(node.name)) return 'text';
+    return node.dataType === 'decimal' ? 'double' : 'raw';
+  }
+  // A type the parser could not read follows the library's type for it.
+  return node.kind === 'unknown' && column.type === 'interval' ? 'text' : 'raw';
+}
+
+/** SQL for a DECIMAL column's value as the double nearest it, without an alias. */
+function decimalAsDouble(column: ColumnSchema, quoted: string): string {
+  const node = parseDuckDBType(column.originalType ?? '');
+  // `DECIMAL` alone is DECIMAL(18,3).
+  const precision = node.kind === 'scalar' && node.args.length > 0 ? Number(node.args[0]) : 18;
+  return precision <= EXACT_DOUBLE_DIGITS
+    ? `CAST(${quoted} AS DOUBLE)`
+    : `CAST(CAST(${quoted} AS VARCHAR) AS DOUBLE)`;
+}
+
+/**
+ * The columns of `columns` that an export reads as JSON text (see
+ * {@link exportColumnRead}), each with its parsed type, for the exporters
+ * to turn that text into cells. Parsed once per export, not once per row.
+ */
+export function exportJsonColumns(
+  columns: readonly string[],
+  schema: readonly ColumnSchema[],
+): Map<string, DuckDBTypeNode> {
+  const byName = new Map(schema.map((column) => [column.name, column] as const));
+  const types = new Map<string, DuckDBTypeNode>();
+  for (const name of columns) {
+    const column = byName.get(name);
+    if (column && exportColumnRead(column) === 'json') {
+      types.set(name, parseDuckDBType(column.originalType ?? ''));
+    }
+  }
+  return types;
+}
+
+/**
+ * The select list for `columns`. Without `schema`, every column is read as
+ * it is (the Parquet path, and callers from before projections existed).
+ * With it, each column is read as {@link exportColumnRead} says, under its
+ * own name: `CAST(to_json("tags") AS VARCHAR) AS "tags"`. A column the
+ * schema does not know is read as it is.
+ */
+function selectList(
+  columns: readonly string[],
+  schema: readonly ColumnSchema[] | undefined,
+): string {
+  if (!schema) return columns.map(quoteIdentifier).join(', ');
+  const byName = new Map(schema.map((column) => [column.name, column] as const));
+  return columns
+    .map((name) => {
+      const quoted = quoteIdentifier(name);
+      const column = byName.get(name);
+      if (!column) return quoted;
+      switch (exportColumnRead(column)) {
+        case 'json':
+          return `${jsonValueSQL(column, quoted)} AS ${quoted}`;
+        case 'text':
+          return `CAST(${quoted} AS VARCHAR) AS ${quoted}`;
+        case 'double':
+          return `${decimalAsDouble(column, quoted)} AS ${quoted}`;
+        default:
+          return quoted;
+      }
+    })
+    .join(', ');
+}
+
+// ---------------------------------------------------------------------------
 // SQL query builders
 // ---------------------------------------------------------------------------
 
 /**
- * Build an `ORDER BY` clause for export queries.
+ * The sort keys of an export query, each column qualified with the table,
+ * and `__rowid__ ASC` last unless the user already sorts on it:
+ * `"t"."name" ASC, "t"."__rowid__" ASC`.
+ *
+ * @param sortKeyColumns - Columns ordered by `create_sort_key(…)` instead,
+ *   for a window: see {@link buildSelectedRowsQuery}.
+ */
+function orderByList(
+  sortColumns: SortColumn[],
+  tableName: string,
+  sortKeyColumns?: ReadonlySet<string>,
+): string {
+  const table = quoteIdentifier(tableName);
+  const parts = sortColumns.map((s) => {
+    const column = `${table}.${quoteIdentifier(s.column)}`;
+    const direction = s.direction.toUpperCase();
+    // NULLS LAST is DuckDB's default order for both directions, as the
+    // grid's plain ORDER BY gets it.
+    return sortKeyColumns?.has(s.column)
+      ? `create_sort_key(${column}, '${direction} NULLS LAST')`
+      : `${column} ${direction}`;
+  });
+  if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
+    parts.push(`${table}.${quoteIdentifier(ROWID_COLUMN)} ASC`);
+  }
+  return parts.join(', ');
+}
+
+/**
+ * Build an `ORDER BY` clause for export queries on `tableName`.
  *
  * Always appends `__rowid__ ASC` as the final tiebreaker (skipping the
  * append if the user already sorts on `__rowid__`). DuckDB's ORDER BY is
@@ -91,29 +272,35 @@ export function isContiguousRange(
  *   differ in row order within tie groups across re-exports
  *   (reproducibility issue).
  *
+ * Every column is qualified with the table: `ORDER BY "t"."tags" ASC,
+ * "t"."__rowid__" ASC`. A column the select list reads as text keeps its
+ * own name as the alias (`CAST(to_json("tags") AS VARCHAR) AS "tags"`), and
+ * an unqualified `ORDER BY "tags"` binds to that alias, sorting rows by the
+ * JSON text (`[10]` before `[9]`) rather than by the value as the grid does.
+ * The table's name works for a derived-column VIEW as for a table.
+ *
  * Mirrors the idiom used in `Actions.getColumnValues` (Actions.ts:1769) and
  * the loader's table-recreation paths (worker/loaders/common.ts).
  */
-export function buildOrderByClause(sortColumns: SortColumn[]): string {
-  const parts = sortColumns.map((s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`);
-  if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
-    parts.push(`${quoteIdentifier(ROWID_COLUMN)} ASC`);
-  }
-  return ` ORDER BY ${parts.join(', ')}`;
+export function buildOrderByClause(sortColumns: SortColumn[], tableName: string): string {
+  return ` ORDER BY ${orderByList(sortColumns, tableName)}`;
 }
 
 /**
  * Build a SELECT query without LIMIT/OFFSET.
  * Used by Parquet export where DuckDB handles the entire result set via COPY.
+ *
+ * @param schema - Read columns as {@link exportColumnRead} says; without
+ *   it, every column is read as it is.
  */
 export function buildSelectQuery(
   tableName: string,
   columns: string[],
   filters: Filter[],
   sortColumns: SortColumn[],
+  schema?: readonly ColumnSchema[],
 ): string {
-  const columnList = columns.map(quoteIdentifier).join(', ');
-  let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
+  let sql = `SELECT ${selectList(columns, schema)} FROM ${quoteIdentifier(tableName)}`;
 
   if (filters.length > 0) {
     const where = filtersToWhereClause(filters);
@@ -122,10 +309,35 @@ export function buildSelectQuery(
     }
   }
 
-  sql += buildOrderByClause(sortColumns);
+  sql += buildOrderByClause(sortColumns, tableName);
   return sql;
 }
 
+/**
+ * Build one batch of an export: `LIMIT` rows from `OFFSET` in the sorted,
+ * filtered view.
+ *
+ * Two steps, in one query: a subquery picks the batch's rows by
+ * `__rowid__`, then the outer SELECT reads the columns of those rows only,
+ * sorted again the same way:
+ *
+ * ```sql
+ * SELECT CAST(to_json("emb") AS VARCHAR) AS "emb" FROM "t"
+ * WHERE "t"."__rowid__" IN (SELECT "t"."__rowid__" FROM "t" WHERE … ORDER BY … LIMIT 10000 OFFSET 30000)
+ * ORDER BY …
+ * ```
+ *
+ * In a single SELECT, DuckDB computes the select list for every row of the
+ * view before `ORDER BY … LIMIT` keeps the batch: `to_json` of every
+ * nested value, some 15,000 characters for a `FLOAT[768]`, to keep 10,000
+ * of them. A 10-row clipboard copy at row 30,000 of 100,000 such rows took
+ * 4 s, and is now a few milliseconds. The order ends with `__rowid__`, so
+ * it is total, and sorting the batch's rows again gives them in the same
+ * order, ties included.
+ *
+ * @param schema - Read columns as {@link exportColumnRead} says; without
+ *   it, every column is read as it is.
+ */
 export function buildBaseQuery(
   tableName: string,
   columns: string[],
@@ -133,28 +345,54 @@ export function buildBaseQuery(
   sortColumns: SortColumn[],
   limit: number,
   offset: number,
+  schema?: readonly ColumnSchema[],
 ): string {
-  const columnList = columns.map(quoteIdentifier).join(', ');
-  let sql = `SELECT ${columnList} FROM ${quoteIdentifier(tableName)}`;
+  const table = quoteIdentifier(tableName);
+  const rowid = `${table}.${quoteIdentifier(ROWID_COLUMN)}`;
+  const orderBy = buildOrderByClause(sortColumns, tableName);
 
+  let page = `SELECT ${rowid} FROM ${table}`;
   if (filters.length > 0) {
     const where = filtersToWhereClause(filters);
     if (where) {
-      sql += ` WHERE ${where}`;
+      page += ` WHERE ${where}`;
     }
   }
+  page += `${orderBy} LIMIT ${limit} OFFSET ${offset}`;
 
-  sql += buildOrderByClause(sortColumns);
-  sql += ` LIMIT ${limit} OFFSET ${offset}`;
-  return sql;
+  return `SELECT ${selectList(columns, schema)} FROM ${table} WHERE ${rowid} IN (${page})${orderBy}`;
 }
 
+/**
+ * Build a query for the rows at `indices` (0-based positions in the sorted,
+ * filtered view), in that view's order.
+ *
+ * A sort column whose type is or holds a VARIANT is ordered in the window
+ * by `create_sort_key(c, 'ASC NULLS LAST')`: a window's ORDER BY compares
+ * VARIANT values one by one and throws on two of different kinds ("Can't
+ * compare values of type BIGINT and type VARCHAR", DuckDB 1.5.4), where a
+ * plain ORDER BY, as the grid sorts, orders them by their sort keys. The
+ * key gives the same order. The sort columns' types are looked up in
+ * `sortSchema`; with neither it nor `schema`, every sort column is ordered
+ * as it is.
+ *
+ * @param schema - Read columns as {@link exportColumnRead} says, in the
+ *   outer SELECT only: the `numbered` CTE reads them as they are, so that
+ *   `ROW_NUMBER()` numbers rows by the values. Without it, every column is
+ *   read as it is.
+ * @param sortSchema - Where to find the sort columns' types. Defaults to
+ *   `schema`. A caller that reads the columns as they are passes it alone:
+ *   `getColumnValues`, which reads the value itself in a query around this
+ *   one, and the Parquet export, which writes every column natively.
+ */
 export function buildSelectedRowsQuery(
   tableName: string,
   columns: string[],
   filters: Filter[],
   sortColumns: SortColumn[],
   indices: number[],
+  schema?: readonly ColumnSchema[],
+  sortSchema: readonly ColumnSchema[] | undefined = schema,
 ): string {
   const columnList = columns.map(quoteIdentifier).join(', ');
 
@@ -163,14 +401,18 @@ export function buildSelectedRowsQuery(
   // affects ROW_NUMBER(): without it, `__row_idx__` is assigned to ties
   // in arbitrary order, so a user's selection set (which keys on these
   // indices) drifts across runs. Skipped if the user already sorts on
-  // `__rowid__` (their direction stays authoritative).
-  const orderParts = sortColumns.map(
-    (s) => `${quoteIdentifier(s.column)} ${s.direction.toUpperCase()}`,
-  );
-  if (!sortColumns.some((s) => s.column === ROWID_COLUMN)) {
-    orderParts.push(`${quoteIdentifier(ROWID_COLUMN)} ASC`);
+  // `__rowid__` (their direction stays authoritative). Qualified with the
+  // table as in buildOrderByClause.
+  const sortKeyColumns = new Set<string>();
+  if (sortSchema) {
+    for (const sort of sortColumns) {
+      const column = sortSchema.find((c) => c.name === sort.column);
+      if (column && holdsVariant(parseDuckDBType(column.originalType ?? ''))) {
+        sortKeyColumns.add(sort.column);
+      }
+    }
   }
-  const overClause = `ORDER BY ${orderParts.join(', ')}`;
+  const overClause = `ORDER BY ${orderByList(sortColumns, tableName, sortKeyColumns)}`;
 
   let innerSql = `SELECT ${columnList}, ROW_NUMBER() OVER(${overClause}) - 1 AS __row_idx__ FROM ${quoteIdentifier(tableName)}`;
 
@@ -182,7 +424,7 @@ export function buildSelectedRowsQuery(
   }
 
   const inList = indices.join(', ');
-  return `WITH numbered AS (${innerSql}) SELECT ${columnList} FROM numbered WHERE __row_idx__ IN (${inList}) ORDER BY __row_idx__ ASC`;
+  return `WITH numbered AS (${innerSql}) SELECT ${selectList(columns, schema)} FROM numbered WHERE __row_idx__ IN (${inList}) ORDER BY __row_idx__ ASC`;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,9 +432,26 @@ export function buildSelectedRowsQuery(
 // ---------------------------------------------------------------------------
 
 /**
+ * How export batches are queried: past the bridge's query cache. A batch
+ * is up to 10,000 rows, and a nested value arrives as its JSON text, some
+ * 15,000 characters for a `FLOAT[768]`: the cache kept every batch of an
+ * export until the next filter, sort or derived-column change, 460 MB
+ * after a 30,000-row export of one such column, and evicted the chart and
+ * stats results it is there for. Nothing reads a batch twice.
+ */
+const EXPORT_QUERY_OPTIONS = { cache: false } as const;
+
+/**
  * Fetch all rows matching the given scope, calling `onBatch` for each batch
  * of result rows. Handles batching, scope-based WHERE, contiguous-range
  * optimization for selected rows, and abort checking.
+ *
+ * Columns are read as {@link exportColumnRead} says for `context.schema`:
+ * a nested column's value arrives as its JSON text; an INTERVAL, BLOB, BIT,
+ * GEOMETRY, BIGNUM, ENUM, TIME WITH TIME ZONE or TIME_NS value as DuckDB's
+ * text; a DECIMAL as the double nearest its value.
+ *
+ * The batches skip the bridge's query cache ({@link EXPORT_QUERY_OPTIONS}).
  */
 export async function fetchAllRows(
   tableName: string,
@@ -232,9 +491,10 @@ async function fetchBatchedRows(
       context.sortColumns,
       BATCH_SIZE,
       offset,
+      context.schema,
     );
 
-    const rows = await context.bridge.query<RowData>(sql, signal);
+    const rows = await context.bridge.query<RowData>(sql, signal, EXPORT_QUERY_OPTIONS);
     if (rows.length > 0) {
       onBatch(rows);
     }
@@ -267,9 +527,17 @@ async function fetchSelectedRows(
       }
 
       const limit = Math.min(remaining, BATCH_SIZE);
-      const sql = buildBaseQuery(tableName, columns, filters, context.sortColumns, limit, offset);
+      const sql = buildBaseQuery(
+        tableName,
+        columns,
+        filters,
+        context.sortColumns,
+        limit,
+        offset,
+        context.schema,
+      );
 
-      const rows = await context.bridge.query<RowData>(sql, signal);
+      const rows = await context.bridge.query<RowData>(sql, signal, EXPORT_QUERY_OPTIONS);
       if (rows.length > 0) {
         onBatch(rows);
       }
@@ -292,9 +560,10 @@ async function fetchSelectedRows(
         context.filters,
         context.sortColumns,
         chunk,
+        context.schema,
       );
 
-      const rows = await context.bridge.query<RowData>(sql, signal);
+      const rows = await context.bridge.query<RowData>(sql, signal, EXPORT_QUERY_OPTIONS);
       if (rows.length > 0) {
         onBatch(rows);
       }

@@ -14,8 +14,9 @@ describe('Core Types', () => {
       'timestamp',
       'time',
       'interval',
+      'nested',
     ];
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(11);
   });
 
   it('should allow valid ColumnSchema', () => {

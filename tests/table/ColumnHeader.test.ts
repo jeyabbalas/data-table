@@ -6,6 +6,7 @@ import { ColumnHeader, type ColumnHeaderOptions } from '@/table/ColumnHeader';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 
@@ -609,6 +610,125 @@ describe('ColumnHeader', () => {
     });
   });
 
+  describe('nested and JSON column types', () => {
+    const typeOf = (header: ColumnHeader): HTMLElement =>
+      header.getElement().querySelector<HTMLElement>('.dt-col-type')!;
+
+    it.each([
+      ['tags', 'VARCHAR[]', '[varchar]', 'tags, list of varchar'],
+      ['scores', 'INTEGER[]', '[integer]', 'scores, list of integer'],
+      ['embedding', 'FLOAT[768]', 'float[768]', 'embedding, array of 768 float'],
+      [
+        'point',
+        'STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)',
+        'struct(3)',
+        'point, struct with 3 fields',
+      ],
+      [
+        'attrs',
+        'MAP(VARCHAR, INTEGER)',
+        '{varchar → integer}',
+        'attrs, map from varchar to integer',
+      ],
+      ['u', 'UNION(num INTEGER, str VARCHAR)', 'union(2)', 'u, union of 2 types'],
+      [
+        'people',
+        'STRUCT("name" VARCHAR, age INTEGER, langs VARCHAR[])[]',
+        '[struct(3)]',
+        'people, list of struct with 3 fields',
+      ],
+      ['v', 'VARIANT', 'variant', 'v, variant'],
+    ])(
+      'labels %s (%s) as %s, titled with its full type, spoken as "%s"',
+      (name, originalType, label, ariaLabel) => {
+        const header = new ColumnHeader(
+          { name, type: 'nested', nullable: true, originalType },
+          state,
+          actions,
+        );
+        expect(typeOf(header).textContent).toBe(label);
+        expect(typeOf(header).getAttribute('title')).toBe(originalType);
+        expect(header.getElement().getAttribute('aria-label')).toBe(ariaLabel);
+        header.destroy();
+      },
+    );
+
+    it('labels a JSON column json, and says JSON', () => {
+      const header = new ColumnHeader(
+        { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+        state,
+        actions,
+      );
+      expect(typeOf(header).textContent).toBe('json');
+      expect(typeOf(header).getAttribute('title')).toBe('JSON');
+      expect(header.getElement().getAttribute('aria-label')).toBe('doc, JSON');
+      header.destroy();
+    });
+
+    it('keeps a scalar column’s type, with no title', () => {
+      for (const column of [
+        { name: 'n', type: 'integer', nullable: false, originalType: 'INTEGER' },
+        { name: 's', type: 'string', nullable: true, originalType: 'VARCHAR' },
+        { name: 'd', type: 'decimal', nullable: true, originalType: 'DECIMAL(18,4)' },
+      ] satisfies ColumnSchema[]) {
+        const header = new ColumnHeader(column, state, actions);
+        expect(typeOf(header).textContent).toBe(column.type);
+        expect(typeOf(header).hasAttribute('title')).toBe(false);
+        expect(header.getElement().getAttribute('aria-label')).toBe(
+          `${column.name}, ${column.type}`,
+        );
+        header.destroy();
+      }
+    });
+
+    it('keeps the spoken type when sort and filter state join the label', () => {
+      const column: ColumnSchema = {
+        name: 'tags',
+        type: 'nested',
+        nullable: true,
+        originalType: 'VARCHAR[]',
+      };
+      const header = new ColumnHeader(column, state, actions);
+      state.sortColumns.set([{ column: 'tags', direction: 'asc' }]);
+      expect(header.getElement().getAttribute('aria-label')).toBe(
+        'tags, list of varchar, sorted ascending',
+      );
+      header.destroy();
+    });
+
+    it('says the type in the configured language', () => {
+      const messages = mergeStrings(defaultStrings, {
+        values: { typeList: (element: string) => `liste de ${element}` },
+      });
+      const header = new ColumnHeader(
+        { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+        state,
+        actions,
+        { messages },
+      );
+      expect(header.getElement().getAttribute('aria-label')).toBe('tags, liste de varchar');
+      header.destroy();
+    });
+
+    it('leaves markup in a field name as text', () => {
+      const header = new ColumnHeader(
+        {
+          name: 'evil',
+          type: 'nested',
+          nullable: true,
+          originalType: 'STRUCT("<img src=x onerror=alert(1)>" INTEGER)[]',
+        },
+        state,
+        actions,
+      );
+      // The label names no field; the title holds the type as text.
+      expect(typeOf(header).textContent).toBe('[struct(1)]');
+      expect(typeOf(header).querySelector('img')).toBeNull();
+      expect(typeOf(header).title).toBe('STRUCT("<img src=x onerror=alert(1)>" INTEGER)[]');
+      header.destroy();
+    });
+  });
+
   describe('hide button', () => {
     it('should have a hide button in the action panel', () => {
       const header = new ColumnHeader(column, state, actions);
@@ -667,6 +787,117 @@ describe('ColumnHeader', () => {
       expect(hideBtn.hasAttribute('disabled')).toBe(false);
       expect(hideBtn.classList.contains('dt-col-action-btn--disabled')).toBe(false);
 
+      header.destroy();
+    });
+  });
+
+  describe('extract button', () => {
+    const point: ColumnSchema = {
+      name: 'point',
+      type: 'nested',
+      nullable: true,
+      originalType: 'STRUCT(x DOUBLE, y DOUBLE)',
+    };
+    const doc: ColumnSchema = { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' };
+
+    const extractOf = (header: ColumnHeader): HTMLButtonElement | null =>
+      header.getElement().querySelector<HTMLButtonElement>('.dt-col-extract-btn');
+
+    it('is on a nested or JSON column, after the filter button, out of the tab order', () => {
+      state.visibleColumns.set(['point', 'doc']);
+      for (const col of [point, doc, { ...point, originalType: 'VARIANT' }]) {
+        const onExtractClick = vi.fn();
+        const header = new ColumnHeader(col, state, actions, { onExtractClick });
+        const button = extractOf(header)!;
+        expect(button, col.originalType).toBeTruthy();
+        expect(button.tagName).toBe('BUTTON');
+        expect(button.getAttribute('type')).toBe('button');
+        expect(button.getAttribute('tabindex')).toBe('-1');
+        expect(button.classList.contains('dt-col-action-btn')).toBe(true);
+        expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+        expect(button.getAttribute('aria-expanded')).toBe('false');
+        expect(button.getAttribute('aria-label')).toBe(`Extract from ${col.name}`);
+        expect(button.getAttribute('title')).toBe('Extract a field as a column');
+        // An inline SVG, as the other buttons draw theirs: no `data:` URI.
+        expect(button.querySelector('svg[aria-hidden="true"] path')).toBeTruthy();
+        expect(button.outerHTML).not.toContain('data:');
+
+        const children = Array.from(
+          header.getElement().querySelector('.dt-col-action-panel')!.children,
+        );
+        expect(children.map((c) => c.classList[1] ?? c.classList[0])).toEqual([
+          'dt-col-pin-btn',
+          'dt-col-hide-btn',
+          'dt-col-filter-btn',
+          'dt-col-extract-btn',
+          'dt-col-sort-btn',
+          'dt-col-drag-handle',
+        ]);
+        header.destroy();
+      }
+    });
+
+    it('is not on a scalar column, nor without a click handler (extraction off)', () => {
+      const scalar = new ColumnHeader(column, state, actions, { onExtractClick: vi.fn() });
+      expect(extractOf(scalar)).toBeNull();
+      scalar.destroy();
+      const off = new ColumnHeader(point, state, actions);
+      expect(extractOf(off)).toBeNull();
+      expect(off.getControls().some((c) => c.classList.contains('dt-col-extract-btn'))).toBe(false);
+      off.destroy();
+    });
+
+    it('is a controls-mode stop, between filter and sort', () => {
+      state.visibleColumns.set(['point', 'doc']);
+      const header = new ColumnHeader(point, state, actions, { onExtractClick: vi.fn() });
+      document.body.appendChild(header.getElement());
+      const controls = header.getControls();
+      const at = controls.indexOf(extractOf(header)!);
+      expect(at).toBeGreaterThan(0);
+      expect(controls[at - 1]!.classList.contains('dt-col-filter-btn')).toBe(true);
+      expect(controls[at + 1]!.classList.contains('dt-col-sort-btn')).toBe(true);
+      header.destroy();
+    });
+
+    it('hands the click on with the column and itself, and nothing else', () => {
+      const onExtractClick = vi.fn();
+      const onFilterClick = vi.fn();
+      const header = new ColumnHeader(point, state, actions, { onExtractClick, onFilterClick });
+      const sort = vi.spyOn(actions, 'toggleSort');
+      const button = extractOf(header)!;
+      button.click();
+      expect(onExtractClick).toHaveBeenCalledWith('point', button);
+      expect(onFilterClick).not.toHaveBeenCalled();
+      expect(sort).not.toHaveBeenCalled();
+      header.destroy();
+    });
+
+    it('comes and goes with the controls, and its listener with it', () => {
+      const onExtractClick = vi.fn();
+      const header = new ColumnHeader(point, state, actions, { onExtractClick, controls: false });
+      expect(extractOf(header)).toBeNull();
+      header.setControlsMounted(true);
+      const button = extractOf(header)!;
+      header.setControlsMounted(false);
+      expect(extractOf(header)).toBeNull();
+      button.click();
+      expect(onExtractClick).not.toHaveBeenCalled();
+      header.destroy();
+    });
+
+    it('is labelled in the configured language', () => {
+      const messages = mergeStrings(defaultStrings, {
+        values: {
+          extractButtonLabel: (name: string) => `Extraire de ${name}`,
+          extractButtonTitle: 'Extraire un champ',
+        },
+      });
+      const header = new ColumnHeader(point, state, actions, {
+        onExtractClick: vi.fn(),
+        messages,
+      });
+      expect(extractOf(header)!.getAttribute('aria-label')).toBe('Extraire de point');
+      expect(extractOf(header)!.getAttribute('title')).toBe('Extraire un champ');
       header.destroy();
     });
   });

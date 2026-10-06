@@ -639,10 +639,10 @@ function createDerivedMockBridge(typeMap: Record<string, string> = {}) {
   return {
     initialize: vi.fn().mockResolvedValue(undefined),
     query: vi.fn().mockImplementation(async (sql: string) => {
-      if (sql.includes('typeof(')) {
-        const match = sql.match(/typeof\(\((.+?)\)\)/);
+      if (sql.startsWith('DESCRIBE SELECT (')) {
+        const match = sql.match(/^DESCRIBE SELECT \((.+?)\) AS v FROM /);
         const expr = match?.[1] ?? '';
-        return [{ t: typeMap[expr] ?? defaultType }];
+        return [{ column_name: 'v', column_type: typeMap[expr] ?? defaultType }];
       }
       if (sql.includes('LIMIT 0')) return [];
       if (/^(CREATE|DROP|INSERT)/i.test(sql.trim())) return [];

@@ -745,6 +745,66 @@ describe('FilterPresetManager', () => {
   });
 
   // ==========================================
+  // valueType — text comparisons on nested columns
+  // ==========================================
+
+  describe('valueType', () => {
+    const textFilters: Filter[] = [
+      { type: 'point', column: 'tags', value: "['it\\'s', NULL]", valueType: 'text' },
+      { type: 'set', column: 'choice', values: ['0', '42'], includeNull: true, valueType: 'text' },
+      { type: 'not-set', column: 'point', values: ["{'x': 1.5}"], valueType: 'text' },
+      { type: 'range', column: 'wait', min: '1 day', max: '2 days', valueType: 'interval' },
+    ];
+
+    it('keeps valueType through save → exportToJSON → importFromJSON → load', () => {
+      manager.save('Nested', textFilters);
+      const fresh = new FilterPresetManager();
+      const result = fresh.importFromJSON(manager.exportToJSON());
+      expect(result).toEqual({ imported: 1, errors: [] });
+
+      const actions = mockActions();
+      fresh.load(fresh.getPresets()[0].id, actions);
+      const loaded = (actions.loadFilterPreset as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(loaded).toEqual(textFilters);
+    });
+
+    it('keeps valueType when a preset is updated', () => {
+      const preset = manager.save('Nested', []);
+      manager.update(preset.id, textFilters);
+      const actions = mockActions();
+      manager.load(preset.id, actions);
+      expect((actions.loadFilterPreset as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual(
+        textFilters,
+      );
+    });
+
+    it('skips an imported filter whose valueType this version does not know', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [
+          {
+            name: 'P',
+            filters: [
+              { type: 'point', column: 'a', value: '[1]', valueType: 'json' },
+              { type: 'set', column: 'b', values: ['x'], valueType: 'interval' },
+              { type: 'not-set', column: 'c', values: ['x'], valueType: 7 },
+              { type: 'range', column: 'd', min: 0, max: 1, valueType: 'text' },
+              { type: 'point', column: 'e', value: '[1]', valueType: 'text' },
+              { type: 'range', column: 'f', min: '1 day', max: '2 days', valueType: 'interval' },
+              // A filter type that reads no valueType ignores one.
+              { type: 'pattern', column: 'g', pattern: 'x', mode: 'contains', valueType: 'text' },
+            ],
+          },
+        ],
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(1);
+      expect(result.errors).toEqual(['Preset 0: skipped 4 invalid filter(s)']);
+      expect(manager.getPresets()[0].filters.map((f) => f.column)).toEqual(['e', 'f', 'g']);
+    });
+  });
+
+  // ==========================================
   // Phase 5 — round-trip every filter type
   // ==========================================
 

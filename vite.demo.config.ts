@@ -1,12 +1,19 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
-import { readFileSync, existsSync, statSync } from 'fs';
+import { resolve, sep } from 'path';
+import { createReadStream, readFileSync, existsSync, statSync } from 'fs';
 
 const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as {
   version: string;
 };
 
 const FIXTURES_ROOT = resolve(__dirname, 'tests/fixtures/datasets');
+
+/**
+ * Large local datasets for manual and automated checks (git-ignored; e.g.
+ * the 1.1 GB `wide_200k_x_1000.parquet`). Served at /large-data/* in dev
+ * when the directory exists.
+ */
+const LARGE_DATA_ROOT = resolve(__dirname, 'tmp-large-data');
 
 const EXAMPLES = [
   '01-minimal',
@@ -89,6 +96,35 @@ export default defineConfig({
           res.setHeader('Content-Type', mime[ext] || 'application/octet-stream');
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.end(readFileSync(filePath));
+        });
+      },
+    },
+    {
+      // Dev-only: stream the git-ignored datasets in tmp-large-data/ from
+      // /large-data/*, piped from disk (a 1 GB file is not read into memory).
+      name: 'serve-large-data',
+      configureServer(server) {
+        if (!existsSync(LARGE_DATA_ROOT)) return;
+        server.middlewares.use('/large-data', (req, res, next) => {
+          const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+          const filePath = resolve(LARGE_DATA_ROOT, '.' + urlPath);
+          if (!filePath.startsWith(LARGE_DATA_ROOT + sep)) {
+            res.statusCode = 403;
+            res.end();
+            return;
+          }
+          if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+            return next();
+          }
+          res.setHeader('Content-Type', 'application/octet-stream');
+          res.setHeader('Content-Length', String(statSync(filePath).size));
+          if (req.method === 'HEAD') {
+            res.end();
+            return;
+          }
+          createReadStream(filePath)
+            .on('error', () => res.destroy())
+            .pipe(res);
         });
       },
     },

@@ -1,0 +1,639 @@
+{
+  "generator": "generate-nested-stress-tests.py",
+  "seed": 20261005,
+  "rowCount": 1000,
+  "duckdbVersion": "v1.5.4",
+  "displayCap": 1000,
+  "capEmojiStart": 998,
+  "showcaseRows": {
+    "ALL_NULL": {
+      "row": 0,
+      "purpose": "Every column is NULL except id, embedding (a fixed-size list is never NULL: it holds 32 NULL elements instead) and all_empty_list ([])."
+    },
+    "EMPTIES": {
+      "row": 1,
+      "purpose": "Empty values: [] for lists, {} for maps, structs whose fields are all NULL, '' and an empty blob for top-level text and BLOB, {} for JSON documents, and an all-zero embedding."
+    },
+    "NULL_ELEMENTS": {
+      "row": 2,
+      "purpose": "NULL inside values: list elements ([4, NULL, 17]), map values, struct fields, a NULL inner list, a NULL struct in people, JSON null members, and SQL NULL next to the JSON literal null in json_list."
+    },
+    "NUMERIC_EXTREMES": {
+      "row": 3,
+      "purpose": "Numeric edges: 2^53-1 and 2^53+1, INT64 min and max, UINT64 max, the decimals [1.25, 2.50, 3.75], DECIMAL(38,0) max, and NaN, +-Infinity, -0.0 and 5e-324 in doubles; INT8/INT16/INT32 bounds and float32 edges in the narrower columns."
+    },
+    "TEXT_ESCAPES": {
+      "row": 4,
+      "purpose": "Text that needs quoting or escaping: it's, \"dq\", a, b, [x], k=v, the text NULL, '', two single quotes, a backslash, a newline, a tab, right-to-left text and combining marks, as list elements, map keys, struct fields and JSON strings."
+    },
+    "LIST_1000": {
+      "row": 5,
+      "purpose": "long_list and tags hold 1,000 items (long_list holds 1..1000), int_keys holds 600 entries, and doc is a 1,000-item JSON array; the JSON file's counts holds 1,000 digits."
+    },
+    "LIST_2500": {
+      "row": 6,
+      "purpose": "long_list and tags hold 2,500 items (long_list holds 1..2500), as does the JSON file's counts; doc is the JSON scalar 42."
+    },
+    "LIST_10000": {
+      "row": 7,
+      "purpose": "long_list and tags hold 10,000 items (long_list holds 1..10000), as does the JSON file's counts; doc is the JSON literal null."
+    },
+    "CAP_EDGE": {
+      "row": 8,
+      "purpose": "The display cap: strings_edge (and the JSON file's words) holds one 20,000-character element and tags holds three, each placing the ZWJ family emoji (7 code points, 11 UTF-16 units) at code points 998-1004 of the DuckDB cell text, so a 1000-code-point or -UTF-16-unit cut would split it while a 1000-grapheme cut keeps it whole; raw_blob holds 300 bytes; wide_struct renders past 1000 characters; doc holds the long string."
+    },
+    "DATE_BINARY_EDGES": {
+      "row": 9,
+      "purpose": "Date and binary edges: 0001-01-01, 9999-12-31, 1970-01-01 and a pre-1970 date (dates, timestamps, map keys, struct leaves), the nil and all-ones UUIDs, and blobs that are empty or hold \\x00, \\xff and quote/backslash bytes."
+    },
+    "DEMO": {
+      "row": 10,
+      "purpose": "Readable values for demos and docs: tags [red, green, blue], point {x: 1.5, y: -0.5, tier: gold}, a contact card in nested_struct, two people, and int_keys with keys 2, 1, 10 in that order."
+    },
+    "NAME_COLLISIONS": {
+      "row": 11,
+      "purpose": "Keys whose extracted default column names collide: doc holds the JSON keys a.b, a_b and A_B, attrs (and the JSON file's props) the map keys k=v, k_v and K_V next to size, toJSON, constructor, __proto__, 2 and 1."
+    }
+  },
+  "parquet": {
+    "file": "parquet/nested-stress-tests.parquet",
+    "rowGroups": 4,
+    "columns": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "arrowType": "int64",
+        "duckdbType": "BIGINT",
+        "nullCount": 0,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "Row number 0-999; equals the __rowid__ the loaders add."
+      },
+      {
+        "name": "label",
+        "kind": "scalar",
+        "arrowType": "string",
+        "duckdbType": "VARCHAR",
+        "nullCount": 1,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "Showcase rows: their name; other rows: a random two-word label."
+      },
+      {
+        "name": "notes",
+        "kind": "scalar",
+        "arrowType": "string",
+        "duckdbType": "VARCHAR",
+        "nullCount": 100,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "About 250 characters of stock sentences."
+      },
+      {
+        "name": "raw_blob",
+        "kind": "scalar",
+        "arrowType": "binary",
+        "duckdbType": "BLOB",
+        "nullCount": 91,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "Top-level BLOB, 0-16 bytes; 300 bytes in the CAP_EDGE row."
+      },
+      {
+        "name": "tags",
+        "kind": "list",
+        "arrowType": "list<item: string>",
+        "duckdbType": "VARCHAR[]",
+        "nullCount": 110,
+        "emptyCount": 105,
+        "maxLength": 10000,
+        "description": "1-8 short words; 1,000 / 2,500 / 10,000 words in rows 5-7."
+      },
+      {
+        "name": "scores",
+        "kind": "list",
+        "arrowType": "list<item: int32>",
+        "duckdbType": "INTEGER[]",
+        "nullCount": 110,
+        "emptyCount": 113,
+        "maxLength": 10,
+        "description": "1-10 integers 0-100."
+      },
+      {
+        "name": "long_list",
+        "kind": "list",
+        "arrowType": "list<item: int32>",
+        "duckdbType": "INTEGER[]",
+        "nullCount": 98,
+        "emptyCount": 100,
+        "maxLength": 10000,
+        "description": "1-40 integers 0-99 (longer than the 32-item preview in a fifth of the rows); 1..1000, 1..2500 and 1..10000 in rows 5-7."
+      },
+      {
+        "name": "matrix",
+        "kind": "list",
+        "arrowType": "list<item: list<item: int16>>",
+        "duckdbType": "SMALLINT[][]",
+        "nullCount": 102,
+        "emptyCount": 110,
+        "maxLength": 4,
+        "description": "A list of 1-4 lists of 0-4 SMALLINTs."
+      },
+      {
+        "name": "deep_list",
+        "kind": "list",
+        "arrowType": "list<item: list<item: list<item: int8>>>",
+        "duckdbType": "TINYINT[][][]",
+        "nullCount": 95,
+        "emptyCount": 98,
+        "maxLength": 3,
+        "description": "Three levels of lists of TINYINTs."
+      },
+      {
+        "name": "embedding",
+        "kind": "list",
+        "arrowType": "fixed_size_list<item: float>[32]",
+        "duckdbType": "FLOAT[]",
+        "nullCount": 0,
+        "emptyCount": 0,
+        "maxLength": 32,
+        "description": "A fixed-size list of 32 FLOATs with two decimals, -1 to 1 (DuckDB reads it as FLOAT[]); never NULL: 32 NULL elements in ALL_NULL, zeros in EMPTIES, float32 edges in NUMERIC_EXTREMES."
+      },
+      {
+        "name": "doubles",
+        "kind": "list",
+        "arrowType": "list<item: double>",
+        "duckdbType": "DOUBLE[]",
+        "nullCount": 97,
+        "emptyCount": 108,
+        "maxLength": 8,
+        "description": "1-4 DOUBLEs at full precision; NaN, +-Infinity, -0.0, 5e-324 and +-DOUBLE max in NUMERIC_EXTREMES."
+      },
+      {
+        "name": "decimals",
+        "kind": "list",
+        "arrowType": "list<item: decimal128(10, 2)>",
+        "duckdbType": "DECIMAL(10,2)[]",
+        "nullCount": 106,
+        "emptyCount": 93,
+        "maxLength": 5,
+        "description": "1-5 DECIMAL(10,2)s; [1.25, 2.50, 3.75] in NUMERIC_EXTREMES, which bridge.query used to return as [6.2e-322, 0, 1.235e-321]."
+      },
+      {
+        "name": "big_ints",
+        "kind": "list",
+        "arrowType": "list<item: int64>",
+        "duckdbType": "BIGINT[]",
+        "nullCount": 110,
+        "emptyCount": 89,
+        "maxLength": 4,
+        "description": "1-3 BIGINTs within +-2^62 (most beyond 2^53); 2^53+-1 and INT64 bounds in NUMERIC_EXTREMES."
+      },
+      {
+        "name": "ubig",
+        "kind": "list",
+        "arrowType": "list<item: uint64>",
+        "duckdbType": "UBIGINT[]",
+        "nullCount": 105,
+        "emptyCount": 111,
+        "maxLength": 3,
+        "description": "1-3 UBIGINTs over the whole range; UINT64 max in NUMERIC_EXTREMES."
+      },
+      {
+        "name": "dates",
+        "kind": "list",
+        "arrowType": "list<item: date32[day]>",
+        "duckdbType": "DATE[]",
+        "nullCount": 102,
+        "emptyCount": 92,
+        "maxLength": 4,
+        "description": "1-4 DATEs 1990-2029; 0001-01-01, 9999-12-31, 1970-01-01 and 1969-07-20 in DATE_BINARY_EDGES."
+      },
+      {
+        "name": "timestamps_tz",
+        "kind": "list",
+        "arrowType": "list<item: timestamp[us, tz=UTC]>",
+        "duckdbType": "TIMESTAMP WITH TIME ZONE[]",
+        "nullCount": 92,
+        "emptyCount": 120,
+        "maxLength": 4,
+        "description": "1-2 TIMESTAMPTZs 1990-2029 with microseconds; the range ends and the epoch in DATE_BINARY_EDGES."
+      },
+      {
+        "name": "times",
+        "kind": "list",
+        "arrowType": "list<item: time64[us]>",
+        "duckdbType": "TIME[]",
+        "nullCount": 115,
+        "emptyCount": 88,
+        "maxLength": 3,
+        "description": "1-2 TIMEs with microseconds."
+      },
+      {
+        "name": "uuids",
+        "kind": "list",
+        "arrowType": "list<item: extension<arrow.uuid>>",
+        "duckdbType": "UUID[]",
+        "nullCount": 94,
+        "emptyCount": 98,
+        "maxLength": 3,
+        "description": "1-3 version-4 UUIDs from a pool of 32 (Parquet UUID logical type); the nil and all-ones UUIDs in DATE_BINARY_EDGES."
+      },
+      {
+        "name": "blobs",
+        "kind": "list",
+        "arrowType": "list<item: binary>",
+        "duckdbType": "BLOB[]",
+        "nullCount": 99,
+        "emptyCount": 109,
+        "maxLength": 4,
+        "description": "1-3 BLOBs of 0-6 bytes."
+      },
+      {
+        "name": "bools",
+        "kind": "list",
+        "arrowType": "list<item: bool>",
+        "duckdbType": "BOOLEAN[]",
+        "nullCount": 102,
+        "emptyCount": 83,
+        "maxLength": 6,
+        "description": "1-6 BOOLEANs."
+      },
+      {
+        "name": "strings_edge",
+        "kind": "list",
+        "arrowType": "list<item: string>",
+        "duckdbType": "VARCHAR[]",
+        "nullCount": 100,
+        "emptyCount": 102,
+        "maxLength": 15,
+        "description": "1-5 strings, half of them needing quotes or escapes; every escape case in TEXT_ESCAPES; one 20,000-character element in CAP_EDGE."
+      },
+      {
+        "name": "tier_list",
+        "kind": "list",
+        "arrowType": "list<item: string>",
+        "duckdbType": "VARCHAR[]",
+        "nullCount": 1,
+        "emptyCount": 125,
+        "maxLength": 2,
+        "description": "Cycles through 8 lists by row number (row % 8) whose texts pair up as look-alikes: [NULL] (a NULL element) and ['NULL'] (the text NULL), [] and [''], ['a, b'] and [a, b]; NULL in ALL_NULL."
+      },
+      {
+        "name": "point",
+        "kind": "struct",
+        "arrowType": "struct<x: double, y: double, tier: string>",
+        "duckdbType": "STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)",
+        "nullCount": 98,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "STRUCT(x, y, tier): the shape of the wide test file's struct columns; x and y normal with two decimals, tier bronze/silver/gold/platinum."
+      },
+      {
+        "name": "odd_names",
+        "kind": "struct",
+        "arrowType": "struct<label: string, name: string, type: string, data: string, size: int32, length: int32, toJSON: string, constructor: string, __proto__: string, hasOwnProperty: bool, months: int32, days: int32, nanoseconds: int64, my field: string, x,y: double, quote\"d: string, it's: string, 2: int32, 1: int32, 10: int32, ünï: string, emoji😀: string, order: int32, null: string, SELECT: string, ID: int64>",
+        "duckdbType": "STRUCT(\"label\" VARCHAR, \"name\" VARCHAR, \"type\" VARCHAR, \"data\" VARCHAR, size INTEGER, length INTEGER, toJSON VARCHAR, constructor VARCHAR, __proto__ VARCHAR, hasOwnProperty BOOLEAN, \"months\" INTEGER, \"days\" INTEGER, nanoseconds BIGINT, \"my field\" VARCHAR, \"x,y\" DOUBLE, \"quote\"\"d\" VARCHAR, \"it's\" VARCHAR, \"2\" INTEGER, \"1\" INTEGER, \"10\" INTEGER, \"ünï\" VARCHAR, \"emoji😀\" VARCHAR, \"order\" INTEGER, \"null\" VARCHAR, \"SELECT\" VARCHAR, ID BIGINT)",
+        "nullCount": 104,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "26 fields named label, name, type, data, size, length, toJSON, constructor, __proto__, hasOwnProperty, months, days, nanoseconds, \"my field\", \"x,y\", quote\"d, it's, 2, 1, 10, ünï, emoji😀, order, null, SELECT, ID: names that break JavaScript objects or need SQL quoting."
+      },
+      {
+        "name": "typed_leaves",
+        "kind": "struct",
+        "arrowType": "struct<dec38: decimal128(38, 0), dec18_4: decimal128(18, 4), uuid: extension<arrow.uuid>, blob: binary, time: time64[us], ts: timestamp[us], tstz: timestamp[us, tz=UTC], date: date32[day], flag: bool, f32: float, i64: int64>",
+        "duckdbType": "STRUCT(dec38 DECIMAL(38,0), dec18_4 DECIMAL(18,4), uuid UUID, blob BLOB, \"time\" TIME, ts TIMESTAMP, tstz TIMESTAMP WITH TIME ZONE, date DATE, flag BOOLEAN, f32 FLOAT, i64 BIGINT)",
+        "nullCount": 105,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "One leaf of each type that has gone wrong inside a nested value: DECIMAL(38,0), DECIMAL(18,4), UUID, BLOB, TIME, TIMESTAMP, TIMESTAMPTZ, DATE, BOOLEAN, FLOAT, BIGINT."
+      },
+      {
+        "name": "wide_struct",
+        "kind": "struct",
+        "arrowType": "struct<f01: int32, f02: double, f03: string, f04: bool, f05: date32[day], f06: int64, f07: float, f08: int16, f09: int32, f10: double, f11: string, f12: bool, f13: date32[day], f14: int64, f15: float, f16: int16, f17: int32, f18: double, f19: string, f20: bool, f21: date32[day], f22: int64, f23: float, f24: int16, f25: int32, f26: double, f27: string, f28: bool, f29: date32[day], f30: int64, f31: float, f32: int16, f33: int32, f34: double, f35: string, f36: bool, f37: date32[day], f38: int64, f39: float, f40: int16>",
+        "duckdbType": "STRUCT(f01 INTEGER, f02 DOUBLE, f03 VARCHAR, f04 BOOLEAN, f05 DATE, f06 BIGINT, f07 FLOAT, f08 SMALLINT, f09 INTEGER, f10 DOUBLE, f11 VARCHAR, f12 BOOLEAN, f13 DATE, f14 BIGINT, f15 FLOAT, f16 SMALLINT, f17 INTEGER, f18 DOUBLE, f19 VARCHAR, f20 BOOLEAN, f21 DATE, f22 BIGINT, f23 FLOAT, f24 SMALLINT, f25 INTEGER, f26 DOUBLE, f27 VARCHAR, f28 BOOLEAN, f29 DATE, f30 BIGINT, f31 FLOAT, f32 SMALLINT, f33 INTEGER, f34 DOUBLE, f35 VARCHAR, f36 BOOLEAN, f37 DATE, f38 BIGINT, f39 FLOAT, f40 SMALLINT)",
+        "nullCount": 117,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "40 scalar fields f01-f40 cycling INTEGER, DOUBLE, VARCHAR, BOOLEAN, DATE, BIGINT, FLOAT, SMALLINT; its CAP_EDGE row (150-character strings) renders past 1,000 characters."
+      },
+      {
+        "name": "nested_struct",
+        "kind": "struct",
+        "arrowType": "struct<owner: struct<name: string, contact: struct<email: string, phones: list<item: string>, address: struct<city: string, zip: string>>>, version: int32>",
+        "duckdbType": "STRUCT(\"owner\" STRUCT(\"name\" VARCHAR, contact STRUCT(email VARCHAR, phones VARCHAR[], address STRUCT(city VARCHAR, zip VARCHAR))), \"version\" INTEGER)",
+        "nullCount": 114,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "Four levels deep: owner.contact.address.city, with owner.contact.email and the list owner.contact.phones."
+      },
+      {
+        "name": "people",
+        "kind": "list",
+        "arrowType": "list<item: struct<name: string, age: int32, langs: list<item: string>>>",
+        "duckdbType": "STRUCT(\"name\" VARCHAR, age INTEGER, langs VARCHAR[])[]",
+        "nullCount": 106,
+        "emptyCount": 95,
+        "maxLength": 4,
+        "description": "A list of 1-4 STRUCT(name, age, langs VARCHAR[])."
+      },
+      {
+        "name": "attrs",
+        "kind": "map",
+        "arrowType": "map<string, int32>",
+        "duckdbType": "MAP(VARCHAR, INTEGER)",
+        "nullCount": 100,
+        "emptyCount": 94,
+        "maxLength": 11,
+        "description": "1-5 keys drawn from size, toJSON, constructor, __proto__, 2, 1, k=v, length and ordinary names; escape cases as keys in TEXT_ESCAPES."
+      },
+      {
+        "name": "int_keys",
+        "kind": "map",
+        "arrowType": "map<int32, string>",
+        "duckdbType": "MAP(INTEGER, VARCHAR)",
+        "nullCount": 110,
+        "emptyCount": 93,
+        "maxLength": 600,
+        "description": "1-5 INTEGER keys -100..100; 600 entries in LIST_1000; keys 2, 1, 10 in that order in DEMO."
+      },
+      {
+        "name": "date_keys",
+        "kind": "map",
+        "arrowType": "map<date32[day], list<item: int32>>",
+        "duckdbType": "MAP(DATE, INTEGER[])",
+        "nullCount": 118,
+        "emptyCount": 92,
+        "maxLength": 4,
+        "description": "1-3 DATE keys 2020-2025, each mapped to a list of 0-3 integers."
+      },
+      {
+        "name": "map_of_structs",
+        "kind": "map",
+        "arrowType": "map<string, struct<qty: int32, price: decimal128(10, 2), note: string>>",
+        "duckdbType": "MAP(VARCHAR, STRUCT(qty INTEGER, price DECIMAL(10,2), note VARCHAR))",
+        "nullCount": 92,
+        "emptyCount": 94,
+        "maxLength": 3,
+        "description": "1-3 fruit keys mapped to STRUCT(qty INTEGER, price DECIMAL(10,2), note VARCHAR)."
+      },
+      {
+        "name": "doc",
+        "kind": "json",
+        "arrowType": "extension<arrow.json>",
+        "duckdbType": "JSON",
+        "nullCount": 93,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "JSON documents (Parquet JSON logical type) with keys k, score, kind, \"my field\", \"a.b\", q\"k, ünï; some rows a JSON scalar, an array or the literal null (a 1,000-item array, 42 and null in rows 5-7)."
+      },
+      {
+        "name": "json_list",
+        "kind": "list",
+        "arrowType": "list<item: extension<arrow.json>>",
+        "duckdbType": "JSON[]",
+        "nullCount": 109,
+        "emptyCount": 107,
+        "maxLength": 9,
+        "description": "A list of 1-2 JSON values (objects, arrays, scalars, the literal null); SQL NULL next to the JSON literal null in NULL_ELEMENTS."
+      },
+      {
+        "name": "all_null_list",
+        "kind": "list",
+        "arrowType": "list<item: int32>",
+        "duckdbType": "INTEGER[]",
+        "nullCount": 1000,
+        "emptyCount": 0,
+        "maxLength": null,
+        "description": "NULL in every row."
+      },
+      {
+        "name": "all_empty_list",
+        "kind": "list",
+        "arrowType": "list<item: string>",
+        "duckdbType": "VARCHAR[]",
+        "nullCount": 0,
+        "emptyCount": 1000,
+        "maxLength": 0,
+        "description": "[] in every row."
+      }
+    ]
+  },
+  "json": {
+    "file": "json/nested-stress-tests.json",
+    "columns": [
+      {
+        "name": "id",
+        "kind": "scalar",
+        "arrowType": null,
+        "duckdbType": "BIGINT",
+        "nullCount": 0,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "Row number 0-999; equals the __rowid__ the loader adds."
+      },
+      {
+        "name": "label",
+        "kind": "scalar",
+        "arrowType": null,
+        "duckdbType": "VARCHAR",
+        "nullCount": 1,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "As the Parquet file's label."
+      },
+      {
+        "name": "counts",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "BIGINT[]",
+        "nullCount": 107,
+        "emptyCount": 105,
+        "maxLength": 10000,
+        "description": "Non-negative integers (BIGINT[]); 1,000 / 2,500 / 10,000 single digits (position mod 10, to keep the file small) in rows 5-7."
+      },
+      {
+        "name": "signed",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "HUGEINT[]",
+        "nullCount": 87,
+        "emptyCount": 105,
+        "maxLength": 4,
+        "description": "Integers of both signs: read_json infers HUGEINT[] for them, not BIGINT[] (it reads non-negative integers as unsigned)."
+      },
+      {
+        "name": "huge",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "HUGEINT[]",
+        "nullCount": 102,
+        "emptyCount": 83,
+        "maxLength": 3,
+        "description": "Non-negative integers, past INT64 max in NUMERIC_EXTREMES (2^63 and UINT64 max), which makes read_json infer HUGEINT[]."
+      },
+      {
+        "name": "floats",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "DOUBLE[]",
+        "nullCount": 93,
+        "emptyCount": 107,
+        "maxLength": 5,
+        "description": "DOUBLE[] with three decimals; NUMERIC_EXTREMES holds -0.0, 5e-324, +-DOUBLE max and 2^64 (an integer past UINT64, which read_json reads as a DOUBLE)."
+      },
+      {
+        "name": "words",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "VARCHAR[]",
+        "nullCount": 99,
+        "emptyCount": 97,
+        "maxLength": 15,
+        "description": "VARCHAR[]: 1-2 words; the escape cases in TEXT_ESCAPES; the 20,000-character element in CAP_EDGE."
+      },
+      {
+        "name": "days",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "DATE[]",
+        "nullCount": 116,
+        "emptyCount": 99,
+        "maxLength": 4,
+        "description": "ISO date strings, which read_json reads as DATE[]."
+      },
+      {
+        "name": "ids",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "UUID[]",
+        "nullCount": 94,
+        "emptyCount": 104,
+        "maxLength": 2,
+        "description": "UUID strings, which read_json reads as UUID[]."
+      },
+      {
+        "name": "point",
+        "kind": "struct",
+        "arrowType": null,
+        "duckdbType": "STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)",
+        "nullCount": 98,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "As the Parquet file's point; {} (read as all-NULL fields) in EMPTIES."
+      },
+      {
+        "name": "depth5",
+        "kind": "struct",
+        "arrowType": null,
+        "duckdbType": "STRUCT(l2 STRUCT(l3 STRUCT(l4 STRUCT(l5 STRUCT(leaf BIGINT)))))",
+        "nullCount": 105,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "A STRUCT five levels deep (the column, then l2, l3, l4, l5), with one leaf: depth5.l2.l3.l4.l5.leaf."
+      },
+      {
+        "name": "props",
+        "kind": "map",
+        "arrowType": null,
+        "duckdbType": "MAP(VARCHAR, BIGINT)",
+        "nullCount": 119,
+        "emptyCount": 100,
+        "maxLength": 6,
+        "description": "Objects whose keys vary from row to row (key_000-key_499, rarely size/toJSON/constructor/__proto__), which read_json reads as MAP(VARCHAR, BIGINT); a.b, a_b, A_B, k=v and k_v in NAME_COLLISIONS (case-colliding keys would fail as STRUCT fields)."
+      },
+      {
+        "name": "empty_list",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "JSON[]",
+        "nullCount": 90,
+        "emptyCount": 910,
+        "maxLength": 0,
+        "description": "[] in every non-NULL row, which read_json reads as JSON[]."
+      },
+      {
+        "name": "mixed_list",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "JSON[]",
+        "nullCount": 98,
+        "emptyCount": 94,
+        "maxLength": 5,
+        "description": "Arrays mixing numbers, strings, booleans, null, objects and arrays, which read_json reads as JSON[] (a JSON null element is SQL NULL)."
+      },
+      {
+        "name": "shifty",
+        "kind": "json",
+        "arrowType": null,
+        "duckdbType": "JSON",
+        "nullCount": 102,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "A field whose type changes from row to row (number, string, boolean, object, array), which read_json reads as JSON."
+      },
+      {
+        "name": "key_order",
+        "kind": "struct",
+        "arrowType": null,
+        "duckdbType": "STRUCT(\"2\" BIGINT, \"1\" BIGINT)",
+        "nullCount": 81,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "An object whose key \"2\" comes before \"1\": STRUCT(\"2\" BIGINT, \"1\" BIGINT), in that order."
+      },
+      {
+        "name": "people",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "STRUCT(\"name\" VARCHAR, age BIGINT, langs VARCHAR[])[]",
+        "nullCount": 108,
+        "emptyCount": 112,
+        "maxLength": 3,
+        "description": "A list of 1-2 objects {name, age, langs}: STRUCT(...)[], with \"name\" quoted in the DESCRIBE text (a keyword)."
+      },
+      {
+        "name": "odd_keys",
+        "kind": "struct",
+        "arrowType": null,
+        "duckdbType": "STRUCT(k VARCHAR, score DOUBLE, kind VARCHAR, \"my field\" JSON, \"a.b\" BIGINT, \"q\"\"k\" BOOLEAN, \"ünï\" VARCHAR)",
+        "nullCount": 101,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "Objects with the keys k, score, kind, \"my field\", \"a.b\", q\"k and ünï (a random subset, in that order), read as a STRUCT whose field names need quoting; \"my field\" holds a number in some rows and text in others, so read_json types that field JSON."
+      },
+      {
+        "name": "matrix",
+        "kind": "list",
+        "arrowType": null,
+        "duckdbType": "BIGINT[][]",
+        "nullCount": 89,
+        "emptyCount": 100,
+        "maxLength": 3,
+        "description": "Non-negative integer arrays of arrays (BIGINT[][])."
+      },
+      {
+        "name": "all_null",
+        "kind": "json",
+        "arrowType": null,
+        "duckdbType": "JSON",
+        "nullCount": 1000,
+        "emptyCount": null,
+        "maxLength": null,
+        "description": "null in every row, which read_json reads as JSON."
+      },
+      {
+        "name": "empty_obj",
+        "kind": "map",
+        "arrowType": null,
+        "duckdbType": "MAP(VARCHAR, JSON)",
+        "nullCount": 105,
+        "emptyCount": 895,
+        "maxLength": 0,
+        "description": "{} in every non-NULL row, which read_json reads as MAP(VARCHAR, JSON)."
+      }
+    ]
+  }
+}

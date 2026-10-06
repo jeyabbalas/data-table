@@ -7,7 +7,7 @@ import type { VectorDataType } from '@/derived/types';
 
 /**
  * Mock WorkerBridge that records all SQL queries for assertion.
- * Handles typeof(), LIMIT 0, and DDL patterns.
+ * Handles DESCRIBE SELECT, LIMIT 0, and DDL patterns.
  */
 function createMockBridge(typeMap: Record<string, string> = {}) {
   const queryCalls: string[] = [];
@@ -17,11 +17,11 @@ function createMockBridge(typeMap: Record<string, string> = {}) {
     query: vi.fn().mockImplementation(async (sql: string) => {
       queryCalls.push(sql);
 
-      if (sql.includes('typeof(')) {
-        const match = sql.match(/typeof\(\((.+)\)\) AS t/);
+      if (sql.startsWith('DESCRIBE SELECT (')) {
+        const match = sql.match(/^DESCRIBE SELECT \((.+)\) AS v FROM /);
         const expr = match?.[1] ?? '';
         const duckdbType = typeMap[expr] ?? 'DOUBLE';
-        return [{ t: duckdbType }];
+        return [{ column_name: 'v', column_type: duckdbType }];
       }
 
       if (sql.includes('LIMIT 0')) {

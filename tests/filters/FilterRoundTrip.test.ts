@@ -112,6 +112,22 @@ describe('Filter round-trip via structured-clone-equivalent path', () => {
     expect(roundTrip(filter)).toEqual(filter);
   });
 
+  it("point, set and not-set comparing text (valueType: 'text')", () => {
+    const cases: Filter[] = [
+      { type: 'point', column: 'tags', value: "['it\\'s', NULL]", valueType: 'text' },
+      { type: 'set', column: 'u', values: ['0', '42'], includeNull: true, valueType: 'text' },
+      { type: 'not-set', column: 'point', values: ['{}'], valueType: 'text' },
+    ];
+    for (const filter of cases) {
+      const round = roundTrip(filter);
+      expect(round).toEqual(filter);
+      // A text filter that came back without valueType would compare values.
+      expect(round).toHaveProperty('valueType', 'text');
+      // IndexedDB stores the serialized form by structured clone.
+      expect(deserializeFilter(structuredClone(serializeFilter(filter)))).toEqual(filter);
+    }
+  });
+
   it('null filter', () => {
     const filter: Filter = { type: 'null', column: 'deleted_at' };
     expect(roundTrip(filter)).toEqual(filter);
@@ -196,6 +212,10 @@ describe('Filter round-trip via FilterPresetManager JSON path', () => {
       { type: 'null', column: 'deleted_at' },
       { type: 'not-null', column: 'name' },
       { type: 'pattern', column: 'name', pattern: 'smith', mode: 'contains' },
+      { type: 'range', column: 'wait', min: '1 day', max: '2 days', valueType: 'interval' },
+      { type: 'point', column: 'tags', value: '[red, green]', valueType: 'text' },
+      { type: 'set', column: 'u', values: ['0'], includeNull: true, valueType: 'text' },
+      { type: 'not-set', column: 'attrs', values: ['{}', '{k=v}'], valueType: 'text' },
       {
         type: 'raw-sql',
         column: '__raw_sql_a__',

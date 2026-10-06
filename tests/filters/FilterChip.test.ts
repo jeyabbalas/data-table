@@ -2,7 +2,12 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
-import { formatFilter, formatDisplayValue, FilterChip } from '@/filters/FilterChip';
+import {
+  CHIP_VALUE_MAX_LENGTH,
+  formatFilter,
+  formatDisplayValue,
+  FilterChip,
+} from '@/filters/FilterChip';
 import type { Filter } from '@/filters/FilterTypes';
 
 // =========================================
@@ -491,5 +496,119 @@ describe('FilterChip', () => {
     expect(onEdit).not.toHaveBeenCalled();
 
     chip.destroy();
+  });
+});
+
+// =========================================
+// Long values — a nested value's text runs to 1,000 characters
+// =========================================
+
+describe('long values', () => {
+  // 1,190 characters: [0, 1, 2, …, 299]
+  const longText = `[${Array.from({ length: 300 }, (_, i) => i).join(', ')}]`;
+  const family = '\u{1F468}‍\u{1F469}‍\u{1F467}'; // one grapheme, five code points
+
+  describe('formatFilter', () => {
+    it('keeps every value whole unless asked to cut them', () => {
+      const filter: Filter = { type: 'point', column: 'tags', value: longText, valueType: 'text' };
+      expect(formatFilter(filter).description).toBe(`= ${longText}`);
+    });
+
+    it('cuts a value to maxValueLength characters, the ellipsis one of them', () => {
+      const point = (value: string): Filter => ({ type: 'point', column: 'c', value });
+      const cut = (value: string) =>
+        formatFilter(point(value), undefined, { maxValueLength: 10 }).description;
+      expect(cut('abcdefghij')).toBe('= abcdefghij');
+      expect(cut('abcdefghijk')).toBe('= abcdefghi…');
+      expect(cut(longText)).toBe(`= ${longText.slice(0, 9)}…`);
+    });
+
+    it('cuts each value a set shows, keeping the count of the rest', () => {
+      const values = ['a'.repeat(20), 'b'.repeat(20), 'c'.repeat(20), 'd'.repeat(20)];
+      const options = { maxValueLength: 5 };
+      expect(
+        formatFilter({ type: 'set', column: 'c', values }, undefined, options).description,
+      ).toBe('in {aaaa…, bbbb…, cccc…, +1 more}');
+      expect(
+        formatFilter(
+          { type: 'not-set', column: 'c', values, includeNull: true },
+          undefined,
+          options,
+        ).description,
+      ).toBe('not in {aaaa…, bbbb…, cccc…, +1 more} or null');
+    });
+
+    it('cuts a pattern inside its quotes', () => {
+      const options = { maxValueLength: 6 };
+      const pattern = (mode: 'contains' | 'regex'): Filter => ({
+        type: 'pattern',
+        column: 'c',
+        pattern: longText,
+        mode,
+      });
+      expect(formatFilter(pattern('contains'), undefined, options).description).toBe(
+        'contains "[0, 1…"',
+      );
+      expect(formatFilter(pattern('regex'), undefined, options).description).toBe(
+        'matches /[0, 1…/',
+      );
+    });
+
+    it('never splits an emoji sequence, or a letter from its accent', () => {
+      const cut = (value: string) =>
+        formatFilter({ type: 'point', column: 'c', value }, undefined, { maxValueLength: 10 })
+          .description;
+      expect(cut(`${'a'.repeat(8)}${family}bbbbb`)).toBe(`= ${'a'.repeat(8)}${family}…`);
+      expect(cut('é'.repeat(12))).toBe(`= ${'é'.repeat(9)}…`);
+    });
+
+    it('cuts at code points where the runtime has no Intl.Segmenter', async () => {
+      const segmenter = Intl.Segmenter;
+      vi.resetModules();
+      (Intl as { Segmenter: unknown }).Segmenter = undefined;
+      try {
+        const fresh = await import('@/filters/FilterChip');
+        const cut = (value: string) =>
+          fresh.formatFilter({ type: 'point', column: 'c', value }, undefined, {
+            maxValueLength: 10,
+          }).description;
+        // A surrogate pair stays whole; a sequence of them may not.
+        expect(cut('\u{1F600}'.repeat(12))).toBe(`= ${'\u{1F600}'.repeat(9)}…`);
+        expect(cut(`${'a'.repeat(8)}${family}bbbbb`)).toBe(`= ${'a'.repeat(8)}\u{1F468}…`);
+      } finally {
+        (Intl as { Segmenter: unknown }).Segmenter = segmenter;
+      }
+    });
+  });
+
+  describe('FilterChip', () => {
+    it('shows a long value cut short, and keeps it whole in the title', () => {
+      const filter: Filter = { type: 'point', column: 'tags', value: longText, valueType: 'text' };
+      const chip = new FilterChip(filter, () => {});
+      const el = chip.getElement();
+
+      const detail = el.querySelector('.dt-filter-chip-detail')!.textContent!;
+      expect(detail).toBe(` = ${longText.slice(0, CHIP_VALUE_MAX_LENGTH - 1)}…`);
+      expect(el.title).toBe(`tags = ${longText}`);
+
+      chip.destroy();
+    });
+
+    it('names the remove button by the column alone', () => {
+      const filter: Filter = { type: 'set', column: 'tags', values: [longText, longText] };
+      const chip = new FilterChip(filter, () => {});
+      const removeBtn = chip.getElement().querySelector('.dt-filter-chip-remove')!;
+      expect(removeBtn.getAttribute('aria-label')).toBe('Remove filter for tags');
+      chip.destroy();
+    });
+
+    it('shows a value that fits whole', () => {
+      const value = 'x'.repeat(CHIP_VALUE_MAX_LENGTH);
+      const chip = new FilterChip({ type: 'point', column: 'c', value }, () => {});
+      expect(chip.getElement().querySelector('.dt-filter-chip-detail')!.textContent).toBe(
+        ` = ${value}`,
+      );
+      chip.destroy();
+    });
   });
 });

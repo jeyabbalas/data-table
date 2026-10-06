@@ -8,7 +8,7 @@
 
 > **copyToClipboard**(`data`, `format`): `Promise`\<`void`\>
 
-Defined in: [export/Clipboard.ts:40](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/Clipboard.ts#L40)
+Defined in: [export/Clipboard.ts:40](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/Clipboard.ts#L40)
 
 Copy a string to the clipboard.
 

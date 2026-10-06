@@ -404,6 +404,43 @@ describe('DerivedColumnEditPanel', () => {
       panel.destroy();
     });
 
+    it('should show error when name differs from another column only in letter case', () => {
+      const panel = createPanel();
+      panel.open('total', anchorEl);
+
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      nameInput.value = 'Price';
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      expect(nameError.style.display).not.toBe('none');
+      expect(nameError.textContent).toBe('A column named "price" already exists');
+
+      panel.destroy();
+    });
+
+    it('should allow a rename that only changes the letter case of its own name', () => {
+      const panel = createPanel();
+      panel.open('total', anchorEl);
+
+      const nameInput = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+      nameInput.value = 'Total';
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const nameError = panel
+        .getElement()
+        .querySelector('.dt-derived-edit-name-error') as HTMLElement;
+      expect(nameError.style.display).toBe('none');
+
+      panel.destroy();
+    });
+
     it('should clear error when name is unique', () => {
       const panel = createPanel();
       panel.open('total', anchorEl);

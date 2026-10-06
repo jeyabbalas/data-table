@@ -7,6 +7,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { collidingColumnName } from '../core/columnNames';
 import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
@@ -418,12 +419,15 @@ export class DerivedColumnModal {
       return;
     }
 
-    // Check uniqueness against all existing columns
-    const schema = this.state.schema.get();
-    const duplicate = schema.find((s) => s.name === name);
+    // Check uniqueness against all existing columns, ignoring letter case
+    // as DuckDB does (`addDerivedColumn` refuses the same names)
+    const duplicate = collidingColumnName(
+      name,
+      this.state.schema.get().map((s) => s.name),
+    );
 
-    if (duplicate) {
-      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(name);
+    if (duplicate !== undefined) {
+      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(duplicate);
       this.nameErrorEl.style.display = '';
     } else {
       this.nameErrorEl.textContent = '';
@@ -435,8 +439,12 @@ export class DerivedColumnModal {
     const name = this.nameInput.value.trim();
     if (!name) return false;
 
-    const schema = this.state.schema.get();
-    return !schema.some((s) => s.name === name);
+    return (
+      collidingColumnName(
+        name,
+        this.state.schema.get().map((s) => s.name),
+      ) === undefined
+    );
   }
 
   private updateVectorInfo(): void {

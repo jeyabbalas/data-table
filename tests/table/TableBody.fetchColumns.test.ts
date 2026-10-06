@@ -371,6 +371,48 @@ describe('TableBody row fetches with a column window', () => {
     harness.body.destroy();
   });
 
+  it('read a column named __proto__ past them into each row as its own value', async () => {
+    const names = COLUMNS.map((name) => (name === 'c04' ? '__proto__' : name));
+    const mounted = createSignal<readonly string[]>(names.slice(40, 48));
+    const harness = setupTableBody({ body: { mountedColumns: mounted } });
+    initializeColumnsFromSchema(
+      harness.state,
+      names.map((name) => ({ name, type: 'string', nullable: true, originalType: 'VARCHAR' })),
+    );
+    const actions = new StateActions(harness.state, {
+      query: vi.fn(),
+      clearQueryCache: vi.fn(),
+    } as unknown as ConstructorParameters<typeof StateActions>[1]);
+    for (const name of names) actions.setColumnWidth(name, 100);
+    const init = harness.body.initialize();
+    await harness.drain();
+    await land(harness);
+    await init;
+
+    mounted.set(names.slice(0, 8));
+    await harness.drain();
+    const topUp = harness.queries.at(-1)!;
+    expect(selected(topUp.sql)).toContain('__proto__');
+    // Rows as the worker builds them, each column an own property.
+    topUp.deferred.resolve(
+      rowidsRead(topUp.sql)!.map((id) =>
+        Object.fromEntries([
+          ['__rowid__', id],
+          ...selected(topUp.sql).map((column) => [column, `${column}-${id}`]),
+        ]),
+      ),
+    );
+    await harness.drain();
+
+    expect(cell(harness, '__proto__').textContent).toBe('__proto__-0');
+    const cached = (
+      harness.body as unknown as { rowDataCache: Map<number, object> }
+    ).rowDataCache.get(0)!;
+    expect(Object.hasOwn(cached, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(cached)).toBe(Object.prototype);
+    harness.body.destroy();
+  });
+
   it('select every visible column without a column window', async () => {
     const harness = setupTableBody();
     const init = harness.body.initialize();

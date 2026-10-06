@@ -25,7 +25,7 @@ import type { CategoricalColumnStats } from '../../statistics/ColumnStatsTypes';
 import { BaseVisualization } from '../BaseVisualization';
 import type { VisualizationOptions } from '../BaseVisualization';
 import { resolveColor, resolveScope } from '../palette';
-import { formatPercent, truncateText, escapeHTML, findSlotAtX } from '../utils';
+import { drawSegmentRect, escapeHTML, findSlotAtX, formatPercent, truncateText } from '../utils';
 import { fetchValueCountsData, fetchAlignedValueCountsData } from './ValueCountsData';
 import type { ValueCountsData } from './ValueCountsData';
 
@@ -985,7 +985,8 @@ export class ValueCounts extends BaseVisualization {
         const fgProportion = initialCount > 0 ? Math.min(fgCount / initialCount, 1) : 0;
 
         // 1. Draw faded color at full segment width
-        this.drawSegmentRect(
+        drawSegmentRect(
+          this.ctx,
           pos.x,
           this.barArea.y,
           pos.width,
@@ -993,13 +994,15 @@ export class ValueCounts extends BaseVisualization {
           fadedCrossfilterColor,
           isFirst,
           isLast,
+          LAYOUT.barRadius,
         );
 
         // 2. Overdraw solid at fgProportion of segment width
         if (fgProportion > 0) {
           const filledWidth = pos.width * fgProportion;
           const fillIsLast = fgProportion >= 1 && isLast;
-          this.drawSegmentRect(
+          drawSegmentRect(
+            this.ctx,
             pos.x,
             this.barArea.y,
             filledWidth,
@@ -1007,11 +1010,13 @@ export class ValueCounts extends BaseVisualization {
             fillColor,
             isFirst,
             fillIsLast,
+            LAYOUT.barRadius,
           );
         }
       } else {
         // Normal rendering (no crossfilter)
-        this.drawSegmentRect(
+        drawSegmentRect(
+          this.ctx,
           pos.x,
           this.barArea.y,
           pos.width,
@@ -1019,6 +1024,7 @@ export class ValueCounts extends BaseVisualization {
           fillColor,
           isFirst,
           isLast,
+          LAYOUT.barRadius,
         );
       }
 
@@ -1036,62 +1042,6 @@ export class ValueCounts extends BaseVisualization {
       // Use the background segment for label text in crossfilter mode
       this.drawSegmentLabel(pos, bgSegment);
     }
-  }
-
-  /**
-   * Draw a single segment rectangle with optional rounded corners
-   */
-  private drawSegmentRect(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    fill: string,
-    roundLeft: boolean,
-    roundRight: boolean,
-  ): void {
-    const ctx = this.ctx;
-    const radius = LAYOUT.barRadius;
-
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-
-    if (roundLeft && roundRight) {
-      // Both corners rounded
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      ctx.lineTo(x + radius, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-    } else if (roundLeft) {
-      // Only left corners rounded
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width, y);
-      ctx.lineTo(x + width, y + height);
-      ctx.lineTo(x + radius, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-    } else if (roundRight) {
-      // Only right corners rounded
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      ctx.lineTo(x, y + height);
-      ctx.lineTo(x, y);
-    } else {
-      // No rounded corners
-      ctx.rect(x, y, width, height);
-    }
-
-    ctx.closePath();
-    ctx.fill();
   }
 
   /**
@@ -1165,7 +1115,7 @@ export class ValueCounts extends BaseVisualization {
     ctx.font = FONTS.axis;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('No data', this.width / 2, this.height / 2);
+    ctx.fillText(this.statsMessages.noData, this.width / 2, this.height / 2);
   }
 
   /**

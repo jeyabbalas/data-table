@@ -6,7 +6,7 @@
 
 # Interface: ColumnHeaderTooltipContent
 
-Defined in: [core/types.ts:99](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/types.ts#L99)
+Defined in: [core/types.ts:113](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L113)
 
 Structured content for a column-header tooltip popover.
 
@@ -23,7 +23,7 @@ by construction.
 
 > `optional` **description?**: `string`
 
-Defined in: [core/types.ts:103](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/types.ts#L103)
+Defined in: [core/types.ts:117](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L117)
 
 Optional free-text body. Whitespace preserved (`white-space: pre-wrap`).
 
@@ -33,7 +33,7 @@ Optional free-text body. Whitespace preserved (`white-space: pre-wrap`).
 
 > `optional` **items?**: [`ColumnHeaderTooltipItem`](ColumnHeaderTooltipItem.md)[]
 
-Defined in: [core/types.ts:105](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/types.ts#L105)
+Defined in: [core/types.ts:119](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L119)
 
 Optional ordered list of label/value items.
 
@@ -43,6 +43,6 @@ Optional ordered list of label/value items.
 
 > `optional` **title?**: `string`
 
-Defined in: [core/types.ts:101](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/types.ts#L101)
+Defined in: [core/types.ts:115](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L115)
 
 Optional bold heading.

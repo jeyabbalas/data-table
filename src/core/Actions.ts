@@ -7,17 +7,22 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { fetchCellJson, readJsonValue, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
+import { jsonValueSQL } from '../data/valueSql';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
+import { jsonFiltersAsText } from '../filters/jsonFilters';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
+import { collidingColumnName, columnNameKey } from './columnNames';
+import { dataTypeOf, parseDuckDBType, type DuckDBTypeNode } from './duckdbType';
 import {
   ConfigurationError,
   DerivedColumnError,
@@ -88,6 +93,92 @@ export interface GetColumnValuesOptions {
   offset?: number;
   /** Optional AbortSignal forwarded to the DuckDB worker. */
   signal?: AbortSignal;
+}
+
+/**
+ * Options for {@link StateActions.getCellValue}.
+ *
+ * @example
+ * const controller = new AbortController();
+ * const value = await table.actions.getCellValue(0, 'tags', { signal: controller.signal });
+ */
+export interface GetCellValueOptions {
+  /**
+   * Aborts the read: the query is cancelled in the DuckDB worker, and the
+   * promise rejects with a `QueryError` coded `QUERY_ABORTED`.
+   */
+  signal?: AbortSignal | undefined;
+}
+
+/**
+ * Options for {@link StateActions.addNestedFieldColumn}.
+ *
+ * @example
+ * // tags: VARCHAR[]
+ * await table.actions.addNestedFieldColumn('tags', [], { extract: 'length', name: 'tag_count' });
+ */
+export interface NestedFieldColumnOptions {
+  /**
+   * The new column's name. Left out, one made of the column's name and the
+   * path's steps, which needs no quoting in SQL: `point_x`,
+   * `people_1_name`, `tags_length`, `attrs_size`, `doc_a_b_0`; with
+   * `_2`, `_3`, … after it when another column has that name, ignoring the
+   * case of its letters. Given, it is checked as `addDerivedColumn` checks a
+   * name: one another column has, in any letter case, is refused.
+   *
+   * @example
+   * // point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+   * await table.actions.addNestedFieldColumn('point', ['x'], { name: 'longitude' });
+   */
+  name?: string | undefined;
+  /**
+   * What the column reads at the end of the path:
+   *
+   * - `'value'` (the default): the value there.
+   * - `'length'`: how many elements a list or array has (`len`), how many
+   *   entries a map has (`cardinality`, named `…_size`), or how many
+   *   elements a JSON array has (0 for any other JSON value).
+   * - `'tag'`: the tag of the member a union holds (`union_tag`).
+   *
+   * @example
+   * // attrs: MAP(VARCHAR, INTEGER)
+   * await table.actions.addNestedFieldColumn('attrs', [], { extract: 'length' }); // attrs_size
+   */
+  extract?: 'value' | 'length' | 'tag' | undefined;
+  /**
+   * How the column reads a value inside a JSON or VARIANT value, whose type
+   * differs from row to row. Ignored on a path that does not reach one.
+   *
+   * - `'string'` (the default): a VARCHAR. A JSON string without its
+   *   quotes, a number, boolean, object or array as its JSON text, JSON
+   *   `null` as NULL.
+   * - `'number'`: a DOUBLE, NULL where the value is not a number. A string
+   *   holding a number counts.
+   * - `'boolean'`: a BOOLEAN, NULL where the value does not read as one.
+   *   DuckDB's text-to-boolean cast decides: besides `true` and `false`,
+   *   `1` and `0` count, as do the strings `"true"`, `"yes"` and `"t"`.
+   * - `'json'`: a JSON value, so objects and arrays stay inspectable.
+   *
+   * @example
+   * // doc: JSON such as {"score": 0.92}
+   * await table.actions.addNestedFieldColumn('doc', ['score'], { jsonLeaf: 'number' });
+   */
+  jsonLeaf?: 'string' | 'number' | 'boolean' | 'json' | undefined;
+}
+
+/** The values {@link NestedFieldColumnOptions.extract} takes. */
+const EXTRACT_KINDS: readonly unknown[] = ['value', 'length', 'tag'];
+
+/** The values {@link NestedFieldColumnOptions.jsonLeaf} takes. */
+const JSON_LEAF_KINDS: readonly unknown[] = ['string', 'number', 'boolean', 'json'];
+
+/**
+ * Where an added derived column goes, when not last: right after the column
+ * `after` names; see {@link placeAfterSource}. Internal: the public
+ * `DerivedColumnDef` has no say in it.
+ */
+interface DerivedColumnPlacement {
+  after: string;
 }
 
 /**
@@ -554,9 +645,9 @@ export class StateActions {
 
       // Reconcile DuckDB state BEFORE applying snapshot signals.
       // This ensures VIEW exists before visibleColumns/columnOrder reference derived cols.
-      if (derivedChanged) {
-        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot, epoch));
-      }
+      const failedNames = derivedChanged
+        ? await this.changeRelation(() => this.reconcileDerivedColumns(snapshot, epoch))
+        : new Set<string>();
       this.throwIfDestroyed(step);
       if (epoch !== this.loadEpoch) return false;
 
@@ -570,6 +661,10 @@ export class StateActions {
               ? this.derivedManager!.getEffectiveTableName()
               : baseTable!,
           );
+          // What the snapshot gave a derived column that did not come back, as
+          // a session restore drops it: a filter on a `LABEL` that is not
+          // rebuilt beside `label` would filter `label`.
+          this.stripDerivedColumnRefs(failedNames);
         }
       });
 
@@ -973,12 +1068,18 @@ export class StateActions {
         } else {
           try {
             const manager = this.ensureDerivedManager();
+            const baseNames = this.state.schema
+              .get()
+              .filter((c) => !c.isDerived)
+              .map((c) => c.name);
             // One change with the rebuild: the filters, sort and columns the
             // snapshot restores can name its derived columns, and the reads
             // and the filtered count they start wait for the VIEW that brings
             // those back, as for any change that rebuilds it.
             const restoredSchemas = await this.changeRelation(async () =>
-              restoreState() ? manager.restoreColumns(this.state.derivedColumns.get()) : null,
+              restoreState()
+                ? manager.restoreColumns(this.state.derivedColumns.get(), baseNames)
+                : null,
             );
             this.throwIfDestroyed('loadData');
 
@@ -1098,6 +1199,11 @@ export class StateActions {
    * undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
    * entire pre-load state atomically.
    *
+   * A point, set or not-set filter on a JSON column without `valueType` is
+   * given `valueType: 'text'` (`jsonFiltersAsText`): compared as JSON,
+   * text that is not JSON would fail every query, and a preset saved before
+   * 0.9, or imported, may hold such a filter.
+   *
    * Columns the preset does not carry forward have lost their filter, so they
    * are notified — outside the suppression window, since the callback may
    * legitimately want to record an undo entry of its own.
@@ -1109,7 +1215,7 @@ export class StateActions {
     this.suppressUndoCapture = true;
     try {
       batch(() => {
-        this.state.filters.set(filters);
+        this.state.filters.set(jsonFiltersAsText(filters, this.state.schema.get()));
         if (sortColumns) {
           this.state.sortColumns.set(sortColumns);
         }
@@ -1691,9 +1797,14 @@ export class StateActions {
    * Remove all state references to the given column names, their header
    * tooltips included: a later column of the same name would show them.
    * Used when derived columns fail to restore or are reset.
-   * Caller must handle derivedColumns signal and schema separately.
+   * Caller must handle derivedColumns signal and schema separately, and
+   * update the schema first: a name a column of the schema has keeps its
+   * references, which are that column's. A derived `total` restored beside
+   * a base `total` is dropped, and the base column keeps its place.
    */
-  private stripDerivedColumnRefs(names: Set<string>): void {
+  private stripDerivedColumnRefs(gone: Set<string>): void {
+    const columns = new Set(this.state.schema.get().map((c) => c.name));
+    const names = new Set([...gone].filter((name) => !columns.has(name)));
     if (names.size === 0) return;
     batch(() => {
       this.state.filters.set(this.state.filters.get().filter((f) => !names.has(f.column)));
@@ -1749,34 +1860,50 @@ export class StateActions {
   /**
    * Reconcile DuckDB VIEW state after undo/redo changes derived columns.
    * Destroys the existing manager and either recreates with the snapshot's
-   * derived columns, or leaves the table in base-table mode.
+   * derived columns, or leaves the table in base-table mode. Resolves with
+   * the names of the snapshot's derived columns that could not be rebuilt
+   * (see `DerivedColumnManager.restoreColumns`), whose filters, sort and
+   * layout the caller drops.
    */
-  private async reconcileDerivedColumns(snapshot: StateSnapshot, epoch: number): Promise<void> {
+  private async reconcileDerivedColumns(
+    snapshot: StateSnapshot,
+    epoch: number,
+  ): Promise<Set<string>> {
     // 1. Destroy existing manager (drops VIEW + helper tables)
     if (this.derivedManager) {
       await this.derivedManager.destroy();
       this.derivedManager = null;
     }
 
-    // 2. Create new manager, restore columns
+    // 2. Create new manager, restore columns beside the base table's
+    const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
     const restoredSchemas =
       snapshot.derivedColumns.length > 0
-        ? await this.ensureDerivedManager().restoreColumns(snapshot.derivedColumns)
+        ? await this.ensureDerivedManager().restoreColumns(
+            snapshot.derivedColumns,
+            baseSchema.map((c) => c.name),
+          )
         : [];
+    const restoredNames = new Set(restoredSchemas.map((s) => s.name));
+    const failedNames = new Set(
+      snapshot.derivedColumns.map((d) => d.name).filter((name) => !restoredNames.has(name)),
+    );
     // New data asked for meanwhile: the load sets the state.
-    if (epoch !== this.loadEpoch) return;
+    if (epoch !== this.loadEpoch) return failedNames;
 
     // 3. Update schema: old derived entries out, restored ones in
-    const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
-    this.state.schema.set([...baseSchema, ...restoredSchemas]);
+    this.state.schema.set([
+      ...this.state.schema.get().filter((c) => !c.isDerived),
+      ...restoredSchemas,
+    ]);
 
     // 4. Update derivedColumns signal (filtered to only successfully restored)
-    const restoredNames = new Set(restoredSchemas.map((s) => s.name));
     this.state.derivedColumns.set(snapshot.derivedColumns.filter((d) => restoredNames.has(d.name)));
 
     // Bulk reconciliation (undo/redo/session restore): emit a single event
     // with no columnName since multiple columns may have changed at once.
     this.emitDerivedChange('updated');
+    return failedNames;
   }
 
   /**
@@ -1792,8 +1919,19 @@ export class StateActions {
   }
 
   /**
-   * Add a derived column (expression or vector).
+   * Add a derived column (expression or vector), last in the column order.
    * Validates name uniqueness, creates VIEW, updates state.
+   *
+   * Names are compared as DuckDB compares them, ignoring the case of ASCII
+   * letters: `LABEL` beside a column `label` gets `already exists`, since
+   * DuckDB would read `label`'s values for it. `__rowid__` is reserved, in
+   * any case.
+   *
+   * An expression must give one value for each row. One that returns
+   * several rows for a row, or none, such as `unnest(tags)`, is refused, and
+   * so is an aggregate without a window, such as `sum(price)` (write
+   * `sum(price) OVER ()`): each with a message that says what to write
+   * instead. A failed add changes nothing.
    *
    * Runs in its turn: derived-column changes, undo, redo, reset and loads run
    * one at a time, in call order, and an add is validated against the columns
@@ -1807,26 +1945,25 @@ export class StateActions {
     return this.inTurn(() => this.addDerivedColumnInTurn(def, epoch));
   }
 
-  /** The turn of {@link addDerivedColumn}. */
+  /**
+   * The turn of {@link addDerivedColumn}, and the add of
+   * {@link addNestedFieldColumn}, which places the column after its source.
+   */
   private async addDerivedColumnInTurn(
     def: DerivedColumnDef,
     epoch: number,
+    placement?: DerivedColumnPlacement,
   ): Promise<{ success: boolean; error?: string }> {
     if (this.destroyed) {
       return { success: false, error: 'DataTable is destroyed' };
     }
     if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
-    if (def.name === ROWID_COLUMN) {
-      return {
-        success: false,
-        error: `Column name "${def.name}" is reserved for the synthetic row id`,
-      };
-    }
     // Validate name uniqueness against all columns
-    const allColumnNames = this.state.schema.get().map((c) => c.name);
-    if (allColumnNames.includes(def.name)) {
-      return { success: false, error: `Column name "${def.name}" already exists` };
-    }
+    const nameError = newColumnNameError(
+      def.name,
+      this.state.schema.get().map((c) => c.name),
+    );
+    if (nameError) return { success: false, error: nameError };
 
     if (!def.name.trim()) {
       return { success: false, error: 'Column name cannot be empty' };
@@ -1849,8 +1986,25 @@ export class StateActions {
       }
       if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
 
-      // Push to undo stack AFTER DuckDB success, BEFORE state mutation
+      // Push to undo stack AFTER DuckDB success, BEFORE state mutation: the
+      // one entry for the whole add, whose undo takes the column out of the
+      // order and the visible columns too.
       this.pushDerivedUndo();
+
+      // Placed by the order as it is now, after the await: a column hidden,
+      // moved or pinned meanwhile counts.
+      const order = this.state.columnOrder.get();
+      const visible = this.state.visibleColumns.get();
+      const placed = placement
+        ? placeAfterSource(
+            def.name,
+            placement.after,
+            order,
+            visible,
+            this.state.pinnedColumns.get(),
+            this.derivedReaders(placement.after),
+          )
+        : { columnOrder: [...order, def.name], visibleColumns: [...visible, def.name] };
 
       batch(() => {
         // Switch tableName to the VIEW
@@ -1871,8 +2025,8 @@ export class StateActions {
         this.state.schema.set([...this.state.schema.get(), newSchemaEntry]);
 
         // Add to column visibility/order arrays
-        this.state.visibleColumns.set([...this.state.visibleColumns.get(), def.name]);
-        this.state.columnOrder.set([...this.state.columnOrder.get(), def.name]);
+        this.state.visibleColumns.set(placed.visibleColumns);
+        this.state.columnOrder.set(placed.columnOrder);
       });
 
       this.emitDerivedChange('added', def.name);
@@ -1887,8 +2041,164 @@ export class StateActions {
   }
 
   /**
+   * Whether a column is a derived expression column that reads `source`
+   * (see {@link leadingColumnKey}): the run of such columns right after a
+   * source is where {@link placeAfterSource} keeps its extracts together.
+   */
+  private derivedReaders(source: string): (column: string) => boolean {
+    const key = columnNameKey(source);
+    const expressions = new Map<string, string>();
+    for (const d of this.state.derivedColumns.get()) {
+      if (d.kind === 'expression') expressions.set(d.name, d.expression);
+    }
+    return (column) => {
+      const expression = expressions.get(column);
+      return expression !== undefined && leadingColumnKey(expression) === key;
+    };
+  }
+
+  /**
+   * Add a column that reads one part of a nested or JSON column: a struct's
+   * field, a list's or array's element, a map's value, a union's member, a
+   * key or index inside a JSON document; or how long a list is, how many
+   * entries a map has, which member a union holds. It is a derived
+   * expression column, with the histogram, stats and filters any column of
+   * its type gets.
+   *
+   * `path` is read against the column's DuckDB type
+   * (`ColumnSchema.originalType`), a step at a time:
+   *
+   * - STRUCT: a field's name, or its 1-based position (the only way to an
+   *   unnamed field).
+   * - LIST, ARRAY: an element's 1-based position, as in SQL (`tags[1]`).
+   * - MAP: a key, as text or as a number.
+   * - UNION: a member's tag.
+   * - JSON, VARIANT: every step from there on, an object's key (a string) or
+   *   an array's 0-based index (a number), as in JSONPath.
+   *
+   * The column goes right after its source, past the derived columns right
+   * after the source that read it, so that extracts stay in the order they
+   * were made: `point, point_x, point_y`. A pinned source's column goes
+   * right after the pinned columns, unpinned. One undo entry: undo removes
+   * the column, redo puts it back where it was.
+   *
+   * Runs in its turn, as {@link addDerivedColumn} does, and resolves as it
+   * does, `{ success: false, error }`, for a column that is not in the
+   * schema or neither nested nor JSON, a path that does not fit the type, an
+   * option it does not know, a name that is taken (ignoring letter case),
+   * an expression DuckDB refuses, a destroyed table, or new data loaded
+   * before the column has landed.
+   *
+   * @param column - The nested or JSON column's name.
+   * @param path - The steps from the column to the part to read. Empty for
+   *   the column itself: its length or tag (`extract`), or a JSON column's
+   *   value read as `jsonLeaf` says.
+   * @returns `{ success: true, name }`, with the new column's name.
+   *
+   * @example
+   * // point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+   * await table.actions.addNestedFieldColumn('point', ['x']);
+   * // { success: true, name: 'point_x' }, a DOUBLE column right after point
+   *
+   * @example
+   * // people: STRUCT(name VARCHAR, langs VARCHAR[])[]: the first person's
+   * // second language
+   * await table.actions.addNestedFieldColumn('people', [1, 'langs', 2]);
+   * // { success: true, name: 'people_1_langs_2' }
+   *
+   * @example
+   * // doc: JSON. A key with a dot in it, then an array index.
+   * const result = await table.actions.addNestedFieldColumn('doc', ['a.b', 0]);
+   * if (!result.success) console.warn(result.error);
+   */
+  async addNestedFieldColumn(
+    column: string,
+    path: readonly (string | number)[],
+    options: NestedFieldColumnOptions = {},
+  ): Promise<{ success: boolean; name?: string; error?: string }> {
+    if (this.destroyed) return { success: false, error: 'DataTable is destroyed' };
+    const epoch = this.loadEpoch;
+    return this.inTurn(() => this.addNestedFieldColumnInTurn(column, path, options, epoch));
+  }
+
+  /** The turn of {@link addNestedFieldColumn}. */
+  private async addNestedFieldColumnInTurn(
+    column: string,
+    path: readonly (string | number)[],
+    options: NestedFieldColumnOptions,
+    epoch: number,
+  ): Promise<{ success: boolean; name?: string; error?: string }> {
+    if (this.destroyed) return { success: false, error: 'DataTable is destroyed' };
+    if (epoch !== this.loadEpoch) return { success: false, error: SUPERSEDED };
+    const { name, extract, jsonLeaf } = options;
+    if (name !== undefined && typeof name !== 'string') {
+      return { success: false, error: 'The column name must be a string' };
+    }
+    if (extract !== undefined && !EXTRACT_KINDS.includes(extract)) {
+      return {
+        success: false,
+        error: `extract must be 'value', 'length' or 'tag', not "${String(extract)}"`,
+      };
+    }
+    if (jsonLeaf !== undefined && !JSON_LEAF_KINDS.includes(jsonLeaf)) {
+      return {
+        success: false,
+        error: `jsonLeaf must be 'string', 'number', 'boolean' or 'json', not "${String(jsonLeaf)}"`,
+      };
+    }
+    const entry = this.state.schema.get().find((c) => c.name === column);
+    if (!entry) return { success: false, error: `Column "${column}" not found` };
+    const node = typeNodeOf(entry);
+    if (node.kind !== 'json' && entry.type !== 'nested' && dataTypeOf(node) !== 'nested') {
+      return {
+        success: false,
+        error: `Column "${column}" is neither nested nor JSON: it has no parts to extract`,
+      };
+    }
+
+    // Loaded here, not with this module: it stays out of the chunk every
+    // table loads.
+    const extractExpression = await import('../nested/extractExpression').catch((err: unknown) =>
+      err instanceof Error ? err : new Error(String(err)),
+    );
+    if (extractExpression instanceof Error) {
+      return { success: false, error: extractExpression.message };
+    }
+    const built = extractExpression.nestedFieldExpression(
+      { name: entry.name, originalType: entry.originalType ?? '' },
+      path,
+      { extract, jsonLeaf },
+    );
+    if (!built.ok) return { success: false, error: built.error.message };
+
+    const columnName =
+      name ??
+      extractExpression.uniqueColumnName(
+        built.name,
+        this.state.schema.get().map((c) => c.name),
+      );
+    const added = await this.addDerivedColumnInTurn(
+      { kind: 'expression', name: columnName, expression: built.expression },
+      epoch,
+      { after: entry.name },
+    );
+    return added.success ? { success: true, name: columnName } : added;
+  }
+
+  /**
    * Update a derived column's expression, name, or values.
    * Handles rename (updates all state references) and type change (removes stale filters).
+   *
+   * A new name is checked as {@link addDerivedColumn} checks one, against
+   * the other columns: a rename that only changes the case of the column's
+   * own name (`total` to `Total`) is allowed. A new expression is checked as
+   * it checks one too. A failed update changes nothing.
+   *
+   * The filters on the column are dropped when its DuckDB type changes
+   * (`ColumnSchema.originalType`), since DuckDB casts their values to it: a
+   * VARCHAR made JSON would read a filter's `'active'` as malformed JSON.
+   * An integer of another width, or a DECIMAL of another precision or scale,
+   * keeps them: DuckDB compares numbers with those by value.
    *
    * Runs in its turn, as {@link addDerivedColumn} does: a rename to a name an
    * add ahead of it takes gets `already exists`.
@@ -1922,16 +2232,11 @@ export class StateActions {
     // If renaming, validate new name uniqueness (excluding self)
     const isRename = oldName !== def.name;
     if (isRename) {
-      if (def.name === ROWID_COLUMN) {
-        return {
-          success: false,
-          error: `Column name "${def.name}" is reserved for the synthetic row id`,
-        };
-      }
-      const otherNames = currentSchema.filter((c) => c.name !== oldName).map((c) => c.name);
-      if (otherNames.includes(def.name)) {
-        return { success: false, error: `Column name "${def.name}" already exists` };
-      }
+      const nameError = newColumnNameError(
+        def.name,
+        currentSchema.filter((c) => c.name !== oldName).map((c) => c.name),
+      );
+      if (nameError) return { success: false, error: nameError };
     }
 
     if (!def.name.trim()) {
@@ -1952,7 +2257,7 @@ export class StateActions {
       // Push to undo stack AFTER DuckDB success, BEFORE state mutation
       this.pushDerivedUndo();
 
-      const typeChanged = oldEntry.type !== info.detectedType;
+      const typeChanged = derivedTypeChanged(oldEntry, info);
 
       batch(() => {
         // Update derivedColumns list
@@ -2071,6 +2376,10 @@ export class StateActions {
    * replacement is atomic: if any pre-flight check or the final VIEW recreate
    * fails, the column reverts to its prior definition.
    *
+   * The new expression is checked as {@link addDerivedColumn} checks one,
+   * and the filters on the column are dropped as {@link updateDerivedColumn}
+   * drops them, when its DuckDB type changes.
+   *
    * @example
    * const result = await table.actions.replaceDerivedColumn('tip_pct', {
    *   kind: 'expression',
@@ -2163,7 +2472,7 @@ export class StateActions {
     // Push to undo stack AFTER DuckDB success, BEFORE state mutation.
     this.pushDerivedUndo();
 
-    const typeChanged = oldEntry.type !== info.detectedType;
+    const typeChanged = derivedTypeChanged(oldEntry, info);
 
     batch(() => {
       this.state.derivedColumns.set(
@@ -2288,7 +2597,7 @@ export class StateActions {
    * the export "selected rows" scope) — not strict selection insertion order.
    *
    * Numeric columns materialize into the narrowest sensible typed array:
-   * - DuckDB `BIGINT` / `HUGEINT` → `BigInt64Array`
+   * - DuckDB `BIGINT` / `UBIGINT` / `HUGEINT` / `UHUGEINT` → `BigInt64Array`
    * - other integer types → `Int32Array`
    * - `FLOAT` / `DOUBLE` / `DECIMAL` → `Float64Array`
    * - all other types → `unknown[]`
@@ -2296,6 +2605,33 @@ export class StateActions {
    * If any returned row carries a `NULL` value, the function falls back to
    * `unknown[]` regardless of declared type so that `null` is preserved (the
    * typed-array packed form would coerce `null` to `0`, which is ambiguous).
+   * It falls back the same way when an integer does not fit the typed array:
+   * a `UINTEGER` past 2^31−1, or a `UBIGINT`, `HUGEINT` or `UHUGEINT` beyond
+   * the 64-bit range. In that `unknown[]`, an integer is a `number` when it
+   * is exact (within ±(2^53−1)) and a `bigint` beyond, as inside nested
+   * values.
+   *
+   * Every value is exact:
+   * - Integers keep every digit. `BIGINT`, `UBIGINT`, `HUGEINT` and
+   *   `UHUGEINT` columns are read as DuckDB's text and parsed as bigints
+   *   (Arrow's numbers for them are rounded past 2^53, or wrong).
+   * - A `DECIMAL` is the double nearest its value.
+   * - A nested column (`type: 'nested'`: LIST, ARRAY, STRUCT, MAP, UNION,
+   *   VARIANT) is read as exact JSON text and returned as
+   *   {@link getCellValue} returns a value: lists and arrays as arrays,
+   *   structs as objects (an unnamed struct as an array), a MAP as a `Map`
+   *   with typed keys in order, a UNION as `{ [tag]: value }`; integers
+   *   inside as numbers when exact and bigints beyond, DECIMAL, FLOAT and
+   *   DOUBLE as numbers (`NaN`, `±Infinity` and `-0` kept), and dates,
+   *   times, UUIDs, INTERVALs, BLOBs, ENUMs and BITs as DuckDB's text.
+   * - `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`, `TIME WITH TIME
+   *   ZONE` and `TIME_NS` values are DuckDB's text: `'1 year 2 months 3
+   *   days'`, `'POINT (1 2)'`, `'03:04:05+02'`, `'03:04:05.123456789'`.
+   *   Arrow returns them as bytes, numbers or `null` that do not hold them.
+   * - Other values come as the DuckDB worker returns them: text for
+   *   `VARCHAR`, `UUID` and `JSON`, a `Uint8Array` for a `BLOB`, epoch
+   *   milliseconds for `DATE` and `TIMESTAMP`, microseconds since midnight
+   *   for `TIME`.
    *
    * The reserved `__rowid__` column is retrievable by name; the loaders
    * always cast its synthesized `row_number()` to `BIGINT` (the conditional
@@ -2313,14 +2649,20 @@ export class StateActions {
    * await table.actions.addFilter({ type: 'range', column: 'age', min: 18 });
    * const adultAges = await table.actions.getColumnValues('age', { scope: 'filtered' });
    *
+   * @example
+   * // A DECIMAL(10,2)[] column: exact numbers, NULL rows as null.
+   * const prices = await table.actions.getColumnValues('prices', { limit: 3 });
+   * // [[1.25, 2.5, 3.75], null, []]
+   *
    * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `name` is not
-   *   in the current schema.
+   *   in the current schema, which is empty until data is loaded.
    * @throws `QueryError` with `code: 'INVALID_PAGINATION'` when `limit` or
    *   `offset` is present but not a non-negative integer.
    * @throws `QueryError` with `code: 'INVALID_ROWID'` when `scope: 'selected'`
    *   and any rowId in `state.selectedRows` is not a non-negative integer.
-   * @throws `QueryError` with `code: 'NO_TABLE'` when called before any data
-   *   is loaded.
+   * @throws `QueryError` with `code: 'NO_TABLE'` when no table is loaded
+   *   while the schema still names the column, which a table built by
+   *   `createDataTable` never leaves.
    */
   async getColumnValues(
     name: string,
@@ -2359,6 +2701,8 @@ export class StateActions {
       (limit !== undefined ? ` LIMIT ${limit}` : '') +
       (offset !== undefined ? ` OFFSET ${offset}` : '');
 
+    const read = valueReadOf(entry);
+    const quotedCol = quoteIdentifier(name);
     let sql: string;
     let valKey: string;
 
@@ -2376,17 +2720,30 @@ export class StateActions {
           );
         }
       }
+      // The column is selected as it is, and read below; the schema says
+      // only how to sort: a VARIANT sort column is numbered by its sort key,
+      // as the export of a selection numbers it.
       const baseSql = buildSelectedRowsQuery(
         tbl,
         [name],
         this.state.filters.get(),
         this.state.sortColumns.get(),
         indices,
+        undefined,
+        schema,
       );
-      sql = pagination ? `SELECT * FROM (${baseSql})${pagination}` : baseSql;
-      valKey = name;
+      if (read === 'raw') {
+        sql = pagination ? `SELECT * FROM (${baseSql})${pagination}` : baseSql;
+        valKey = name;
+      } else {
+        // The subquery numbers the rows by the values as they are and
+        // returns the selected ones in view order; the outer SELECT reads
+        // the value as text, keeping that order, as the pagination wrapper
+        // above keeps it.
+        sql = `SELECT ${valueReadSQL(read, entry, quotedCol)} AS val FROM (${baseSql})${pagination}`;
+        valKey = 'val';
+      }
     } else {
-      const quotedCol = quoteIdentifier(name);
       const quotedTbl = quoteIdentifier(tbl);
       const filtersFragment =
         scope === 'filtered' ? filtersToWhereClause(this.state.filters.get()) : '';
@@ -2396,14 +2753,143 @@ export class StateActions {
       // matches and an explicit ORDER BY would be a redundant N log N pass.
       const needsExplicitOrder =
         scope !== 'all' || where !== '' || this.state.sortColumns.get().length > 0;
-      const orderBy = needsExplicitOrder ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}` : '';
-      sql = `SELECT ${quotedCol} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
+      const value = valueReadSQL(read, entry, quotedCol);
+      if (needsExplicitOrder && pagination) {
+        // The page's rows are picked by rowid first, and the value read for
+        // those rows only. In one SELECT, DuckDB reads the value of every
+        // row, `to_json` of a nested one included, before ORDER BY … LIMIT
+        // keeps the page: 2.3 s for a page of 1,000 FLOAT[768] values out of
+        // 60,000, against 55 ms. Without ORDER BY, it reads only the rows
+        // the LIMIT keeps.
+        const rowid = `${quotedTbl}.${quoteIdentifier(ROWID_COLUMN)}`;
+        const page = `SELECT ${rowid} FROM ${quotedTbl}${where} ORDER BY ${rowid}${pagination}`;
+        sql = `SELECT ${value} AS val FROM ${quotedTbl} WHERE ${rowid} IN (${page}) ORDER BY ${rowid}`;
+      } else {
+        const orderBy = needsExplicitOrder ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}` : '';
+        sql = `SELECT ${value} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
+      }
       valKey = 'val';
     }
 
-    const rows = await this.bridge.query<Record<string, unknown>>(sql, signal);
+    // A nested column's JSON text can run to megabytes a row (a 768-float
+    // embedding is some 15,000 characters): the query cache must not keep it.
+    const rows =
+      read === 'json'
+        ? await this.bridge.query<Record<string, unknown>>(sql, signal, { cache: false })
+        : await this.bridge.query<Record<string, unknown>>(sql, signal);
     this.throwIfDestroyed('getColumnValues');
     return materializeColumn(rows, valKey, entry);
+  }
+
+  /**
+   * Read one cell's value, exactly: the value in column `column` of the row
+   * whose `__rowid__` is `rowId`, from the current effective table (the
+   * derived-column VIEW when there is one).
+   *
+   * A nested column's value (`type: 'nested'`: a LIST, ARRAY, STRUCT, MAP,
+   * UNION or VARIANT) is read as exact JSON text and turned into JS values:
+   *
+   * - LIST and ARRAY → an array.
+   * - STRUCT → an object keyed by field name; a struct whose fields have no
+   *   names (`row(1, 'a')`) → an array of its values. Every key is an own
+   *   property, `__proto__`, `constructor` and `toJSON` included, so the
+   *   object survives `structuredClone` and `JSON.stringify`. Test keys with
+   *   `Object.hasOwn`: a field named `hasOwnProperty` hides the method.
+   * - MAP → a `Map`, entries in order, keys typed by the key type: an
+   *   integer key is a number (a bigint beyond ±(2^53−1)), a FLOAT, DOUBLE or
+   *   DECIMAL key a number, a BOOLEAN key a boolean, any other key its text
+   *   (a DATE key `'2024-01-02'`, a STRUCT key `"{'k': 1}"`).
+   * - UNION → `{ [tag]: value }`.
+   * - Integers → a number when exact, a `bigint` beyond ±(2^53−1). DECIMAL,
+   *   FLOAT and DOUBLE → a number (`NaN`, `±Infinity` and `-0` kept; a FLOAT
+   *   is its float32 value, `0.10000000149011612` for `0.1`). BOOLEAN → a
+   *   boolean. Dates, times, timestamps, UUIDs, INTERVALs, BLOBs, ENUMs and
+   *   BITs → DuckDB's text: `'2024-01-02'`, `'1 year 2 months'`, `'\\xAA\\xBB'`.
+   * - A VARIANT, or JSON inside a value → what its JSON holds.
+   *
+   * Any other column's value is the one {@link getColumnValues} returns for
+   * the row: a `bigint` for `BIGINT`, `UBIGINT`, `HUGEINT` and `UHUGEINT`; a
+   * number for the other integers and for `FLOAT`, `DOUBLE` and `DECIMAL`;
+   * DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`,
+   * `TIME WITH TIME ZONE` and `TIME_NS`; a `JSON` column's text; a
+   * `Uint8Array` for a `BLOB`. SQL NULL, at the top or anywhere inside, is
+   * `null`.
+   *
+   * One query by `__rowid__`. It skips the query cache and runs ahead of
+   * queued chart and stats queries, though not of the grid's row fetches
+   * (`priority: 'elevated'`): a loop of reads leaves scrolling alone.
+   *
+   * @param rowId - The row's `__rowid__`: a non-negative integer, as a
+   *   number or as the bigint `getColumnValues('__rowid__')` gives.
+   * @param column - The column's name.
+   *
+   * @example
+   * // point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+   * await table.actions.getCellValue(10, 'point'); // { x: 1.5, y: -0.5, tier: 'gold' }
+   *
+   * @example
+   * // attrs: MAP(VARCHAR, INTEGER), keys in order, `size` a key like any other
+   * const attrs = (await table.actions.getCellValue(11n, 'attrs')) as Map<string, number>;
+   * attrs.get('size'); // 1
+   *
+   * @example
+   * // big_ints: BIGINT[]: numbers when exact, bigints beyond 2^53
+   * await table.actions.getCellValue(3, 'big_ints');
+   * // [9007199254740991, 9007199254740993n, -9223372036854775808n, 9223372036854775807n]
+   *
+   * @throws `QueryError` with `code: 'COLUMN_NOT_FOUND'` when `column` is not
+   *   in the current schema, which is empty until data is loaded.
+   * @throws `QueryError` with `code: 'INVALID_ROWID'` and `details: { rowId }`
+   *   when `rowId` is not a non-negative integer (a safe integer, or a bigint
+   *   within the BIGINT range), or when no row has it.
+   * @throws `QueryError` with `code: 'NO_TABLE'` when no table is loaded
+   *   while the schema still names the column, which a table built by
+   *   `createDataTable` never leaves.
+   * @throws `QueryError` with `code: 'QUERY_ABORTED'` when `options.signal`
+   *   aborts the read.
+   * @throws `DestroyedError` if the table was destroyed before or during the
+   *   call.
+   */
+  async getCellValue(
+    rowId: number | bigint,
+    column: string,
+    options: GetCellValueOptions = {},
+  ): Promise<unknown> {
+    this.throwIfDestroyed('getCellValue');
+    const entry = this.state.schema.get().find((c) => c.name === column);
+    if (!entry) {
+      throw new QueryError(`Column "${column}" not found`, {
+        code: 'COLUMN_NOT_FOUND',
+        details: { column },
+      });
+    }
+    const id = rowIdLiteral(rowId);
+    const tbl = this.state.tableName.get();
+    if (!tbl) {
+      throw new QueryError('No table loaded', { code: 'NO_TABLE' });
+    }
+
+    const { signal } = options;
+    const read = valueReadOf(entry);
+    if (read === 'json') {
+      const cell = await fetchCellJson(this.bridge, tbl, entry, rowId, { signal });
+      this.throwIfDestroyed('getCellValue');
+      if (cell === undefined) throw rowNotFound(rowId);
+      if (cell.text === null) return null;
+      return readJsonValue(cell.text, typeNodeOf(entry), 'value');
+    }
+
+    const sql =
+      `SELECT ${valueReadSQL(read, entry, quoteIdentifier(column))} AS val` +
+      ` FROM ${quoteIdentifier(tbl)} WHERE ${quoteIdentifier(ROWID_COLUMN)} = ${id}`;
+    const rows = await this.bridge.query<Record<string, unknown>>(sql, signal, {
+      priority: 'elevated',
+      cache: false,
+    });
+    this.throwIfDestroyed('getCellValue');
+    const row = rows[0];
+    if (row === undefined) throw rowNotFound(rowId);
+    return materializeColumn([row], 'val', entry)[0];
   }
 
   /**
@@ -2566,7 +3052,7 @@ export class StateActions {
 }
 
 // ---------------------------------------------------------------------------
-// Column-order helpers (supporting showColumn).
+// Column-order helpers (supporting showColumn and addNestedFieldColumn).
 // ---------------------------------------------------------------------------
 
 /** How many of `visible`'s leading columns are pinned. */
@@ -2575,6 +3061,74 @@ function leadingPinnedCount(visible: readonly string[], pinned: readonly string[
   let count = 0;
   while (count < visible.length && pinnedSet.has(visible[count]!)) count++;
   return count;
+}
+
+/**
+ * `order` (`columnOrder`) and `visible` (`visibleColumns`) with a new column
+ * `name` placed after the column `source`: right after it, past the run of
+ * columns right after it that `readsSource` (the derived columns that read
+ * it), so that extracts of a column stay in the order they were made,
+ * `point, point_x, point_y`. The run is taken in `order`, hidden columns
+ * included; any other column, hidden or not, ends it.
+ *
+ * A pinned source's column goes after the pinned block instead, and past
+ * the run there: `columnOrder` keeps every pinned column first, and the new
+ * column is not pinned. So does an unpinned source found inside the block,
+ * which only an out-of-step state has.
+ *
+ * In `visible`, the column goes right after the last column before it in the
+ * new order that is shown (first when none is), which keeps `visible` in
+ * `order`'s order and a hidden source's column where the source would show.
+ * A source missing from `order` puts the column last in both, as
+ * `addDerivedColumn` does.
+ */
+function placeAfterSource(
+  name: string,
+  source: string,
+  order: readonly string[],
+  visible: readonly string[],
+  pinned: readonly string[],
+  readsSource: (column: string) => boolean,
+): { columnOrder: string[]; visibleColumns: string[] } {
+  const at = order.indexOf(source);
+  if (at < 0) return { columnOrder: [...order, name], visibleColumns: [...visible, name] };
+  let insertAt = Math.max(at + 1, leadingPinnedCount(order, pinned));
+  while (insertAt < order.length && readsSource(order[insertAt]!)) insertAt++;
+
+  const shown = new Set(visible);
+  let before = insertAt - 1;
+  while (before >= 0 && !shown.has(order[before]!)) before--;
+  const visibleAt = before < 0 ? 0 : visible.indexOf(order[before]!) + 1;
+  return {
+    columnOrder: [...order.slice(0, insertAt), name, ...order.slice(insertAt)],
+    visibleColumns: [...visible.slice(0, visibleAt), name, ...visible.slice(visibleAt)],
+  };
+}
+
+/**
+ * The quoted name an expression opens with, past the function calls and
+ * parentheses before it (`len(`, `TRY_CAST(json_extract_string(`, `(`), in
+ * group 1, with `""` for each `"` in it.
+ */
+const LEADING_QUOTED_NAME = /^(?:\s*(?:[A-Za-z_][\w$]*\s*)?\()*\s*"((?:[^"]|"")*)"/;
+
+/**
+ * The column an expression column reads first: the quoted name it opens
+ * with, past the function calls and parentheses before it, as a
+ * {@link columnNameKey} (DuckDB binds `"POINT"` to `point`). `null` for an
+ * expression that opens otherwise: with an unquoted name, a literal, `CASE`.
+ *
+ * It is how {@link placeAfterSource} tells a column's extracts: every
+ * expression `addNestedFieldColumn` writes opens with its source's quoted
+ * name, `"point"['x']`, `"tags"[3]`, or wraps it, `len("tags")`,
+ * `cardinality("attrs")`, `union_tag("u")`, `struct_extract("pair", 2)`,
+ * `TRY_CAST(json_extract_string("doc", '$.a') AS DOUBLE)`,
+ * `json_array_length(NULLIF(CAST("v" AS JSON), 'null'))`. A column of the
+ * user's own that opens the same way, `upper("label")`, counts too.
+ */
+function leadingColumnKey(expression: string): string | null {
+  const match = LEADING_QUOTED_NAME.exec(expression);
+  return match ? columnNameKey(match[1]!.replace(/""/g, '"')) : null;
 }
 
 /**
@@ -2623,71 +3177,304 @@ function alignOrderWithVisible(
   return moved;
 }
 
+/**
+ * Why a derived column cannot take `name` beside the columns named `others`,
+ * or `null` when it can. Names are compared as DuckDB compares them,
+ * ignoring the case of ASCII letters (see `columnNames`): the VIEW of the
+ * derived columns would rename a `LABEL` added beside `label` to `LABEL_1`,
+ * and reads of `"LABEL"` would return `label`'s values. So `__ROWID__` is
+ * the reserved `__rowid__`.
+ */
+function newColumnNameError(name: string, others: readonly string[]): string | null {
+  if (columnNameKey(name) === ROWID_COLUMN) {
+    return `Column name "${name}" is reserved for the synthetic row id`;
+  }
+  const taken = collidingColumnName(name, others);
+  if (taken === undefined) return null;
+  return taken === name
+    ? `Column name "${name}" already exists`
+    : `Column name "${name}" already exists as "${taken}" (column names ignore letter case)`;
+}
+
+/**
+ * Whether a derived column's new definition changed its type, so that the
+ * filters on it no longer fit, and are dropped.
+ *
+ * DuckDB casts a filter's values to the column's type, so a filter is kept
+ * only when that type, the DuckDB type, is the same, and not merely the
+ * library's: a VARCHAR made JSON casts a value-count filter's `'active'` to
+ * JSON, and every query that filters fails (`Malformed JSON`); a cast to
+ * BIT, BIGNUM or GEOMETRY fails as well. A FLOAT compares `0.30000001`
+ * equal to `0.3`, where a DOUBLE does not; a STRUCT made a LIST, two
+ * `'nested'` types, has another shape. Integers and DECIMALs are the
+ * exception: DuckDB compares a number with an integer of any width, or a
+ * DECIMAL of any precision and scale, by its value (`5::TINYINT = 5.4` is
+ * false, as `5::BIGINT = 5.4` is), and the filters the filter panel and the
+ * charts make on them hold numbers. So an INTEGER made BIGINT keeps its
+ * filters.
+ */
+function derivedTypeChanged(before: ColumnSchema, after: DerivedColumnInfo): boolean {
+  if (before.type !== after.detectedType) return true;
+  if (before.type === 'integer' || before.type === 'decimal') return false;
+  return before.originalType !== after.detectedOriginalType;
+}
+
 // ---------------------------------------------------------------------------
-// Column-value materialization helpers (supporting getColumnValues).
+// Column-value reads (supporting getColumnValues and getCellValue).
 // ---------------------------------------------------------------------------
 
-function isBigIntOriginalType(originalType: string): boolean {
-  return /BIGINT|HUGEINT/i.test(originalType);
+/**
+ * How getColumnValues and getCellValue select a column so that every value
+ * arrives exact. Arrow, and the worker's conversion of what it returns, get
+ * some types wrong; those are selected in a form that crosses intact.
+ *
+ * - `'raw'`: as the query returns it.
+ * - `'json'`: a nested value, as exact JSON text (`jsonValueSQL`), which
+ *   `readJsonValue` turns into JS values. Arrow's own nested values are
+ *   wrong for DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT
+ *   cannot cross Arrow at all.
+ * - `'text'`: DuckDB's text, kept as text: see {@link TEXT_READ_NAMES}.
+ * - `'integer-text'`: DuckDB's text, parsed as a bigint. The worker posts a
+ *   BIGINT or UBIGINT as the nearest number, which past 2^53 is another
+ *   integer, and a HUGEINT or UHUGEINT arrives as a double, with the wrong
+ *   sign at the edges: a UHUGEINT past 2^127 negative (its maximum as -1),
+ *   the HUGEINT minimum positive.
+ * - `'decimal-text'`: DuckDB's text, parsed as the nearest double.
+ * - `'double'`: `CAST(c AS DOUBLE)`: see {@link EXACT_DOUBLE_DIGITS}.
+ */
+type ValueRead = 'raw' | 'json' | 'text' | 'integer-text' | 'decimal-text' | 'double';
+
+/**
+ * Scalar types whose values Arrow returns in a form that does not hold them
+ * (duckdb-wasm 1.33, apache-arrow 17), by the upper-case name
+ * `parseDuckDBType` gives them: an INTERVAL as an `Int32Array` of two
+ * meaningless numbers; a BIT and a BIGNUM as their storage bytes; a
+ * GEOMETRY as WKB bytes, where the grid, the exports and a geometry inside
+ * a nested value all give its text, `POINT (1 2)`; a TIME WITH TIME ZONE as
+ * microseconds since midnight, its offset lost; a TIME_NS as nanoseconds,
+ * where a `'time'` column's number is microseconds; and an ENUM as `null`
+ * through the worker's cancellable query path (`conn.send`), which every
+ * `bridge.query` takes. DuckDB's text for each is exact. A BLOB arrives
+ * intact, as a `Uint8Array`, and stays one.
+ */
+const TEXT_READ_NAMES: ReadonlySet<string> = new Set([
+  'INTERVAL',
+  'BIT',
+  'BITSTRING',
+  'BIT VARYING',
+  'BIGNUM',
+  'VARINT',
+  'GEOMETRY',
+  'TIME WITH TIME ZONE',
+  'TIMETZ',
+  'TIME_NS',
+  'ENUM',
+]);
+
+/** Integer types whose values can lie beyond ±(2^53−1): they materialize as bigints. */
+const WIDE_INTEGER_NAMES: ReadonlySet<string> = new Set([
+  'BIGINT',
+  'INT8',
+  'LONG',
+  'UBIGINT',
+  'HUGEINT',
+  'UHUGEINT',
+]);
+
+/**
+ * The most digits a DECIMAL may have for `CAST(c AS DOUBLE)` to be the
+ * double nearest its value: DuckDB divides the unscaled integer by a power
+ * of ten, which rounds once while that integer is below 2^53. A wider
+ * DECIMAL is read as text, which `Number` rounds once. Arrow's own DECIMAL
+ * numbers, with duckdb-wasm's `castDecimalToDouble`, miss the nearest double
+ * for 13 to 31 % of values (scales 2 to 10 measured): 1.2345 reads as
+ * 1.2345000000000002.
+ */
+const EXACT_DOUBLE_DIGITS = 15;
+
+const INT32_MIN = -2147483648;
+const INT32_MAX = 2147483647;
+const INT64_MIN = -9223372036854775808n;
+const INT64_MAX = 9223372036854775807n;
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+
+/** The parsed DuckDB type of `column`. */
+function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
+  // `originalType` is required by the type, but a schema built by hand in
+  // JavaScript may leave it out.
+  return parseDuckDBType(column.originalType ?? '');
+}
+
+/** How getColumnValues and getCellValue read `column`: see {@link ValueRead}. */
+function valueReadOf(column: ColumnSchema): ValueRead {
+  const node = typeNodeOf(column);
+  if (column.type === 'nested' || dataTypeOf(node) === 'nested') return 'json';
+  // The loaders number rows from 0, far below 2^53: as numbers, the rowids
+  // are exact, and cheaper to read than text.
+  if (column.name === ROWID_COLUMN) return 'raw';
+  if (node.kind !== 'scalar') {
+    // A JSON column is text already. A type the parser could not read
+    // follows the library's type for it.
+    return node.kind === 'unknown' && column.type === 'interval' ? 'text' : 'raw';
+  }
+  if (TEXT_READ_NAMES.has(node.name)) return 'text';
+  if (WIDE_INTEGER_NAMES.has(node.name)) return 'integer-text';
+  if (node.dataType === 'decimal') {
+    // `DECIMAL` alone is DECIMAL(18,3).
+    const precision = node.args.length === 0 ? 18 : Number(node.args[0]);
+    return precision <= EXACT_DOUBLE_DIGITS ? 'double' : 'decimal-text';
+  }
+  return 'raw';
+}
+
+/** SQL for the value of `column` (`quotedCol`) as `read` says, without an alias. */
+function valueReadSQL(read: ValueRead, column: ColumnSchema, quotedCol: string): string {
+  switch (read) {
+    case 'raw':
+      return quotedCol;
+    case 'json':
+      return jsonValueSQL(column, quotedCol);
+    case 'double':
+      return `CAST(${quotedCol} AS DOUBLE)`;
+    default:
+      return `CAST(${quotedCol} AS VARCHAR)`;
+  }
+}
+
+/** The typed array a column's values go into when every one fits: see getColumnValues. */
+type TypedArrayKind = 'int32' | 'bigint64' | 'float64' | null;
+
+function typedArrayKindOf(column: ColumnSchema, read: ValueRead): TypedArrayKind {
+  if (read === 'json') return null;
+  if (column.type === 'integer') {
+    const node = typeNodeOf(column);
+    return node.kind === 'scalar' && WIDE_INTEGER_NAMES.has(node.name) ? 'bigint64' : 'int32';
+  }
+  if (column.type === 'float' || column.type === 'decimal') return 'float64';
+  return null;
 }
 
 function emptyTypedResult(
-  schema: ColumnSchema,
+  column: ColumnSchema,
 ): unknown[] | Int32Array | Float64Array | BigInt64Array {
-  if (schema.type === 'integer') {
-    return isBigIntOriginalType(schema.originalType) ? new BigInt64Array(0) : new Int32Array(0);
+  switch (typedArrayKindOf(column, valueReadOf(column))) {
+    case 'int32':
+      return new Int32Array(0);
+    case 'bigint64':
+      return new BigInt64Array(0);
+    case 'float64':
+      return new Float64Array(0);
+    default:
+      return [];
   }
-  if (schema.type === 'float' || schema.type === 'decimal') {
-    return new Float64Array(0);
-  }
-  return [];
 }
 
-function materializeColumn(
-  rows: Record<string, unknown>[],
-  key: string,
-  schema: ColumnSchema,
-): unknown[] | Int32Array | Float64Array | BigInt64Array {
-  const len = rows.length;
-
-  // Detect NULLs (DuckDB's JS layer surfaces SQL NULL as JS null/undefined).
-  // Typed arrays cannot represent null, so any NULL forces a fallback to
-  // unknown[] to keep the semantic distinction intact.
-  // i < len, so rows[i] is defined; assertions encode the invariant.
-  let hasNull = false;
-  for (let i = 0; i < len; i++) {
-    if (rows[i]![key] == null) {
-      hasNull = true;
-      break;
+/** An integer value as a bigint: from DuckDB's text, a number or a bigint. */
+function toBigInt(value: unknown): bigint | undefined {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') return Number.isInteger(value) ? BigInt(value) : undefined;
+  if (typeof value === 'string' && value !== '') {
+    try {
+      return BigInt(value);
+    } catch {
+      return undefined;
     }
   }
-  if (hasNull) {
-    return rows.map((r) => r[key]);
-  }
+  return undefined;
+}
 
-  if (schema.type === 'integer') {
-    if (isBigIntOriginalType(schema.originalType)) {
-      const arr = new BigInt64Array(len);
+/**
+ * The values of `key` in `rows` in the typed array `kind` names, or `null`
+ * when a value is NULL or does not fit it.
+ */
+function typedValues(
+  rows: Record<string, unknown>[],
+  key: string,
+  kind: Exclude<TypedArrayKind, null>,
+): Int32Array | Float64Array | BigInt64Array | null {
+  const len = rows.length;
+  // i < len, so rows[i] is defined; assertions encode the invariant.
+  switch (kind) {
+    case 'int32': {
+      const arr = new Int32Array(len);
       for (let i = 0; i < len; i++) {
-        const v = rows[i]![key];
-        arr[i] = typeof v === 'bigint' ? v : BigInt(v as number | string);
+        const value = rows[i]![key];
+        if (value === null || value === undefined) return null;
+        const n = Number(value);
+        if (!Number.isInteger(n) || n < INT32_MIN || n > INT32_MAX) return null;
+        arr[i] = n;
       }
       return arr;
     }
-    const arr = new Int32Array(len);
-    for (let i = 0; i < len; i++) {
-      arr[i] = Number(rows[i]![key]);
+    case 'bigint64': {
+      const arr = new BigInt64Array(len);
+      for (let i = 0; i < len; i++) {
+        const value = toBigInt(rows[i]![key]);
+        if (value === undefined || value < INT64_MIN || value > INT64_MAX) return null;
+        arr[i] = value;
+      }
+      return arr;
     }
-    return arr;
-  }
-
-  if (schema.type === 'float' || schema.type === 'decimal') {
-    const arr = new Float64Array(len);
-    for (let i = 0; i < len; i++) {
-      arr[i] = Number(rows[i]![key]);
+    case 'float64': {
+      const arr = new Float64Array(len);
+      for (let i = 0; i < len; i++) {
+        const value = rows[i]![key];
+        if (value === null || value === undefined) return null;
+        arr[i] = Number(value);
+      }
+      return arr;
     }
-    return arr;
   }
+}
 
-  return rows.map((r) => r[key]);
+/**
+ * One value read as `read` says, for the `unknown[]` getColumnValues falls
+ * back to: NULL as `null`; an integer read as text as a number when exact
+ * and a bigint beyond ±(2^53−1); a nested value's JSON text as JS values
+ * (`type` is its parsed type).
+ */
+function readValue(value: unknown, read: ValueRead, type: DuckDBTypeNode | undefined): unknown {
+  if (value === null || value === undefined) return null;
+  switch (read) {
+    case 'json':
+      return typeof value === 'string' ? readJsonValue(value, type, 'value') : value;
+    case 'integer-text': {
+      const n = toBigInt(value);
+      if (n === undefined) return value;
+      return n >= -MAX_SAFE_BIGINT && n <= MAX_SAFE_BIGINT ? Number(n) : n;
+    }
+    case 'decimal-text':
+      return Number(value);
+    default:
+      return value;
+  }
+}
+
+/**
+ * The values of `key` in `rows`, read from the form {@link valueReadOf}
+ * selected them in: in the typed array {@link typedArrayKindOf} names when
+ * every value fits it, else in an `unknown[]` (see getColumnValues).
+ */
+function materializeColumn(
+  rows: Record<string, unknown>[],
+  key: string,
+  column: ColumnSchema,
+): unknown[] | Int32Array | Float64Array | BigInt64Array {
+  const read = valueReadOf(column);
+  const kind = typedArrayKindOf(column, read);
+  if (kind !== null) {
+    const typed = typedValues(rows, key, kind);
+    if (typed !== null) return typed;
+  }
+  // Parsed once for the whole column.
+  const type = read === 'json' ? typeNodeOf(column) : undefined;
+  return rows.map((row) => readValue(row[key], read, type));
+}
+
+/** The error for a rowid no row of the table has. */
+function rowNotFound(rowId: number | bigint): QueryError {
+  return new QueryError(`No row has rowId ${String(rowId)}`, {
+    code: 'INVALID_ROWID',
+    details: { rowId },
+  });
 }

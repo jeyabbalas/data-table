@@ -1,17 +1,42 @@
 /**
- * SQL shape of `buildRowQuery`. What the shapes return on a real engine is
- * `rowQuery.duckdb.test.ts`'s subject; this file pins the text.
+ * SQL shape of `buildRowQuery` and `buildRowColumnsQuery`. What the shapes
+ * return on a real engine is `rowQuery.duckdb.test.ts`'s subject; this file
+ * pins the text.
  */
 import { describe, expect, it } from 'vitest';
 
 import type { ColumnSchema } from '@/core/types';
-import { buildRowQuery, type RowQuery } from '@/table/rowQuery';
+import { gridValueSQL } from '@/data/valueSql';
+import { buildRowColumnsQuery, buildRowQuery, type RowQuery } from '@/table/rowQuery';
 
 const SCHEMA: ColumnSchema[] = [
   { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
   { name: 'tag', type: 'string', nullable: true, originalType: 'VARCHAR' },
   { name: 'wait', type: 'interval', nullable: true, originalType: 'INTERVAL' },
+  { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+  { name: 'raw', type: 'string', nullable: true, originalType: 'BLOB' },
+  { name: 'tags', type: 'nested', nullable: true, originalType: 'INTEGER[]' },
+  { name: 'trio', type: 'nested', nullable: true, originalType: 'INTEGER[3]' },
+  {
+    name: 'point',
+    type: 'nested',
+    nullable: true,
+    originalType: 'STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)',
+  },
+  { name: 'attrs', type: 'nested', nullable: true, originalType: 'MAP(VARCHAR, INTEGER)' },
+  { name: 'either', type: 'nested', nullable: true, originalType: 'UNION(n INTEGER, s VARCHAR)' },
+  { name: 'v', type: 'nested', nullable: true, originalType: 'VARIANT' },
+  // The DuckDB type decides, whatever the DataType says.
+  { name: 'words', type: 'string', nullable: true, originalType: 'VARCHAR[]' },
 ];
+
+const NESTED = ['tags', 'trio', 'point', 'attrs', 'either', 'v', 'words'];
+
+/** The projection `selectList` makes for a column of SCHEMA read as text. */
+function asText(name: string): string {
+  const column = SCHEMA.find((c) => c.name === name)!;
+  return `${gridValueSQL(column, `"${name}"`)} AS "${name}"`;
+}
 
 function query(overrides: Partial<RowQuery> = {}): RowQuery {
   return {
@@ -89,5 +114,61 @@ describe('buildRowQuery', () => {
   it('drops a __rowid__ in the visible columns, which it always selects first', () => {
     const sql = buildRowQuery(query({ columns: ['tag', '__rowid__', 'id'], rowidFastPath: true }));
     expect(sql).toMatch(/^SELECT "__rowid__", "tag", "id" FROM/);
+  });
+});
+
+describe('columns read as text', () => {
+  const expectedList = ['"__rowid__"', '"id"', '"tag"', '"doc"', ...NESTED.map(asText)].join(', ');
+
+  it('a list shows 32 items and how many more; a short array is a plain cast', () => {
+    expect(asText('tags')).toBe(
+      `left(CAST(list_transform(list_resize("tags", least(len("tags"), 32)), lambda x1: x1) AS VARCHAR), -1)` +
+        ` || CASE WHEN len("tags") > 32 THEN ', … +' || (len("tags") - 32) ELSE '' END || ']' AS "tags"`,
+    );
+    expect(asText('trio')).toBe('CAST("trio" AS VARCHAR) AS "trio"');
+    // Text items are capped at 1,000 graphemes on top.
+    expect(asText('words')).toMatch(
+      /^list_transform\(\[left\(CAST\(list_transform\(list_resize\("words", /,
+    );
+    expect(asText('words')).toMatch(/ AS "words"$/);
+  });
+
+  it('in a block, by either path; scalar and JSON columns are left alone', () => {
+    const columns = ['id', 'tag', 'doc', ...NESTED];
+    for (const rowidFastPath of [true, false]) {
+      const sql = buildRowQuery(query({ columns, rowidFastPath }));
+      expect(sql.startsWith(`SELECT ${expectedList} FROM "t" WHERE `)).toBe(true);
+    }
+  });
+
+  it('in a top-up by row id', () => {
+    expect(
+      buildRowColumnsQuery({
+        tableName: 't',
+        columns: ['id', 'tag', 'doc', ...NESTED],
+        rowids: [3, 1, 2],
+        schema: SCHEMA,
+      }),
+    ).toBe(`SELECT ${expectedList} FROM "t" WHERE "__rowid__" IN (3, 1, 2)`);
+  });
+
+  it('a BLOB shows its first 256 bytes, and an interval keeps its plain cast', () => {
+    const sql = buildRowQuery(query({ columns: ['raw', 'wait'], rowidFastPath: true }));
+    expect(sql).toContain(`${asText('raw')}, CAST("wait" AS VARCHAR) AS "wait" FROM "t"`);
+    expect(asText('raw')).toContain('CAST("raw"[1:256] AS VARCHAR)');
+  });
+
+  it('a column the schema does not know is read as it is', () => {
+    const sql = buildRowColumnsQuery({ tableName: 't', columns: ['tags'], rowids: [0] });
+    expect(sql).toBe('SELECT "__rowid__", "tags" FROM "t" WHERE "__rowid__" IN (0)');
+  });
+
+  it('a sort on a nested column orders by the table column, not the text alias', () => {
+    const sql = buildRowQuery(
+      query({ columns: ['tags'], sortColumns: [{ column: 'tags', direction: 'desc' }] }),
+    );
+    expect(sql.startsWith(`SELECT "__rowid__", ${asText('tags')} FROM "t" WHERE`)).toBe(true);
+    expect(sql).toContain('ORDER BY "tags" DESC, "__rowid__" ASC LIMIT 128 OFFSET 256)');
+    expect(sql).toMatch(/ORDER BY "t"\."tags" DESC, "t"\."__rowid__" ASC$/);
   });
 });

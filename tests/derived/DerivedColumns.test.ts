@@ -10,7 +10,7 @@ import type { DerivedColumnDef } from '@/derived/types';
  * Create a mock WorkerBridge that handles derived column SQL patterns.
  *
  * The mock inspects the SQL string to decide what to return:
- * - typeof() queries → returns a type string (configurable per expression)
+ * - DESCRIBE SELECT queries → returns a type string (configurable per expression)
  * - LIMIT 0 validation queries → succeeds by default
  * - CREATE/DROP/INSERT DDL → succeeds silently
  * - Everything else → returns []
@@ -24,14 +24,14 @@ function createMockBridge(typeMap: Record<string, string> = {}) {
     query: vi.fn().mockImplementation(async (sql: string) => {
       queryCalls.push(sql);
 
-      // Type detection: SELECT typeof((...)) AS t FROM ...
-      if (sql.includes('typeof(')) {
-        // Extract the expression inside typeof((...)) — use greedy match anchored to ")) AS t"
+      // Type detection: DESCRIBE SELECT (...) AS v FROM ...
+      if (sql.startsWith('DESCRIBE SELECT (')) {
+        // Extract the expression inside DESCRIBE SELECT (...) — use greedy match anchored to ") AS v FROM"
         // so expressions with nested parens (e.g., CAST(x AS INTEGER)) are captured correctly
-        const match = sql.match(/typeof\(\((.+)\)\) AS t/);
+        const match = sql.match(/^DESCRIBE SELECT \((.+)\) AS v FROM /);
         const expr = match?.[1] ?? '';
         const duckdbType = typeMap[expr] ?? defaultType;
-        return [{ t: duckdbType }];
+        return [{ column_name: 'v', column_type: duckdbType }];
       }
 
       // Validation: SELECT (...) AS ... FROM ... LIMIT 0
@@ -159,9 +159,9 @@ describe('Derived Columns — Actions Integration', () => {
       expect(calls.some((sql) => sql.includes('LIMIT 0') && sql.includes('price * quantity'))).toBe(
         true,
       );
-      expect(calls.some((sql) => sql.includes('typeof') && sql.includes('price * quantity'))).toBe(
-        true,
-      );
+      expect(
+        calls.some((sql) => sql.startsWith('DESCRIBE SELECT') && sql.includes('price * quantity')),
+      ).toBe(true);
       expect(calls.some((sql) => sql.includes('CREATE OR REPLACE VIEW'))).toBe(true);
 
       // The VIEW SQL should reference the base table and the expression
@@ -912,10 +912,10 @@ describe('Derived Columns — Actions Integration', () => {
 
     it('removes stale filters when type changes', async () => {
       mockBridge.query.mockImplementation(async (sql: string) => {
-        if (sql.includes('typeof(')) {
+        if (sql.startsWith('DESCRIBE SELECT (')) {
           // First call returns DOUBLE, we'll override for the update
-          if (sql.includes('UPPER(name)')) return [{ t: 'VARCHAR' }];
-          return [{ t: 'DOUBLE' }];
+          if (sql.includes('UPPER(name)')) return [{ column_name: 'v', column_type: 'VARCHAR' }];
+          return [{ column_name: 'v', column_type: 'DOUBLE' }];
         }
         if (sql.includes('LIMIT 0') && sql.includes('nonexistent_column')) {
           throw new Error('Binder Error');
@@ -1233,7 +1233,8 @@ describe('Derived Columns — Actions Integration', () => {
           // Let the first drop calls from loadData succeed, but fail on reset
           if (dropCount > 5) throw new Error('Simulated DuckDB error');
         }
-        if (sql.includes('typeof(')) return [{ t: 'DOUBLE' }];
+        if (sql.startsWith('DESCRIBE SELECT ('))
+          return [{ column_name: 'v', column_type: 'DOUBLE' }];
         if (sql.includes('LIMIT 0')) return [];
         return [];
       });
@@ -1595,7 +1596,7 @@ describe('Derived Columns — Actions Integration', () => {
       const validationSQL = calls.find((sql) => sql.includes('LIMIT 0'));
       expect(validationSQL).toContain('__dt_view_test_table__');
 
-      const typeofSQL = calls.find((sql) => sql.includes('typeof'));
+      const typeofSQL = calls.find((sql) => sql.startsWith('DESCRIBE SELECT'));
       expect(typeofSQL).toContain('__dt_view_test_table__');
     });
   });

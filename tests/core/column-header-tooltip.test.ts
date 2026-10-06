@@ -217,7 +217,8 @@ describe('Column header tooltip — derived-column lifecycle integration', () =>
     const query = vi.fn().mockImplementation(async (sql: string) => {
       queryCalls.push(sql);
       const trimmed = sql.trim();
-      if (sql.includes('typeof(')) return [{ t: 'INTEGER' }];
+      if (sql.startsWith('DESCRIBE SELECT ('))
+        return [{ column_name: 'v', column_type: 'INTEGER' }];
       if (sql.includes('LIMIT 0')) return [];
       if (/^(CREATE|DROP|INSERT|CREATE OR REPLACE)/i.test(trimmed)) return [];
       return [];

@@ -6,7 +6,7 @@
 
 # Interface: QueryOptions
 
-Defined in: [data/WorkerBridge.ts:51](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L51)
+Defined in: [data/WorkerBridge.ts:54](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/WorkerBridge.ts#L54)
 
 Options for [WorkerBridge.query](../classes/WorkerBridge.md#query).
 
@@ -16,7 +16,7 @@ Options for [WorkerBridge.query](../classes/WorkerBridge.md#query).
 
 > `optional` **cache?**: `boolean`
 
-Defined in: [data/WorkerBridge.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L57)
+Defined in: [data/WorkerBridge.ts:60](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/WorkerBridge.ts#L60)
 
 Set `false` to bypass the SQL result cache — both the read (a cached
 result is ignored) and the write (the fresh result is not stored).
@@ -26,10 +26,21 @@ Default: SELECT queries are cached.
 
 ### priority?
 
-> `optional` **priority?**: `"high"` \| `"normal"`
+> `optional` **priority?**: `"high"` \| `"elevated"` \| `"normal"`
 
-Defined in: [data/WorkerBridge.ts:63](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/data/WorkerBridge.ts#L63)
+Defined in: [data/WorkerBridge.ts:77](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/WorkerBridge.ts#L77)
 
-Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
-stats/histogram queries) in the worker's serial dispatch queue —
-intended for viewport row fetches. Default `'normal'`.
+Where the query goes in the worker's serial dispatch queue, which runs
+one query at a time, the queued `'high'` ones first, then the
+`'elevated'` ones, then the `'normal'` ones, each in the order posted:
+
+- `'high'`: viewport row fetches, the rows the grid is waiting to show.
+- `'elevated'`: an interactive read of a few values that someone is
+  waiting on, such as `actions.getCellValue` or the value inspector's
+  read of one cell. It runs ahead of queued chart and stats queries,
+  and behind the viewport's row fetches.
+- `'normal'` (the default): background work, such as column charts,
+  stats, prefetches and exports.
+
+A query that is already running is never interrupted by one of higher
+priority.

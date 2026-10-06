@@ -259,6 +259,19 @@ describe('DerivedColumnModal', () => {
     expect(errorEl.style.display).not.toBe('none');
   });
 
+  it('shows error for a name that differs from a column only in letter case', () => {
+    modal.open();
+    const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+    const errorEl = modal.getElement().querySelector('.dt-derived-modal-name-error') as HTMLElement;
+
+    // DuckDB binds "PRICE" to the column price: the action refuses it too.
+    input.value = 'PRICE';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(errorEl.textContent).toBe('A column named "price" already exists');
+    expect(errorEl.style.display).not.toBe('none');
+  });
+
   it('clears error for unique name', () => {
     modal.open();
     const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;

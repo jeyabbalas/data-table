@@ -14,6 +14,7 @@ or a spinner.
 - Show a progress bar from `loadStart` / `loadProgress` / `loadComplete`
 - Recover from a load failure and retry
 - Know when text columns of dates load as dates
+- Know what list, struct, map and JSON columns become, and how to read their values
 - Replace the current dataset without destroying the table
 
 ## Prerequisites
@@ -256,10 +257,13 @@ at 4 GiB; DuckDB's own `memory_limit` is 3.1 GiB by default. A loaded table
 takes roughly 5–20 bytes per value, plus the length of its text: 200,000
 rows × 1,000 mostly numeric columns come to about 2.2 GiB.
 
+A [nested column](#nested-and-json-columns) takes what its items take, plus
+8 bytes a row for a list: a 768-float embedding is about 3 KB a row.
+
 To load files near that size, pass the Parquet file as a `File`, `Blob`, or
 URL. DuckDB then reads it from disk as it builds the table. Before loading,
 the loader estimates the table's size from the file's footer and a sample
-of its text columns, and picks how to read the file:
+of its text columns and list lengths, and picks how to read the file:
 
 - When there is room, DuckDB reads a whole row group at a time, which is
   as fast as loading from memory.
@@ -328,6 +332,263 @@ To use a column that stayed text as dates, fix its values upstream, or add a
 [derived column](./derived-columns.md) such as `TRY_CAST(due AS DATE)`, which
 turns the values that do not convert into `null` deliberately. See
 [Troubleshooting §28](../troubleshooting.md#28-a-column-of-dates-loaded-as-text).
+
+## Nested and JSON columns
+
+A column of one of DuckDB's container types loads with `type: 'nested'`: a
+LIST (`INTEGER[]`), a fixed-size ARRAY (`FLOAT[768]`), a STRUCT, a MAP, a
+UNION or a VARIANT. `ColumnSchema.originalType` holds the full type as
+`DESCRIBE` prints it, `STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)`, and
+`parseDuckDBType` from `/advanced` reads it into a tree of fields, elements,
+keys and members (`src/core/duckdbType.ts`). A `JSON` column keeps
+`type: 'string'`: it sorts and charts as text, and its cell shows the whole
+JSON text on one line, cut off at the column's edge. Its exact filter
+compares that text too; see [Filtering](#filtering).
+
+Where they come from:
+
+- **Parquet** files hold lists, structs, maps and JSON, which load as they
+  are, and a VARIANT column from a file DuckDB wrote. A fixed-size list
+  loads as a LIST.
+- **JSON** files: DuckDB types nested objects as STRUCTs, arrays as LISTs,
+  objects whose keys vary from row to row as MAPs, and a field whose type
+  changes from row to row as JSON. Deeper than `sourceOptions.json.maxDepth`,
+  values load as JSON. A list of integers of both signs loads as
+  `HUGEINT[]`: DuckDB reads non-negative integers as unsigned.
+- **CSV** never: DuckDB's CSV reader infers no nested type, so a nested
+  column exported to CSV loads back as its JSON text.
+- **SQL**: an ARRAY or a UNION arises only from a derived column's
+  expression, as does a VARIANT that did not come from Parquet.
+
+### In the grid
+
+A nested cell shows DuckDB's own text for the value, as
+`CAST(value AS VARCHAR)` writes it: `[56, 3, 91]`, `{'x': 1.25, 'y': 0.58, 'tier': bronze}` for a
+struct, `{k1=1, k2=2}` for a map. The text is bounded, and so is what DuckDB
+formats to make it, so a cell costs about a screenful of text whatever its
+value holds (`gridValueSQL`, `src/data/valueSql.ts`):
+
+- A list, a map, or an array of more than 32 items shows its first 32, then
+  how many more there are: `[1, 2, …, 32, … +968]`, `{k1=1, … +568}`. A
+  list, array or map inside the value is formatted only as far as its first
+  1,001 items, more than the text cap can show, so the cell reads as the
+  whole value's text would. A few parts are still formatted whole; see
+  [Performance → Nested columns](../performance.md#nested-columns).
+- Text past 1,000 graphemes is cut and ends `…`, only when something was
+  cut, and never inside an emoji made of several code points.
+- A BLOB shows its first 256 bytes as DuckDB writes them, then `… +N` for
+  the bytes left. DuckDB writes a byte that is not printable ASCII as four
+  characters (`\x89`), so that text can pass 1,000 characters; the cell then
+  shows the whole bytes that fit, 250 to 256 of them, and `…`, without the
+  count. BIT, GEOMETRY, BIGNUM and ENUM cells, and VARIANT ones, show
+  DuckDB's text too.
+- A `TIME_NS` column is a `time` column, and its cell shows DuckDB's text
+  with every digit: `03:04:05.123456789`, `23:59:59.123456`. A
+  `TIME WITH TIME ZONE` cell shows DuckDB's text with its offset:
+  `14:05:06+05:30`, `14:05:06.5-08`. A `TIME` cell shows the time to the
+  millisecond.
+- A NULL value keeps the grid's null style; a NULL inside a value reads
+  `NULL`.
+
+This text is for reading, not parsing: a string inside is quoted only when it
+has to be (`[a, b]` is two strings, `['a, b']` one), a map is written
+`{key=value}`, and a UNION as its member's value, without its tag. Read the
+value itself with [`getCellValue`](#reading-values).
+
+### The value inspector
+
+To see a whole value, open the value inspector on its cell: `F2` on the
+keyboard cursor, a double click, or a click on the inspect icon that shows at
+the cell's end on hover and on the cursor's cell. It opens on any cell of a
+nested or JSON column that holds a value, NULLs aside, in a panel beside the
+cell (`src/table/ValueInspector.ts`):
+
+- **The exact value**, read by the row's `__rowid__` as JSON and parsed
+  without losing a digit, as a keyboard tree: keys, values, each container's
+  type outline, count and a 60-character preview. Map entries show as
+  `key → value`; list, array and map positions count from 1, JSON array
+  positions from 0. The root opens expanded, and its children too when they
+  fit in 50 rows.
+- **Values as their type writes them**: text quoted, and cut at 2,000
+  characters with "N more characters"; numbers exact (a FLOAT at float32
+  precision, a HUGEINT with all its digits); `NaN`, `±Infinity`, `true` and
+  `false` as keywords; `null` muted; dates, times, UUIDs and BLOBs as
+  DuckDB's text.
+- **Buckets** for a container too big to list at once: 100 items a bucket
+  (`[1 … 100]`, `[101 … 200]`, …), and buckets of buckets past 10,000.
+- **Copy JSON** copies the whole value as standard JSON (`NaN` and
+  `±Infinity` as `null`); `Ctrl/Cmd+C` copies the active item's. A value
+  nested too deep to write as JSON says "Copy failed".
+- **Limits**: the panel shows the first 2,097,152 characters of a value's
+  JSON text (2 Mi, counted in code points) and says when a value is longer.
+  Copy JSON then reads the value again, up to 8,388,608 characters, and so
+  does `Ctrl/Cmd+C` on an item the cut runs through (the root, its last
+  item, that item's last item, and so on down), which copies the item from
+  the whole value; past that each says "Too large to copy", and an export of
+  the column is the way to get it. Every other item is copied from what the
+  panel shows. A copy that reads first starts its clipboard write inside the
+  click or key press, which Safari requires.
+
+The panel closes on `Escape`, a press outside it, or any filter, sort,
+selection or data change, and focus goes back to the grid with its cursor
+where it was. Its keys and screen-reader behaviour are in the
+[accessibility guide](./accessibility.md#value-inspector-f2-on-a-nested-cell).
+It loads as a chunk of its own the first time a table opens it, so a table
+that never does never downloads it. Call
+`table.container.openValueInspector({ row, column })` to open it from your
+own code, with the row's 0-based position in the sorted, filtered view. It
+opens only on a row the grid has rendered, in or near the view, and returns
+`false` for any other row, a NULL or a column that is neither nested nor
+JSON. It opens a microtask later, and the first time once its chunk has
+loaded. An open still waiting is dropped when the user goes on meanwhile: a
+cursor move, another panel, a filter, sort, selection or table change, or,
+when focus was in the table, focus leaving it. So `true` can still open
+nothing, and from code a cursor move in the same task drops the open. `F2`
+on a row still loading waits for the row: when it lands, the panel opens
+only if the cursor is still on the cell, focus on the grid and no other
+panel open, and not at all once the row has left the rows rendered. A chunk
+that fails to download is said in the live region and reported as an
+`error` event coded `CHUNK_LOAD_FAILED`.
+
+With `derivedColumns` on, the default, the panel's footer can also add the
+active node as a column of its own: "Add as column", "Add length as column"
+(a list, an array or a JSON array), "Add size as column" (a map) and "Add tag
+as column" (a union), a row's "+" on hover, or `Ctrl/Cmd+Enter`. See
+[Derived columns → Nested columns](./derived-columns.md#nested-columns).
+
+Sorting a nested column orders rows by value, as DuckDB compares them, not
+by their text. A sort by a wide value, such as an embedding, is the slowest
+kind: see [Performance → Nested columns](../performance.md#nested-columns).
+
+### Header, chart and stats
+
+- **Type.** The header's type line is a short outline of the DuckDB type:
+  `[integer]`, `struct(3)`, `{varchar → integer}`, `float[768]`, `union(2)`,
+  `json`, `variant` (`src/nested/typeOutline.ts`). It is cut with `…` when
+  the column is narrow, between graphemes, and its title holds the full
+  type. The header's accessible name says the type in words, "tags, list of
+  integer", from [`messages.values`](./i18n.md#nested-column-types). The
+  filter panel's type badge shows the same outline. JSON columns show
+  `json`.
+- **Chart.** `NestedSummaryVisualization` draws a bar of the column's
+  non-null and null shares, the type outline under it (`{x, y, tier}`), and
+  with filters on, the share of each passing them. It reads ungrouped
+  `COUNT(*), COUNT(c)` scans, one of every row and, with filters on, one of
+  the rows passing them, so an embedding column costs what an integer column
+  does. Hovering a segment shows its counts; clicking does nothing, since
+  the bar has nothing to filter by beyond what the null toggle does. JSON
+  columns keep the value counts. See
+  [Visualizations](./visualizations.md#built-in-visualizations).
+- **Stats.** Line 1 is the row count, as on every column. Line 2 is the type
+  summary: `x double · y double · tier varchar` for a struct, `[integer]` for
+  a list.
+
+### Filtering
+
+The filter panel gives a nested column, and a JSON one, the text controls:
+
+- **Contains / starts with / ends with / regex** match the cell's text,
+  `CAST(col AS VARCHAR)`; the first three ignore case.
+- **Exact** matches the whole text: `[red, green]`. The filter it makes
+  carries `valueType: 'text'`, which compares `CAST(col AS VARCHAR)` with the
+  value as text. An exact filter added in code needs `valueType: 'text'`
+  too: compared as a value, text that does not read as the column's type is
+  a Conversion Error, `Malformed JSON` on a JSON column (see
+  [Filters → Matching nested values](./filters.md#matching-nested-values)).
+- **Is null / is not null** keeps only the rows whose value is NULL, or
+  only those whose value is not.
+
+To filter on a field's value as a number or a date, add it as a column of
+its own: from the column header's extract button, or in code with
+`table.actions.addNestedFieldColumn('point', ['x'])`, which reads it with the
+expression `"point"['x']` and puts the column right after `point`. It gets a
+histogram, stats and range filters of its own. See
+[Derived columns → Nested columns](./derived-columns.md#nested-columns).
+
+### Reading values
+
+[`actions.getCellValue(rowId, column)`](../api-reference.md#getcellvalue)
+reads one value exactly, by the row's `__rowid__`, and
+[`actions.getColumnValues(column)`](../api-reference.md#column-values-read-only-export)
+reads a column's values the same way. Both read a nested value as exact JSON
+text from DuckDB and turn it into JS values by its type:
+
+```ts
+// point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+await table.actions.getCellValue(10, 'point'); // { x: 1.5, y: -0.5, tier: 'gold' }
+
+// attrs: MAP(VARCHAR, INTEGER): a Map, keys in order
+const attrs = (await table.actions.getCellValue(11, 'attrs')) as Map<string, number>;
+
+// big_ints: BIGINT[]: numbers when exact, bigints beyond 2^53
+await table.actions.getCellValue(3, 'big_ints');
+// [9007199254740991, 9007199254740993n, -9223372036854775808n, 9223372036854775807n]
+```
+
+Lists and arrays become arrays, structs objects (an unnamed struct, an
+array; a field named with the empty string, which a JSON or Parquet file can
+hold, under the key `''`), a MAP a `Map`, a UNION `{ [tag]: value }`; a
+DECIMAL inside is the number nearest its digits; dates, times, UUIDs,
+intervals and BLOBs inside are DuckDB's text. `JSON.stringify` writes a
+`Map` as `{}`: convert it with `Object.fromEntries(map)` first, or export
+the column as JSON. To look at a value rather than compute with it, open the
+[value inspector](#the-value-inspector) on its cell.
+
+A raw `bridge.query` reads values as Arrow carries them, which loses
+`DECIMAL`, `HUGEINT` and `INTERVAL` values inside a nested value and cannot
+carry a VARIANT, or a value holding one, at all. Select a nested column as
+`CAST(to_json(c) AS VARCHAR)`, which is exact for every type but those with
+a VARIANT: select a VARIANT as `CAST(c AS JSON)`, and a type holding one
+(`VARIANT[]`, `STRUCT(v VARIANT)`) as `CAST(CAST(c AS VARIANT) AS JSON)`. See
+[API reference → Data layer](../api-reference.md#data-layer).
+
+### Exporting
+
+- **CSV and the clipboard** write a nested value as standard JSON:
+  `[56,3,91]`, `{"x":1.25,"tier":"bronze"}`, a MAP as an object in key
+  order, a UNION as `{"tag":value}`. Every digit is kept, and `NaN` and
+  `±Infinity`, which JSON cannot hold, are `null`.
+- **JSON export** writes real arrays and objects: a MAP as an object keyed
+  by each key's text, an unnamed struct as an array, an integer inside past
+  2^53 as a string of its digits. A JS object lists integer-like keys first,
+  so a struct or map with keys `2`, `1`, `10` comes out as `1`, `2`, `10`.
+  A `BIGINT`-family column of its own is exported, by both, as numbers:
+  rounded past 2^53, and a `HUGEINT` or `UHUGEINT` with the wrong sign at its
+  extremes. Read it with `getColumnValues`, or export to Parquet, when its
+  digits matter.
+- **Both** write `INTERVAL`, `BLOB`, `BIT`, `GEOMETRY`, `BIGNUM`, `ENUM`,
+  `TIME WITH TIME ZONE` and `TIME_NS` values as DuckDB's text
+  (`14:05:06+05:30`, `03:04:05.123456789`), a `DECIMAL` as the double nearest
+  its value (`0.35`, not `0.35000000000000003`), and a JSON column's value as
+  its text. A `DATE`, `TIMESTAMP` or `TIMESTAMP WITH TIME ZONE` column is
+  written as epoch milliseconds, and a `TIME` column as microseconds since
+  midnight; dates and times inside a nested value are DuckDB's text
+  (`["2024-01-02"]`).
+- **Parquet** writes every column natively. A few types come back in part:
+  an ARRAY loads back as a LIST, a `HUGEINT` or `UHUGEINT` as a `DOUBLE`, an
+  `INTERVAL` to the millisecond, and an `ENUM` inside a struct or a `BIT`
+  inside a list as `VARCHAR`; a UNION or unnamed STRUCT column exports but
+  its file does not load again, and a VARIANT inside a list or struct does
+  not export.
+- **A type that holds a VARIANT** (`VARIANT[]`, `STRUCT(v VARIANT)`) is read
+  through VARIANT, in every export and value read: a UNION inside it loses
+  its tag and is its member's value, read as its JSON holds it, and CSV and
+  the clipboard write a MAP inside it as a list of `{"key": …, "value": …}`
+  objects.
+
+A CSV or JSON export is built as one string. A `FLOAT[768]` value is some
+15,000 characters of JSON, so a few tens of thousands of rows of one can pass
+the browser's limit on a string's length: export large nested columns to
+Parquet. See
+[Troubleshooting §34](../troubleshooting.md#34-exporting-an-embedding-column-to-csv-or-json-fails).
+
+### Try it
+
+The demo's **Nested types (Parquet)** example (`npm run dev`) loads
+`tests/fixtures/datasets/parquet/nested-stress-tests.parquet`: 1,000 rows of
+36 columns of lists, structs, maps and JSON, whose rows 0–11 hold the edge
+cases (all NULL, empties, numeric extremes, escapes, long lists, the text
+cap). `tests/fixtures/datasets/Dataset Schema.md` describes every column.
 
 ## Recipes
 
@@ -419,4 +680,4 @@ for a runnable demo.
 - Events: [Events guide](./events.md) — lifecycle ordering for `loadStart` / `loadProgress` / `loadComplete` / `loadError`
 - Errors: [Troubleshooting — `FETCH_FAILED`](../troubleshooting.md) for URL load failures
 - API reference: [`createDataTable` options](../api-reference.md#createdatatable), [`DataTable.loadData`](../api-reference.md#datatable-interface)
-- Source: `src/data/DataLoader.ts`, `src/data/WorkerBridge.ts:262-288`
+- Source: `src/data/DataLoader.ts`, `src/data/WorkerBridge.ts:439-482`; nested columns: `src/core/duckdbType.ts`, `src/data/valueSql.ts`, `src/core/jsonTree.ts`

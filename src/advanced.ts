@@ -155,6 +155,7 @@ export type {
   TemporalColumnStats,
   TimeColumnStats,
   IntervalColumnStats,
+  NestedColumnStats,
   BaseColumnStats,
 } from './statistics/ColumnStatsTypes';
 export { statsKindForDataType } from './statistics/ColumnStatsTypes';
@@ -199,6 +200,9 @@ export type {
 export { ValueCounts } from './visualizations/valuecounts';
 export type { CategorySegment, ValueCountsData } from './visualizations/valuecounts';
 
+export { NestedSummaryVisualization } from './visualizations/nested';
+export type { NestedSummaryData } from './visualizations/nested';
+
 export { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
 export { InteractionManager } from './visualizations/InteractionManager';
 export type {
@@ -213,8 +217,29 @@ export {
   isTimeType,
   isCategoricalType,
   isIntervalType,
+  isNestedType,
   needsVisualization,
 } from './visualizations/VisualizationRegistry';
+
+// A column's DuckDB type (`ColumnSchema.originalType`) as a tree, for code
+// that looks inside a nested type: a custom chart or stats panel, an
+// extract picker of its own.
+export { parseDuckDBType } from './core/duckdbType';
+export type {
+  DuckDBTypeNode,
+  DuckDBTypeKind,
+  DuckDBScalarTypeNode,
+  DuckDBJsonTypeNode,
+  DuckDBVariantTypeNode,
+  DuckDBListTypeNode,
+  DuckDBArrayTypeNode,
+  DuckDBStructTypeNode,
+  DuckDBStructField,
+  DuckDBMapTypeNode,
+  DuckDBUnionTypeNode,
+  DuckDBUnionMember,
+  DuckDBUnknownTypeNode,
+} from './core/duckdbType';
 
 // Deprecated static wrapper — kept reachable here on /advanced only.
 // New code should use `VisualizationRegistry` from the root entry.

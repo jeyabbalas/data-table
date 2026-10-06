@@ -205,14 +205,15 @@ describe('VisualizationFactory', () => {
   // 1. Default registration
   // =============================================
   describe('default registration', () => {
-    it('registers all 5 built-in types', () => {
+    it('registers all 6 built-in types', () => {
       const types = VisualizationFactory.getRegisteredTypes();
       expect(types).toContain('histogram');
       expect(types).toContain('date-histogram');
       expect(types).toContain('time-histogram');
       expect(types).toContain('interval-histogram');
       expect(types).toContain('value-counts');
-      expect(types).toHaveLength(5);
+      expect(types).toContain('nested-summary');
+      expect(types).toHaveLength(6);
     });
   });
 
@@ -370,8 +371,8 @@ describe('VisualizationFactory', () => {
         priority: 0,
       });
 
-      // Should still only have 5 types (replaced, not added)
-      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(5);
+      // Should still only have 6 types (replaced, not added)
+      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(6);
 
       const viz = createAndTrack('integer');
       expect(viz).toBeInstanceOf(CustomViz);
@@ -410,7 +411,7 @@ describe('VisualizationFactory', () => {
 
       expect(VisualizationFactory.getRegisteredTypes()).not.toContain('custom');
       expect(VisualizationFactory.getRegisteredTypes()).toContain('histogram');
-      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(5);
+      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(6);
     });
   });
 

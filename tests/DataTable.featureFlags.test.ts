@@ -6,8 +6,10 @@
  * API intact. The combined-off path is the headless-bundle configuration that
  * lets consumers skip the optional CodeMirror peer dependencies.
  */
-import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { createDataTable, type DataTable } from '@/index';
+import { initializeColumnsFromSchema } from '@/core/State';
+import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 
 beforeAll(() => {
@@ -86,6 +88,119 @@ describe('createDataTable — derivedColumns flag', () => {
     // The "+" button never mounts, so the dynamic-import for
     // DerivedColumnModal is unreachable. As a proxy: no backdrop exists.
     expect(document.querySelector('.dt-derived-modal-backdrop')).toBeNull();
+    await table.destroy();
+  });
+});
+
+describe('createDataTable — derivedColumns flag and extract field → column', () => {
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    'clientHeight',
+  );
+  const SCHEMA: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+    { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+  ];
+
+  /** Answers the body's row reads and the value inspector's, for SCHEMA's ten rows. */
+  function rowsBridge(): WorkerBridge {
+    const row = (i: number): Record<string, unknown> => ({
+      __rowid__: i,
+      id: i,
+      tags: '[a, b]',
+      doc: '{"k": 1}',
+    });
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes('AS "json"')) return [{ json: '["a","b"]', chars: 9 }];
+      const byIds = /"__rowid__" IN \(([^)]*)\)/.exec(sql);
+      if (byIds) return byIds[1]!.split(',').map((id) => row(Number(id)));
+      if (sql.includes('COUNT(')) return [{ count: 10 }];
+      const limit = Number(/LIMIT (\d+)/.exec(sql)?.[1] ?? 0);
+      const offset = Number(/OFFSET (\d+)/.exec(sql)?.[1] ?? 0);
+      return Array.from({ length: Math.max(0, Math.min(limit, 10 - offset)) }, (_, i) =>
+        row(offset + i),
+      );
+    });
+    return { ...makeBridge(), query } as unknown as WorkerBridge;
+  }
+
+  async function mountNested(derivedColumns?: boolean): Promise<{
+    table: DataTable;
+    container: HTMLElement;
+  }> {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const table = await createDataTable({
+      container,
+      bridge: rowsBridge(),
+      persistence: false,
+      undoRedo: false,
+      visualizations: false,
+      exportDialog: false,
+      ...(derivedColumns === undefined ? {} : { derivedColumns }),
+    });
+    table.state.tableName.set('t');
+    table.state.totalRows.set(10);
+    table.state.filteredRows.set(10);
+    initializeColumnsFromSchema(table.state, SCHEMA);
+    await vi.waitFor(() =>
+      expect(
+        container
+          .querySelector('[data-row-index="2"] [data-column="tags"]')
+          ?.classList.contains('dt-cell--inspectable'),
+      ).toBe(true),
+    );
+    return { table, container };
+  }
+
+  /** The value inspector's footer buttons, once it shows the value of row 2's tags. */
+  async function inspectorButtons(table: DataTable, container: HTMLElement): Promise<string[]> {
+    expect(table.container.openValueInspector({ row: 2, column: 'tags' })).toBe(true);
+    await vi.waitFor(
+      () => expect(container.querySelector('.dt-value-inspector [role="tree"]')).toBeTruthy(),
+      { timeout: 5000 },
+    );
+    return [...container.querySelectorAll('.dt-value-inspector__button')].map(
+      (b) => b.textContent ?? '',
+    );
+  }
+
+  beforeAll(() => {
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return 400;
+      },
+    });
+  });
+
+  afterAll(() => {
+    if (originalClientHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    }
+  });
+
+  it('shows the extract button on nested and JSON headers, and the inspector’s add buttons, by default', async () => {
+    const { table, container } = await mountNested();
+    expect(table.container.getOptions().extractColumns).toBe(true);
+    const withButton = [...container.querySelectorAll('.dt-col-extract-btn')].map((b) =>
+      b.closest('[data-column]')?.getAttribute('data-column'),
+    );
+    expect(withButton).toEqual(['tags', 'doc']);
+    expect(await inspectorButtons(table, container)).toContain('Add length as column');
+    await table.destroy();
+  });
+
+  it('hides both when derivedColumns: false, leaving addNestedFieldColumn to the API', async () => {
+    const { table, container } = await mountNested(false);
+    expect(table.container.getOptions().extractColumns).toBe(false);
+    expect(container.querySelector('.dt-col-extract-btn')).toBeNull();
+    expect(await inspectorButtons(table, container)).toEqual(['Copy JSON', 'Close']);
+    expect(container.querySelector('.dt-value-tree__add')).toBeNull();
+    expect(typeof table.actions.addNestedFieldColumn).toBe('function');
     await table.destroy();
   });
 });

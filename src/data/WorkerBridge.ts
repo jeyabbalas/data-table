@@ -59,11 +59,22 @@ export interface QueryOptions {
    */
   cache?: boolean;
   /**
-   * Worker queue priority. `'high'` jumps queued `'normal'` work (e.g.
-   * stats/histogram queries) in the worker's serial dispatch queue —
-   * intended for viewport row fetches. Default `'normal'`.
+   * Where the query goes in the worker's serial dispatch queue, which runs
+   * one query at a time, the queued `'high'` ones first, then the
+   * `'elevated'` ones, then the `'normal'` ones, each in the order posted:
+   *
+   * - `'high'`: viewport row fetches, the rows the grid is waiting to show.
+   * - `'elevated'`: an interactive read of a few values that someone is
+   *   waiting on, such as `actions.getCellValue` or the value inspector's
+   *   read of one cell. It runs ahead of queued chart and stats queries,
+   *   and behind the viewport's row fetches.
+   * - `'normal'` (the default): background work, such as column charts,
+   *   stats, prefetches and exports.
+   *
+   * A query that is already running is never interrupted by one of higher
+   * priority.
    */
-  priority?: 'high' | 'normal';
+  priority?: 'high' | 'elevated' | 'normal';
 }
 
 /**
@@ -334,6 +345,51 @@ export class WorkerBridge {
    * makes the worker run this query ahead of queued normal-priority work
    * (viewport row fetches use this so they are not stuck behind
    * stats/histogram fan-outs).
+   *
+   * Each row is a plain object whose own properties are its columns,
+   * `__proto__` included. Integers arrive as numbers, the nearest one past
+   * ±2^53, except a HUGEINT or UHUGEINT at its ends, which arrives with the
+   * wrong sign: the HUGEINT minimum positive, a UHUGEINT past 2^127
+   * negative (the maximum as `-1`). A LIST or ARRAY value arrives as an
+   * array, a STRUCT or MAP value as an object (a MAP's keys as strings; an
+   * unnamed STRUCT, as `row(1, 'a')` builds, as an array), a UNION value as
+   * its member's, and a BLOB as a `Uint8Array`.
+   *
+   * DECIMAL, HUGEINT and UHUGEINT values inside a nested value do not
+   * arrive intact. In a LIST, ARRAY or STRUCT each reads as a meaningless
+   * number (`[1.25, 2.50, 3.75]` as `[6.2e-322, 0, 1.235e-321]`,
+   * `[-12::HUGEINT]` as `[NaN]`). Anywhere under a MAP or a UNION it reads
+   * as a `Uint32Array` of the 32-bit words of its unscaled integer, low
+   * first (`MAP {'a': 1.25}` as `{ a: Uint32Array [125, 0, 0, 0] }`), and a
+   * MAP key as that integer's digits (`MAP {1.25: 'a'}` as
+   * `{ '125': 'a' }`). An INTERVAL, nested or a column's own value, reads
+   * as an `Int32Array` that does not hold it, and a MAP key as that array's
+   * text (`'0,0'`). Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
+   * nested value as JSON text, which is exact: `CAST(to_json(c) AS VARCHAR)`
+   * keeps every digit, a MAP's DECIMAL keys included, and writes an
+   * INTERVAL as DuckDB does (`"1 year 2 months 3 days"`). `JSON.parse`
+   * rounds integers past 2^53 and rejects the bare `NaN` and `Infinity`
+   * DuckDB writes for non-finite DOUBLEs.
+   *
+   * A VARIANT value cannot cross Arrow at all (`Unsupported Arrow type
+   * VARIANT`), nor a value that holds one, and `to_json` gets those wrong
+   * (`to_json(42::VARIANT)` is the string `"42"`). Select a VARIANT column
+   * as `CAST(c AS JSON)`, or read any of these with `actions.getCellValue`
+   * or `actions.getColumnValues`, which pick the SQL for each type.
+   *
+   * The worker runs queries on a path that can be cancelled but receives
+   * no ENUM dictionaries. So a result holding an ENUM, at any depth, is
+   * computed a second time, on a path that has them, when the SQL is a
+   * single query (a `SELECT`, `WITH`, `FROM` or `VALUES` query) that does
+   * not name `nextval`. That second read cannot be cancelled: an abort
+   * still rejects at once, but the worker finishes the read before its
+   * next query. Anything else runs once, and its ENUM values arrive as
+   * `null`: an `INSERT`, `UPDATE` or `DELETE … RETURNING`, several
+   * statements in one text, and a query that calls `nextval`, whose
+   * sequence a second run would advance again. A `nextval` called through
+   * a view or a macro is not seen, and advances its sequence twice.
+   * `CAST(e AS VARCHAR)` reads an ENUM's text in one run, in any
+   * statement.
    *
    * @param sql SQL text to execute.
    * @param signal Optional abort signal; aborting rejects with
@@ -697,7 +753,19 @@ export class WorkerBridge {
           );
           break;
         }
-        request.reject(reconstructError(payload as ErrorPayload));
+        // The request is out of `pendingRequests` now, so nothing else can
+        // settle it: an error reply that cannot be read still rejects it.
+        let error: Error;
+        try {
+          error = reconstructError(payload as ErrorPayload);
+        } catch (cause) {
+          error = new WorkerInitError('Worker error response could not be read', {
+            code: 'WORKER_PROTOCOL_VIOLATION',
+            cause,
+            details: { id, type },
+          });
+        }
+        request.reject(error);
         break;
       }
 

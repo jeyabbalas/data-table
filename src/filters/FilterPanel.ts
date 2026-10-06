@@ -35,6 +35,7 @@ import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { columnTypeLabel, columnTypeTitle } from '../nested/typeOutline';
 import { FilterPanelField } from './FilterPanelField';
 
 /**
@@ -254,7 +255,12 @@ export class FilterPanel {
 
     // Update header: title, type badge, clear button
     this.titleEl.textContent = this.messages.filters.panelTitleForColumn(column);
-    this.typeBadgeEl.textContent = colSchema.type;
+    // A nested or JSON column's badge is the header's short type, titled
+    // with the full one.
+    this.typeBadgeEl.textContent = columnTypeLabel(colSchema);
+    const fullType = columnTypeTitle(colSchema);
+    if (fullType === null) this.typeBadgeEl.removeAttribute('title');
+    else this.typeBadgeEl.title = fullType;
     const hasFilter = this.state.filtersByColumn.get().has(column);
     this.updatePanelClearButton(hasFilter);
 

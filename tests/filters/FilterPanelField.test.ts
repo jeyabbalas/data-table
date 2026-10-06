@@ -232,6 +232,116 @@ describe('FilterPanelField', () => {
   // String Filters
   // =========================================
 
+  describe('nested columns', () => {
+    const listColumn: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+
+    it('get the text controls, matching the text the grid shows', () => {
+      const field = createField(listColumn, state, actions);
+      const el = field.getElement();
+
+      const select = el.querySelector('select') as HTMLSelectElement;
+      const input = el.querySelector('input[type="text"]') as HTMLInputElement;
+      expect(select).not.toBeNull();
+      expect(input).not.toBeNull();
+      expect(el.querySelector('input[type="number"]')).toBeNull();
+
+      select.value = 'contains';
+      input.value = 'red';
+      field.applyFilter();
+      expect(state.filters.get()[0]).toEqual({
+        type: 'pattern',
+        column: 'tags',
+        pattern: 'red',
+        mode: 'contains',
+      });
+      field.destroy();
+    });
+
+    it.each([
+      ['VARCHAR[]', '[red, green]'],
+      ['INTEGER[3]', '[1, 2, 3]'],
+      ['STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', "{'x': 1.25, 'y': 0.58, 'tier': bronze}"],
+      ['MAP(VARCHAR, INTEGER)', '{k1=1, k2=2}'],
+      ['UNION(i INTEGER, s VARCHAR)', '0'],
+      ['VARIANT', '42'],
+    ])('"exact" on a %s column compares the text', (originalType, text) => {
+      // Compared as a value, text that does not read as the column's type is
+      // a Conversion Error, a UNION finds only one member, and a VARIANT
+      // fails on values of other types.
+      const field = createField({ ...listColumn, originalType }, state, actions);
+      const el = field.getElement();
+      (el.querySelector('select') as HTMLSelectElement).value = 'exact';
+      (el.querySelector('input[type="text"]') as HTMLInputElement).value = text;
+      field.applyFilter();
+
+      expect(state.filters.get()).toStrictEqual([
+        { type: 'point', column: 'tags', value: text, valueType: 'text' },
+      ]);
+      field.destroy();
+    });
+
+    it('shows a text filter as "exact" and applies it again unchanged', () => {
+      const field = createField(listColumn, state, actions);
+      const filter = {
+        type: 'point',
+        column: 'tags',
+        value: "['it\\'s', NULL]",
+        valueType: 'text',
+      } as const;
+      actions.addFilter(filter);
+      field.syncFromState();
+
+      const el = field.getElement();
+      expect((el.querySelector('select') as HTMLSelectElement).value).toBe('exact');
+      expect((el.querySelector('input[type="text"]') as HTMLInputElement).value).toBe(filter.value);
+
+      field.applyFilter();
+      expect(state.filters.get()).toStrictEqual([filter]);
+      field.destroy();
+    });
+
+    it('"exact" on a JSON column compares the text', () => {
+      // Compared as JSON, text that is not JSON is a Conversion Error, which
+      // fails every grid query; JSON that is compares as its text anyway.
+      const field = createField(
+        { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+        state,
+        actions,
+      );
+      const el = field.getElement();
+      (el.querySelector('select') as HTMLSelectElement).value = 'exact';
+      (el.querySelector('input[type="text"]') as HTMLInputElement).value = 'abc';
+      field.applyFilter();
+
+      expect(state.filters.get()).toStrictEqual([
+        { type: 'point', column: 'doc', value: 'abc', valueType: 'text' },
+      ]);
+      field.destroy();
+    });
+
+    it('keeps a string column\'s "exact" a value comparison', () => {
+      const field = createField(
+        { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
+        state,
+        actions,
+      );
+      const el = field.getElement();
+      (el.querySelector('select') as HTMLSelectElement).value = 'exact';
+      (el.querySelector('input[type="text"]') as HTMLInputElement).value = '[red, green]';
+      field.applyFilter();
+
+      expect(state.filters.get()).toStrictEqual([
+        { type: 'point', column: 'name', value: '[red, green]' },
+      ]);
+      field.destroy();
+    });
+  });
+
   describe('string filters', () => {
     const strColumn: ColumnSchema = {
       name: 'name',

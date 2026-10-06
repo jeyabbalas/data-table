@@ -55,6 +55,98 @@ describe('Strings', () => {
       expect(s.matchCount(300)).toBe('300 match');
       expect(s.matchCount(0)).toBe('0 match');
       expect(s.valueListSuffix(8)).toBe(', ... (8 values)');
+      expect(s.nonNullCategory).toBe('non-null');
+    });
+
+    it('ships the spoken forms of nested and JSON types', () => {
+      const v = defaultStrings.values;
+      expect(v.typeList('integer')).toBe('list of integer');
+      expect(v.typeArray('float', 768)).toBe('array of 768 float');
+      expect(v.typeArray('float', 1536)).toBe('array of 1,536 float');
+      expect(v.typeStruct(3)).toBe('struct with 3 fields');
+      expect(v.typeStruct(1)).toBe('struct with 1 field');
+      expect(v.typeMap('varchar', 'integer')).toBe('map from varchar to integer');
+      expect(v.typeUnion(2)).toBe('union of 2 types');
+      expect(v.typeUnion(1)).toBe('union of 1 type');
+      expect(v.typeJson).toBe('JSON');
+      expect(v.typeVariant).toBe('variant');
+    });
+
+    it('ships the value inspector’s words', () => {
+      const v = defaultStrings.values;
+      expect(v.inspectorTitle('tags', v.rowLabel(1235))).toBe('tags · Row 1,235');
+      expect(v.treeLabel('tags')).toBe('Value of tags');
+      expect(v.itemCount(1)).toBe('1 item');
+      expect(v.itemCount(10000)).toBe('10,000 items');
+      expect(v.entryCount(1)).toBe('1 entry');
+      expect(v.entryCount(600)).toBe('600 entries');
+      expect(v.fieldCount(1)).toBe('1 field');
+      expect(v.fieldCount(26)).toBe('26 fields');
+      expect(v.keyCount(1)).toBe('1 key');
+      expect(v.keyCount(2)).toBe('2 keys');
+      // Plain digits, as the positions inside the bucket show them.
+      expect(v.bucketLabel(1, 100)).toBe('[1 … 100]');
+      expect(v.bucketLabel(10001, 10001)).toBe('[10001 … 10001]');
+      expect(v.moreCharacters(1)).toBe('1 more character');
+      expect(v.moreCharacters(18000)).toBe('18,000 more characters');
+      expect(v.loading).toBe('Loading…');
+      expect(v.loadFailed).toBe('Could not load this value');
+      expect(v.retry).toBe('Retry');
+      expect(v.truncatedNotice(2097152, 3000000)).toBe(
+        'Showing the first 2,097,152 of 3,000,000 characters',
+      );
+      expect(v.copyJson).toBe('Copy JSON');
+      expect(v.copied).toBe('Copied');
+      expect(v.copyFailed).toBe('Copy failed');
+      expect(v.tooLargeToCopy).toBe('Too large to copy');
+      expect(v.closeLabel).toBe('Close value inspector');
+    });
+
+    it('ships the words of extract field → column', () => {
+      const v = defaultStrings.values;
+      // The value inspector's buttons, and what it and the table say.
+      expect(v.addAsColumn).toBe('Add as column');
+      expect(v.addLengthAsColumn).toBe('Add length as column');
+      expect(v.addSizeAsColumn).toBe('Add size as column');
+      expect(v.addTagAsColumn).toBe('Add tag as column');
+      expect(v.adding).toBe('Adding…');
+      expect(v.extractFailed('Column name "x" already exists')).toBe(
+        'Could not add the column: Column name "x" already exists',
+      );
+      expect(v.columnAdded('point_x')).toBe('Column point_x added');
+      // The header's button.
+      expect(v.extractButtonLabel('point')).toBe('Extract from point');
+      expect(v.extractButtonTitle).toBe('Extract a field as a column');
+      // The panel.
+      expect(v.extractTitle('point')).toBe('Extract from point');
+      expect(v.extractCloseLabel).toBe('Close extract panel');
+      expect(v.extractTreeLabel('point')).toBe('Parts of point');
+      expect(v.nothingToExtract).toBe('This column has no parts to extract');
+      expect(v.lengthNode).toBe('length');
+      expect(v.sizeNode).toBe('size');
+      expect(v.tagNode).toBe('tag');
+      expect(v.elementNode).toBe('element');
+      expect(v.mapValueNode).toBe('value');
+      expect(v.positionLabel('people')).toBe('Position in people');
+      expect(v.positionInvalid).toBe('Enter a whole number, 1 or more');
+      expect(v.keyLabel('attrs')).toBe('Key in attrs');
+      expect(v.keyRequired).toBe('Enter a key');
+      expect(v.jsonPathLabel).toBe('JSON path');
+      expect(v.jsonPathHint).toBe(
+        'As $.a.b[0]: keys after dots, array indexes from 0. A key with a dot, a bracket or a quote goes in brackets: $["a.b"].',
+      );
+      expect(v.jsonPathInvalid(5)).toBe('Not a JSON path: check character 5');
+      expect(v.readAsLabel).toBe('Read as');
+      expect(v.readAs).toEqual({
+        string: 'Text',
+        number: 'Number',
+        boolean: 'Boolean',
+        json: 'JSON',
+        length: 'Array length',
+      });
+      expect(v.columnNameLabel).toBe('Column name');
+      expect(v.expressionLabel).toBe('Expression');
+      expect(v.addColumn).toBe('Add column');
     });
   });
 
@@ -86,6 +178,23 @@ describe('Strings', () => {
       expect(merged.export.csv.delimiters.tab).toBe('Tabulator');
       expect(merged.export.csv.delimiters.comma).toBe('Comma (,)');
       expect(merged.export.csv.headersLabel).toBe(defaultStrings.export.csv.headersLabel);
+    });
+
+    it('overrides one spoken type, keeping the rest of the values section', () => {
+      const merged = mergeStrings(defaultStrings, {
+        values: { typeList: (element: string) => `Liste von ${element}` },
+      });
+      expect(merged.values.typeList('integer')).toBe('Liste von integer');
+      expect(merged.values.typeMap('a', 'b')).toBe(defaultStrings.values.typeMap('a', 'b'));
+      expect(merged.values.typeJson).toBe('JSON');
+    });
+
+    it('overrides one "Read as" choice, keeping the others', () => {
+      const merged = mergeStrings(defaultStrings, {
+        values: { readAs: { number: 'Zahl' } },
+      });
+      expect(merged.values.readAs).toEqual({ ...defaultStrings.values.readAs, number: 'Zahl' });
+      expect(merged.values.addColumn).toBe('Add column');
     });
 
     it('replaces function-valued templates wholesale', () => {

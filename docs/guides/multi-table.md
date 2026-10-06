@@ -72,9 +72,9 @@ one IndexedDB handle.
 ### Sharing a `WorkerBridge`
 
 Pass one initialized `WorkerBridge` to each `createDataTable()` via the
-`bridge` option. The library honours `ownsBridge` semantics: only the
-caller-owned bridge is terminated when a table's `destroy()` runs
-([`src/DataTable.ts:479-480,:1635`](../../src/DataTable.ts)). A bridge you
+`bridge` option. The library honours `ownsBridge` semantics: a table's
+`destroy()` terminates only a bridge the table created itself
+([`src/DataTable.ts:511,:1842`](../../src/DataTable.ts)). A bridge you
 constructed yourself survives every table's destruction — call
 `bridge.terminate()` when you're done with the page.
 
@@ -95,7 +95,7 @@ bridge keep their tables and continue working.
   behind by name when it next loads or is destroyed.
 - **Derived columns are already namespaced per table.** The VIEW is
   `__dt_view_<tableName>__`
-  ([`src/derived/DerivedColumnManager.ts:79`](../../src/derived/DerivedColumnManager.ts)),
+  ([`src/derived/DerivedColumnManager.ts:126`](../../src/derived/DerivedColumnManager.ts)),
   and each table's vector columns get helper tables of their own, so adding,
   editing or removing a derived column on one table leaves the other's alone,
   even when both have a vector column of the same name.
@@ -222,7 +222,7 @@ sharedStore.close();
 ```
 
 Tables skip `bridge.terminate()` when they don't own the bridge
-(`ownsBridge` in `src/DataTable.ts:479,:1635`), so a shared bridge survives
+(`ownsBridge` in `src/DataTable.ts:511,:1842`), so a shared bridge survives
 both `destroy()` calls and must be terminated explicitly. Each table
 does drop its own base table from the bridge before exiting, with its
 derived columns' VIEW and helper tables, so the bridge's DuckDB catalog
@@ -327,5 +327,5 @@ async function teardownDashboard() {
 - Session persistence: [Session persistence guide](./session-persistence.md) for `SessionStore` lifecycle
 - Filter presets: [Filter presets guide](./filter-presets.md) for CRUD and export/import
 - Visualizations: [Visualizations guide](./visualizations.md) for per-instance registries
-- API reference: [`presets` option](../api-reference.md#createdatatable), [`persistence` option](../api-reference.md#createdatatable), [`FilterPresetManager`](../api-reference.md#filterpresetmanager)
+- API reference: [`presets` option](../api-reference.md#createdatatable), [`persistence` option](../api-reference.md#createdatatable), [`FilterPresetManager`](../api-reference.md#filter-presets)
 - Source: `src/filters/FilterPresets.ts`, `src/persistence/SessionStore.ts`

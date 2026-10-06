@@ -10,8 +10,15 @@
 
 - A Parquet `File`, `Blob`, or URL is no longer read into memory before loading. DuckDB reads the file from disk as it builds the table, so the file no longer has to fit in memory alongside it. A 1.5 GB file of 200,000 rows × 1,000 columns now loads in about 35 seconds in Chrome; it used to run out of memory. Typical files load about as fast as before. A Parquet `ArrayBuffer` is still copied into memory whole, so pass a `File` or `Blob` for large files.
 - `table.loadData`, `actions.loadData`, and `WorkerBridge.loadData` accept a `Blob` directly. The facade used to convert a `Blob` to an `ArrayBuffer` first.
-- If you self-host the worker script (`bridgeOptions.workerUrl` or `workerFactory`), copy the new worker file when you upgrade. The main thread now posts a Parquet `File` or `Blob` to the worker as is, and an older worker file cannot read it, so every Parquet load from a `File`, `Blob`, or URL fails.
 
 ### Fixed
 
 - A load that fails no longer leaves the previous table in DuckDB for good. The next successful load, or `destroy()` over a shared `WorkerBridge`, drops it.
+
+### Changed (breaking)
+
+- If you self-host the worker script (`bridgeOptions.workerUrl` or `workerFactory`), copy the new worker file when you upgrade. The main thread now posts a Parquet `File` or `Blob` to the worker as is, and an older worker file cannot read it, so every Parquet load from a `File`, `Blob`, or URL fails.
+
+### Migration
+
+- A self-hosted worker file: copy the new one; see [Self-hosted workers and offline deployments](./docs/migration-guides/from-0.8-to-0.9.md#3-self-hosted-workers-and-offline-deployments).

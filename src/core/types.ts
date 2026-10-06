@@ -2,7 +2,20 @@
  * Core type definitions for the Interactive Data Table Library
  */
 
-// Column data types supported by the library
+/**
+ * Column data types supported by the library.
+ *
+ * `'nested'` covers DuckDB's container types: LIST (`INTEGER[]`), fixed-size
+ * ARRAY (`FLOAT[768]`), STRUCT, MAP, UNION and VARIANT. Their values are not
+ * scalars; the grid shows DuckDB's text for them, and
+ * `ColumnSchema.originalType` says which container a column is. A `JSON`
+ * column is `'string'`.
+ *
+ * @example
+ * // The columns whose values are lists, structs, maps and the like
+ * const nested = table.state.schema.get().filter((column) => column.type === 'nested');
+ * nested.map((column) => column.originalType); // ['VARCHAR[]', 'STRUCT(x DOUBLE, y DOUBLE)']
+ */
 export type DataType =
   | 'integer'
   | 'float'
@@ -13,7 +26,8 @@ export type DataType =
   | 'date'
   | 'timestamp'
   | 'time'
-  | 'interval';
+  | 'interval'
+  | 'nested';
 
 /**
  * Column metadata exposed on `state.schema.get()` and threaded through every

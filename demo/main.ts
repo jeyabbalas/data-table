@@ -46,6 +46,7 @@ import {
   isDateType,
   isTimeType,
   isCategoricalType,
+  isNestedType,
 } from '@jeyabbalas/data-table/advanced';
 
 // ----- DOM refs -----
@@ -102,6 +103,19 @@ function setUrlParam(url: string | null): void {
   } catch {
     /* history API unavailable */
   }
+}
+
+// ----- Example datasets -----
+// The example chips load this repository's test fixtures from GitHub. The
+// dev server serves the same files from the working tree at /fixtures/
+// (vite.demo.config.ts), and a chip uses those in development: they work
+// offline, and a fixture added on a branch works before it reaches main.
+const FIXTURES_ON_GITHUB =
+  /^https:\/\/raw\.githubusercontent\.com\/jeyabbalas\/data-table\/(?:refs\/heads\/)?main\/tests\/fixtures\/datasets\//;
+
+/** The URL an example chip loads: its own, or in development the local copy. */
+function exampleUrl(url: string): string {
+  return import.meta.env.DEV ? url.replace(FIXTURES_ON_GITHUB, '/fixtures/') : url;
 }
 
 // ----- Dataset cache for the current dataset (demo-only) -----
@@ -311,7 +325,16 @@ async function prepareSource(source: File | string): Promise<PreparedSource> {
   }
   // A Blob, not an ArrayBuffer: the browser keeps a large one on disk.
   const blob = await response.blob();
-  const path = new URL(source).pathname;
+  // A web page is no dataset, though it would load as a CSV of its HTML: a
+  // server that answers any path with its app's page sends one, as Vite's
+  // dev server does for a relative `?url=` it has no file for.
+  const head = (await blob.slice(0, 1024).text()).trimStart().toLowerCase();
+  if (head.startsWith('<!doctype html') || head.startsWith('<html')) {
+    throw new Error('The URL returned a web page, not a data file');
+  }
+  // Relative to the page, as fetch reads it: an example chip's /fixtures/
+  // path in development, or a relative `?url=`.
+  const path = new URL(source, window.location.href).pathname;
   const fileSeg = path.split('/').pop() || '';
   return {
     file: new File([blob], fileSeg || 'data', { type: blob.type }),
@@ -334,6 +357,18 @@ function preparedFromCache(cached: CachedSource): PreparedSource {
 const sessionStore = new SessionStore();
 
 let table: DataTable | null = null;
+// Development only: the current table as `window.__dtDemo.table`, for the
+// browser tests and for poking at it from DevTools.
+if (import.meta.env.DEV) {
+  Object.defineProperty(window, '__dtDemo', {
+    value: Object.freeze({
+      get table(): DataTable | null {
+        return table;
+      },
+    }),
+    configurable: true,
+  });
+}
 // Per-page counter that ensures every file upload yields a unique
 // `tableName` even when two uploads share a millisecond timestamp.
 let fileUploadCounter = 0;
@@ -413,19 +448,23 @@ function updateTableInfo(): void {
 
   const totalRows = state.totalRows.get();
   const filteredRows = state.filteredRows.get();
-  const schema = state.schema.get();
+  // The dataset's columns: the hidden `__rowid__` is the table's own.
+  const schema = state.schema.get().filter((c) => !c.system);
   const filters = state.filters.get();
 
   const numericCols = schema.filter((c) => isNumericType(c.type)).length;
   const dateCols = schema.filter((c) => isDateType(c.type)).length;
   const timeCols = schema.filter((c) => isTimeType(c.type)).length;
   const categoricalCols = schema.filter((c) => isCategoricalType(c.type)).length;
+  const nestedCols = schema.filter((c) => isNestedType(c.type)).length;
 
   let info =
     filters.length > 0
       ? `<strong>${filteredRows.toLocaleString()}</strong> / ${totalRows.toLocaleString()} rows, <strong>${schema.length}</strong> columns | <strong>${filters.length}</strong> filter${filters.length > 1 ? 's' : ''}`
       : `<strong>${totalRows.toLocaleString()}</strong> rows, <strong>${schema.length}</strong> columns`;
-  info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical)`;
+  info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical`;
+  if (nestedCols > 0) info += `, ${nestedCols} nested`;
+  info += ')';
 
   const derived = state.derivedColumns.get();
   if (derived.length > 0) info += ` | <strong>${derived.length}</strong> derived`;
@@ -442,6 +481,10 @@ function updateTableInfo(): void {
     info += ` | <strong>Sort:</strong> ${desc}`;
   }
   if (lastLoadSeconds !== null) info += ` | loaded in ${lastLoadSeconds.toFixed(1)} s`;
+  // Nested and JSON cells open in the value inspector.
+  if (nestedCols > 0 || schema.some((c) => c.originalType.toUpperCase() === 'JSON')) {
+    info += ' | F2 or double-click a nested cell to inspect it';
+  }
   updateInfo(info);
 }
 
@@ -812,7 +855,7 @@ urlInput.addEventListener('keydown', (e) => {
 // URL input, so format auto-detection and `?url=` syncing both happen for free.
 for (const chip of exampleChips) {
   chip.addEventListener('click', () => {
-    const url = chip.dataset.url;
+    const url = chip.dataset.url && exampleUrl(chip.dataset.url);
     if (!url || loadRunning) return;
     urlInput.value = url;
     void exclusively(() => loadSource(url));

@@ -6,7 +6,39 @@
  */
 
 import type { ColumnSchema, DataType } from '../core/types';
+import { outlinedColumnType } from '../nested/typeOutline';
 import { MONTH_SECONDS, YEAR_SECONDS } from '../visualizations/histogram/IntervalHistogramData';
+
+/** `isInspectableColumn`'s answers, by schema entry: it runs for every cell rendered. */
+const inspectableColumns = new WeakMap<ColumnSchema, boolean>();
+
+/**
+ * Whether the value inspector opens a column's values: a nested column
+ * (`type: 'nested'`: LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) or a JSON one
+ * (`type: 'string'` with `originalType` `JSON`). A cell shows only part of
+ * such a value: a nested one's text is bounded, and any text runs on past
+ * the column's edge. The inspector shows all of it, as a tree.
+ *
+ * The columns whose header shows a type outline (`outlinedColumnType`): the
+ * header's extract button, the cells' inspect icon and the outline go
+ * together.
+ *
+ * @example
+ * ```ts
+ * isInspectableColumn({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // true
+ * isInspectableColumn({ name: 'doc', type: 'string', nullable: true, originalType: 'JSON' });       // true
+ * isInspectableColumn({ name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' });   // false
+ * ```
+ */
+export function isInspectableColumn(column: ColumnSchema | undefined): boolean {
+  if (!column) return false;
+  let inspectable = inspectableColumns.get(column);
+  if (inspectable === undefined) {
+    inspectable = outlinedColumnType(column) !== null;
+    inspectableColumns.set(column, inspectable);
+  }
+  return inspectable;
+}
 
 /**
  * Format a number with scientific notation for extreme values.
@@ -104,6 +136,37 @@ export class CellRenderer {
   }
 
   /**
+   * Mark a cell as one the value inspector opens, or unmark it: the
+   * `-cell--inspectable` class, which shows the inspect icon (drawn by the
+   * stylesheet, no element of its own) on hover and on the cursor, and
+   * `aria-haspopup="dialog"` with `aria-keyshortcuts="F2"`, which tell
+   * assistive technology that the cell opens a dialog and how.
+   *
+   * For the non-NULL values of nested and JSON columns
+   * (`isInspectableColumn`). A cell is reused across rows and columns, so
+   * every render says which it is now; nothing is written unless that
+   * changes, since this runs for every cell of every render.
+   *
+   * @example
+   * ```typescript
+   * renderer.setInspectable(cellEl, value != null && isInspectableColumn(column));
+   * ```
+   */
+  setInspectable(cellEl: HTMLElement, inspectable: boolean): void {
+    const inspectableClass = `${this.classPrefix}-cell--inspectable`;
+    if (cellEl.classList.contains(inspectableClass) === inspectable) return;
+    if (inspectable) {
+      cellEl.classList.add(inspectableClass);
+      cellEl.setAttribute('aria-haspopup', 'dialog');
+      cellEl.setAttribute('aria-keyshortcuts', 'F2');
+    } else {
+      cellEl.classList.remove(inspectableClass);
+      cellEl.removeAttribute('aria-haspopup');
+      cellEl.removeAttribute('aria-keyshortcuts');
+    }
+  }
+
+  /**
    * Format a value to string based on its data type.
    *
    * @param value - The value to format
@@ -138,10 +201,15 @@ export class CellRenderer {
         return this.formatTimestamp(value, originalType);
 
       case 'time':
-        return this.formatTimeValue(value);
+        return this.formatTimeValue(value, originalType);
 
       case 'interval':
         return this.formatInterval(value);
+
+      case 'nested':
+        // The grid reads a nested value as DuckDB's text for it (see
+        // rowQuery.ts), so it arrives here as a string already.
+        return typeof value === 'string' ? value : String(value);
 
       case 'string':
       default:
@@ -430,8 +498,11 @@ export class CellRenderer {
    * DuckDB returns TIME as "HH:MM:SS" or "HH:MM:SS.ffffff", or BigInt (microseconds since midnight).
    * Truncate microseconds to milliseconds and remove trailing zeros.
    * Examples: "14:30:45.100" → "14:30:45.1", "14:30:45.000" → "14:30:45"
+   *
+   * A TIME_NS or a TIME WITH TIME ZONE arrives as DuckDB's text (see
+   * `gridValueSQL`) and shows as that text, nanoseconds and offset kept.
    */
-  private formatTimeValue(value: unknown): string {
+  private formatTimeValue(value: unknown, originalType?: string): string {
     // DuckDB returns TIME as BigInt: microseconds since midnight
     if (typeof value === 'bigint' || typeof value === 'number') {
       const totalMicros = Number(value);
@@ -457,6 +528,9 @@ export class CellRenderer {
     }
 
     if (typeof value === 'string') {
+      // A TIME_NS's fraction of up to six digits would match below, and its
+      // nanoseconds would be cut to milliseconds only in those cells.
+      if (originalType?.trim().toUpperCase() === 'TIME_NS') return value;
       // Match TIME format: HH:MM:SS or HH:MM:SS.ffffff
       const match = value.match(/^(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?$/);
       if (match) {

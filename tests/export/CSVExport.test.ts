@@ -359,11 +359,12 @@ describe('exportToCSV', () => {
 
       expect(csv).toBe('id,name,price\n1,Alice,10.5\n2,Bob,20');
 
-      // Verify SQL has no WHERE clause
+      // Verify SQL has no filter: its one WHERE picks the batch's rows by
+      // rowid (see buildBaseQuery)
       const sql = mockBridge.query.mock.calls[0][0] as string;
       expect(sql).toContain('SELECT "id", "name", "price"');
       expect(sql).toContain('FROM "test_table"');
-      expect(sql).not.toContain('WHERE');
+      expect(sql).not.toMatch(/WHERE (?!"test_table"\."__rowid__" IN \()/);
       expect(sql).toContain('LIMIT 10000 OFFSET 0');
     });
 
@@ -433,7 +434,7 @@ describe('exportToCSV', () => {
       // exports don't duplicate/skip rows across batch boundaries when
       // the user-specified sort key has ties (DuckDB ORDER BY is
       // non-deterministic for ties without an explicit unique tail).
-      expect(sql).toContain('ORDER BY "name" ASC, "__rowid__" ASC');
+      expect(sql).toContain('ORDER BY "test_table"."name" ASC, "test_table"."__rowid__" ASC');
     });
 
     it('should handle multi-sort', async () => {
@@ -450,7 +451,9 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'all' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).toContain('ORDER BY "name" ASC, "price" DESC, "__rowid__" ASC');
+      expect(sql).toContain(
+        'ORDER BY "test_table"."name" ASC, "test_table"."price" DESC, "test_table"."__rowid__" ASC',
+      );
     });
   });
 
@@ -483,7 +486,8 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'all' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).not.toContain('WHERE');
+      expect(sql).not.toMatch(/WHERE (?!"test_table"\."__rowid__" IN \()/);
+      expect(sql).not.toContain('"price" >=');
     });
   });
 
@@ -550,7 +554,9 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'selected' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" ASC, "__rowid__" ASC)');
+      expect(sql).toContain(
+        'ROW_NUMBER() OVER(ORDER BY "test_table"."name" ASC, "test_table"."__rowid__" ASC)',
+      );
     });
 
     it('should use __rowid__ ASC OVER clause when no sorting', async () => {
@@ -569,7 +575,7 @@ describe('exportToCSV', () => {
       // ROW_NUMBER() assigns __row_idx__ in a deterministic, repeatable
       // order. Without it, repeat exports could map the same selection
       // indices to different rows under DuckDB's parallel scan.
-      expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "__rowid__" ASC)');
+      expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "test_table"."__rowid__" ASC)');
     });
 
     it('should include filters in selected rows CTE', async () => {
@@ -825,5 +831,155 @@ describe('exportToCSV — __rowid__ default-exclusion + opt-in', () => {
     );
     expect(csv).toContain('9007199254740993,1,huge');
     expect(csv).not.toMatch(/e\+/i); // no scientific notation
+  });
+});
+
+// =========================================
+// Nested values as standard JSON
+// =========================================
+//
+// A nested column (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) is read as its
+// exact JSON text (see ExportQuery.exportColumnRead), which DuckDB writes
+// with bare NaN and ±Infinity. A CSV cell holds it as standard JSON: those
+// become null, outside strings only, and every digit is kept.
+
+/** The fields of one RFC 4180 line, as `rowToCSVLine` writes them (no line breaks inside). */
+function splitCSVLine(line: string, delimiter: string): string[] {
+  const fields: string[] = [];
+  let i = 0;
+  for (;;) {
+    let field = '';
+    if (line[i] === '"') {
+      i++;
+      for (;;) {
+        const quote = line.indexOf('"', i);
+        field += line.slice(i, quote);
+        i = quote + 1;
+        if (line[i] !== '"') break;
+        field += '"';
+        i++;
+      }
+    } else {
+      const end = line.indexOf(delimiter, i);
+      field = line.slice(i, end < 0 ? line.length : end);
+      i = end < 0 ? line.length : end;
+    }
+    fields.push(field);
+    if (i >= line.length) return fields;
+    i++; // the delimiter
+  }
+}
+
+describe('rowToCSVLine — nested values as standard JSON', () => {
+  const nested = new Set(['n']);
+
+  it('writes NaN and ±Infinity as null, and keeps every digit', () => {
+    expect(rowToCSVLine({ n: '[1.5,NaN,-Infinity,Infinity]' }, ['n'], ',', '', nested)).toBe(
+      '"[1.5,null,null,null]"',
+    );
+    expect(
+      rowToCSVLine({ n: '[170141183460469231731687303715884105727]' }, ['n'], ',', '', nested),
+    ).toBe('[170141183460469231731687303715884105727]');
+  });
+
+  it('leaves strings alone, NaN, delimiters, quotes and escapes included', () => {
+    const json = '{"s":"NaN, \\"q\\"\\n\\t-Infinity","n":NaN}';
+    const line = rowToCSVLine({ id: 1, n: json }, ['id', 'n'], ',', '', nested);
+    expect(line).toBe('1,"{""s"":""NaN, \\""q\\""\\n\\t-Infinity"",""n"":null}"');
+    const cell = splitCSVLine(line, ',')[1]!;
+    expect(JSON.parse(cell)).toEqual({ s: 'NaN, "q"\n\t-Infinity', n: null });
+  });
+
+  it('writes a NULL as nullValue', () => {
+    expect(rowToCSVLine({ id: 1, n: null }, ['id', 'n'], ',', 'NULL', nested)).toBe('1,NULL');
+  });
+
+  it('keeps a JSON number intact: no formula prefix on a number alone', () => {
+    // A VARIANT holding a negative number is its JSON text, `-5`; a `'` in
+    // front would make it invalid JSON, and a number alone is no formula.
+    expect(rowToCSVLine({ n: '-5' }, ['n'], ',', '', nested)).toBe('-5');
+    expect(rowToCSVLine({ n: '-1.5e-7' }, ['n'], ',', '', nested)).toBe('-1.5e-7');
+    expect(rowToCSVLine({ n: '-Infinity' }, ['n'], ',', '', nested)).toBe('null');
+    // Containers and strings start with `[`, `{` or `"`, which no spreadsheet runs.
+    expect(rowToCSVLine({ n: '"=cmd()"' }, ['n'], ',', '', nested)).toBe('"""=cmd()"""');
+    expect(rowToCSVLine({ n: '["=1+2"]' }, ['n'], ',', '', nested)).toBe('"[""=1+2""]"');
+    // Text that is not JSON still gets the prefix, even in a nested column.
+    expect(rowToCSVLine({ n: '-1+cmd()' }, ['n'], ',', '', nested)).toBe("'-1+cmd()");
+  });
+
+  it('writes other columns as before: text, a JSON column, a negative number', () => {
+    const row = { s: '[1,NaN]', j: '{"x":NaN}', neg: -5, n: '[NaN]' };
+    expect(rowToCSVLine(row, ['s', 'j', 'neg', 'n'], ',', '', nested)).toBe(
+      `"[1,NaN]","{""x"":NaN}",'-5,[null]`,
+    );
+    // Without jsonColumns, a nested column's text is written as any text.
+    expect(rowToCSVLine({ n: '[NaN]' }, ['n'], ',', '')).toBe('[NaN]');
+  });
+
+  it('quotes a cell for a tab delimiter as for a comma', () => {
+    const line = rowToCSVLine({ id: 1, n: '{"a":[1,2],"b":"x"}' }, ['id', 'n'], '\t', '', nested);
+    expect(line).toBe('1\t"{""a"":[1,2],""b"":""x""}"');
+    expect(JSON.parse(splitCSVLine(line, '\t')[1]!)).toEqual({ a: [1, 2], b: 'x' });
+  });
+});
+
+describe('exportToCSV — nested columns', () => {
+  const schema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+    { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+    { name: 'v', type: 'nested', nullable: true, originalType: 'VARIANT' },
+    { name: 'span', type: 'interval', nullable: true, originalType: 'INTERVAL' },
+  ];
+
+  function contextWith(query: ReturnType<typeof vi.fn>): ExportContext {
+    return {
+      bridge: { query } as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      filters: [],
+      sortColumns: [{ column: 'tags', direction: 'desc' }],
+      selectedRows: new Set([0, 2]),
+      columnOrder: schema.map((c) => c.name),
+      schema,
+    };
+  }
+
+  it('selects nested columns as JSON text and writes them as standard JSON', async () => {
+    const query = vi.fn().mockResolvedValueOnce([
+      { id: 1, tags: '["a, b","NaN"]', doc: '{"x":NaN}', v: '-5', span: '1 day' },
+      { id: 2, tags: null, doc: null, v: '{"k":NaN}', span: null },
+    ]);
+    const csv = await exportToCSV('t', { scope: 'all' }, contextWith(query));
+
+    const sql = query.mock.calls[0]![0] as string;
+    expect(sql).toContain('CAST(to_json("tags") AS VARCHAR) AS "tags"');
+    expect(sql).toContain(
+      'CASE WHEN "v" IS NULL THEN NULL ELSE CAST(CAST("v" AS JSON) AS VARCHAR) END AS "v"',
+    );
+    expect(sql).toContain('CAST("span" AS VARCHAR) AS "span"');
+    expect(sql).toContain('"doc"');
+    expect(sql).toContain('ORDER BY "t"."tags" DESC, "t"."__rowid__" ASC');
+
+    const lines = csv.split('\n');
+    expect(lines).toEqual([
+      'id,tags,doc,v,span',
+      '1,"[""a, b"",""NaN""]","{""x"":NaN}",-5,1 day',
+      '2,,,"{""k"":null}",',
+    ]);
+    expect(JSON.parse(splitCSVLine(lines[1]!, ',')[1]!)).toEqual(['a, b', 'NaN']);
+  });
+
+  it('projects in the outer SELECT of a selection that is not one run of rows', async () => {
+    const query = vi.fn().mockResolvedValueOnce([{ id: 1, tags: '["x"]' }]);
+    const csv = await exportToCSV(
+      't',
+      { scope: 'selected', columns: ['id', 'tags'] },
+      contextWith(query),
+    );
+    const sql = query.mock.calls[0]![0] as string;
+    expect(sql).toContain(
+      'WITH numbered AS (SELECT "id", "tags", ROW_NUMBER() OVER(ORDER BY "t"."tags" DESC',
+    );
+    expect(sql).toContain('SELECT "id", CAST(to_json("tags") AS VARCHAR) AS "tags" FROM numbered');
+    expect(csv).toBe('id,tags\n1,"[""x""]"');
   });
 });

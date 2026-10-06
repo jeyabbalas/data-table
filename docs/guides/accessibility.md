@@ -11,6 +11,7 @@ focus-trap behavior for modals.
 ## You'll learn how to
 
 - Navigate the table entirely from the keyboard
+- Open a list, struct, map or JSON value and walk it as a tree
 - Understand the ARIA roles and live-region announcements
 - Override the ARIA labels for localization or rewording
 - Test the table with a screen reader
@@ -27,38 +28,40 @@ one tab stop, no matter how many columns it has; see
 [the focus model](#focus-model-single-cursor--aria-activedescendant) for the
 four others the table contributes — and then:
 
-| Key                                                    | Action                                                       |
-| ------------------------------------------------------ | ------------------------------------------------------------ |
-| `Tab` / `Shift+Tab`                                    | Leave the grid, forwards / backwards. **Never intercepted.** |
-| `↑` / `↓` / `←` / `→`                                  | Move the cursor                                              |
-| `↑` from the first body row                            | Move the cursor onto the column-header row                   |
-| `↓` from the header row                                | Move the cursor into the body, same column                   |
-| `Home`                                                 | First column in the current row                              |
-| `Ctrl` / `Cmd` + `Home`                                | First cell of the body                                       |
-| `End`                                                  | Last column in the current row                               |
-| `Ctrl` / `Cmd` + `End`                                 | Last cell of the body                                        |
-| `PageUp` / `PageDown`                                  | Move the cursor by one viewport of rows                      |
-| `Enter` (body)                                         | Toggle selection on the cursor's row                         |
-| `Enter` / `Space` (header row)                         | Toggle sort on the cursor's column                           |
-| `Shift`/`Ctrl`/`Cmd` + `Enter` or `Space` (header row) | Add the column to the multi-sort stack                       |
-| `F2` (header row)                                      | Enter controls mode — focus the header cell's first button   |
-| `←` / `→` (controls mode)                              | Cycle that header cell's buttons (wraps)                     |
-| `↑` / `↓` (controls mode)                              | Leave controls mode and move the cursor one row              |
-| `Enter` / `Space` (controls mode)                      | Activate the focused button                                  |
-| `Escape` (controls mode)                               | Leave controls mode; focus returns to the grid               |
-| `Shift` + `F2` (header row)                            | Enter column layout mode — resize and reorder the column     |
-| `←` / `→` (layout mode)                                | Resize the column by 16px, clamped to 50–500                 |
-| `Shift` + `←` / `→` (layout mode)                      | Move the column one position                                 |
-| `Home` / `End` (layout mode)                           | Minimum / maximum width                                      |
-| `Shift` + `Home` / `End` (layout mode)                 | Move the column to the first / last position it may occupy   |
-| `Backspace` (layout mode)                              | Reset the width to the default                               |
-| `Enter` (layout mode)                                  | Commit and leave the mode                                    |
-| `Escape` (layout mode)                                 | Cancel — restore the entry width **and** position            |
-| `Escape`                                               | Clear the cursor                                             |
-| `Ctrl` + `Z` / `Cmd` + `Z`                             | Undo                                                         |
-| `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z`         | Redo                                                         |
-| `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)          |
-| `Ctrl` + `C` / `Cmd` + `C`                             | Copy selected rows (defers to native copy behavior)          |
+| Key                                                    | Action                                                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `Tab` / `Shift+Tab`                                    | Leave the grid, forwards / backwards. **Never intercepted.**                 |
+| `↑` / `↓` / `←` / `→`                                  | Move the cursor                                                              |
+| `↑` from the first body row                            | Move the cursor onto the column-header row                                   |
+| `↓` from the header row                                | Move the cursor into the body, same column                                   |
+| `Home`                                                 | First column in the current row                                              |
+| `Ctrl` / `Cmd` + `Home`                                | First cell of the body                                                       |
+| `End`                                                  | Last column in the current row                                               |
+| `Ctrl` / `Cmd` + `End`                                 | Last cell of the body                                                        |
+| `PageUp` / `PageDown`                                  | Move the cursor by one viewport of rows                                      |
+| `Enter` (body)                                         | Toggle selection on the cursor's row                                         |
+| `Enter` / `Space` (header row)                         | Toggle sort on the cursor's column                                           |
+| `Shift`/`Ctrl`/`Cmd` + `Enter` or `Space` (header row) | Add the column to the multi-sort stack                                       |
+| `F2` (header row)                                      | Enter controls mode — focus the header cell's first button                   |
+| `F2` (a nested or JSON body cell)                      | Open the [value inspector](#value-inspector-f2-on-a-nested-cell) on the cell |
+| `←` / `→` (controls mode)                              | Cycle that header cell's buttons (wraps)                                     |
+| `↑` / `↓` (controls mode)                              | Leave controls mode and move the cursor one row                              |
+| `Enter` / `Space` (controls mode)                      | Activate the focused button                                                  |
+| `Escape` (controls mode)                               | Leave controls mode; focus returns to the grid                               |
+| `Shift` + `F2` (header row)                            | Enter column layout mode — resize and reorder the column                     |
+| `←` / `→` (layout mode)                                | Resize the column by 16px, clamped to 50–500                                 |
+| `Shift` + `←` / `→` (layout mode)                      | Move the column one position                                                 |
+| `Home` / `End` (layout mode)                           | Minimum / maximum width                                                      |
+| `Shift` + `Home` / `End` (layout mode)                 | Move the column to the first / last position it may occupy                   |
+| `Backspace` (layout mode)                              | Reset the width to the default                                               |
+| `Enter` (layout mode)                                  | Commit and leave the mode                                                    |
+| `Escape` (layout mode)                                 | Cancel — restore the entry width **and** position                            |
+| `Escape` (value inspector)                             | Close the inspector; focus returns to the grid, cursor kept                  |
+| `Escape`                                               | Clear the cursor                                                             |
+| `Ctrl` + `Z` / `Cmd` + `Z`                             | Undo                                                                         |
+| `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z`         | Redo                                                                         |
+| `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)                          |
+| `Ctrl` + `C` / `Cmd` + `C`                             | Copy selected rows (defers to native copy behavior)                          |
 
 The keys that move the cursor scroll its cell into view, and so do the keys
 that act on it where it is — `Enter`, `Space`, `F2` and `Shift+F2` — so a
@@ -67,9 +70,10 @@ In layout mode the view follows the column as its width changes, as it moves,
 and back to its place on `Escape`. A column wider than the view is shown from
 its start.
 
-When any modal is open (export dialog, SQL filter editor, derived-column
-editor, preset panel), the grid keyboard shortcuts are disabled — the
-modal owns input until dismissed.
+When any modal or panel holds focus (export dialog, SQL filter editor,
+derived-column editor, preset panel, filter panel, value inspector, extract
+panel), the grid keyboard shortcuts are disabled — the dialog owns input
+until dismissed.
 
 ### Column layout mode (`Shift+F2`)
 
@@ -102,6 +106,145 @@ named in the drag handle's `title` and the resize handle's `aria-label`, and
 the live-region announcement on entry, which reads the whole key map aloud.
 All of those strings are translatable — see
 [ARIA and screen-reader strings](./i18n.md#aria-and-screen-reader-strings).
+
+### Value inspector (`F2` on a nested cell)
+
+A cell of a nested column (a list, array, struct, map, union or VARIANT)
+shows a bounded text of its value: 32 items and `… +N`, at most 1,000
+graphemes. A JSON column's cell shows its whole text on one line, cut off at
+the column's edge. The value inspector shows either value whole, as a tree. It
+opens on such a cell when it holds a value, not a NULL:
+
+- **`F2` on the grid cursor.** The cell is scrolled back into view first if
+  the user has scrolled away from it. On a row still loading, as after
+  `Ctrl+End` on a large table, it waits for the row (see
+  [Gotchas](#gotchas)). `F2` on any other body cell, a scalar one or a NULL,
+  does nothing, as before, and leaves the view where it is.
+- **A double click** anywhere in the cell.
+- **A click on the cell's inspect icon**, which shows at the cell's inline end
+  on hover and on the cursor's cell. The click moves the cursor there and
+  leaves the selection alone; with a modifier key it selects, as any click on a
+  row does. A touch screen has no hover, so there the icon shows on the
+  cursor's cell only, and a tap opens the inspector on that cell only.
+
+Inspectable cells carry `aria-haspopup="dialog"` and `aria-keyshortcuts="F2"`,
+which is how a screen reader user learns that `F2` opens something. The icon is
+drawn by the stylesheet in the cell's pseudo-elements: no element, no text, and
+no tab stop, so the [five-stop census](#focus-model-single-cursor--aria-activedescendant)
+does not change.
+
+The panel is a `role="dialog"`, named by its title: the column and the row's
+1-based position in the table as sorted and filtered, `tags · Row 3`. It opens
+beside the cell, inside the table, with no backdrop; the table keeps scrolling
+under it:
+
+- Focus moves into the panel, and onto the tree's first item once the value
+  has loaded. `Tab` and `Shift+Tab` cycle inside the panel: the tree, then
+  its buttons.
+- `Escape`, the × button and Close close it, and focus returns to `.dt-grid`
+  with the cursor and `aria-activedescendant` where they were; a second
+  `Escape` then clears the cursor, as usual. A press outside the panel, other
+  than on its own cell, closes it too, and so does a filter, sort or data
+  change, a change of the selection, the cursor moving to another cell, or
+  another panel opening. An open still waiting, for the panel's chunk the
+  first time, is dropped by the same things, and by focus leaving the table,
+  so the panel never takes focus from where the user has gone.
+- Asked again for the value it shows, as the second click of a double click
+  on the inspect icon asks, the panel takes focus back: onto the tree, onto
+  Retry, or onto the panel itself while the value loads.
+- A `role="status"` line in the panel says what it is doing: "Loading…"
+  (only after 150 ms, so a fast read says nothing), "Showing the first
+  2,097,152 of 3,000,000 characters" for a value too long to show whole,
+  "Copied", "Copy failed" or "Too large to copy" (each cleared after 3 s), and
+  "Could not load this value" with a Retry button, which takes focus.
+
+The tree follows the
+[APG tree view pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/)
+with flat items (`src/table/TreeView.ts`). Every visible node is a
+`role="treeitem"` child of the `role="tree"` and states its own place with
+`aria-level`, `aria-setsize`, `aria-posinset` and, when it can expand,
+`aria-expanded`. An item's accessible name is its own row only — `x: 1.25`,
+`point: struct(3), 3 fields` — where items nested in `role="group"` elements
+would fold an expanded struct's every field into its parent's name. The tree is
+one tab stop: the active item carries `tabindex="0"` and `aria-selected="true"`.
+The root opens expanded, and its children too when they fit in 50 rows.
+
+| Key                      | Action                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `↓` / `↑`                | Next / previous visible item                                                                                |
+| `→`                      | Expand a closed item; on an open one, move to its first child                                               |
+| `←`                      | Collapse an open item; on a closed one or a leaf, move to its parent                                        |
+| `Home` / `End`           | First / last visible item                                                                                   |
+| `*`                      | Expand the active item and its siblings                                                                     |
+| `Enter` / `Space`        | Expand or collapse the active item                                                                          |
+| A printable character    | Type-ahead: move to the next item whose name starts with what was typed (any character but a space and `*`) |
+| `Ctrl` / `Cmd` + `Enter` | Add the active item as a column, when the inspector offers it (see [Extract panel](#extract-panel))         |
+| `Ctrl` / `Cmd` + `C`     | Copy the active item's value as JSON, unless text in the tree is selected                                   |
+| `Tab` / `Shift+Tab`      | Move between the tree and the panel's buttons; never leaves the panel                                       |
+| `Escape`                 | Close the inspector                                                                                         |
+
+A container too big to list at once is split into buckets of 100 items —
+`[1 … 100]`, `[101 … 200]`, … — each an ordinary item, so the tree never builds
+more rows than it shows; `aria-setsize` and `aria-posinset` count the items
+under one parent, buckets included. Positions in a list, array or map are
+1-based, as in SQL; positions in a JSON array 0-based. Copy JSON copies the
+whole value. In a value shown cut short, `Ctrl/Cmd+C` on an item the cut runs
+through (the root, its last item, that item's last item, and so on down) reads
+the value again first, as Copy JSON does, up to 8 MiB. With the `derivedColumns`
+UI on (the default), the footer also offers "Add as column" for the active item,
+or its length, size or tag, and reports "Adding…" and any failure in the status
+line; the "+" a row shows on hover is `aria-hidden`, since the footer and
+`Ctrl/Cmd+Enter` do the same. The strings the panel and the tree speak are
+translatable — see [Value inspector](./i18n.md#value-inspector).
+
+### Extract panel
+
+A nested or JSON column's header has one more control than other headers: an
+extract button (`.dt-col-extract-btn`), after the filter button. It is
+`tabindex="-1"` like the others and sits in the `F2` cycle — pin, hide, filter,
+extract, sort — so it adds no tab stop. It is named "Extract from point", titled
+"Extract a field as a column", and carries `aria-haspopup="dialog"`, with
+`aria-expanded` saying whether its panel is open. The responsive rules keep it
+with filter and sort: under 750 px of table width the pin button and the drag
+handle hide, and under 550 px the hide button too. With `derivedColumns: false`
+there is no extract button.
+
+The button opens a panel under it, a non-modal `role="dialog"` titled "Extract
+from point", which closes any other panel. `Tab` cycles inside it, `Escape`
+closes it, and focus returns to the button.
+
+- **A tree of the column's type**, the same [APG tree](#value-inspector-f2-on-a-nested-cell)
+  as the inspector's, named "Parts of point": a struct's fields at any depth
+  (an unnamed field by its 1-based position), a union's tag and then its
+  members, a list's or an array's length and then its element, a map's size
+  and then its value. Focus starts on its first item. A JSON or VARIANT column
+  has no tree, and focus starts in the JSON path field.
+- **A labelled field for each step to type**: a 1-based position for each
+  list or array element on the way ("Position in people", "Position in matrix
+  › element"), a key for each map value ("Key in attrs"), and for a part that
+  is JSON or VARIANT, a JSON path, whose hint is tied to it with
+  `aria-describedby`, and a "Read as" select.
+- **The column's name and the expression** it will read, shown as text.
+- **Errors** appear under the fields as you type, tied to them with
+  `aria-describedby` rather than announced, since they change with every key;
+  the field at fault carries `aria-invalid="true"` and Add column is disabled.
+  A map key's field is `aria-required` and starts empty, which is not yet
+  wrong: it is marked once typed in, or once `Enter` is pressed.
+  A failed add is said in a `role="alert"` region in the footer, there from the
+  start so that its text is announced.
+- **Adding.** Add column, `Enter` in a text or number field (not the "Read as" select), `Enter` on a tree item that does not expand (a scalar field, a length, a size, a tag) or `Ctrl/Cmd+Enter` anywhere in the panel adds
+  the column. Meanwhile the button reads "Adding…" and is `aria-disabled`, not
+  `disabled`, so it keeps focus and `Escape` still works.
+
+After an add, from the panel or the inspector, the cursor moves to the new
+column, on its header from the panel or on the same row from the inspector, the
+column scrolls into view, its header flashes, and the live region says "Column
+point_x added". A failure with neither panel open is announced as "Could not
+add the column: …". An add still running is not sent again: the panel opened
+again on its column reads "Adding…" until it lands. Once the panel that asked
+has been closed, by Cancel, `Escape`, a press outside, another panel or a
+cursor move, the column is still added and announced, but the cursor, the
+view and focus stay where the user has gone.
 
 ### Focus model (single cursor + `aria-activedescendant`)
 
@@ -166,7 +309,9 @@ have a screen reader announce "row 3 of 5,001" on a five-row result.
 
 `F2` is the escape hatch into the header's buttons: it moves real DOM focus onto
 the first one, `←` / `→` cycle them, `↑` / `↓` leave and move the cursor, and
-`Escape` hands focus back to `.dt-grid`.
+`Escape` hands focus back to `.dt-grid`. On a body cell that holds a nested or
+JSON value, `F2` opens the [value inspector](#value-inspector-f2-on-a-nested-cell)
+instead, whose `Escape` hands focus back the same way.
 
 A column narrower than its buttons (about 135 px at the default padding; a
 column can be 50 px) shows the buttons that fit and clips the rest at its
@@ -174,7 +319,12 @@ edge, so none lies over the next header. The bar shows all of them, running on
 over the next header's bar, once the pointer has rested on it for 200 ms, and
 at once when keyboard focus is in it. The pointer reaches the others along the
 bar; a pointer passing along the row of bars without pausing reveals nothing,
-so a click lands on the button under it. While a bar is shown, it covers the next header's first
+so a click lands on the button under it. A nested or JSON column's header has
+six controls, so it is narrower than its buttons already at the default
+150 px: six 22-px controls need 132 px where the bar clips at 128, so the
+drag handle loses the last 4 px of its box, past its dots, until hover or
+`F2` shows the bar whole, and its buttons touch, where a five-control
+header's have about 4 px between them. While a bar is shown, it covers the next header's first
 buttons, visibly, until the pointer leaves it. `F2` scrolls the table so the
 button it focuses is always in view, and the last column's bar runs on
 leftward instead, over its own header and the one before.
@@ -199,6 +349,13 @@ tooltip popovers that open on `focusin`, are left alone.
 | Body scroller (`.dt-body-scroll`)                     | `role="rowgroup"`, `tabindex="0"`                                                                      |
 | Data row                                              | `role="row"`                                                                                           |
 | Data cell                                             | `role="gridcell"`                                                                                      |
+| Data cell of a nested or JSON value                   | `role="gridcell"`, `aria-haspopup="dialog"`, `aria-keyshortcuts="F2"`                                  |
+| Value inspector                                       | `role="dialog"` (a non-modal panel), `aria-labelledby` its title                                       |
+| Value inspector status line                           | `role="status"`                                                                                        |
+| Value tree                                            | `role="tree"`, `aria-label` ("Value of tags"); flat `role="treeitem"` items, one tab stop              |
+| Extract button (a nested or JSON column header)       | a button, `aria-haspopup="dialog"`, `aria-expanded`; in the `F2` cycle, `tabindex="-1"`                |
+| Extract panel                                         | `role="dialog"` (a non-modal panel), `aria-labelledby` its title; a `role="tree"` of the column's type |
+| Extract panel failure line                            | `role="alert"`                                                                                         |
 | Filter panel                                          | `role="dialog"` (floating popover)                                                                     |
 | SQL filter modal, export dialog, derived-column modal | `role="dialog"`                                                                                        |
 | Null filter toggle group                              | `role="radiogroup"`                                                                                    |
@@ -322,11 +479,15 @@ high-contrast palette automatically. No extra work needed on your side —
 but if you override `--dt-*` tokens, make sure focus outlines remain
 visible in your overrides.
 
-On top of that automatic behaviour, `src/styles/11-high-contrast.css` — last
+On top of that automatic behaviour, `src/styles/12-high-contrast.css` — last
 in the cascade, so it wins over the per-component styles — adds two targeted
 blocks: `prefers-contrast: more` thickens filter-chip borders, and
 `forced-colors: active` keeps the visualization canvases in colour, pins
-filter chips to `CanvasText` and disabled buttons to `GrayText`. What those
+filter chips to `CanvasText` and disabled buttons to `GrayText`, draws a
+nested cell's inspect icon in `CanvasText` on `Canvas` (forced colours would
+drop the gradients its glyph is drawn with), outlines the active item of the
+value tree and of the extract panel's tree in `Highlight`, and marks an open
+extract button and a field at fault with `Highlight` too. What those
 blocks do _not_ cover is listed under
 [What's not yet supported](#whats-not-yet-supported).
 
@@ -410,20 +571,22 @@ messages: {
 - **Grid keyboard shortcuts are disabled when a dialog is focused.** That's intentional — each context "owns" its keystrokes. Confused users often assume the arrow keys should work inside the filter panel; gently remind them.
 - **Tab always moves on.** It is never intercepted, in any state, including controls mode and the two toolbars. Moving _within_ the grid is the arrow keys' job. Five Tab presses cross the whole table: the filter bar, the cursor, the two scroll regions, the hidden-columns gutter.
 - **The grid does not own keys pressed on the filter bar or the hidden-columns gutter.** They sit inside `.dt-root`, where the keydown listener lives, so the grid explicitly checks that focus is inside `.dt-grid` before acting — otherwise Space on "Clear all filters" would sort a column instead. Undo, redo and copy stay table-wide.
-- **The per-column buttons are not in the tab order.** Sort, pin, hide, filter and the derived-column `f(x)` icon are reachable through `F2` from the header row, not by tabbing. A 266-column table would otherwise put ~1,600 tab stops in front of the next control on the page.
-- **Only the columns near the view have their buttons.** Every visible column has its `columnheader`, with its label, sort state and `aria-colindex`, but the pin, hide, filter and sort buttons and the drag and resize handles exist only for the columns body rows render cells for. The cursor's column is always one of them, so `F2` always has buttons to cycle, and so is a column whose filter panel or derived-column editor is open, so closing it gives focus back to the button that opened it. A screen reader's browse mode, reading the page rather than the grid, finds buttons only in those headers.
+- **The per-column buttons are not in the tab order.** Sort, pin, hide, filter, a nested or JSON column's extract button and the derived-column `f(x)` icon are reachable through `F2` from the header row, not by tabbing. A 266-column table would otherwise put ~1,600 tab stops in front of the next control on the page.
+- **Only the columns near the view have their buttons.** Every visible column has its `columnheader`, with its label, sort state and `aria-colindex`, but the pin, hide, filter and sort buttons and the drag and resize handles exist only for the columns body rows render cells for. The cursor's column is always one of them, so `F2` always has buttons to cycle, and so is a column whose filter panel, extract panel or derived-column editor is open, so closing it gives focus back to the button that opened it. A screen reader's browse mode, reading the page rather than the grid, finds buttons only in those headers.
 - **The drag handle and the resize handle are not in the `F2` cycle either.** `ColumnHeader.getControls()` — the list `F2` walks — omits them on purpose, along with any control the responsive rules have hidden and any disabled one. A focus stop whose Enter key does nothing is worse than no stop at all, and a focusable `role="separator"` would need `aria-valuenow` / `aria-valuemin` / `aria-valuemax` to stay valid. They have their own gesture instead: [`Shift+F2`](#column-layout-mode-shiftf2), which costs no tab stop and no focus stop.
 - **Live-region announcements are `polite`, not `assertive`.** Long-running operations queue without interrupting the user's current read. For ops that need interruption (errors), raise your own `role="alert"` region.
 - **Hide button preserves the last-visible column.** Pressing hide on the only visible column does nothing — the table must have at least one visible column.
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
+- **`F2` on a body cell only opens the value inspector.** On a cell of a nested or JSON column that holds a value, it opens the inspector; on a row still loading, as after `Ctrl+End` on a large table, it opens it once the row arrives with a value there, unless first the cursor moves, a filter, sort, selection or the table changes, or another panel opens. When the row arrives, the cursor must still be on the cell, focus on the grid (not on a header button) and no dialog open, and a row that has left the rows rendered drops the request: it never opens later. On any other body cell, a scalar one or a NULL, it does nothing and scrolls nothing. Body cells have no controls mode.
 - **High-DPI + custom focus ring.** If you override `--dt-primary`, check that the focus outline contrast ratio stays ≥ 3:1 against the cell background.
 
 ## Manual screen-reader test plan
 
 The automated `tests/a11y/axe.test.ts` suite catches structural ARIA
-issues in jsdom (13 scenarios — empty shell, light and dark, header cursor
-set, filters open, sort active, every modal, every popover, multi-table,
-RTL). Every rule except `color-contrast` runs, including
+issues in jsdom (19 scenarios — empty shell, light and dark, header cursor
+set, column layout mode in light and dark, filters open, sort active, every
+modal, the value inspector and the extract panel in light and dark, every
+popover, multi-table, RTL). Every rule except `color-contrast` runs, including
 `aria-required-children`; contrast is guarded separately by
 `tests/styles/contrast.test.ts`, which computes ratios from the token
 declarations. The matrix below covers the dynamic announcement and
@@ -432,19 +595,21 @@ focus-flow behaviour that needs a real screen reader.
 Run before each release on at least one combination of OS + screen
 reader from each row. The test rig is the demo (`npm run dev`).
 
-| Scenario                                                                        | VoiceOver (macOS, Safari)                                                                                                           | NVDA (Windows, Firefox) | JAWS (Windows, Chrome) |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------- |
-| **Grid focus + arrow nav** — focus the grid, ArrowDown / ArrowRight a few cells | row N, column NAME, value V                                                                                                         | same                    | same                   |
-| **Tab through** — Tab from the control before the table to the one after it     | six presses — five stops inside, one to step off — regardless of column count, hidden columns or active filters; Shift+Tab retraces | same                    | same                   |
-| **Header cursor** — ArrowUp from body row 0, then ArrowLeft / ArrowRight        | column header name, type, sort and filter state                                                                                     | same                    | same                   |
-| **Controls mode** — F2 on a header, ArrowRight a few times, Enter, Escape       | button label announced on each step; Escape returns to the grid cursor                                                              | same                    | same                   |
-| **Layout mode** — Shift+F2 on a header, then ←, Shift+→, Backspace, Escape      | key map read on entry; each step announces a width or a new position; Escape says the layout was cancelled                          | same                    | same                   |
-| **Filter add** — open Filter panel, apply a range filter, close                 | live region: "1 filter active, showing X of Y rows"                                                                                 | same                    | same                   |
-| **Sort change** — click a column header twice (toggle desc)                     | live region: "sorted by NAME descending"                                                                                            | same                    | same                   |
-| **Modal open** — open Export, then SQL filter, then Derived column              | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener                          | same                    | same                   |
-| **Annotation popover** — focus an annotated cell; trigger via pointer / focus   | tooltip role; description announced                                                                                                 | same                    | same                   |
-| **Column header tooltip** — focus a header with a tooltip set                   | tooltip role; description announced                                                                                                 | same                    | same                   |
-| **Undo / redo** — Cmd/Ctrl+Z then Cmd/Ctrl+Shift+Z                              | live region announces resulting state ("0 filters active, …")                                                                       | same (Ctrl+Z / Ctrl+Y)  | same                   |
+| Scenario                                                                                                                                | VoiceOver (macOS, Safari)                                                                                                                                                 | NVDA (Windows, Firefox) | JAWS (Windows, Chrome) |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------- |
+| **Grid focus + arrow nav** — focus the grid, ArrowDown / ArrowRight a few cells                                                         | row N, column NAME, value V                                                                                                                                               | same                    | same                   |
+| **Tab through** — Tab from the control before the table to the one after it                                                             | six presses — five stops inside, one to step off — regardless of column count, hidden columns or active filters; Shift+Tab retraces                                       | same                    | same                   |
+| **Header cursor** — ArrowUp from body row 0, then ArrowLeft / ArrowRight                                                                | column header name, type, sort and filter state                                                                                                                           | same                    | same                   |
+| **Controls mode** — F2 on a header, ArrowRight a few times, Enter, Escape                                                               | button label announced on each step; Escape returns to the grid cursor                                                                                                    | same                    | same                   |
+| **Layout mode** — Shift+F2 on a header, then ←, Shift+→, Backspace, Escape                                                              | key map read on entry; each step announces a width or a new position; Escape says the layout was cancelled                                                                | same                    | same                   |
+| **Extract panel** — F2 on a list header to its extract button, Enter, ↓ to `element`, Tab to the position field, type a position, Enter | the button announces it opens a dialog; dialog title and tree announced; a wrong position is described on the field; "Column … added" on success; focus lands on the grid | same                    | same                   |
+| **Value inspector** — F2 on a nested cell, then ↓, →, `*`, Ctrl/Cmd+C, Escape                                                           | the cell announces it opens a dialog; dialog title announced; each item read with its level and position; Escape returns to the grid cursor                               | same                    | same                   |
+| **Filter add** — open Filter panel, apply a range filter, close                                                                         | live region: "1 filter active, showing X of Y rows"                                                                                                                       | same                    | same                   |
+| **Sort change** — click a column header twice (toggle desc)                                                                             | live region: "sorted by NAME descending"                                                                                                                                  | same                    | same                   |
+| **Modal open** — open Export, then SQL filter, then Derived column                                                                      | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener                                                                | same                    | same                   |
+| **Annotation popover** — focus an annotated cell; trigger via pointer / focus                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
+| **Column header tooltip** — focus a header with a tooltip set                                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
+| **Undo / redo** — Cmd/Ctrl+Z then Cmd/Ctrl+Shift+Z                                                                                      | live region announces resulting state ("0 filters active, …")                                                                                                             | same (Ctrl+Z / Ctrl+Y)  | same                   |
 
 Document any divergence in the relevant release / phase report. Known
 quirks worth checking:
@@ -489,7 +654,7 @@ to post-1.0).
 ## What's not yet supported
 
 - **Contrast beyond AA under `prefers-contrast: more`.** The media query
-  _is_ handled — `src/styles/11-high-contrast.css` ships a
+  _is_ handled — `src/styles/12-high-contrast.css` ships a
   `@media (prefers-contrast: more)` block — but all it does is thicken the
   filter-chip border to 2px so chip boundaries stay distinct against the
   user's preferred palette. The colour tokens are left alone, on the grounds
@@ -503,7 +668,9 @@ to post-1.0).
   narrow: it opts the visualization canvases and SVGs out of colour
   flattening with `forced-color-adjust: none` (histogram bars and brush
   selections carry information, so flattening them loses data), pins
-  `.dt-filter-chip` to `CanvasText`, and maps disabled buttons to `GrayText`.
+  `.dt-filter-chip` to `CanvasText`, maps disabled buttons to `GrayText`, and
+  keeps the inspect icon, the trees' active items, an open extract button
+  and a field at fault visible.
   Everything else — modals, popovers, filled buttons, non-filter chips — is
   left to whatever the user agent substitutes.
 - **Touch drag for column resize / reorder** — the pointer path uses mouse
@@ -519,4 +686,4 @@ to post-1.0).
 - i18n: [i18n guide](./i18n.md) for translating `a11y` strings and ARIA labels
 - Theming: [Theming guide](./theming.md) for focus-outline and contrast customization
 - Migration: [v0.5 → v0.6](../migration-guides/from-0.5-to-0.6.md) if you query the table's DOM by ARIA role
-- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode), `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/11-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)
+- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode), `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region, `openValueInspector`), `src/table/ValueInspector.ts`, `src/table/ExtractColumnPanel.ts` and `src/table/TreeView.ts` (the value inspector, the extract panel and their tree), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/12-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)

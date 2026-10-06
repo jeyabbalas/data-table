@@ -11,7 +11,7 @@ npm run dev
 
 ## API surface
 
-- [`actions.getColumnValues(name, opts?)`](../../docs/api-reference.md#column-export) — returns `Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]` depending on column type.
+- [`actions.getColumnValues(name, opts?)`](../../docs/api-reference.md#column-values-read-only-export) — returns `Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]` depending on column type.
 - [`ROWID_COLUMN`](../../docs/api-reference.md#tier-1-exports) — the string constant `"__rowid__"`, reserved for the synthetic row id.
 - [`actions.showColumn`](../../docs/api-reference.md#column-visibility) / [`actions.hideColumn`](../../docs/api-reference.md#column-visibility).
 

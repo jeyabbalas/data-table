@@ -1,9 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { CellRenderer, type CellOptions } from '@/table/Cell';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { CellRenderer, isInspectableColumn, type CellOptions } from '@/table/Cell';
 import type { ColumnSchema } from '@/core/types';
+import { outlinedColumnType } from '@/nested/typeOutline';
 
 describe('CellRenderer', () => {
   let renderer: CellRenderer;
@@ -288,6 +289,37 @@ describe('CellRenderer', () => {
       };
     });
 
+    describe('nested values', () => {
+      const nested: ColumnSchema = {
+        name: 'point',
+        type: 'nested',
+        nullable: true,
+        originalType: 'STRUCT(x DOUBLE, tier VARCHAR)',
+      };
+
+      it("shows DuckDB's text as it is, as text, with a title", () => {
+        renderer.render(cellEl, "{'x': 1.25, 'tier': bronze}", nested);
+        expect(cellEl.textContent).toBe("{'x': 1.25, 'tier': bronze}");
+        expect(cellEl.title).toBe("{'x': 1.25, 'tier': bronze}");
+        expect(cellEl.classList.contains('dt-cell--number')).toBe(false);
+        expect(cellEl.classList.contains('dt-cell--null')).toBe(false);
+      });
+
+      it('clears the number class a reused cell carried', () => {
+        renderer.render(cellEl, 42, schema);
+        expect(cellEl.classList.contains('dt-cell--number')).toBe(true);
+        renderer.render(cellEl, '[1, 2, 3]', { ...nested, originalType: 'INTEGER[]' });
+        expect(cellEl.textContent).toBe('[1, 2, 3]');
+        expect(cellEl.classList.contains('dt-cell--number')).toBe(false);
+      });
+
+      it('shows NULL as null', () => {
+        renderer.render(cellEl, null, nested);
+        expect(cellEl.textContent).toBe('null');
+        expect(cellEl.classList.contains('dt-cell--null')).toBe(true);
+      });
+    });
+
     describe('null values', () => {
       it('should display "null" text', () => {
         renderer.render(cellEl, null, schema);
@@ -484,6 +516,91 @@ describe('CellRenderer', () => {
         renderer.render(cellEl, longText, schema);
         expect(cellEl.title).toBe(longText);
       });
+    });
+  });
+
+  describe('inspectable cells (the value inspector)', () => {
+    const nested: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+    const json: ColumnSchema = {
+      name: 'doc',
+      type: 'string',
+      nullable: true,
+      originalType: 'JSON',
+    };
+    const text: ColumnSchema = {
+      name: 'name',
+      type: 'string',
+      nullable: true,
+      originalType: 'VARCHAR',
+    };
+
+    it('takes nested and JSON columns, and nothing else', () => {
+      expect(isInspectableColumn(nested)).toBe(true);
+      expect(
+        isInspectableColumn({ ...nested, originalType: 'STRUCT(x DOUBLE, tier VARCHAR)' }),
+      ).toBe(true);
+      expect(isInspectableColumn({ ...nested, originalType: 'VARIANT' })).toBe(true);
+      expect(isInspectableColumn(json)).toBe(true);
+      expect(isInspectableColumn(text)).toBe(false);
+      expect(
+        isInspectableColumn({
+          name: 'n',
+          type: 'integer',
+          nullable: false,
+          originalType: 'INTEGER',
+        }),
+      ).toBe(false);
+      expect(isInspectableColumn(undefined)).toBe(false);
+    });
+
+    it('takes exactly the columns whose header shows a type outline, schemas built by hand included', () => {
+      const answers: string[] = [];
+      for (const type of ['nested', 'string', 'integer'] as const) {
+        for (const originalType of ['VARCHAR[]', 'JSON', 'VARCHAR', 'INTEGER', 'STRUCT(a', '']) {
+          const column: ColumnSchema = { name: 'c', type, nullable: true, originalType };
+          if (isInspectableColumn(column) !== (outlinedColumnType(column) !== null)) {
+            answers.push(`${type} ${originalType}`);
+          }
+        }
+      }
+      expect(answers).toEqual([]);
+    });
+
+    it('marks a cell with the class, aria-haspopup and aria-keyshortcuts, and unmarks it', () => {
+      const cellEl = document.createElement('div');
+      renderer.setInspectable(cellEl, true);
+      expect(cellEl.classList.contains('dt-cell--inspectable')).toBe(true);
+      expect(cellEl.getAttribute('aria-haspopup')).toBe('dialog');
+      expect(cellEl.getAttribute('aria-keyshortcuts')).toBe('F2');
+
+      renderer.setInspectable(cellEl, false);
+      expect(cellEl.classList.contains('dt-cell--inspectable')).toBe(false);
+      expect(cellEl.hasAttribute('aria-haspopup')).toBe(false);
+      expect(cellEl.hasAttribute('aria-keyshortcuts')).toBe(false);
+    });
+
+    it('writes nothing when nothing changes', () => {
+      const cellEl = document.createElement('div');
+      renderer.setInspectable(cellEl, true);
+      const setAttribute = vi.spyOn(cellEl, 'setAttribute');
+      const removeAttribute = vi.spyOn(cellEl, 'removeAttribute');
+      renderer.setInspectable(cellEl, true);
+      expect(setAttribute).not.toHaveBeenCalled();
+
+      renderer.setInspectable(cellEl, false);
+      renderer.setInspectable(cellEl, false);
+      expect(removeAttribute).toHaveBeenCalledTimes(2); // once per attribute, once only
+    });
+
+    it('uses the class prefix', () => {
+      const cellEl = document.createElement('div');
+      new CellRenderer({ classPrefix: 'custom' }).setInspectable(cellEl, true);
+      expect(cellEl.className).toBe('custom-cell--inspectable');
     });
   });
 

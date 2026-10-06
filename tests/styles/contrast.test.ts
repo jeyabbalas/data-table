@@ -47,6 +47,7 @@ import {
   type Rule,
   type ThemeName,
 } from './cssContrast';
+import { inkFor } from '../../src/visualizations/palette';
 
 /** WCAG AA for text below 18pt / 14pt-bold. Nothing here qualifies as large. */
 const AA_NORMAL_TEXT = 4.5;
@@ -431,6 +432,10 @@ describe('component rules — indicators (WCAG 1.4.11)', () => {
       ],
       ['action-panel icons', paintedBy('03-columns.css', '.dt-col-action-btn')],
       ['an active action icon', paintedBy('03-columns.css', '.dt-col-action-btn--active')],
+      [
+        'the extract icon while its panel is open',
+        paintedBy('03-columns.css', ".dt-col-extract-btn[aria-expanded='true']"),
+      ],
     ];
 
     it.each(
@@ -521,6 +526,8 @@ describe('stylesheet antipatterns', () => {
       '.dt-export-dialog',
       '.dt-filter-panel-body', // filter inputs
       '.dt-filter-preset-list', // preset rows, each with load/delete buttons
+      '.dt-value-tree', // treeitems, the active one the tree's tab stop
+      '.dt-extract-panel__body', // the type's tree, inputs, the name field
     ]);
     const found: string[] = [];
     for (const file of componentStyleFiles()) {
@@ -552,5 +559,263 @@ describe('stylesheet antipatterns', () => {
         'overflow',
       ),
     ).toMatch(/\b(auto|scroll)\b/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Canvas labels — the nested summary bar
+// ---------------------------------------------------------------------------
+
+/**
+ * The summary chart of a nested column labels its segments on the canvas,
+ * where no stylesheet rule can be checked: "99%" on the primary fill and "∅"
+ * on the accent, in the ink `inkFor` picks for the fill, and on a faded or
+ * ghost segment (another one hovered, or filters on) in `--dt-text`. The
+ * type outline under the bar is `--dt-text-secondary` on the chart slot.
+ */
+describe('canvas labels — the nested summary bar', () => {
+  /** Fills a label is drawn on solid: the segments, resting and hovered. */
+  const SOLID_FILLS = [
+    '--dt-primary',
+    '--dt-primary-hover',
+    '--dt-accent',
+    '--dt-accent-hover',
+  ] as const;
+
+  /** Translucent fills, labelled in `--dt-text`: faded (hover) and ghost (filters). */
+  const TINTED_FILLS = [
+    '--dt-primary-alpha-30',
+    '--dt-primary-alpha-50',
+    '--dt-accent-soft',
+  ] as const;
+
+  /** The chart slot, which the tints are painted over. */
+  const chartSlot = paintedBy('03-columns.css', '.dt-col-viz', 'background');
+
+  describe.each(THEME_NAMES)('%s theme', (themeName) => {
+    it.each(SOLID_FILLS)(`the ink inkFor picks clears ${AA_NORMAL_TEXT}:1 on %s`, (fillToken) => {
+      // What the chart reads from the computed style: the token's colour.
+      const fill = formatHex(resolveColor(`var(${fillToken})`, themeName));
+      const ink = inkFor(fill);
+      expectRatio(
+        () => parseColor(ink, {}),
+        token(fillToken),
+        AA_NORMAL_TEXT,
+        `inkFor(${fill}) = ${ink} on ${fillToken}`,
+        themeName,
+      );
+    });
+
+    it.each(TINTED_FILLS)(
+      `--dt-text clears ${AA_NORMAL_TEXT}:1 on %s over the chart slot`,
+      (fillToken) => {
+        expectRatio(
+          token('--dt-text'),
+          layered(token(fillToken), chartSlot),
+          AA_NORMAL_TEXT,
+          `--dt-text on ${fillToken} over .dt-col-viz`,
+          themeName,
+        );
+      },
+    );
+
+    it(`the type outline clears ${AA_NORMAL_TEXT}:1 on the chart slot`, () => {
+      expectRatio(
+        token('--dt-text-secondary'),
+        chartSlot,
+        AA_NORMAL_TEXT,
+        '--dt-text-secondary on .dt-col-viz',
+        themeName,
+      );
+    });
+  });
+
+  it(`picks an ink that clears ${AA_NORMAL_TEXT}:1 on any opaque fill`, () => {
+    const fills: string[] = [];
+    for (let v = 0; v <= 255; v += 5) {
+      const h = v.toString(16).padStart(2, '0');
+      fills.push(`#${h}${h}${h}`, `#${h}0000`, `#00${h}00`, `#0000${h}`, `#${h}${h}00`);
+    }
+    // Mid-tones, where white and near-black both fall short of 4.5:1.
+    fills.push('#767676', '#808080', '#7a7a7a', '#2f9e44', '#e8590c', '#d6336c', '#1c7ed6');
+    for (const fill of fills) {
+      const ratio = contrastRatio(parseColor(inkFor(fill), {}), parseColor(fill, {}));
+      expect(
+        ratio,
+        `inkFor(${fill}) = ${inkFor(fill)} is ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    }
+  });
+
+  it('prefers white, then near-black, and black only for a mid-tone', () => {
+    expect(inkFor('#2563eb')).toBe('#ffffff');
+    expect(inkFor('#60a5fa')).toBe('#111827');
+    expect(inkFor('#f59e0b')).toBe('#111827');
+    expect(inkFor('#000000')).toBe('#ffffff');
+    expect(inkFor('#ffffff')).toBe('#111827');
+    // Neither white (4.24:1) nor #111827 (4.19:1) reaches 4.5:1 on #6b7d8f; black is 4.96:1.
+    expect(inkFor('#6b7d8f')).toBe('#000000');
+  });
+
+  it('reads short and long hex, rgb() and rgba() in either syntax', () => {
+    expect(inkFor('#25E')).toBe(inkFor('#2255ee'));
+    expect(inkFor('  #2563EB ')).toBe('#ffffff');
+    expect(inkFor('rgb(37, 99, 235)')).toBe('#ffffff');
+    expect(inkFor('rgb(37 99 235)')).toBe('#ffffff');
+    expect(inkFor('rgb(14.5% 38.8% 92.2%)')).toBe('#ffffff');
+    expect(inkFor('rgba(96, 165, 250, 1)')).toBe('#111827');
+    expect(inkFor('#60a5faff')).toBe('#111827');
+  });
+
+  it('reads a translucent fill as painted over its backdrop', () => {
+    // 30% primary over white is a pale blue; over the dark slot, a dark one.
+    expect(inkFor('rgba(37, 99, 235, 0.3)')).toBe('#111827');
+    expect(inkFor('rgba(37, 99, 235, 0.3)', { backdrop: '#1f2937' })).toBe('#ffffff');
+    expect(inkFor('#2563eb4d', { backdrop: '#1f2937' })).toBe('#ffffff');
+    expect(inkFor('transparent', { backdrop: '#111827' })).toBe('#ffffff');
+  });
+
+  it('falls back for a fill it cannot read', () => {
+    expect(inkFor('oklch(0.62 0.19 260)')).toBe('#ffffff');
+    expect(inkFor('rebeccapurple', { fallback: '#111827' })).toBe('#111827');
+    expect(inkFor('rgb(1, 2)')).toBe('#ffffff');
+    expect(inkFor('#12345')).toBe('#ffffff');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. The value inspector — the cell's inspect icon, the tree's text
+// ---------------------------------------------------------------------------
+
+describe('the value inspector', () => {
+  describe.each(THEME_NAMES)('%s theme', (themeName) => {
+    // The icon is the only sign that the cell opens a dialog: non-text
+    // content, drawn in the glyph's colour on the chip behind it.
+    it(`the inspect glyph clears ${AA_NON_TEXT}:1 on its chip`, () => {
+      const icon = '.dt-cell--inspectable:is(:hover, .dt-cell--focused)';
+      expectRatio(
+        paintedBy('05-data-grid.css', `${icon}::after`),
+        paintedBy('05-data-grid.css', `${icon}::before`, 'background'),
+        AA_NON_TEXT,
+        'the inspect glyph on its chip',
+        themeName,
+      );
+    });
+
+    /** Every text style a tree row shows, by the rule that colours it. */
+    const TREE_TEXT = [
+      '.dt-value-tree__key--column',
+      '.dt-value-tree__key--field',
+      '.dt-value-tree__key--bucket',
+      '.dt-value-tree__key--position',
+      '.dt-value-tree__key--json-index',
+      '.dt-value-tree__key--part',
+      '.dt-value-tree__sep',
+      '.dt-value-tree__type',
+      '.dt-value-tree__count',
+      '.dt-value-tree__more',
+      '.dt-value-tree__preview',
+      '.dt-value-tree__value--string',
+      '.dt-value-tree__value--number',
+      '.dt-value-tree__value--keyword',
+      '.dt-value-tree__value--null',
+    ] as const;
+
+    /** The surfaces a row sits on: the panel, and a hovered or active row. */
+    const ROW_SURFACES: Array<[string, Paint]> = [
+      ['the panel', paintedBy('11-nested.css', '.dt-value-inspector', 'background')],
+      [
+        'an active row',
+        paintedBy('11-nested.css', ".dt-value-tree__item[aria-selected='true']", 'background'),
+      ],
+    ];
+
+    it.each(
+      TREE_TEXT.flatMap((selector) =>
+        ROW_SURFACES.map(([surface, bg]) => [selector, surface, bg] as const),
+      ),
+    )(`%s clears ${AA_NORMAL_TEXT}:1 on %s`, (selector, surface, bg) => {
+      expectRatio(
+        paintedBy('11-nested.css', selector),
+        bg,
+        AA_NORMAL_TEXT,
+        `${selector} on ${surface}`,
+        themeName,
+      );
+    });
+
+    it(`the active row's marker and the "add" glyph clear ${AA_NON_TEXT}:1`, () => {
+      const activeRow = paintedBy(
+        '11-nested.css',
+        ".dt-value-tree__item[aria-selected='true']",
+        'background',
+      );
+      expectRatio(
+        paintedBy('11-nested.css', ".dt-value-tree__item[aria-selected='true']", 'box-shadow'),
+        activeRow,
+        AA_NON_TEXT,
+        'the active row marker',
+        themeName,
+      );
+      expectRatio(
+        paintedBy('11-nested.css', '.dt-value-tree__add'),
+        activeRow,
+        AA_NON_TEXT,
+        'the add glyph on a hovered row',
+        themeName,
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. The extract panel — its labels, hint, errors and buttons
+// ---------------------------------------------------------------------------
+
+describe('the extract panel', () => {
+  describe.each(THEME_NAMES)('%s theme', (themeName) => {
+    const panel = paintedBy('11-nested.css', '.dt-extract-panel', 'background');
+
+    /** Text set on the panel's own surface; its tree's text is checked above. */
+    const PANEL_TEXT = [
+      '.dt-extract-panel__label',
+      '.dt-extract-panel__hint',
+      '.dt-extract-panel__error',
+      '.dt-extract-panel__alert',
+    ] as const;
+
+    it.each(PANEL_TEXT)(`%s clears ${AA_NORMAL_TEXT}:1 on the panel`, (selector) => {
+      expectRatio(paintedBy('11-nested.css', selector), panel, AA_NORMAL_TEXT, selector, themeName);
+    });
+
+    it(`Add column clears ${AA_NORMAL_TEXT}:1 at rest and hovered`, () => {
+      const button = '.dt-extract-panel__button--primary';
+      expectRatio(
+        paintedBy('11-nested.css', button),
+        paintedBy('11-nested.css', button, 'background'),
+        AA_NORMAL_TEXT,
+        'Add column',
+        themeName,
+      );
+      const hovered = `${button}:hover:not(:disabled)`;
+      expectRatio(
+        paintedBy('11-nested.css', hovered),
+        paintedBy('11-nested.css', hovered, 'background'),
+        AA_NORMAL_TEXT,
+        'a hovered Add column',
+        themeName,
+      );
+    });
+
+    it(`the expression preview clears ${AA_NORMAL_TEXT}:1 on its well`, () => {
+      const preview = '.dt-extract-panel__expression';
+      expectRatio(
+        paintedBy('11-nested.css', preview),
+        paintedBy('11-nested.css', preview, 'background'),
+        AA_NORMAL_TEXT,
+        'the expression preview',
+        themeName,
+      );
+    });
   });
 });

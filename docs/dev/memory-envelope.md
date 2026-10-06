@@ -139,6 +139,41 @@ Measured afterwards to design the load path (#120), same setup. `prefetch` is
   while a 2.2 GB table was held. `src/worker/openFileFix.ts` puts those writes where they belong,
   in DuckDB's worker; duckdb-wasm's main branch shifts the same way.
 
+## Follow-up: nested columns
+
+Measured for the nested-type work, DuckDB 1.5.4 (duckdb-wasm 1.33.1-dev57) in Node. The table
+estimate charged every nested value a flat 40 bytes, so a `FLOAT[768]` embedding, about 3 KB a row
+in DuckDB, came out at 3% of its size, and a table that could not fit was loaded anyway. The
+text-length sample also failed on any `VARCHAR[]` or `JSON[]` column (`strlen` of a list), and on a
+JSON column read from Parquet before the json extension loads; the Binder error was swallowed, and
+every text column then counted 8 bytes.
+
+- **DuckDB stores a nested column as a tree of columns,** each with its own segments and validity
+  mask (its `ColumnData`): a LIST as an 8-byte offset per row over a child column of its items, an
+  ARRAY as a mask over `size` items per row, a STRUCT as a mask over a column per field, a MAP as a
+  LIST of `STRUCT(key, value)`, a UNION as a STRUCT of a `UTINYINT` tag and every member, each
+  holding a value for every row, and a VARIANT as a STRUCT of four columns (its object keys, its
+  arrays' and objects' children, its values and its data), 13 storage columns in all, whose first
+  segments take 212 KiB for a single row. `storageColumns` reads that tree off the type, and
+  `estimateStorageBytes` sizes each column as it does a scalar one: whole 256 KiB blocks per row
+  group, the first group starting each column with a one-vector segment. Against `duckdb_memory()`
+  on tables of 1 to 200,000 rows, single columns of each kind match to the block; the cases are in
+  `tests/worker/loaders/memoryBudget.test.ts`.
+- **Lengths come from a second sample** of 2,048 rows, caught on its own: the average length of
+  each list (`len`), map (`cardinality`) and text inside a nested value, each charged its own, so
+  a struct of several lists is sized list by list. `STRUCT(chunks VARCHAR[], ids BIGINT[])`, with
+  2 chunks of 5,000 characters and 2,000 ids a row, came out at 100 GB for 20,000 rows that take
+  0.53 GB while one average stood for both lists, and is now estimated at 0.995×. Lists below the
+  outermost level count 4 items. The text sample now picks columns by their parsed type (top-level VARCHAR,
+  BLOB, BIT and JSON) and measures text as `strlen(CAST(c AS VARCHAR))`, which binds for a Parquet
+  JSON column too, and BLOB and BIT as `octet_length(c)`.
+- **Whole tables** (`tests/worker/loaders/memoryBudget.duckdb.test.ts`): 20,000 `FLOAT[768]`
+  embeddings are estimated at 1.00× DuckDB's count, and 200,000 rows of long text beside a
+  `VARCHAR[]` column at 0.985×, where the failed sample had them 59% low. Short STRUCT, MAP, LIST
+  and `JSON[]` tables are checked within ±25%. VARIANT errs high by design, being sized from its
+  text: 1.0× for integers and long strings, 1.2× for doubles, 1.6–1.7× for arrays of numbers and
+  for objects.
+
 ## Caveats
 
 - Synthetic data. Its strings are 8 characters, which DuckDB stores inline; longer strings cost

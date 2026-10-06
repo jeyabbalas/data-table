@@ -8,7 +8,7 @@
 
 > **isDateType**(`type`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:74](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/VisualizationRegistry.ts#L74)
+Defined in: [visualizations/VisualizationRegistry.ts:75](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/VisualizationRegistry.ts#L75)
 
 Check if a column type is date/timestamp (suitable for date histogram).
 

@@ -44,7 +44,8 @@
     height: 3.9em;
   }
 
-  /* Action panel: hide pin and drag (keep filter, sort, hide) */
+  /* Action panel: hide pin and drag (keep filter, sort, hide, and a nested
+     or JSON column's extract button) */
   .dt-col-pin-btn,
   .dt-col-drag-handle {
     display: none;
@@ -103,7 +104,8 @@
     display: none;
   }
 
-  /* Action panel: only filter and sort remain */
+  /* Action panel: only filter and sort remain, and extract on a nested or
+     JSON column */
   .dt-col-hide-btn {
     display: none;
   }

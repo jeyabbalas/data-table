@@ -268,6 +268,47 @@
   z-index: var(--dt-z-table-body, 1);
 }
 
+/* A nested or JSON value opens the value inspector. Its icon (on hover and on
+   the cursor) is the cell's pseudo-elements, a chip and a glyph drawn with
+   gradients: no element for a render to clobber, no text for a screen
+   reader, no data: URI for a CSP. See TableBody.handleInspectIconClick. */
+.dt-cell--inspectable {
+  position: relative;
+  align-self: stretch;
+  line-height: var(--dt-row-height);
+}
+
+.dt-cell--inspectable:is(:hover, .dt-cell--focused)::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 10px);
+  inset-inline-end: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--dt-radius-sm);
+  background: var(--dt-bg-tertiary);
+  box-shadow: 0 0 0 1px var(--dt-border);
+}
+
+.dt-cell--inspectable:is(:hover, .dt-cell--focused)::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 5px);
+  inset-inline-end: 8px;
+  width: 12px;
+  height: 10px;
+  color: var(--dt-text-secondary);
+  background-image:
+    linear-gradient(currentColor, currentColor), linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-position:
+    0 0,
+    4px 4px,
+    4px 8px;
+  background-size: 8px 2px;
+  background-repeat: no-repeat;
+}
+
 /* ===========================================
    Column Reordering
    =========================================== */

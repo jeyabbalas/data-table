@@ -1,9 +1,14 @@
 import type { DeepPartial, Strings } from '@jeyabbalas/data-table';
 
+/** `de` before a word, elided before a vowel: « de tags », « d'attrs ». */
+const de = (word: string): string =>
+  /^[aeiouàâäéèêëîïôöùûü]/i.test(word) ? `d'${word}` : `de ${word}`;
+
 /**
  * French translation of every user-facing label the table renders on the
  * common interaction paths (filter panel, column-header menu, export dialog,
- * presets, stats line, screen-reader labels). Pass this as `messages` to
+ * presets, stats line, screen-reader labels, and the value inspector and
+ * extract panel of nested and JSON columns). Pass this as `messages` to
  * `createDataTable()`. Keys you don't override fall back to English.
  */
 export const frenchMessages: DeepPartial<Strings> = {
@@ -342,6 +347,81 @@ export const frenchMessages: DeepPartial<Strings> = {
     uniqueCount: (count) => `${count.toLocaleString()} unique`,
     uniquePercent: (count, pct) => `${count.toLocaleString()} unique (${pct} %)`,
     separator: ' · ',
+    nonNullCategory: 'non null',
     chartFailed: 'Échec du chargement',
+    noData: 'Aucune donnée',
+  },
+
+  values: {
+    typeList: (element) => `liste ${de(element)}`,
+    typeArray: (element, size) => `tableau de ${size.toLocaleString()} ${element}`,
+    typeStruct: (fieldCount) =>
+      `structure à ${fieldCount.toLocaleString()} ${fieldCount < 2 ? 'champ' : 'champs'}`,
+    typeMap: (key, value) => `dictionnaire ${de(key)} vers ${value}`,
+    typeUnion: (memberCount) =>
+      `union de ${memberCount.toLocaleString()} ${memberCount < 2 ? 'type' : 'types'}`,
+    typeJson: 'JSON',
+    typeVariant: 'variant',
+
+    inspectorTitle: (column, rowLabel) => `${column} · ${rowLabel}`,
+    rowLabel: (row) => `Ligne ${row.toLocaleString()}`,
+    treeLabel: (column) => `Valeur ${de(column)}`,
+    itemCount: (count) => `${count.toLocaleString()} ${count < 2 ? 'élément' : 'éléments'}`,
+    entryCount: (count) => `${count.toLocaleString()} ${count < 2 ? 'entrée' : 'entrées'}`,
+    fieldCount: (count) => `${count.toLocaleString()} ${count < 2 ? 'champ' : 'champs'}`,
+    keyCount: (count) => `${count.toLocaleString()} ${count < 2 ? 'clé' : 'clés'}`,
+    bucketLabel: (first, last) => `[${first} … ${last}]`,
+    moreCharacters: (count) =>
+      `${count.toLocaleString()} ${count < 2 ? 'caractère' : 'caractères'} de plus`,
+    loading: 'Chargement…',
+    loadFailed: 'Impossible de charger cette valeur',
+    retry: 'Réessayer',
+    truncatedNotice: (shownChars, totalChars) =>
+      `Affichage des ${shownChars.toLocaleString()} premiers caractères sur ${totalChars.toLocaleString()}`,
+    copyJson: 'Copier le JSON',
+    copied: 'Copié',
+    copyFailed: 'Échec de la copie',
+    tooLargeToCopy: 'Trop volumineux pour être copié',
+    closeLabel: "Fermer l'inspecteur de valeur",
+
+    addAsColumn: 'Ajouter comme colonne',
+    addLengthAsColumn: 'Ajouter la longueur comme colonne',
+    addSizeAsColumn: 'Ajouter la taille comme colonne',
+    addTagAsColumn: "Ajouter l'étiquette comme colonne",
+    adding: 'Ajout…',
+    extractFailed: (error) => `Impossible d'ajouter la colonne : ${error}`,
+    columnAdded: (column) => `Colonne ${column} ajoutée`,
+
+    extractButtonLabel: (column) => `Extraire ${de(column)}`,
+    extractButtonTitle: 'Extraire un champ comme colonne',
+    extractTitle: (column) => `Extraire ${de(column)}`,
+    extractCloseLabel: "Fermer le panneau d'extraction",
+    extractTreeLabel: (column) => `Parties ${de(column)}`,
+    nothingToExtract: "Cette colonne n'a aucune partie à extraire",
+    lengthNode: 'longueur',
+    sizeNode: 'taille',
+    tagNode: 'étiquette',
+    elementNode: 'élément',
+    mapValueNode: 'valeur',
+    positionLabel: (container) => `Position dans ${container}`,
+    positionInvalid: 'Saisir un nombre entier, 1 ou plus',
+    keyLabel: (container) => `Clé dans ${container}`,
+    keyRequired: 'Saisir une clé',
+    jsonPathLabel: 'Chemin JSON',
+    jsonPathHint:
+      'Sous la forme $.a.b[0] : les clés après des points, les index de tableau à partir de 0. Une clé contenant un point, un crochet ou un guillemet se met entre crochets : $["a.b"].',
+    jsonPathInvalid: (character) => `Chemin JSON non valide : vérifier le caractère ${character}`,
+    readAsLabel: 'Lire comme',
+    readAs: {
+      string: 'Texte',
+      number: 'Nombre',
+      boolean: 'Booléen',
+      json: 'JSON',
+      length: 'Longueur du tableau',
+    },
+    columnNameLabel: 'Nom de la colonne',
+    expressionLabel: 'Expression',
+    addColumn: 'Ajouter la colonne',
+    panelLoadFailed: "Le panneau n'a pas pu être chargé. Rechargez la page pour réessayer.",
   },
 };

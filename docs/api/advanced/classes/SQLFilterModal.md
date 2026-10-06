@@ -6,7 +6,7 @@
 
 # Class: SQLFilterModal
 
-Defined in: [filters/SQLFilterModal.ts:46](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L46)
+Defined in: [filters/SQLFilterModal.ts:46](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L46)
 
 Modal dialog that hosts the raw-SQL `WHERE`-clause filter editor backed
 by a CodeMirror editor (DuckDB grammar + autocompletion). On Apply, emits
@@ -19,7 +19,7 @@ a [RawSQLFilter](../../index/interfaces/RawSQLFilter.md). Treat user-authored SQ
 
 > **new SQLFilterModal**(`state`, `actions`, `options?`): `SQLFilterModal`
 
-Defined in: [filters/SQLFilterModal.ts:80](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L80)
+Defined in: [filters/SQLFilterModal.ts:80](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L80)
 
 #### Parameters
 
@@ -45,7 +45,7 @@ Defined in: [filters/SQLFilterModal.ts:80](https://github.com/jeyabbalas/data-ta
 
 > **close**(): `void`
 
-Defined in: [filters/SQLFilterModal.ts:514](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L514)
+Defined in: [filters/SQLFilterModal.ts:543](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L543)
 
 #### Returns
 
@@ -57,7 +57,7 @@ Defined in: [filters/SQLFilterModal.ts:514](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [filters/SQLFilterModal.ts:557](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L557)
+Defined in: [filters/SQLFilterModal.ts:586](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L586)
 
 #### Returns
 
@@ -69,7 +69,7 @@ Defined in: [filters/SQLFilterModal.ts:557](https://github.com/jeyabbalas/data-t
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/SQLFilterModal.ts:549](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L549)
+Defined in: [filters/SQLFilterModal.ts:578](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L578)
 
 #### Returns
 
@@ -81,7 +81,7 @@ Defined in: [filters/SQLFilterModal.ts:549](https://github.com/jeyabbalas/data-t
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [filters/SQLFilterModal.ts:553](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L553)
+Defined in: [filters/SQLFilterModal.ts:582](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L582)
 
 #### Returns
 
@@ -93,7 +93,7 @@ Defined in: [filters/SQLFilterModal.ts:553](https://github.com/jeyabbalas/data-t
 
 > **open**(): `void`
 
-Defined in: [filters/SQLFilterModal.ts:447](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L447)
+Defined in: [filters/SQLFilterModal.ts:456](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L456)
 
 Open the modal in create mode (empty fields)
 
@@ -107,7 +107,7 @@ Open the modal in create mode (empty fields)
 
 > **openForEdit**(`filterId`, `returnFocus?`): `void`
 
-Defined in: [filters/SQLFilterModal.ts:459](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/SQLFilterModal.ts#L459)
+Defined in: [filters/SQLFilterModal.ts:476](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/SQLFilterModal.ts#L476)
 
 Open the modal in edit mode (pre-populated from existing SQL filter)
 
@@ -124,8 +124,8 @@ The raw-SQL filter to edit.
 `HTMLElement`
 
 Where focus goes when the modal closes, in place of
-the element focused when it opened. Pass one that outlives the edit:
-updating or removing the filter rebuilds the filter bar's chips.
+  the element focused when it opened. Pass one that outlives the edit:
+  updating or removing the filter rebuilds the filter bar's chips.
 
 #### Returns
 

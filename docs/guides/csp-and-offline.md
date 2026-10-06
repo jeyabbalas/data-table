@@ -150,6 +150,45 @@ have to serve from a CDN, make sure it sends
 For COOP/COEP setups (required by `coi` bundles, which use SharedArrayBuffer),
 see [the DuckDB-WASM docs on cross-origin isolation](https://duckdb.org/docs/api/wasm/overview).
 
+### DuckDB extensions: Parquet and JSON
+
+The bundles are not quite everything. DuckDB-WASM loads two extensions the
+library uses when a query first needs them, from DuckDB's extension
+repository (`extensions.duckdb.org` unless told otherwise) rather than from
+the bundle: `parquet`, for a Parquet source or export, and `json`, for
+
+- a JSON source;
+- a Parquet source with a JSON column, or with JSON inside a list, array,
+  struct, map or union, which loads it with the table, so cells and filters
+  read the same from the first query;
+- exact reads of nested values: `actions.getCellValue`,
+  `actions.getColumnValues` on a nested column, the value inspector, and
+  CSV, JSON and clipboard exports of nested values;
+- extracting a value from JSON or VARIANT, whether a column of its own or
+  inside a nested column.
+
+Under a strict CSP, allow that origin in `connect-src`. Offline, mirror the
+extension files for your DuckDB version and platform on a host you control,
+and point DuckDB at it once the bridge is up:
+
+```ts
+import { WorkerBridge, createDataTable } from '@jeyabbalas/data-table';
+
+const bridge = new WorkerBridge({ duckdbBundles });
+await bridge.initialize();
+await bridge.query(
+  "SET custom_extension_repository = 'https://intranet.example/duckdb-extensions'",
+);
+const table = await createDataTable({ container, source, bridge });
+```
+
+Where an extension cannot load, what needs it fails with DuckDB's error,
+and a Parquet source does not load at all. The one exception is the Parquet
+loader's own load of `json`, which is best effort: the table loads, and its
+JSON reads as plain text, with JSON inside a list or struct shown as quoted
+strings (`[1, NULL, 'null']`). CSV sources, the grid, filters, sorting and
+the charts need neither.
+
 ## Extending the init timeout
 
 Slow connections can exceed the default 30-second worker init budget:
@@ -252,6 +291,9 @@ workers.
 2. Pass a `duckdbBundles` map pointing there.
 3. If your intranet proxies block jsDelivr, the default behavior will fail
    loudly with a fetch error — the explicit override avoids this.
+4. Mirror the `parquet` and `json` extensions too, and set
+   `custom_extension_repository` (see
+   [DuckDB extensions](#duckdb-extensions-parquet-and-json)).
 
 ## Gotchas
 
@@ -270,4 +312,4 @@ workers.
 - CDN / no-build: [CDN](../integrations/cdn.md)
 - Troubleshooting: [WASM 404 in production](../troubleshooting.md), [CSP blocking](../troubleshooting.md)
 - API reference: [`bridgeOptions`, `WorkerBridgeOptions`](../api-reference.md#createdatatable), [`strictBrowserCheck`](../api-reference.md#createdatatable)
-- Source: `src/data/WorkerBridge.ts:45-146`, `src/worker/duckdb.ts`
+- Source: `src/data/WorkerBridge.ts:80-232`, `src/worker/duckdb.ts`

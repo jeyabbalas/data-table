@@ -288,6 +288,29 @@ describe('ModalHost — focus restore', () => {
     expect(document.activeElement).toBe(second);
   });
 
+  it('scrolls to the element it gives focus back to, unless told not to', () => {
+    const target = document.createElement('div');
+    target.tabIndex = 0;
+    document.body.appendChild(target);
+    const focus = vi.spyOn(target, 'focus');
+    const host = new ModalHost();
+
+    host.open({ mode: 'panel', element: makePanel(), returnFocus: target });
+    host.close();
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: false });
+
+    // The grid, say, which is taller than the window: the page stays put.
+    host.open({
+      mode: 'panel',
+      element: makePanel(),
+      returnFocus: target,
+      restoreFocusPreventScroll: true,
+    });
+    host.close();
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(target);
+  });
+
   it('falls back gracefully when opener is removed from the DOM', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);
@@ -647,5 +670,74 @@ describe('ModalHost — controls the browser skips', () => {
     expect(document.activeElement).toBe(buttons[1]);
     host.close();
     style.remove();
+  });
+});
+
+describe('ModalHost — inside a shadow root', () => {
+  /** A panel with three buttons, and the button that opens it, in a shadow root. */
+  function shadowPanel(): { shadow: ShadowRoot; opener: HTMLButtonElement; panel: HTMLElement } {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    const opener = document.createElement('button');
+    opener.textContent = 'open';
+    const panel = document.createElement('div');
+    for (const text of ['one', 'two', 'three']) {
+      const button = document.createElement('button');
+      button.textContent = text;
+      panel.appendChild(button);
+    }
+    shadow.append(opener, panel);
+    return { shadow, opener, panel };
+  }
+  const buttonsOf = (panel: HTMLElement): HTMLButtonElement[] =>
+    Array.from(panel.querySelectorAll('button'));
+  const tab = (target: Element, shiftKey = false): KeyboardEvent => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  it('leaves Tab between controls to the browser, and wraps at the ends', () => {
+    const { shadow, panel } = shadowPanel();
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel });
+    const [first, second, last] = buttonsOf(panel);
+
+    first!.focus();
+    expect(tab(first!).defaultPrevented).toBe(false);
+    second!.focus();
+    expect(tab(second!, true).defaultPrevented).toBe(false);
+
+    last!.focus();
+    expect(tab(last!).defaultPrevented).toBe(true);
+    expect(shadow.activeElement).toBe(first);
+    expect(tab(first!, true).defaultPrevented).toBe(true);
+    expect(shadow.activeElement).toBe(last);
+    host.close();
+  });
+
+  it('gives focus back to the control that opened it', () => {
+    const { shadow, opener, panel } = shadowPanel();
+    opener.focus();
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel });
+    buttonsOf(panel)[1]!.focus();
+    host.close();
+    expect(shadow.activeElement).toBe(opener);
+  });
+
+  it('gives focus back to `returnFocus` in the shadow root', () => {
+    const { shadow, opener, panel } = shadowPanel();
+    const host = new ModalHost();
+    host.open({ mode: 'panel', element: panel, returnFocus: opener });
+    buttonsOf(panel)[0]!.focus();
+    host.close();
+    expect(shadow.activeElement).toBe(opener);
   });
 });

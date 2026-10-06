@@ -6,7 +6,7 @@
 
 # Class: FilterChip
 
-Defined in: [filters/FilterChip.ts:145](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/FilterChip.ts#L145)
+Defined in: [filters/FilterChip.ts:190](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterChip.ts#L190)
 
 FilterChip renders a single filter as a removable pill-shaped chip.
 
@@ -16,7 +16,7 @@ FilterChip renders a single filter as a removable pill-shaped chip.
 
 > **new FilterChip**(`filter`, `onRemove`, `options?`): `FilterChip`
 
-Defined in: [filters/FilterChip.ts:152](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/FilterChip.ts#L152)
+Defined in: [filters/FilterChip.ts:197](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterChip.ts#L197)
 
 #### Parameters
 
@@ -42,7 +42,7 @@ Defined in: [filters/FilterChip.ts:152](https://github.com/jeyabbalas/data-table
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterChip.ts:248](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/FilterChip.ts#L248)
+Defined in: [filters/FilterChip.ts:298](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterChip.ts#L298)
 
 Destroy and clean up
 
@@ -56,7 +56,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterChip.ts:234](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/FilterChip.ts#L234)
+Defined in: [filters/FilterChip.ts:284](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterChip.ts#L284)
 
 Get the chip's DOM element
 
@@ -70,7 +70,7 @@ Get the chip's DOM element
 
 > **getFilter**(): [`Filter`](../../index/type-aliases/Filter.md)
 
-Defined in: [filters/FilterChip.ts:241](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/filters/FilterChip.ts#L241)
+Defined in: [filters/FilterChip.ts:291](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterChip.ts#L291)
 
 Get the filter this chip represents
 

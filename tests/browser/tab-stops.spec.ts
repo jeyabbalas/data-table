@@ -10,7 +10,17 @@
 
 import { expect, test } from '@playwright/test';
 import type { Browser } from '@playwright/test';
-import { NARROW_COLUMNS, WIDE_COLUMNS, loadCsv, openDemo, settle } from './helpers/demo';
+import {
+  NARROW_COLUMNS,
+  NESTED_EXAMPLE,
+  NESTED_EXAMPLE_STRUCTS,
+  WIDE_COLUMNS,
+  loadCsv,
+  loadExample,
+  openDemo,
+  settle,
+} from './helpers/demo';
+import { scrollToColumn, unpaintedCharts, waitForFilledBody } from './helpers/nested';
 
 const ROOT = '.dt-root';
 
@@ -40,6 +50,30 @@ test('the set of tab stops inside the table is identical at 4 and 266 columns', 
       `  ${NARROW_COLUMNS} cols (${narrow.length}): ${narrow.join(', ')}\n` +
       `  ${WIDE_COLUMNS} cols (${wide.length}): ${wide.join(', ')}`,
   ).toEqual(narrow);
+});
+
+test('nested columns add no tab stops: the census is still five', async ({ browser, page }) => {
+  // Nested columns have their own header chart, the nested summary, and
+  // their cells hold DuckDB's text for lists, structs and maps: neither may
+  // bring a focusable element of its own.
+  test.setTimeout(240_000);
+  const csv = await censusAt(browser, NARROW_COLUMNS);
+
+  await openDemo(page);
+  await loadExample(page, NESTED_EXAMPLE);
+  await expect.poll(() => unpaintedCharts(page, ['tags', 'scores'], ROOT)).toEqual([]);
+  const lists = await page.evaluate((s) => window.__dtA11y.partition(s).inside, ROOT);
+
+  // The structs and the list of structs, which the first screen does not show.
+  await scrollToColumn(page, 'point', ROOT);
+  await waitForFilledBody(page, NESTED_EXAMPLE_STRUCTS, ROOT);
+  await expect.poll(() => unpaintedCharts(page, NESTED_EXAMPLE_STRUCTS, ROOT)).toEqual([]);
+  await settle(page);
+  const structsInView = await page.evaluate((s) => window.__dtA11y.partition(s).inside, ROOT);
+
+  expect(csv, `${NARROW_COLUMNS}-column CSV: ${csv.join(', ')}`).toHaveLength(5);
+  expect(lists, `lists in view: ${lists.join(', ')}`).toEqual(csv);
+  expect(structsInView, `structs in view: ${structsInView.join(', ')}`).toEqual(csv);
 });
 
 test('hiding columns does not add tab stops', async ({ page }) => {

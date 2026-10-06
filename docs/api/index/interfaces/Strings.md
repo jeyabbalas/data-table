@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L337)
+Defined in: [core/Strings.ts:337](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L337)
 
 #### ascending
 
@@ -486,7 +486,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -550,7 +550,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/c
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
@@ -944,7 +944,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:460](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L460)
+Defined in: [core/Strings.ts:634](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L634)
 
 #### stylesheetMissing
 
@@ -956,7 +956,7 @@ Defined in: [core/Strings.ts:460](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -1106,7 +1106,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1746,7 +1746,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1856,7 +1856,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L421)
+Defined in: [core/Strings.ts:421](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L421)
 
 #### allNull
 
@@ -1989,6 +1989,20 @@ Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 ##### Returns
 
 `string`
+
+#### noData
+
+> **noData**: `string`
+
+What a column-header chart draws for a column with no values and no
+nulls, as an empty table has: "No data".
+
+#### nonNullCategory
+
+> **nonNullCategory**: `string`
+
+Display value for the non-null segment of a nested column's summary
+bar in a hover detail line, the counterpart of `nullBinLabel`.
 
 #### nullBinLabel
 
@@ -2147,3 +2161,634 @@ Truncation suffix for a long multi-select value list (total = selected values).
 ##### Returns
 
 `string`
+
+***
+
+### values
+
+> **values**: `object`
+
+Defined in: [core/Strings.ts:472](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L472)
+
+#### addAsColumn
+
+> **addAsColumn**: `string`
+
+Value inspector button that adds the active node's value as a column
+("extract field → column"); also the `title` of the "+" a row shows
+under the pointer.
+
+#### addColumn
+
+> **addColumn**: `string`
+
+The extract panel's submit button.
+
+#### adding
+
+> **adding**: `string`
+
+Status while a column is being added (the value inspector, the extract panel's button).
+
+#### addLengthAsColumn
+
+> **addLengthAsColumn**: `string`
+
+Value inspector button that adds a list's, an array's or a JSON array's length as a column.
+
+#### addSizeAsColumn
+
+> **addSizeAsColumn**: `string`
+
+Value inspector button that adds a map's number of entries as a column.
+
+#### addTagAsColumn
+
+> **addTagAsColumn**: `string`
+
+Value inspector button that adds which member a union holds as a column.
+
+#### bucketLabel
+
+> **bucketLabel**: (`first`, `last`) => `string`
+
+One bucket of a container too big to list at once, by the numbers of
+its first and last child (1-based for DuckDB values, 0-based inside
+JSON, the same number twice for a bucket of one): "[1 … 100]",
+"[10001 … 10001]".
+
+##### Parameters
+
+###### first
+
+`number`
+
+###### last
+
+`number`
+
+##### Returns
+
+`string`
+
+#### closeLabel
+
+> **closeLabel**: `string`
+
+`aria-label` of the value inspector's × button.
+
+#### columnAdded
+
+> **columnAdded**: (`column`) => `string`
+
+Live-region text once a column has been added: "Column point_x added".
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### columnNameLabel
+
+> **columnNameLabel**: `string`
+
+Label of the extract panel's input for the new column's name.
+
+#### copied
+
+> **copied**: `string`
+
+Value inspector status after a copy (Copy JSON, or Ctrl/Cmd+C on a node).
+
+#### copyFailed
+
+> **copyFailed**: `string`
+
+Value inspector status when the clipboard refused the copy.
+
+#### copyJson
+
+> **copyJson**: `string`
+
+Value inspector button that copies the whole value as JSON.
+
+#### elementNode
+
+> **elementNode**: `string`
+
+The tree's node for a list's or an array's elements, read at a position.
+
+#### entryCount
+
+> **entryCount**: (`count`) => `string`
+
+Entries of a map, in the tree: "600 entries".
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### expressionLabel
+
+> **expressionLabel**: `string`
+
+Label of the extract panel's preview of the SQL expression the column reads.
+
+#### extractButtonLabel
+
+> **extractButtonLabel**: (`column`) => `string`
+
+`aria-label` of a nested or JSON column header's extract button: "Extract from point".
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### extractButtonTitle
+
+> **extractButtonTitle**: `string`
+
+`title` of the header's extract button.
+
+#### extractCloseLabel
+
+> **extractCloseLabel**: `string`
+
+`aria-label` of the extract panel's × button.
+
+#### extractFailed
+
+> **extractFailed**: (`error`) => `string`
+
+A column could not be added, with the reason (in English, from the action): "Could not add the column: …".
+
+##### Parameters
+
+###### error
+
+`string`
+
+##### Returns
+
+`string`
+
+#### extractTitle
+
+> **extractTitle**: (`column`) => `string`
+
+Title of the extract panel, which names it for assistive technology: "Extract from point".
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### extractTreeLabel
+
+> **extractTreeLabel**: (`column`) => `string`
+
+Accessible name of the extract panel's tree of the column's type: "Parts of point".
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### fieldCount
+
+> **fieldCount**: (`count`) => `string`
+
+Fields of a struct, in the tree: "3 fields".
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### inspectorTitle
+
+> **inspectorTitle**: (`column`, `rowLabel`) => `string`
+
+Title of the value inspector, the panel that shows one nested or JSON
+cell's whole value (F2, a double click, or the cell's inspect icon):
+the column and `rowLabel`'s text, "tags · Row 1,235". It also
+names the panel for assistive technology.
+
+##### Parameters
+
+###### column
+
+`string`
+
+###### rowLabel
+
+`string`
+
+##### Returns
+
+`string`
+
+#### itemCount
+
+> **itemCount**: (`count`) => `string`
+
+Elements of a list, an array or a JSON array, in the tree: "3 items".
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### jsonPathHint
+
+> **jsonPathHint**: `string`
+
+How to write a JSON path, under the input.
+
+#### jsonPathInvalid
+
+> **jsonPathInvalid**: (`character`) => `string`
+
+The JSON path does not parse, by the 1-based character where it goes wrong.
+
+##### Parameters
+
+###### character
+
+`number`
+
+##### Returns
+
+`string`
+
+#### jsonPathLabel
+
+> **jsonPathLabel**: `string`
+
+Label of the extract panel's JSON path input, for a part that is JSON or VARIANT.
+
+#### keyCount
+
+> **keyCount**: (`count`) => `string`
+
+Keys of a JSON object, in the tree: "2 keys".
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### keyLabel
+
+> **keyLabel**: (`container`) => `string`
+
+Label of the input for a map value's key, by the map: "Key in attrs".
+
+##### Parameters
+
+###### container
+
+`string`
+
+##### Returns
+
+`string`
+
+#### keyRequired
+
+> **keyRequired**: `string`
+
+The key input is empty.
+
+#### lengthNode
+
+> **lengthNode**: `string`
+
+The tree's leaf for a list's or an array's number of elements.
+
+#### loadFailed
+
+> **loadFailed**: `string`
+
+Value inspector status when the value could not be read.
+
+#### loading
+
+> **loading**: `string`
+
+Value inspector status while the value loads, shown after 150 ms.
+
+#### mapValueNode
+
+> **mapValueNode**: `string`
+
+The tree's node for a map's values, read by key.
+
+#### moreCharacters
+
+> **moreCharacters**: (`count`) => `string`
+
+After text the tree cut short, by the characters left out: "18,000 more characters".
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
+#### nothingToExtract
+
+> **nothingToExtract**: `string`
+
+The extract panel's text when the column's type could not be read, so has no parts.
+
+#### panelLoadFailed
+
+> **panelLoadFailed**: `string`
+
+Live-region text when the value inspector or the extract panel, which
+load on first use, could not be downloaded.
+
+#### positionInvalid
+
+> **positionInvalid**: `string`
+
+The position input holds something other than a whole number from 1 up.
+
+#### positionLabel
+
+> **positionLabel**: (`container`) => `string`
+
+Label of the input for an element's 1-based position, by the list or
+array it is in: "Position in people". A list inside a list is named
+after the outer one's element: "Position in matrix › element".
+
+##### Parameters
+
+###### container
+
+`string`
+
+##### Returns
+
+`string`
+
+#### readAs
+
+> **readAs**: `object`
+
+The "Read as" choices: a value inside JSON or VARIANT as text, a
+number, a boolean or JSON, or the length of the array there.
+
+##### readAs.boolean
+
+> **boolean**: `string`
+
+##### readAs.json
+
+> **json**: `string`
+
+##### readAs.length
+
+> **length**: `string`
+
+##### readAs.number
+
+> **number**: `string`
+
+##### readAs.string
+
+> **string**: `string`
+
+#### readAsLabel
+
+> **readAsLabel**: `string`
+
+Label of the extract panel's "Read as" select, for a part that is JSON or VARIANT.
+
+#### retry
+
+> **retry**: `string`
+
+Button that reads the value again after it failed to load.
+
+#### rowLabel
+
+> **rowLabel**: (`row`) => `string`
+
+The row a value inspector shows, by its 1-based position in the table
+as sorted and filtered (the number a loading row shows): "Row 1,235".
+
+##### Parameters
+
+###### row
+
+`number`
+
+##### Returns
+
+`string`
+
+#### sizeNode
+
+> **sizeNode**: `string`
+
+The tree's leaf for a map's number of entries.
+
+#### tagNode
+
+> **tagNode**: `string`
+
+The tree's leaf for which member a union holds.
+
+#### tooLargeToCopy
+
+> **tooLargeToCopy**: `string`
+
+Value inspector status when the value is too long to copy: over 8 MiB of JSON.
+
+#### treeLabel
+
+> **treeLabel**: (`column`) => `string`
+
+Accessible name of the value inspector's tree: "Value of tags".
+
+##### Parameters
+
+###### column
+
+`string`
+
+##### Returns
+
+`string`
+
+#### truncatedNotice
+
+> **truncatedNotice**: (`shownChars`, `totalChars`) => `string`
+
+Value inspector status for a value too long to show whole, by the
+characters shown and the value's length:
+"Showing the first 2,097,152 of 3,000,000 characters".
+
+##### Parameters
+
+###### shownChars
+
+`number`
+
+###### totalChars
+
+`number`
+
+##### Returns
+
+`string`
+
+#### typeArray
+
+> **typeArray**: (`element`, `size`) => `string`
+
+Spoken type of a fixed-size ARRAY: "array of 768 float".
+
+##### Parameters
+
+###### element
+
+`string`
+
+###### size
+
+`number`
+
+##### Returns
+
+`string`
+
+#### typeJson
+
+> **typeJson**: `string`
+
+Spoken name of the JSON type.
+
+#### typeList
+
+> **typeList**: (`element`) => `string`
+
+Spoken type of a LIST, given its element's spoken type: "list of
+integer". A column header's accessible name ends with it ("tags, list
+of integer"); the visible label stays DuckDB's notation (`[integer]`).
+
+##### Parameters
+
+###### element
+
+`string`
+
+##### Returns
+
+`string`
+
+#### typeMap
+
+> **typeMap**: (`key`, `value`) => `string`
+
+Spoken type of a MAP, given its key's and value's: "map from varchar to integer".
+
+##### Parameters
+
+###### key
+
+`string`
+
+###### value
+
+`string`
+
+##### Returns
+
+`string`
+
+#### typeStruct
+
+> **typeStruct**: (`fieldCount`) => `string`
+
+Spoken type of a STRUCT, by its number of fields: "struct with 3 fields".
+
+##### Parameters
+
+###### fieldCount
+
+`number`
+
+##### Returns
+
+`string`
+
+#### typeUnion
+
+> **typeUnion**: (`memberCount`) => `string`
+
+Spoken type of a UNION, by its number of members: "union of 2 types".
+
+##### Parameters
+
+###### memberCount
+
+`number`
+
+##### Returns
+
+`string`
+
+#### typeVariant
+
+> **typeVariant**: `string`
+
+Spoken name of the VARIANT type.

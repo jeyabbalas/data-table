@@ -9,6 +9,7 @@ export type {
   TemporalColumnStats,
   TimeColumnStats,
   IntervalColumnStats,
+  NestedColumnStats,
   ColumnStatsData,
 } from './ColumnStatsTypes';
 

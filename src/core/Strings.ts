@@ -442,6 +442,11 @@ export interface Strings {
     selectedLabel: string;
     /** Display value for the null bin/segment in a selection detail line. */
     nullBinLabel: string;
+    /**
+     * Display value for the non-null segment of a nested column's summary
+     * bar in a hover detail line, the counterpart of `nullBinLabel`.
+     */
+    nonNullCategory: string;
     /** Display value for the folded "Other" segment (count = folded distinct values). */
     otherCategory: (count: number) => string;
     /** Display value for the all-unique segment (count = distinct values). */
@@ -454,6 +459,173 @@ export interface Strings {
     valueListSuffix: (total: number) => string;
     /** Stats-slot line for a column whose chart's data failed to load. */
     chartFailed: string;
+    /**
+     * What a column-header chart draws for a column with no values and no
+     * nulls, as an empty table has: "No data".
+     */
+    noData: string;
+  };
+
+  // =========================================
+  // Values — nested and JSON columns
+  // =========================================
+  values: {
+    /**
+     * Spoken type of a LIST, given its element's spoken type: "list of
+     * integer". A column header's accessible name ends with it ("tags, list
+     * of integer"); the visible label stays DuckDB's notation (`[integer]`).
+     */
+    typeList: (element: string) => string;
+    /** Spoken type of a fixed-size ARRAY: "array of 768 float". */
+    typeArray: (element: string, size: number) => string;
+    /** Spoken type of a STRUCT, by its number of fields: "struct with 3 fields". */
+    typeStruct: (fieldCount: number) => string;
+    /** Spoken type of a MAP, given its key's and value's: "map from varchar to integer". */
+    typeMap: (key: string, value: string) => string;
+    /** Spoken type of a UNION, by its number of members: "union of 2 types". */
+    typeUnion: (memberCount: number) => string;
+    /** Spoken name of the JSON type. */
+    typeJson: string;
+    /** Spoken name of the VARIANT type. */
+    typeVariant: string;
+
+    /**
+     * Title of the value inspector, the panel that shows one nested or JSON
+     * cell's whole value (F2, a double click, or the cell's inspect icon):
+     * the column and `rowLabel`'s text, "tags · Row 1,235". It also
+     * names the panel for assistive technology.
+     */
+    inspectorTitle: (column: string, rowLabel: string) => string;
+    /**
+     * The row a value inspector shows, by its 1-based position in the table
+     * as sorted and filtered (the number a loading row shows): "Row 1,235".
+     */
+    rowLabel: (row: number) => string;
+    /** Accessible name of the value inspector's tree: "Value of tags". */
+    treeLabel: (column: string) => string;
+    /** Elements of a list, an array or a JSON array, in the tree: "3 items". */
+    itemCount: (count: number) => string;
+    /** Entries of a map, in the tree: "600 entries". */
+    entryCount: (count: number) => string;
+    /** Fields of a struct, in the tree: "3 fields". */
+    fieldCount: (count: number) => string;
+    /** Keys of a JSON object, in the tree: "2 keys". */
+    keyCount: (count: number) => string;
+    /**
+     * One bucket of a container too big to list at once, by the numbers of
+     * its first and last child (1-based for DuckDB values, 0-based inside
+     * JSON, the same number twice for a bucket of one): "[1 … 100]",
+     * "[10001 … 10001]".
+     */
+    bucketLabel: (first: number, last: number) => string;
+    /** After text the tree cut short, by the characters left out: "18,000 more characters". */
+    moreCharacters: (count: number) => string;
+    /** Value inspector status while the value loads, shown after 150 ms. */
+    loading: string;
+    /** Value inspector status when the value could not be read. */
+    loadFailed: string;
+    /** Button that reads the value again after it failed to load. */
+    retry: string;
+    /**
+     * Value inspector status for a value too long to show whole, by the
+     * characters shown and the value's length:
+     * "Showing the first 2,097,152 of 3,000,000 characters".
+     */
+    truncatedNotice: (shownChars: number, totalChars: number) => string;
+    /** Value inspector button that copies the whole value as JSON. */
+    copyJson: string;
+    /** Value inspector status after a copy (Copy JSON, or Ctrl/Cmd+C on a node). */
+    copied: string;
+    /** Value inspector status when the clipboard refused the copy. */
+    copyFailed: string;
+    /** Value inspector status when the value is too long to copy: over 8 MiB of JSON. */
+    tooLargeToCopy: string;
+    /** `aria-label` of the value inspector's × button. */
+    closeLabel: string;
+
+    /**
+     * Value inspector button that adds the active node's value as a column
+     * ("extract field → column"); also the `title` of the "+" a row shows
+     * under the pointer.
+     */
+    addAsColumn: string;
+    /** Value inspector button that adds a list's, an array's or a JSON array's length as a column. */
+    addLengthAsColumn: string;
+    /** Value inspector button that adds a map's number of entries as a column. */
+    addSizeAsColumn: string;
+    /** Value inspector button that adds which member a union holds as a column. */
+    addTagAsColumn: string;
+    /** Status while a column is being added (the value inspector, the extract panel's button). */
+    adding: string;
+    /** A column could not be added, with the reason (in English, from the action): "Could not add the column: …". */
+    extractFailed: (error: string) => string;
+    /** Live-region text once a column has been added: "Column point_x added". */
+    columnAdded: (column: string) => string;
+
+    /** `aria-label` of a nested or JSON column header's extract button: "Extract from point". */
+    extractButtonLabel: (column: string) => string;
+    /** `title` of the header's extract button. */
+    extractButtonTitle: string;
+    /** Title of the extract panel, which names it for assistive technology: "Extract from point". */
+    extractTitle: (column: string) => string;
+    /** `aria-label` of the extract panel's × button. */
+    extractCloseLabel: string;
+    /** Accessible name of the extract panel's tree of the column's type: "Parts of point". */
+    extractTreeLabel: (column: string) => string;
+    /** The extract panel's text when the column's type could not be read, so has no parts. */
+    nothingToExtract: string;
+    /** The tree's leaf for a list's or an array's number of elements. */
+    lengthNode: string;
+    /** The tree's leaf for a map's number of entries. */
+    sizeNode: string;
+    /** The tree's leaf for which member a union holds. */
+    tagNode: string;
+    /** The tree's node for a list's or an array's elements, read at a position. */
+    elementNode: string;
+    /** The tree's node for a map's values, read by key. */
+    mapValueNode: string;
+    /**
+     * Label of the input for an element's 1-based position, by the list or
+     * array it is in: "Position in people". A list inside a list is named
+     * after the outer one's element: "Position in matrix › element".
+     */
+    positionLabel: (container: string) => string;
+    /** The position input holds something other than a whole number from 1 up. */
+    positionInvalid: string;
+    /** Label of the input for a map value's key, by the map: "Key in attrs". */
+    keyLabel: (container: string) => string;
+    /** The key input is empty. */
+    keyRequired: string;
+    /** Label of the extract panel's JSON path input, for a part that is JSON or VARIANT. */
+    jsonPathLabel: string;
+    /** How to write a JSON path, under the input. */
+    jsonPathHint: string;
+    /** The JSON path does not parse, by the 1-based character where it goes wrong. */
+    jsonPathInvalid: (character: number) => string;
+    /** Label of the extract panel's "Read as" select, for a part that is JSON or VARIANT. */
+    readAsLabel: string;
+    /**
+     * The "Read as" choices: a value inside JSON or VARIANT as text, a
+     * number, a boolean or JSON, or the length of the array there.
+     */
+    readAs: {
+      string: string;
+      number: string;
+      boolean: string;
+      json: string;
+      length: string;
+    };
+    /** Label of the extract panel's input for the new column's name. */
+    columnNameLabel: string;
+    /** Label of the extract panel's preview of the SQL expression the column reads. */
+    expressionLabel: string;
+    /** The extract panel's submit button. */
+    addColumn: string;
+    /**
+     * Live-region text when the value inspector or the extract panel, which
+     * load on first use, could not be downloaded.
+     */
+    panelLoadFailed: string;
   };
 
   // =========================================
@@ -827,6 +999,7 @@ export const defaultStrings: Strings = {
     categoryLabel: 'Category:',
     selectedLabel: 'Selected:',
     nullBinLabel: 'null',
+    nonNullCategory: 'non-null',
     otherCategory: (count) => `Other (${count.toLocaleString()} values)`,
     allUniqueCategory: (count) => `All unique (${count.toLocaleString()})`,
     selectionRowCount: (count, pct) =>
@@ -834,6 +1007,81 @@ export const defaultStrings: Strings = {
     matchCount: (count) => `${count.toLocaleString()} match`,
     valueListSuffix: (total) => `, ... (${total.toLocaleString()} values)`,
     chartFailed: 'Failed to load',
+    noData: 'No data',
+  },
+
+  values: {
+    typeList: (element) => `list of ${element}`,
+    typeArray: (element, size) => `array of ${size.toLocaleString()} ${element}`,
+    typeStruct: (fieldCount) =>
+      `struct with ${fieldCount.toLocaleString()} ${fieldCount === 1 ? 'field' : 'fields'}`,
+    typeMap: (key, value) => `map from ${key} to ${value}`,
+    typeUnion: (memberCount) =>
+      `union of ${memberCount.toLocaleString()} ${memberCount === 1 ? 'type' : 'types'}`,
+    typeJson: 'JSON',
+    typeVariant: 'variant',
+
+    inspectorTitle: (column, rowLabel) => `${column} · ${rowLabel}`,
+    rowLabel: (row) => `Row ${row.toLocaleString()}`,
+    treeLabel: (column) => `Value of ${column}`,
+    itemCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'item' : 'items'}`,
+    entryCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'entry' : 'entries'}`,
+    fieldCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'field' : 'fields'}`,
+    keyCount: (count) => `${count.toLocaleString()} ${count === 1 ? 'key' : 'keys'}`,
+    // Plain digits, as the positions of the children inside it show.
+    bucketLabel: (first, last) => `[${first} … ${last}]`,
+    moreCharacters: (count) =>
+      `${count.toLocaleString()} more ${count === 1 ? 'character' : 'characters'}`,
+    loading: 'Loading…',
+    loadFailed: 'Could not load this value',
+    retry: 'Retry',
+    truncatedNotice: (shownChars, totalChars) =>
+      `Showing the first ${shownChars.toLocaleString()} of ${totalChars.toLocaleString()} characters`,
+    copyJson: 'Copy JSON',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    tooLargeToCopy: 'Too large to copy',
+    closeLabel: 'Close value inspector',
+
+    addAsColumn: 'Add as column',
+    addLengthAsColumn: 'Add length as column',
+    addSizeAsColumn: 'Add size as column',
+    addTagAsColumn: 'Add tag as column',
+    adding: 'Adding…',
+    extractFailed: (error) => `Could not add the column: ${error}`,
+    columnAdded: (column) => `Column ${column} added`,
+
+    extractButtonLabel: (column) => `Extract from ${column}`,
+    extractButtonTitle: 'Extract a field as a column',
+    extractTitle: (column) => `Extract from ${column}`,
+    extractCloseLabel: 'Close extract panel',
+    extractTreeLabel: (column) => `Parts of ${column}`,
+    nothingToExtract: 'This column has no parts to extract',
+    lengthNode: 'length',
+    sizeNode: 'size',
+    tagNode: 'tag',
+    elementNode: 'element',
+    mapValueNode: 'value',
+    positionLabel: (container) => `Position in ${container}`,
+    positionInvalid: 'Enter a whole number, 1 or more',
+    keyLabel: (container) => `Key in ${container}`,
+    keyRequired: 'Enter a key',
+    jsonPathLabel: 'JSON path',
+    jsonPathHint:
+      'As $.a.b[0]: keys after dots, array indexes from 0. A key with a dot, a bracket or a quote goes in brackets: $["a.b"].',
+    jsonPathInvalid: (character) => `Not a JSON path: check character ${character}`,
+    readAsLabel: 'Read as',
+    readAs: {
+      string: 'Text',
+      number: 'Number',
+      boolean: 'Boolean',
+      json: 'JSON',
+      length: 'Array length',
+    },
+    columnNameLabel: 'Column name',
+    expressionLabel: 'Expression',
+    addColumn: 'Add column',
+    panelLoadFailed: 'The panel could not be loaded. Reload the page to try again.',
   },
 
   errors: {

@@ -1,0 +1,417 @@
+/**
+ * SQL text of `gridValueSQL` and `jsonValueSQL`, per kind of column. What
+ * the SQL returns on a real engine is `valueSql.duckdb.test.ts`'s subject;
+ * this file pins the text and the choices: which columns are read as text,
+ * which are sliced, which are capped, and which JSON route each takes.
+ */
+import { describe, expect, it } from 'vitest';
+
+import type { ColumnSchema } from '@/core/types';
+import { mapDuckDBType } from '@/data/SchemaDetector';
+import {
+  BLOB_PREVIEW,
+  FORMATTED_ITEMS,
+  PREVIEW_ITEMS,
+  TEXT_CAP,
+  gridValueSQL,
+  jsonValueSQL,
+} from '@/data/valueSql';
+
+/** A column of `originalType`, typed as the loaders type it. */
+function col(originalType: string, name = 'c'): ColumnSchema {
+  return { name, type: mapDuckDBType(originalType), nullable: true, originalType };
+}
+
+const grid = (originalType: string, quoted = '"c"') => gridValueSQL(col(originalType), quoted);
+const json = (originalType: string, quoted = '"c"') => jsonValueSQL(col(originalType), quoted);
+
+/** The capped form of `text`. */
+const capped = (text: string) =>
+  `list_transform([${text}], lambda txt: CASE WHEN strlen(txt) > 1000` +
+  ` AND strlen(left_grapheme(txt, 1000)) < strlen(txt)` +
+  ` THEN concat(left_grapheme(txt, 1000), '…') ELSE txt END)[1]`;
+
+/** The text of `head`, a list's or map's first items, as a cell shows them. */
+const preview = (head: string, count: string, close: string) =>
+  `left(CAST(${head} AS VARCHAR), -1)` +
+  ` || CASE WHEN ${count} > 32 THEN ', … +' || (${count} - 32) ELSE '' END` +
+  ` || '${close}'`;
+
+/** The first `count` items of `list`, copied out, each read as `item` (`x` names one). */
+const items = (list: string, count: string | number, x: string, item = x) =>
+  `list_transform(list_resize(${list}, least(len(${list}), ${count})), lambda ${x}: ${item})`;
+
+/** How many of the first 32 items of `list`, lists or maps themselves, a cell needs. */
+const needed = (list: string, size = 'len') =>
+  `list_transform([list_transform(list_resize(${list}, least(len(${list}), 32)),` +
+  ` lambda y: coalesce(${size}(y), 0))],` +
+  ` lambda n: len(list_filter(range(1, len(n) + 1),` +
+  ` lambda i: coalesce(list_sum(n[1:i - 1]), 0) < 1001)))[1]`;
+
+/** The first `count` entries of the map `"c"`, copied out, each value read as `value`. */
+const entries = (count: string | number, value = 'e1.value') =>
+  `map_from_entries(list_transform(list_resize(map_entries("c"), least(cardinality("c"), ${count})),` +
+  ` lambda e1: {'key': e1.key, 'value': ${value}}))`;
+
+const LIST_TEXT = preview(items('"c"', 32, 'x1'), 'len("c")', ']');
+
+const MAP_TEXT = preview(entries(32), 'cardinality("c")', '}');
+
+const BLOB_TEXT =
+  `CASE WHEN octet_length("c") > 256` +
+  ` THEN concat(CAST("c"[1:256] AS VARCHAR), '… +', octet_length("c") - 256)` +
+  ` ELSE CAST("c" AS VARCHAR) END`;
+
+const CAST_TEXT = 'CAST("c" AS VARCHAR)';
+
+const isCapped = (sql: string | null) => sql !== null && sql.startsWith('list_transform([');
+
+describe('constants', () => {
+  it('are the documented bounds', () => {
+    expect(PREVIEW_ITEMS).toBe(32);
+    expect(TEXT_CAP).toBe(1000);
+    expect(BLOB_PREVIEW).toBe(256);
+    // One item more than the cap can show, at one grapheme or more each.
+    expect(FORMATTED_ITEMS).toBe(TEXT_CAP + 1);
+  });
+});
+
+describe('gridValueSQL', () => {
+  describe('lists and arrays', () => {
+    it('a list shows 32 items and how many more, capped when its items are text', () => {
+      expect(grid('VARCHAR[]')).toBe(capped(LIST_TEXT));
+    });
+
+    it('a list of numbers is not capped: 32 of them always fit', () => {
+      expect(grid('INTEGER[]')).toBe(LIST_TEXT);
+    });
+
+    it('an array of more than 32 items is sliced like a list', () => {
+      expect(grid('FLOAT[768]')).toBe(LIST_TEXT);
+      expect(grid('INTEGER[33]')).toBe(LIST_TEXT);
+    });
+
+    it('an array of 32 items or fewer is a plain cast', () => {
+      expect(grid('INTEGER[3]')).toBe(CAST_TEXT);
+      expect(grid('INTEGER[32]')).toBe(CAST_TEXT);
+      expect(grid('VARCHAR[3]')).toBe(capped(CAST_TEXT));
+    });
+
+    it('a list of lists keeps the items a cell needs, each cut to 1,001 items, and is capped', () => {
+      expect(grid('INTEGER[][]')).toBe(
+        capped(
+          preview(items('"c"', needed('"c"'), 'x1', items('x1', 1001, 'x2')), 'len("c")', ']'),
+        ),
+      );
+      expect(grid('TINYINT[][][]')).toBe(
+        capped(
+          preview(
+            items('"c"', needed('"c"'), 'x1', items('x1', 1001, 'x2', items('x2', 1001, 'x3'))),
+            'len("c")',
+            ']',
+          ),
+        ),
+      );
+      // A short array of lists is not sliced, but its lists are cut.
+      expect(grid('INTEGER[][3]')).toBe(
+        capped(`CAST(${items('"c"', needed('"c"'), 'x1', items('x1', 1001, 'x2'))} AS VARCHAR)`),
+      );
+    });
+
+    it('a list of structs or arrays with nothing long in them copies out its items only', () => {
+      expect(grid('STRUCT(a INTEGER, b VARCHAR)[]')).toBe(capped(LIST_TEXT));
+      // 32 arrays of two hold too few items for any of them to be left out.
+      expect(grid('INTEGER[2][]')).toBe(LIST_TEXT);
+      expect(grid('FLOAT[384][]')).toBe(
+        capped(preview(items('"c"', needed('"c"'), 'x1'), 'len("c")', ']')),
+      );
+      // An array longer than 1,001 items is cut like a list.
+      expect(grid('INTEGER[2000][]')).toBe(
+        capped(
+          preview(items('"c"', needed('"c"'), 'x1', items('x1', 1001, 'x2')), 'len("c")', ']'),
+        ),
+      );
+    });
+  });
+
+  it('a map shows 32 entries and how many more', () => {
+    expect(grid('MAP(VARCHAR, INTEGER)')).toBe(capped(MAP_TEXT));
+    expect(grid('MAP(INTEGER, INTEGER)')).toBe(MAP_TEXT);
+    expect(grid('MAP(STRUCT(k INTEGER), VARCHAR)')).toBe(capped(MAP_TEXT));
+    // List values: the entries a cell needs, each value cut to 1,001 items.
+    expect(grid('MAP(DATE, INTEGER[])')).toBe(
+      capped(
+        preview(
+          entries(needed('map_values("c")'), items('e1.value', 1001, 'x2')),
+          'cardinality("c")',
+          '}',
+        ),
+      ),
+    );
+    // A list key is kept whole: cut short, it could equal another key.
+    expect(grid('MAP(INTEGER[], VARCHAR)')).toBe(capped(MAP_TEXT));
+  });
+
+  it('a struct, union or VARIANT is its whole text, capped unless its type bounds it', () => {
+    expect(grid('STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)')).toBe(capped(CAST_TEXT));
+    expect(grid('STRUCT(x DOUBLE, y DOUBLE)')).toBe(CAST_TEXT);
+    expect(grid('STRUCT(INTEGER, VARCHAR)')).toBe(capped(CAST_TEXT));
+    expect(grid('STRUCT(HUGEINT, UHUGEINT)')).toBe(CAST_TEXT);
+    expect(grid('UNION(n INTEGER, s VARCHAR)')).toBe(capped(CAST_TEXT));
+    expect(grid('UNION(i INTEGER, d DOUBLE)')).toBe(CAST_TEXT);
+    expect(grid('VARIANT')).toBe(capped(CAST_TEXT));
+    expect(grid('VARIANT[]')).toBe(capped(LIST_TEXT));
+    expect(grid('STRUCT(k VARIANT)')).toBe(capped(CAST_TEXT));
+  });
+
+  describe('a struct holding a list is rebuilt around it, cut', () => {
+    it('with its names, or with row() when its fields have none', () => {
+      const v = 'struct_extract_at("c", 2)';
+      expect(grid('STRUCT(id BIGINT, v DOUBLE[])')).toBe(
+        capped(
+          `CAST(CASE WHEN "c" IS NULL THEN NULL ELSE struct_pack("id" := struct_extract_at("c", 1),` +
+            ` "v" := ${items(v, 1001, 'x2')}) END AS VARCHAR)`,
+        ),
+      );
+      expect(grid('STRUCT(INTEGER, VARCHAR[])')).toBe(
+        capped(
+          `CAST(CASE WHEN "c" IS NULL THEN NULL ELSE row(struct_extract_at("c", 1),` +
+            ` ${items(v, 1001, 'x2')}) END AS VARCHAR)`,
+        ),
+      );
+      expect(grid('STRUCT("my ""odd"" name" INTEGER[])')).toContain(
+        'struct_pack("my ""odd"" name" := ',
+      );
+    });
+
+    it('and inside a list, by its lambda parameter', () => {
+      const sql = grid('STRUCT(s STRUCT(v INTEGER[]))[]')!;
+      expect(sql).toContain(
+        `lambda x1: CASE WHEN x1 IS NULL THEN NULL ELSE struct_pack("s" := CASE WHEN struct_extract_at(x1, 1) IS NULL`,
+      );
+      expect(sql).toContain(items('struct_extract_at(struct_extract_at(x1, 1), 1)', 1001, 'x4'));
+    });
+
+    it('but not when a field is named with the empty string, which SQL cannot write', () => {
+      expect(grid('STRUCT(b BIGINT,  BIGINT[])')).toBe(capped(CAST_TEXT));
+    });
+
+    it('a union or VARIANT holding a list is formatted whole', () => {
+      expect(grid('UNION(a INTEGER[], s VARCHAR)')).toBe(capped(CAST_TEXT));
+      expect(grid('STRUCT(u UNION(a INTEGER[]), v VARIANT)')).toBe(capped(CAST_TEXT));
+    });
+
+    it('lists nested more than 16 levels deep inside a value are formatted whole', () => {
+      const sql = grid(`INTEGER${'[]'.repeat(20)}`)!;
+      expect(sql).toContain('lambda x16: ');
+      expect(sql).not.toContain('lambda x17: ');
+    });
+  });
+
+  it('JSON is read as it is: its text is already a string', () => {
+    expect(grid('JSON')).toBeNull();
+    expect(grid('JSON[]')).toBe(capped(LIST_TEXT));
+  });
+
+  it('a BLOB shows its first 256 bytes and how many more, cut between bytes', () => {
+    expect(grid('BLOB')).toBe(
+      `list_transform([${BLOB_TEXT}], lambda txt: CASE WHEN length(txt) > 1000` +
+        ` THEN regexp_replace(left(txt, 1000), '(….*|\\\\(x[0-9A-Fa-f]?)?)$', '') || '…'` +
+        ` ELSE txt END)[1]`,
+    );
+  });
+
+  it('BIT, GEOMETRY and BIGNUM, which Arrow carries as bytes, are cast and capped', () => {
+    for (const type of ['BIT', 'GEOMETRY', 'BIGNUM', 'VARINT']) {
+      expect(grid(type), type).toBe(capped(CAST_TEXT));
+    }
+  });
+
+  it('ENUM, whose dictionary the worker does not receive, is cast and capped', () => {
+    expect(grid("ENUM('a', 'it''s')")).toBe(capped(CAST_TEXT));
+  });
+
+  it('INTERVAL keeps its plain cast', () => {
+    expect(grid('INTERVAL')).toBe(CAST_TEXT);
+  });
+
+  it('TIME_NS and TIME WITH TIME ZONE, which Arrow carries as a cell cannot show them, are cast', () => {
+    for (const type of ['TIME_NS', 'TIME WITH TIME ZONE', 'TIMETZ']) {
+      expect(grid(type), type).toBe(CAST_TEXT);
+    }
+  });
+
+  it('scalars Arrow carries well are read as they are', () => {
+    for (const type of [
+      'INTEGER',
+      'BIGINT',
+      'HUGEINT',
+      'DOUBLE',
+      'DECIMAL(18,4)',
+      'BOOLEAN',
+      'VARCHAR',
+      'DATE',
+      'TIME',
+      'TIMESTAMP',
+      'TIMESTAMP WITH TIME ZONE',
+      'UUID',
+    ]) {
+      expect(grid(type), type).toBeNull();
+    }
+  });
+
+  it('a type the parser cannot read is cast and capped when it looks nested', () => {
+    expect(grid('STRUCT(a INTEGER')).toBe(capped(CAST_TEXT));
+    expect(grid('NOT A TYPE (')).toBeNull();
+    const interval: ColumnSchema = {
+      name: 'c',
+      type: 'interval',
+      nullable: true,
+      originalType: 'NOT A TYPE (',
+    };
+    expect(gridValueSQL(interval, '"c"')).toBe(CAST_TEXT);
+  });
+
+  it('a schema entry built without its DuckDB type is read by its DataType', () => {
+    const bare = { name: 'c', type: 'integer', nullable: true } as unknown as ColumnSchema;
+    expect(gridValueSQL(bare, '"c"')).toBeNull();
+    expect(gridValueSQL({ ...bare, type: 'interval' }, '"c"')).toBe(CAST_TEXT);
+  });
+
+  describe('which columns are capped: only those whose type does not bound their text', () => {
+    it.each([
+      ['BOOLEAN[]', false],
+      ['TINYINT[]', false],
+      ['BIGINT[]', false],
+      ['UBIGINT[]', false],
+      ['FLOAT[]', false],
+      ['DOUBLE[]', false],
+      ['DECIMAL(10,2)[]', false],
+      ['DECIMAL(25,4)[]', false],
+      ['DATE[]', false],
+      ['TIME[]', false],
+      ['INTEGER[2][]', false],
+      ['FLOAT[768]', false],
+      ['HUGEINT[]', true],
+      ['UHUGEINT[]', true],
+      ['DECIMAL(26,4)[]', true],
+      ['DECIMAL(38,0)[]', true],
+      ['TIMESTAMP[]', true],
+      ['TIMESTAMP WITH TIME ZONE[]', true],
+      ['UUID[]', true],
+      ['INTERVAL[]', true],
+      ["ENUM('x', 'y')[]", true],
+      ['BLOB[]', true],
+      ['BIT[]', true],
+      ['INTEGER[3][]', true],
+      ['STRUCT(a INTEGER, b VARCHAR)[]', true],
+    ])('%s: capped %s', (type, expected) => {
+      expect(isCapped(grid(type))).toBe(expected);
+    });
+  });
+
+  describe('the column operand', () => {
+    it('uses a quoted identifier as it is, escaped quotes and all', () => {
+      expect(gridValueSQL(col('INTEGER[]'), '"my ""odd"" col"')).toBe(
+        LIST_TEXT.replaceAll('"c"', '"my ""odd"" col"'),
+      );
+      expect(gridValueSQL(col('INTEGER[3]'), '"t"."c"')).toBe('CAST("t"."c" AS VARCHAR)');
+    });
+
+    it('parenthesises anything else, so a function applies to all of it', () => {
+      const sql = gridValueSQL(col('INTEGER[]'), 'list_concat("a", "b")')!;
+      expect(sql).toContain(
+        'list_resize((list_concat("a", "b")), least(len((list_concat("a", "b"))), 32))',
+      );
+      expect(sql).toContain('len((list_concat("a", "b"))) > 32');
+    });
+
+    it('a name with brackets or a lambda keyword in it stays inside its quotes', () => {
+      const sql = gridValueSQL(col('VARCHAR[]', 'lambda txt: [1:32]'), '"lambda txt: [1:32]"')!;
+      expect(sql).toContain('len("lambda txt: [1:32]") > 32');
+    });
+  });
+});
+
+describe('jsonValueSQL', () => {
+  it('reads most types through to_json', () => {
+    for (const type of [
+      'VARCHAR[]',
+      'INTEGER[3]',
+      'STRUCT(x DOUBLE, tier VARCHAR)',
+      'STRUCT(INTEGER, VARCHAR)',
+      'MAP(VARCHAR, INTEGER)',
+      'UNION(i INTEGER, s VARCHAR)',
+      'DECIMAL(10,2)[]',
+      'INTEGER',
+      'VARCHAR',
+      'BLOB',
+      'INTERVAL',
+    ]) {
+      expect(json(type), type).toBe('CAST(to_json("c") AS VARCHAR)');
+    }
+  });
+
+  it('reads a JSON column as its text', () => {
+    expect(json('JSON')).toBe('CAST("c" AS VARCHAR)');
+  });
+
+  it('reads a JSON list through to_json, which keeps its values as JSON', () => {
+    expect(json('JSON[]')).toBe('CAST(to_json("c") AS VARCHAR)');
+  });
+
+  it('casts a VARIANT to JSON, keeping NULL', () => {
+    expect(json('VARIANT')).toBe(
+      'CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST("c" AS JSON) AS VARCHAR) END',
+    );
+  });
+
+  it('reads a type holding a VARIANT through VARIANT, keeping NULL', () => {
+    const viaVariant =
+      'CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST(CAST("c" AS VARIANT) AS JSON) AS VARCHAR) END';
+    for (const type of [
+      'VARIANT[]',
+      'STRUCT(k VARIANT)',
+      'MAP(VARCHAR, VARIANT)',
+      'STRUCT(a STRUCT(b VARIANT[]))',
+      'UNION(v VARIANT, i INTEGER)',
+      // A field named "" is named: nothing to rename, so its value is kept.
+      'STRUCT(b BIGINT,  BIGINT, v VARIANT)',
+    ]) {
+      expect(json(type), type).toBe(viaVariant);
+    }
+  });
+
+  it('names a field named "" by position beside an unnamed struct: SQL cannot write ""', () => {
+    expect(json('STRUCT(p STRUCT(INTEGER, VARCHAR), s STRUCT(b BIGINT,  BIGINT), v VARIANT)')).toBe(
+      `CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST(CAST(CAST("c" AS STRUCT("p" STRUCT("1" INTEGER, "2" VARCHAR), "s" STRUCT("b" BIGINT, "2" BIGINT), "v" VARIANT)) AS VARIANT) AS JSON) AS VARCHAR) END`,
+    );
+  });
+
+  it('names the fields of an unnamed struct by position before the cast to VARIANT', () => {
+    expect(json("STRUCT(VARIANT, ENUM('a', 'it''s'))[]")).toBe(
+      `CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST(CAST(CAST("c" AS STRUCT("1" VARIANT, "2" ENUM('a', 'it''s'))[]) AS VARIANT) AS JSON) AS VARCHAR) END`,
+    );
+    expect(
+      json(
+        'STRUCT(v VARIANT, p STRUCT(INTEGER, DECIMAL(18,4)[2]), m MAP(VARCHAR, UNION("my tag" INTEGER)))',
+      ),
+    ).toBe(
+      `CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST(CAST(CAST("c" AS STRUCT("v" VARIANT, "p" STRUCT("1" INTEGER, "2" DECIMAL(18,4)[2]), "m" MAP(VARCHAR, UNION("my tag" INTEGER)))) AS VARIANT) AS JSON) AS VARCHAR) END`,
+    );
+  });
+
+  it('reads a type the parser cannot read through VARIANT only when it names VARIANT', () => {
+    expect(json('STRUCT(v VARIANT')).toBe(
+      'CASE WHEN "c" IS NULL THEN NULL ELSE CAST(CAST(CAST("c" AS VARIANT) AS JSON) AS VARCHAR) END',
+    );
+    expect(json('STRUCT(a INTEGER')).toBe('CAST(to_json("c") AS VARCHAR)');
+  });
+
+  it('parenthesises an operand that is not a quoted identifier', () => {
+    expect(jsonValueSQL(col('VARIANT'), 'a.b')).toBe(
+      'CASE WHEN (a.b) IS NULL THEN NULL ELSE CAST(CAST((a.b) AS JSON) AS VARCHAR) END',
+    );
+    expect(jsonValueSQL(col('INTEGER[]'), '"t"."c"')).toBe('CAST(to_json("t"."c") AS VARCHAR)');
+  });
+});

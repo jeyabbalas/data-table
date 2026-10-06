@@ -7,6 +7,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { collidingColumnName } from '../core/columnNames';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -531,12 +532,13 @@ export class DerivedColumnEditPanel {
       return;
     }
 
-    // Check uniqueness against schema (excluding current column)
-    const schema = this.state.schema.get();
-    const duplicate = schema.find((s) => s.name === name && s.name !== this.currentColumn);
+    // Check uniqueness against the other columns, ignoring letter case as
+    // DuckDB does (`updateDerivedColumn` refuses the same names); the column
+    // may change the case of its own name
+    const duplicate = collidingColumnName(name, this.otherColumnNames());
 
-    if (duplicate) {
-      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(name);
+    if (duplicate !== undefined) {
+      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(duplicate);
       this.nameErrorEl.style.display = '';
     } else {
       this.nameErrorEl.textContent = '';
@@ -548,8 +550,15 @@ export class DerivedColumnEditPanel {
     const name = this.nameInput.value.trim();
     if (!name) return false;
 
-    const schema = this.state.schema.get();
-    return !schema.some((s) => s.name === name && s.name !== this.currentColumn);
+    return collidingColumnName(name, this.otherColumnNames()) === undefined;
+  }
+
+  /** The names of the columns other than the one being edited. */
+  private otherColumnNames(): string[] {
+    return this.state.schema
+      .get()
+      .filter((s) => s.name !== this.currentColumn)
+      .map((s) => s.name);
   }
 
   private updateButtonState(): void {

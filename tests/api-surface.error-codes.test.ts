@@ -105,6 +105,19 @@ function walkTsFiles(dir: string, acc: string[] = []): string[] {
 // helpers — verify the helper actually feeds an error-construction path.
 const INDIRECT_CODES: Record<string, string> = {
   PERSISTENCE_QUOTA_EXCEEDED: 'src/persistence/AutoSave.ts',
+  // NestedPathError codes: the path walker builds each error through
+  // `failure(code, step, message)`, and `actions.addNestedFieldColumn`
+  // resolves `{ success: false, error }` with its message.
+  INVALID_COLUMN: 'src/nested/extractExpression.ts',
+  INVALID_STEP: 'src/nested/extractExpression.ts',
+  NOT_A_CONTAINER: 'src/nested/extractExpression.ts',
+  NO_SUCH_FIELD: 'src/nested/extractExpression.ts',
+  POSITION_OUT_OF_RANGE: 'src/nested/extractExpression.ts',
+  UNSUPPORTED_MAP_KEY: 'src/nested/extractExpression.ts',
+  INVALID_MAP_KEY: 'src/nested/extractExpression.ts',
+  UNKNOWN_TYPE: 'src/nested/extractExpression.ts',
+  EMPTY_PATH: 'src/nested/extractExpression.ts',
+  NOT_APPLICABLE: 'src/nested/extractExpression.ts',
 };
 
 function extractLiteralCodes(): { codes: Set<string>; locations: Map<string, string[]> } {

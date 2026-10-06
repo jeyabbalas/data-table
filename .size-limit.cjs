@@ -17,19 +17,23 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, re-measured with the fixes after the column
- * work merged together, under Vite 8.0.13 / rolldown 1.0.1, which inlined the
- * shared ModalHost code into each modal consumer and shifted some helper code
- * into VisualizationRegistry):
- *   root entry · ESM               10.85 kB   →  11.4 kB cap (5.1 %)
- *   advanced entry · ESM            2.47 kB   →   2.6 kB cap (5.3 %)
- *   stylesheet                     20.51 kB   →  21.5 kB cap (4.8 %)
- *   lazy ExportDialog chunk        81.35 kB   →  85 kB   cap (4.5 %)
- *   lazy SQLFilterModal chunk       2.54 kB   →   2.6 kB cap (2.4 %)
+ * Current baseline (brotli, re-measured after the review fixes to the
+ * nested-type work under Vite 8.2.0 / rolldown 1.2.1, which, like rolldown
+ * 1.0.1 before it, inlines the shared ModalHost code into each modal
+ * consumer):
+ *   root entry · ESM               10.93 kB   →  11.4 kB cap (4.3 %)
+ *   advanced entry · ESM            2.50 kB   →   2.6 kB cap (4.0 %)
+ *   stylesheet                     22.57 kB   →  23.7 kB cap (5.0 %)
+ *   lazy ExportDialog chunk        97.67 kB   → 100 kB   cap (2.4 %)
+ *   lazy SQLFilterModal chunk       2.53 kB   →   2.6 kB cap (2.8 %)
  *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
- *   lazy DerivedColumnEditPanel     3.00 kB   →   3.1 kB cap (3.3 %)
- *   lazy FilterPresetPanel          2.61 kB   →   2.7 kB cap (3.4 %)
+ *   lazy DerivedColumnEditPanel     3.02 kB   →   3.1 kB cap (2.6 %)
+ *   lazy FilterPresetPanel          2.62 kB   →   2.7 kB cap (3.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
+ *   lazy extractExpression chunk    2.81 kB   →   2.95 kB cap (5.0 %)
+ *   lazy ValueInspector chunk       8.45 kB   →   8.9 kB cap (5.3 %)
+ *   lazy ExtractColumnPanel chunk   4.95 kB   →   5.3 kB cap (7.1 %)
+ *   lazy TreeView chunk             2.79 kB   →   2.85 kB cap (2.2 %)
  *
  * Root entry history. It measured 7.68 kB until the column charts became
  * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
@@ -48,7 +52,8 @@
  * Merged with the other fixes of that round (load options passed to the
  * worker and `loadProgress` emitted, derived-column changes run one at a
  * time, a failed initial load torn down, loads that report the tables they
- * replace), it measured 10.85 kB, and the cap moved to 11.4 kB.
+ * replace), it measured 10.85 kB, and the cap moved to 11.4 kB. The
+ * nested-type work left it at 10.93 kB.
  *
  * ExportDialog chunk history. Despite its name, the glob matches the shared
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
@@ -66,10 +71,51 @@
  * the viewport height, the dialogs' focus) and its cap to 85 kB, and the
  * stylesheet to 20.51 kB (narrow headers' clipped controls, the SQL filter
  * modal's Remove section, the failed chart's line) and its cap to 21.5 kB.
+ * Measured again under Vite 8.2.0 / rolldown 1.2.1, the chunk was 81.61 kB
+ * before nested columns. Their type parser, bounded cell text and exact
+ * text filters took it to 84.28 kB, and their header label and summary
+ * chart to 87.80 kB, and the cap to 92 kB. Reading cell and column values
+ * exactly, nested ones as JSON, took it to 91.28 kB, and the cap to 96 kB.
+ * The `codeSplitting` group in `vite.config.ts` (see the ValueInspector
+ * chunk below) took it to 94.04 kB, and "extract field → column" from the
+ * UI (the header's extract button, the panels' wiring) to 94.98 kB, and the
+ * cap to 100 kB. The fixes after it (F2 on a row still loading, the value
+ * inspector's focus) left it at 95.22 kB, and the review fixes, among them
+ * the bounded formatting of nested cells, the derived-column checks, the
+ * exact reads' paging and the panels' waiting opens, at 97.67 kB.
  *
- * ModalHost no longer ships as a separate chunk: rolldown 1.0.1 inlines the
- * shared ModalHost helpers into each modal consumer. The per-modal caps above
- * already cover the added bytes.
+ * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
+ * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
+ * the first time a column is extracted.
+ *
+ * ValueInspector chunk history. New with the value inspector (F2, a double
+ * click or the inspect icon on a nested or JSON cell), at 10.59 kB: the
+ * panel, the tree view and the value-tree model, which pairs a value's JSON
+ * with its DuckDB type. The JSON parser, the type parser and the cell read
+ * it uses are shared with the table. Opening it also loads the
+ * `extractExpression-*` chunk, for its "add as column" rules. With the
+ * type parser shared by two lazy chunks and the table, rolldown would move
+ * it, with `FilterSQL`, `errors` and `types`, into a chunk of their own that
+ * the root entry imports (3.94 kB, which no budget here measured), and a
+ * page would load 1.07 kB more: the `codeSplitting` group in
+ * `vite.config.ts` keeps them in the shared chunk.
+ *
+ * ExtractColumnPanel chunk history. New with "extract field → column" from
+ * the UI (the extract button on a nested or JSON column's header), at
+ * 5.12 kB: the panel and its JSON path parser. It loads the
+ * `extractExpression-*` chunk too, and shares the tree view with the
+ * ValueInspector chunk, so rolldown moved `TreeView` out of that chunk into
+ * a `TreeView-*` chunk the two load, measured here at 2.71 kB (cap
+ * 2.85 kB): the ValueInspector chunk measured 8.51 kB with it gone, and its
+ * cap moved from 11.2 to 8.9 kB. A page that opens both panels loads the
+ * tree once. The review fixes dropped the tree's unused API and moved the two
+ * panels' element and close-icon helpers into it, and took the copies the
+ * inspector kept of shared rules out: TreeView 2.79 kB, ValueInspector
+ * 8.45 kB and ExtractColumnPanel 4.95 kB.
+ *
+ * ModalHost no longer ships as a separate chunk: rolldown, since 1.0.1,
+ * inlines the shared ModalHost helpers into each modal consumer. The
+ * per-modal caps above already cover the added bytes.
  *
  * Stylesheet history. The line above previously read 16.94 kB; that figure was
  * never measured — the real size at that commit was 17.11 kB, so the gate had
@@ -87,6 +133,11 @@
  * that concat step would make this budget a measure of CSS rather than of
  * documentation; it is deliberately left alone here because it changes
  * published output.
+ *
+ * Nested columns took it from 20.51 to 20.54 kB (the header's type label),
+ * and the value inspector's panel and tree to 21.81 kB, and the cap from
+ * 21.5 to 22.9 kB. The extract panel took it to 22.57 kB, and the cap to
+ * 23.7 kB.
  *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
@@ -107,12 +158,12 @@ module.exports = [
   {
     name: 'stylesheet (dist/data-table.css)',
     path: 'dist/data-table.css',
-    limit: '21.5 kB',
+    limit: '23.7 kB',
   },
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '85 kB',
+    limit: '100 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -138,5 +189,25 @@ module.exports = [
     name: 'lazy CodeMirror editor chunk · ESM',
     path: 'dist/CodeMirrorExpressionEditor-*.js',
     limit: '5.5 kB',
+  },
+  {
+    name: 'lazy extractExpression chunk · ESM',
+    path: 'dist/extractExpression-*.js',
+    limit: '2.95 kB',
+  },
+  {
+    name: 'lazy ValueInspector chunk · ESM',
+    path: 'dist/ValueInspector-*.js',
+    limit: '8.9 kB',
+  },
+  {
+    name: 'lazy ExtractColumnPanel chunk · ESM',
+    path: 'dist/ExtractColumnPanel-*.js',
+    limit: '5.3 kB',
+  },
+  {
+    name: 'lazy TreeView chunk · ESM',
+    path: 'dist/TreeView-*.js',
+    limit: '2.85 kB',
   },
 ];

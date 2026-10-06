@@ -5,6 +5,12 @@
  * delimiter, and null value handling. Queries DuckDB in batches to handle
  * large datasets without excessive memory usage.
  *
+ * A nested value (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) is written as
+ * standard JSON: `[56,3,91]`, `{"x":1.25,"tier":"bronze"}`, a MAP as an
+ * object in key order, a UNION as `{"tag":value}`. Every digit is kept, and
+ * NaN and ±Infinity, which JSON cannot hold, are `null`. A JSON column is
+ * written as its text, as any text.
+ *
  * @example
  * import { exportFromState } from '@jeyabbalas/data-table/advanced';
  *
@@ -24,9 +30,10 @@
  */
 
 import { ExportError } from '../core/errors';
+import { toStandardJson } from '../core/jsonTree';
 import type { TableState } from '../core/State';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { resolveColumns, fetchAllRows } from './ExportQuery';
+import { resolveColumns, fetchAllRows, exportJsonColumns } from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
 
 // Re-export shared types so existing consumers are unaffected
@@ -96,16 +103,48 @@ export function neutralizeFormulaPrefix(value: string): string {
  * are doubled.
  */
 export function escapeCSVField(value: string, delimiter: string): string {
-  const neutralized = neutralizeFormulaPrefix(value);
+  return quoteCSVField(neutralizeFormulaPrefix(value), delimiter);
+}
+
+/**
+ * RFC 4180 quoting alone: wrap the field in double-quotes, doubling the
+ * double-quotes inside, when it contains the delimiter, a double-quote, a
+ * newline or a carriage return.
+ */
+function quoteCSVField(value: string, delimiter: string): string {
   if (
-    neutralized.includes(delimiter) ||
-    neutralized.includes('"') ||
-    neutralized.includes('\n') ||
-    neutralized.includes('\r')
+    value.includes(delimiter) ||
+    value.includes('"') ||
+    value.includes('\n') ||
+    value.includes('\r')
   ) {
-    return '"' + neutralized.replace(/"/g, '""') + '"';
+    return '"' + value.replace(/"/g, '""') + '"';
   }
-  return neutralized;
+  return value;
+}
+
+/** JSON text that is a number and nothing else: `-5`, `-1.5e-7`. */
+const JSON_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+/**
+ * The CSV field for a nested value, from the exact JSON text the export
+ * reads it as (`jsonValueSQL`): the text made standard JSON by
+ * `toStandardJson` (bare `NaN`, `Infinity` and `-Infinity` outside strings
+ * become `null`; every digit is kept, so a HUGEINT keeps all 39), then
+ * escaped as any field.
+ *
+ * Formula neutralization (see {@link neutralizeFormulaPrefix}) is kept, and
+ * leaves every container alone: JSON text from DuckDB starts with `[`, `{`,
+ * `"`, a digit, `-`, `t`, `f` or `n`, and only `-` is a trigger. Text that
+ * starts with `-` is a number (a VARIANT holding `-5`), and a number alone,
+ * with no operator, reference or `|` to carry a formula, is what a
+ * spreadsheet reads as a number; prefixing it with `'` would make the cell
+ * invalid JSON. So a field that is exactly a JSON number is written without
+ * the prefix, and anything else goes through it as any cell does.
+ */
+function jsonCSVField(json: string, delimiter: string): string {
+  const text = toStandardJson(json);
+  return JSON_NUMBER.test(text) ? quoteCSVField(text, delimiter) : escapeCSVField(text, delimiter);
 }
 
 /**
@@ -134,15 +173,26 @@ export function formatCellValue(value: unknown, nullValue: string): string {
 
 /**
  * Convert a single result row to a CSV line.
+ *
+ * @param jsonColumns - Columns whose values are a nested value's JSON text
+ *   (`exportJsonColumns` in ExportQuery.ts), written as standard JSON; see
+ *   the module comment. A NULL is `nullValue`, as in any column.
  */
 export function rowToCSVLine(
   row: Record<string, unknown>,
   columns: string[],
   delimiter: string,
   nullValue: string,
+  jsonColumns?: ReadonlySet<string>,
 ): string {
   return columns
-    .map((col) => escapeCSVField(formatCellValue(row[col], nullValue), delimiter))
+    .map((col) => {
+      const value = row[col];
+      if (typeof value === 'string' && jsonColumns?.has(col)) {
+        return jsonCSVField(value, delimiter);
+      }
+      return escapeCSVField(formatCellValue(value, nullValue), delimiter);
+    })
     .join(delimiter);
 }
 
@@ -188,6 +238,9 @@ export async function exportToCSV(
     lines.push(columns.map((col) => escapeCSVField(col, opts.delimiter)).join(opts.delimiter));
   }
 
+  // Nested columns arrive as their JSON text (see fetchAllRows).
+  const jsonColumns = new Set(exportJsonColumns(columns, context.schema).keys());
+
   await fetchAllRows(
     tableName,
     columns,
@@ -195,7 +248,7 @@ export async function exportToCSV(
     context,
     (rows) => {
       for (const row of rows) {
-        lines.push(rowToCSVLine(row, columns, opts.delimiter, opts.nullValue));
+        lines.push(rowToCSVLine(row, columns, opts.delimiter, opts.nullValue, jsonColumns));
       }
     },
     signal,

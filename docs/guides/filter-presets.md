@@ -16,7 +16,7 @@ to drive it from your own UI.
 
 ## Prerequisites
 
-- Read: [Filters guide](./filters.md), [API reference — `FilterPresetManager`](../api-reference.md#filterpresetmanager)
+- Read: [Filters guide](./filters.md), [API reference — `FilterPresetManager`](../api-reference.md#filter-presets)
 - Runnable example: [`examples/09-multi-table`](../../examples/09-multi-table/)
 
 ## Minimal example
@@ -258,5 +258,5 @@ manager.presets.subscribe((presets) => {
 - Filters: [Filters guide](./filters.md) for the seven filter types each preset contains
 - Multi-table: [Multi-table dashboards](./multi-table.md) for shared preset patterns
 - Session persistence: [Session persistence guide](./session-persistence.md) for how presets survive reloads
-- API reference: [`FilterPresetManager`](../api-reference.md#filterpresetmanager)
-- Source: `src/filters/FilterPresets.ts:1-243`
+- API reference: [`FilterPresetManager`](../api-reference.md#filter-presets)
+- Source: `src/filters/FilterPresets.ts:1-352`

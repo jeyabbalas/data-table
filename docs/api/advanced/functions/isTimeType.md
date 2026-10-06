@@ -8,7 +8,7 @@
 
 > **isTimeType**(`type`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:81](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/VisualizationRegistry.ts#L81)
+Defined in: [visualizations/VisualizationRegistry.ts:82](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/VisualizationRegistry.ts#L82)
 
 Check if a column type is time (suitable for time histogram).
 

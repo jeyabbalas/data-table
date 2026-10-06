@@ -6,6 +6,7 @@ import {
   exportJSONFromState,
 } from '@/export/JSONExport';
 import type { ExportContext } from '@/export/ExportQuery';
+import { parseDuckDBType } from '@/core/duckdbType';
 import type { ColumnSchema } from '@/core/types';
 
 // =========================================
@@ -296,8 +297,10 @@ describe('exportToJSON', () => {
 
       await exportToJSON('test', { scope: 'all' }, context);
 
+      // The one WHERE picks the batch's rows by rowid (see buildBaseQuery).
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).not.toContain('WHERE');
+      expect(sql).not.toMatch(/WHERE (?!"test"\."__rowid__" IN \()/);
+      expect(sql).not.toContain("'Alice'");
     });
 
     it('should include WHERE for scope filtered', async () => {
@@ -448,5 +451,154 @@ describe('exportJSONFromState', () => {
     const parsed = JSON.parse(json);
     expect(parsed).toEqual([{ id: 1, name: 'Alice' }]);
     expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+});
+
+// =========================================
+// Nested values as structures
+// =========================================
+//
+// A nested column is read as its exact JSON text (see
+// ExportQuery.exportColumnRead) and written as a real structure, read by
+// its DuckDB type with the export rules of `materialize`: a MAP is an
+// object keyed by the key's text, an integer beyond ±(2^53−1) its decimal
+// string, NaN and ±Infinity null. A JSON column stays its text.
+
+describe('formatRowForJSON — nested values', () => {
+  const types = (entries: Record<string, string>) =>
+    new Map(Object.entries(entries).map(([name, type]) => [name, parseDuckDBType(type)]));
+
+  it('reads each value by its type', () => {
+    const jsonColumns = types({
+      tags: 'VARCHAR[]',
+      huge: 'HUGEINT[]',
+      doubles: 'DOUBLE[]',
+      decimals: 'DECIMAL(10,2)[]',
+      attrs: 'MAP(VARCHAR, INTEGER)',
+      keyed: 'MAP(INTEGER, VARCHAR)',
+      choice: 'UNION(num INTEGER, str VARCHAR)',
+      pair: 'STRUCT(INTEGER, VARCHAR)',
+      v: 'VARIANT',
+      neg: 'VARIANT',
+    });
+    const row = {
+      id: 7,
+      tags: '["a","NaN"]',
+      huge: '[1,170141183460469231731687303715884105727,-9007199254740993]',
+      doubles: '[1.5,NaN,Infinity,-Infinity,-0.0]',
+      decimals: '[1.25,2.50,3.75]',
+      attrs: '{"b":1,"a":null}',
+      keyed: '{"2":"two","1":"one"}',
+      choice: '{"str":"0"}',
+      pair: '{"":1,"":"a"}',
+      v: '[1,"x",{"k":NaN}]',
+      neg: '-5',
+    };
+    const result = formatRowForJSON(row, Object.keys(row), jsonColumns);
+    expect(result).toEqual({
+      id: 7,
+      tags: ['a', 'NaN'],
+      huge: [1, '170141183460469231731687303715884105727', '-9007199254740993'],
+      doubles: [1.5, null, null, null, -0],
+      decimals: [1.25, 2.5, 3.75],
+      attrs: { b: 1, a: null },
+      keyed: { '1': 'one', '2': 'two' },
+      choice: { str: '0' },
+      pair: [1, 'a'],
+      v: [1, 'x', { k: null }],
+      neg: -5,
+    });
+    expect(JSON.parse(JSON.stringify(result))).toEqual({
+      ...result,
+      doubles: [1.5, null, null, null, 0],
+    });
+  });
+
+  it('keeps fields named like JavaScript members as plain keys', () => {
+    const jsonColumns = types({
+      s: 'STRUCT(__proto__ INTEGER, "constructor" VARCHAR, toJSON INTEGER)',
+    });
+    const result = formatRowForJSON(
+      { s: '{"__proto__":1,"constructor":"c","toJSON":3}' },
+      ['s'],
+      jsonColumns,
+    );
+    const s = result['s'] as Record<string, unknown>;
+    expect(Object.getPrototypeOf(s)).toBe(Object.prototype);
+    expect(Object.keys(s)).toEqual(['__proto__', 'constructor', 'toJSON']);
+    expect(JSON.stringify(result)).toBe('{"s":{"__proto__":1,"constructor":"c","toJSON":3}}');
+  });
+
+  it('writes NULL as null, and a JSON column or a column without a type as text', () => {
+    const jsonColumns = types({ tags: 'INTEGER[]' });
+    const row = { tags: null, doc: '{"x":NaN}', other: '[1,2]' };
+    expect(formatRowForJSON(row, ['tags', 'doc', 'other'], jsonColumns)).toEqual({
+      tags: null,
+      doc: '{"x":NaN}',
+      other: '[1,2]',
+    });
+    // Without types, as before.
+    expect(formatRowForJSON({ tags: '[1,2]' }, ['tags'])).toEqual({ tags: '[1,2]' });
+  });
+
+  it('writes a column named __proto__ as a key, not as the prototype', () => {
+    const row = { ['__proto__']: '[1]', id: 1 } as Record<string, unknown>;
+    const jsonColumns = new Map([['__proto__', parseDuckDBType('INTEGER[]')]]);
+    const result = formatRowForJSON(row, ['id', '__proto__'], jsonColumns);
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(JSON.stringify(result)).toBe('{"id":1,"__proto__":[1]}');
+  });
+});
+
+describe('exportToJSON — nested columns', () => {
+  const schema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'attrs', type: 'nested', nullable: true, originalType: 'MAP(VARCHAR, BIGINT)' },
+    { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' },
+    { name: 'span', type: 'interval', nullable: true, originalType: 'INTERVAL' },
+  ];
+  const rows = [
+    { id: 1, attrs: '{"k":9223372036854775807,"n":NaN}', doc: '{"a":1}', span: '1 day' },
+    { id: 2, attrs: null, doc: null, span: null },
+  ];
+  const expected = [
+    { id: 1, attrs: { k: '9223372036854775807', n: null }, doc: '{"a":1}', span: '1 day' },
+    { id: 2, attrs: null, doc: null, span: null },
+  ];
+
+  function contextWith(query: ReturnType<typeof vi.fn>): ExportContext {
+    return {
+      bridge: { query } as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      filters: [],
+      sortColumns: [],
+      selectedRows: new Set(),
+      columnOrder: schema.map((c) => c.name),
+      schema,
+    };
+  }
+
+  it('selects nested columns as JSON text and writes them as structures', async () => {
+    const query = vi.fn().mockResolvedValueOnce(rows);
+    const json = await exportToJSON('t', { format: 'array' }, contextWith(query));
+    const sql = query.mock.calls[0]![0] as string;
+    expect(sql).toContain('CAST(to_json("attrs") AS VARCHAR) AS "attrs"');
+    expect(sql).toContain('CAST("span" AS VARCHAR) AS "span"');
+    expect(JSON.parse(json)).toEqual(expected);
+  });
+
+  it('does the same as NDJSON and pretty-printed', async () => {
+    const ndjson = await exportToJSON(
+      't',
+      { format: 'ndjson' },
+      contextWith(vi.fn().mockResolvedValueOnce(rows)),
+    );
+    expect(ndjson.split('\n').map((line) => JSON.parse(line) as unknown)).toEqual(expected);
+    const pretty = await exportToJSON(
+      't',
+      { format: 'array', pretty: true },
+      contextWith(vi.fn().mockResolvedValueOnce(rows)),
+    );
+    expect(pretty).toContain('\n    "attrs": {\n      "k": "9223372036854775807",');
+    expect(JSON.parse(pretty)).toEqual(expected);
   });
 });

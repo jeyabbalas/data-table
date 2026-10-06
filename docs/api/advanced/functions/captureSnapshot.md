@@ -8,7 +8,7 @@
 
 > **captureSnapshot**(`state`): [`StateSnapshot`](../interfaces/StateSnapshot.md)
 
-Defined in: [core/UndoManager.ts:205](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/UndoManager.ts#L205)
+Defined in: [core/UndoManager.ts:211](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/UndoManager.ts#L211)
 
 Capture the current TableState as a StateSnapshot.
 

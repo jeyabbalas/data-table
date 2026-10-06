@@ -140,15 +140,19 @@ is a thin Promise-based RPC wrapper:
   mutation via `attachCacheInvalidation`. Individual queries can opt out
   or jump the queue through a `QueryOptions` third parameter on
   `query(sql, signal?, options?)`
-  ([`src/data/WorkerBridge.ts:51-63`](../../src/data/WorkerBridge.ts)):
+  ([`src/data/WorkerBridge.ts:51-78`](../../src/data/WorkerBridge.ts)):
   `cache: false` bypasses the SQL-text cache — viewport row fetches use
   it, since their rows already live in `TableBody`'s row cache (see
-  [Row fetching](#row-fetching)) — and `priority: 'high' | 'normal'`
-  picks the worker queue.
+  [Row fetching](#row-fetching)) — and
+  `priority: 'high' | 'elevated' | 'normal'` picks its place in the worker
+  queue.
 - **Serial priority queue.** The worker runs one query at a time,
-  drained from an explicit two-priority FIFO — `'high'` for viewport row
-  fetches, `'normal'` for everything else
-  ([`src/worker/dispatcher.ts:46-72`](../../src/worker/dispatcher.ts)).
+  drained from an explicit FIFO of three priorities — `'high'` for
+  viewport row fetches, `'elevated'` for a read a user is waiting on
+  (`getCellValue`, the value inspector), which goes ahead of every queued
+  `'normal'` query but never of a row fetch, and `'normal'` for everything
+  else
+  ([`src/worker/dispatcher.ts:48-80`](../../src/worker/dispatcher.ts)).
   Serialization costs nothing real — SQL already executes serially
   inside DuckDB-WASM's single-threaded worker — and buys truthful
   cancel targeting, free cancellation of still-queued work, and
@@ -337,13 +341,13 @@ when its block arrives (a row whose cache entry was evicted or
 invalidated demotes back to a placeholder — stale paint never persists).
 Fetching is reconciliation that happens after the paint, never a
 precondition for it; the full state machine is documented at
-[`src/table/TableBody.ts:226-267`](../../src/table/TableBody.ts).
+[`src/table/TableBody.ts:252-293`](../../src/table/TableBody.ts).
 
 Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:910-1019`](../../src/table/TableBody.ts)) keeps
+([`src/table/TableBody.ts:943-1063`](../../src/table/TableBody.ts)) keeps
 at most 2 block fetches in flight — the worker executes serially, so
 that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
@@ -367,7 +371,7 @@ Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
 rounded up to whole blocks with a floor of 4 blocks). Over the cap,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:1272-1306`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:1304-1356`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -376,7 +380,7 @@ its own TTL/LRU would be a second staleness domain.
 The SQL itself has two shapes. With no filters and no user sort, a block
 is fetched by a range predicate on the dense synthetic row id —
 `WHERE "__rowid__" >= start AND "__rowid__" < end ORDER BY "__rowid__" ASC LIMIT n`
-([`src/table/rowQuery.ts:78-84`](../../src/table/rowQuery.ts)) —
+([`src/table/rowQuery.ts:113-118`](../../src/table/rowQuery.ts)) —
 which DuckDB prunes via zonemaps, so a block fetch costs about the same
 at any scroll depth, where `LIMIT/OFFSET` grows with the offset. Every
 loader materializes `__rowid__` densely, and a runtime density valve
@@ -386,7 +390,7 @@ correct, never wrong rows.
 
 Sorted or filtered fetches page with `ORDER BY … LIMIT n OFFSET k` in two
 phases
-([`src/table/rowQuery.ts:99-125`](../../src/table/rowQuery.ts)). A
+([`src/table/rowQuery.ts:147-161`](../../src/table/rowQuery.ts)). A
 subquery sorts only the sort keys and `"__rowid__"` to find the block's
 row ids, and the outer query reads the visible columns for those ids,
 `WHERE "__rowid__" IN (…)`, and restores the order. Paging the full
@@ -396,6 +400,20 @@ WASM memory. Both `ORDER BY`s end with `"__rowid__" ASC` as a
 tiebreaker: DuckDB's `ORDER BY` is non-deterministic for ties, and two
 block queries that permute ties differently would duplicate some rows
 across block boundaries and drop others.
+
+Both shapes select some columns as text
+([`gridValueSQL`](../../src/data/valueSql.ts)): a nested column (LIST,
+ARRAY, STRUCT, MAP, UNION, VARIANT) as DuckDB's text for its value, cut to
+32 items and 1,000 graphemes so a block stays kilobytes, and formatted from
+only the items that text can reach, so a long list inside a value costs no
+more than a short one; BLOB, BIT, GEOMETRY and BIGNUM values, which Arrow
+carries as bytes, INTERVAL, which it carries as numbers that do not hold it,
+TIME_NS, which it carries in nanoseconds, TIME WITH TIME ZONE, which it
+carries without its offset, and ENUM, whose values a raw read makes the
+worker read twice (`executeQueryCancellable`, `src/worker/duckdb.ts`), as
+their text too. Each keeps its column's name as its alias, so the outer
+`ORDER BY` names the table (`"t"."col"`) to sort by the value rather than by
+the text.
 
 Unlike `bufferRows` and `maxVirtualHeight`, the pipeline knobs are
 public: `fetchBlockSize`, `rowCacheRows`, and `prefetch` are accepted by
@@ -422,7 +440,7 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1357`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1449`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was
@@ -431,7 +449,7 @@ zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
 ([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:401-408`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:480-491`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 

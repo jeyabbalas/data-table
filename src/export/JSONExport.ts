@@ -7,12 +7,24 @@
  *
  * Values are output as native JSON types (numbers, booleans, null) rather
  * than converting everything to strings as CSV does.
+ *
+ * A nested value (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) is written as a
+ * real JSON structure, read from its exact JSON text by the type it has:
+ * lists and arrays as arrays, structs as objects (an unnamed struct as an
+ * array), a MAP as an object keyed by the key's text, a UNION as
+ * `{"tag": value}`. An integer in it beyond ±(2^53−1) is its decimal
+ * string, every digit kept, and NaN and ±Infinity are `null`, as
+ * {@link formatValueForJSON} writes a bigint and a number. A JSON column's
+ * value is written as its text, a string, as any text.
  */
 
+import type { DuckDBTypeNode } from '../core/duckdbType';
 import { ExportError } from '../core/errors';
+import { setOwnProperty } from '../core/ownProperty';
 import type { TableState } from '../core/State';
+import { readJsonValue } from '../data/cellValue';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { resolveColumns, fetchAllRows } from './ExportQuery';
+import { resolveColumns, fetchAllRows, exportJsonColumns } from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
 
 export type { ExportContext } from './ExportQuery';
@@ -95,14 +107,28 @@ export function formatValueForJSON(value: unknown): unknown {
 /**
  * Convert a result row to a JSON-safe object containing only the requested
  * columns in the specified order.
+ *
+ * @param jsonColumns - Columns whose values are a nested value's JSON text,
+ *   each with its parsed DuckDB type (`exportJsonColumns` in
+ *   ExportQuery.ts). Each is written as a real structure, read as
+ *   `materialize` reads it in its `'export'` mode (`readJsonValue`, which
+ *   uses `JSON.parse` where that gives the same values): see the module
+ *   comment. A NULL is `null`.
  */
 export function formatRowForJSON(
   row: Record<string, unknown>,
   columns: string[],
+  jsonColumns?: ReadonlyMap<string, DuckDBTypeNode>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const col of columns) {
-    result[col] = formatValueForJSON(row[col]);
+    const value = row[col];
+    const type = jsonColumns?.get(col);
+    const formatted =
+      type !== undefined && typeof value === 'string'
+        ? readJsonValue(value, type, 'export')
+        : formatValueForJSON(value);
+    setOwnProperty(result, col, formatted);
   }
   return result;
 }
@@ -141,15 +167,19 @@ export async function exportToJSON(
     throw new DOMException('Export aborted', 'AbortError');
   }
 
+  // Nested columns arrive as their JSON text (see fetchAllRows).
+  const jsonColumns = exportJsonColumns(columns, context.schema);
+
   if (opts.format === 'ndjson') {
-    return exportNDJSON(tableName, columns, opts, context, signal);
+    return exportNDJSON(tableName, columns, jsonColumns, opts, context, signal);
   }
-  return exportArray(tableName, columns, opts, context, signal);
+  return exportArray(tableName, columns, jsonColumns, opts, context, signal);
 }
 
 async function exportArray(
   tableName: string,
   columns: string[],
+  jsonColumns: ReadonlyMap<string, DuckDBTypeNode>,
   opts: JSONExportOptions,
   context: ExportContext,
   signal?: AbortSignal,
@@ -165,7 +195,7 @@ async function exportArray(
     context,
     (rows) => {
       for (const row of rows) {
-        const formatted = formatRowForJSON(row, columns);
+        const formatted = formatRowForJSON(row, columns, jsonColumns);
         if (opts.pretty) {
           // Pretty-print each object with indentation, then indent the whole block
           const json = JSON.stringify(formatted, null, 2);
@@ -192,6 +222,7 @@ async function exportArray(
 async function exportNDJSON(
   tableName: string,
   columns: string[],
+  jsonColumns: ReadonlyMap<string, DuckDBTypeNode>,
   opts: JSONExportOptions,
   context: ExportContext,
   signal?: AbortSignal,
@@ -205,7 +236,7 @@ async function exportNDJSON(
     context,
     (rows) => {
       for (const row of rows) {
-        const formatted = formatRowForJSON(row, columns);
+        const formatted = formatRowForJSON(row, columns, jsonColumns);
         lines.push(JSON.stringify(formatted));
       }
     },

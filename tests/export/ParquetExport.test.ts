@@ -39,7 +39,9 @@ describe('buildParquetQuery', () => {
     // same table produce byte-identical Parquet files even when the
     // user's `sortColumns` is empty (DuckDB's parallel scan order is
     // otherwise non-deterministic).
-    expect(sql).toBe('SELECT "id", "name", "price" FROM "test_table" ORDER BY "__rowid__" ASC');
+    expect(sql).toBe(
+      'SELECT "id", "name", "price" FROM "test_table" ORDER BY "test_table"."__rowid__" ASC',
+    );
     expect(sql).not.toContain('WHERE');
     expect(sql).not.toContain('LIMIT');
   });
@@ -57,7 +59,7 @@ describe('buildParquetQuery', () => {
       context,
     );
 
-    expect(sql).toContain('ORDER BY "name" ASC, "__rowid__" ASC');
+    expect(sql).toContain('ORDER BY "test_table"."name" ASC, "test_table"."__rowid__" ASC');
   });
 
   it('should include WHERE for scope filtered', () => {
@@ -161,7 +163,9 @@ describe('buildParquetQuery', () => {
       context,
     );
 
-    expect(sql).toContain('ROW_NUMBER() OVER(ORDER BY "name" DESC, "__rowid__" ASC)');
+    expect(sql).toContain(
+      'ROW_NUMBER() OVER(ORDER BY "test_table"."name" DESC, "test_table"."__rowid__" ASC)',
+    );
   });
 
   it('should include filters in selected rows query', () => {

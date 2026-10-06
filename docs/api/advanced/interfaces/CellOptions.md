@@ -6,7 +6,7 @@
 
 # Interface: CellOptions
 
-Defined in: [table/Cell.ts:44](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L44)
+Defined in: [table/Cell.ts:76](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L76)
 
 Options for configuring the CellRenderer
 
@@ -16,7 +16,7 @@ Options for configuring the CellRenderer
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/Cell.ts:46](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L46)
+Defined in: [table/Cell.ts:78](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L78)
 
 CSS class prefix (default: 'dt')
 
@@ -26,6 +26,6 @@ CSS class prefix (default: 'dt')
 
 > `optional` **locale?**: `string`
 
-Defined in: [table/Cell.ts:48](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L48)
+Defined in: [table/Cell.ts:80](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L80)
 
 Locale for number/date formatting (default: undefined = user's locale)

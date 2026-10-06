@@ -1,6 +1,6 @@
 # @jeyabbalas/data-table
 
-> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), programmatic row/column/cell annotations with severity tiers + popover, structured XSS-safe column-header tooltips, custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry`, public CodeMirror SQL editor primitives (`createSqlExtensions` / `buildCompletionContext` for host-app embedded editors), stable synthetic `__rowid__` plus read-only column export, undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
+> Client-side TypeScript library for interactive, explorable data tables. Runs DuckDB compiled to WebAssembly directly in the browser — no server-side processing, complete data privacy. Ships per-column visualizations with brush/click crossfilter, derived columns (SQL expressions or JS value vectors), programmatic row/column/cell annotations with severity tiers + popover, structured XSS-safe column-header tooltips, custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry`, public CodeMirror SQL editor primitives (`createSqlExtensions` / `buildCompletionContext` for host-app embedded editors), stable synthetic `__rowid__` plus exact read-only value reads (`getColumnValues`, `getCellValue`), nested LIST / ARRAY / STRUCT / MAP / UNION / VARIANT columns (`type: 'nested'`: bounded DuckDB text in cells, a keyboard-tree value inspector with Copy JSON, text-matched exact filters, fields extracted as columns from the header's extract button or `addNestedFieldColumn`), undo/redo, IndexedDB session persistence, WCAG-oriented accessibility, and CSV/JSON/Parquet export.
 
 This file follows the [llms.txt](https://llmstxt.org) convention. It is a curated index for coding agents and LLM-driven tools. Human readers should start with [README.md](./README.md).
 
@@ -19,19 +19,19 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 
 ## Guides (task-oriented walkthroughs)
 
-- [docs/guides/loading-data.md](./docs/guides/loading-data.md): File / URL / Blob / ArrayBuffer ingestion, format detection, progress events.
-- [docs/guides/filters.md](./docs/guides/filters.md): The seven filter types, programmatic filter construction, serialization.
-- [docs/guides/derived-columns.md](./docs/guides/derived-columns.md): SQL-expression vs vector derived columns, DuckDB VIEW reconciliation, dependency-aware replacement.
+- [docs/guides/loading-data.md](./docs/guides/loading-data.md): File / URL / Blob / ArrayBuffer ingestion, format detection, progress events; what nested (list, struct, map) and JSON columns become in the grid, the value inspector, filters, value reads and exports.
+- [docs/guides/filters.md](./docs/guides/filters.md): The seven filter types, programmatic filter construction, matching nested values by their text (`valueType: 'text'`), serialization.
+- [docs/guides/derived-columns.md](./docs/guides/derived-columns.md): SQL-expression vs vector derived columns, DuckDB VIEW reconciliation, dependency-aware replacement, nested fields as columns (the header's extract panel, the inspector's "Add as column", `addNestedFieldColumn`), names unique ignoring case.
 - [docs/guides/annotations.md](./docs/guides/annotations.md): Programmatic row/column/cell annotation CRUD, severity filtering, intersection popover, JSON round-trip, session persistence.
 - [docs/guides/column-header-tooltips.md](./docs/guides/column-header-tooltips.md): Structured popover for column-header metadata (title / description / items + enum chips), XSS-safe by construction.
 - [docs/guides/events.md](./docs/guides/events.md): Full event catalog, lifecycle ordering, error discrimination.
-- [docs/guides/visualizations.md](./docs/guides/visualizations.md): Built-in visualization classes and custom class registration.
+- [docs/guides/visualizations.md](./docs/guides/visualizations.md): Built-in visualization classes (including the nested-column summary) and custom class registration.
 - [docs/guides/stats-panels.md](./docs/guides/stats-panels.md): Replace the column-header `.dt-col-stats` slot with a `BaseStatsPanel` subclass — lifecycle, filter-aware DuckDB queries, hover integration, error surfacing.
 - [docs/guides/sql-editor-primitives.md](./docs/guides/sql-editor-primitives.md): Embed a host-app CodeMirror SQL editor outside the data table — `createSqlExtensions`, `buildCompletionContext`, `DUCKDB_FUNCTION_DETAILS`; live-schema refresh via `Compartment.reconfigure()`; literal-schema use without a `DataTable`.
 - [docs/guides/session-persistence.md](./docs/guides/session-persistence.md): IndexedDB lifecycle, `saveSync()` for page-exit, custom stores.
 - [docs/guides/theming.md](./docs/guides/theming.md): Complete `--dt-*` CSS variable reference, dark mode, per-instance overrides.
 - [docs/guides/i18n.md](./docs/guides/i18n.md): `Strings` interface, `DeepPartial` overrides, function-typed strings.
-- [docs/guides/accessibility.md](./docs/guides/accessibility.md): Keyboard map, ARIA surface, screen-reader testing.
+- [docs/guides/accessibility.md](./docs/guides/accessibility.md): Keyboard map, ARIA surface, the value inspector's and the extract panel's dialogs and tree keys, screen-reader testing.
 - [docs/guides/multi-table.md](./docs/guides/multi-table.md): Sharing `FilterPresetManager` and `SessionStore` across instances.
 - [docs/guides/csp-and-offline.md](./docs/guides/csp-and-offline.md): `workerFactory`, `workerUrl`, `duckdbBundles` for strict-CSP and offline.
 - [docs/guides/filter-presets.md](./docs/guides/filter-presets.md): Save / load / export / import preset JSON.

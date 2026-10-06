@@ -159,6 +159,15 @@ when the chart reported it, the stage that failed in `error.details.stage`:
 reports itself. A `'stats-panel'` error names its column and `phase` the same
 way.
 
+A panel that loads on first use, the value inspector or the extract panel,
+whose chunk does not download (the network, a CSP, a redeploy that removed
+the file) is reported as an `error` event with `source: 'unknown'`: a
+`ConfigurationError` coded `CHUNK_LOAD_FAILED`, `error.details.panel`
+`'valueInspector'` or `'extractPanel'`, and the import's error as
+`error.cause`. The live region says the panel could not be loaded, and the
+table keeps working. The next open asks for the chunk again, but Chrome
+answers with the same failure until the page reloads.
+
 A DuckDB worker that fails is reported once per table, as it happens: an
 `error` event whose `error.code` is `WORKER_CRASHED`, with `source: 'query'`.
 Every query after it fails the same way, so the table stops fetching rows and

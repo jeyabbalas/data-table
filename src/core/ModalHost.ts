@@ -61,6 +61,12 @@ export interface ModalOptions {
    */
   returnFocus?: HTMLElement | undefined;
   /**
+   * Give focus back on close without scrolling to it (default false). For a
+   * focus target the page need not scroll to, such as the grid, taller than
+   * the window, whose top a plain `focus()` would bring into view.
+   */
+  restoreFocusPreventScroll?: boolean | undefined;
+  /**
    * Element to focus after open. `null` (or omitted) focuses the first
    * focusable descendant of the dialog.
    */
@@ -176,8 +182,20 @@ function releaseScrollLock(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Focusable-descendant helper
+// Focus helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * The focused element, inside open shadow roots too: `document.activeElement`
+ * stops at the host of the shadow root that holds focus, so a table mounted
+ * in one would see every panel opener, and every Tab inside a panel, as its
+ * host.
+ */
+function deepActiveElement(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -328,7 +346,7 @@ export class ModalHost {
     this.dialogEl = dialog;
 
     // Capture opener for focus restore.
-    const active = document.activeElement;
+    const active = deepActiveElement();
     this.opener =
       opts.returnFocus ??
       (active instanceof HTMLElement && active !== document.body ? active : null);
@@ -441,12 +459,13 @@ export class ModalHost {
 
     if (opts.mode === 'modal') releaseScrollLock();
 
-    // Focus restore.
+    // Focus restore. `isConnected`, not `document.contains`: an opener in a
+    // shadow root is in the page, but not among the document's descendants.
     let restored = false;
     if (opts.restoreFocus !== false && this.opener) {
-      if (document.contains(this.opener)) {
+      if (this.opener.isConnected) {
         try {
-          this.opener.focus({ preventScroll: false });
+          this.opener.focus({ preventScroll: opts.restoreFocusPreventScroll === true });
           restored = true;
         } catch {
           /* ignore */
@@ -567,7 +586,7 @@ export class ModalHost {
       // Bounds-checked above; non-null asserts encode the invariant.
       const first = focusables[0]!;
       const last = focusables[focusables.length - 1]!;
-      const active = document.activeElement as HTMLElement | null;
+      const active = deepActiveElement() as HTMLElement | null;
       // Any radio of a group is at that group's stop: Shift+Tab into a group
       // with nothing checked lands on its last radio, not the one listed.
       const at = (stop: HTMLElement): boolean => active === stop || sameRadioGroup(active, stop);

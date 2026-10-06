@@ -3,6 +3,7 @@
  */
 
 import * as duckdb from '@duckdb/duckdb-wasm';
+import { setOwnProperty } from '../core/ownProperty';
 import { duckdbWorkerSource } from './openFileFix';
 
 let db: duckdb.AsyncDuckDB | null = null;
@@ -50,11 +51,16 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
 }
 
 /**
- * Check if a value is a DuckDB WASM interval object.
+ * Check if a value is an interval object: numeric `months` and `days`, as in
+ * Arrow's MonthDayNano shape `{ months, days, nanoseconds }` or DuckDB's
+ * `{ months, days, micros }`.
  *
- * DuckDB WASM returns INTERVAL values as Arrow MonthDayNano objects
- * with { months, days, nanoseconds } instead of strings. This detector
- * checks for that shape so we can convert to a string representation.
+ * apache-arrow 17 never returns one: it reads an INTERVAL value as a
+ * two-element `Int32Array` that does not hold the interval, which is why
+ * the grid and the column stats select INTERVAL columns as text.
+ * {@link convertBigInts} tests only a plain object outside any list and any
+ * STRUCT or MAP value, so a STRUCT with `months` and `days` fields stays a
+ * record.
  */
 function isIntervalObject(obj: Record<string, unknown>): boolean {
   return (
@@ -125,37 +131,218 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
 }
 
 /**
- * Convert BigInt values to Numbers for JSON serialization, and convert
- * DuckDB WASM interval objects to string representations.
+ * Check if a value is an Arrow `Vector`: what a LIST or fixed-size ARRAY
+ * cell holds.
  *
- * DuckDB WASM returns BigInt for integer columns, which can't be serialized by JSON.stringify().
- * It also returns INTERVAL values as Arrow MonthDayNano objects instead of strings.
+ * Duck-typed, because `apache-arrow` is only a transitive dependency. A
+ * STRUCT or MAP cell is a proxy that reads its fields as properties, so a
+ * `type` and a `data` field would pass for a Vector's; a Vector's `data` is
+ * an array of its chunks, and no field value is an array.
+ */
+function isArrowVector(obj: object): obj is Iterable<unknown> {
+  const vector = obj as {
+    toArray?: unknown;
+    type?: unknown;
+    data?: unknown;
+    [Symbol.iterator]?: unknown;
+  };
+  return (
+    typeof vector.toArray === 'function' &&
+    typeof vector[Symbol.iterator] === 'function' &&
+    typeof vector.type === 'object' &&
+    vector.type !== null &&
+    Array.isArray(vector.data)
+  );
+}
+
+/**
+ * The symbol Arrow keeps a STRUCT value's row index under, on
+ * `StructRow.prototype`. `MapRow.prototype` has no such property.
+ */
+const ARROW_ROW_INDEX = Symbol.for('rowIndex');
+
+/** An Arrow row's entries, in order: see {@link readArrowRow}. */
+interface ArrowRowEntries {
+  /** Whether the row is a STRUCT value; if not, it is a MAP value. */
+  isStruct: boolean;
+  /** `[field name, value]` for a STRUCT, `[key, value]` for a MAP. */
+  entries: [unknown, unknown][];
+}
+
+/**
+ * Read an Arrow row: what a STRUCT value (a `StructRow`) or a MAP value (a
+ * `MapRow`) is. Returns `null` for any other value.
+ *
+ * Both are proxies, tagged `Row`, that read fields (a MAP's keys) as
+ * properties. Their `get` looks a name up on the row object first, so a
+ * field named `size` reads as a MAP's entry count, and one named `toJSON`
+ * or `constructor` as a function, which `postMessage` cannot clone; and
+ * listing the fields of an unnamed STRUCT, all named '', throws. Their own
+ * `toJSON()` assigns the fields to a plain object, so it loses a
+ * `__proto__` field or makes it the object's prototype (after which the
+ * next field's assignment can throw), and an unnamed STRUCT's fields
+ * overwrite one another. The entries come from the iterator on the row's
+ * prototype instead, which reads Arrow's data by position.
+ */
+function readArrowRow(obj: object): ArrowRowEntries | null {
+  if (Object.prototype.toString.call(obj) !== '[object Row]') {
+    return null;
+  }
+  const proto = Object.getPrototypeOf(obj) as Record<PropertyKey, unknown> | null;
+  if (proto === null || typeof proto[Symbol.iterator] !== 'function') {
+    return null;
+  }
+  const iterate = proto[Symbol.iterator] as (this: object) => Iterator<[unknown, unknown]>;
+  const iterator = iterate.call(obj);
+  const entries: [unknown, unknown][] = [];
+  for (let step = iterator.next(); !step.done; step = iterator.next()) {
+    entries.push(step.value);
+  }
+  return { isStruct: Object.hasOwn(proto, ARROW_ROW_INDEX), entries };
+}
+
+/**
+ * A copy of a typed array in a buffer of its own. Arrow returns a BLOB value
+ * as a view into the buffer that holds a whole batch of the result, and
+ * structured clone copies a view's entire buffer: a 2-byte BLOB posted as it
+ * is would take every other column of the batch with it.
+ */
+function copyTypedArray(view: ArrayBufferView): ArrayBufferView {
+  // Every typed array has slice(). A DataView has not, and stays as it is;
+  // Arrow never returns one.
+  return view instanceof DataView ? view : (view as Uint8Array).slice();
+}
+
+/**
+ * Convert a query result value for posting to the main thread, as plain
+ * data that structured clone can copy and `JSON.stringify` can write.
+ *
+ * - A BigInt becomes a Number: the nearest one, past ±2^53.
+ * - A LIST or ARRAY value becomes an array. Arrow returns one as a
+ *   `Vector`, whose own properties include functions, so copied field by
+ *   field it could not be posted.
+ * - A STRUCT or MAP value becomes an object whose own properties are its
+ *   fields, or its keys as `String` writes them; `__proto__` included. An
+ *   unnamed STRUCT, as `row(1, 'a')` builds, names every field '', and
+ *   becomes an array. See {@link readArrowRow}.
+ * - A typed array, such as a BLOB's `Uint8Array`, stays one, in a copy:
+ *   see {@link copyTypedArray}.
+ * - A plain object with numeric `months` and `days` becomes DuckDB-style
+ *   interval text, unless it is inside a list or a STRUCT or MAP value: see
+ *   {@link isIntervalObject}.
+ *
+ * DECIMAL, HUGEINT and INTERVAL values inside a nested value cannot be
+ * read this way. duckdb-wasm, opened with `castDecimalToDouble`, labels a
+ * DECIMAL (and a HUGEINT, which it passes as a DECIMAL) in a LIST, ARRAY or
+ * STRUCT a DOUBLE without converting its data, so `[1.25, 2.50, 3.75]`
+ * arrives as `[6.2e-322, 0, 1.235e-321]`, and a HUGEINT as a number just as
+ * meaningless, or NaN. Under a MAP or a UNION it leaves the DECIMAL, which
+ * Arrow reads as a `Uint32Array` of its unscaled integer's 32-bit words
+ * (`1.25` as `[125, 0, 0, 0]`), and as a MAP key as that integer's digits
+ * (`'125'`). Arrow reads an INTERVAL, anywhere, as an `Int32Array` that
+ * does not hold it. `CAST(to_json(c) AS VARCHAR)` reads all of them
+ * exactly, as JSON text.
  */
 export function convertBigInts(obj: unknown): unknown {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
-  if (typeof obj === 'bigint') {
-    return Number(obj);
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(convertBigInts);
-  }
-  if (typeof obj === 'object') {
-    const record = obj as Record<string, unknown>;
+  return convertValue(obj, true);
+}
 
-    // Detect and convert interval objects before general recursion
-    if (isIntervalObject(record)) {
-      return intervalObjectToString(record);
-    }
-
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(record)) {
-      result[key] = convertBigInts(value);
-    }
-    return result;
+/**
+ * {@link convertBigInts} for one value. `topLevel` says whether it may be
+ * taken for an interval object: true for the value converted and, through
+ * plain objects, for their fields; false inside a list or an Arrow row.
+ */
+function convertValue(value: unknown, topLevel: boolean): unknown {
+  if (value === null || value === undefined) {
+    return value;
   }
-  return obj;
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+  if (typeof value !== 'object') {
+    return value;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return copyTypedArray(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item: unknown) => convertValue(item, false));
+  }
+  const row = readArrowRow(value);
+  if (row !== null) {
+    return convertArrowRow(row);
+  }
+  if (isArrowVector(value)) {
+    return Array.from(value, (item) => convertValue(item, false));
+  }
+
+  const record = value as Record<string, unknown>;
+  if (topLevel && isIntervalObject(record)) {
+    return intervalObjectToString(record);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(record)) {
+    setOwnProperty(result, key, convertValue(item, topLevel));
+  }
+  return result;
+}
+
+/**
+ * Convert an Arrow row's entries: a STRUCT's fields, or a MAP's keys and
+ * values, to an object's own properties, and an unnamed STRUCT's fields to
+ * an array.
+ */
+function convertArrowRow({ isStruct, entries }: ArrowRowEntries): unknown {
+  if (isStruct && entries.length > 0 && entries.every(([name]) => name === '')) {
+    return entries.map(([, item]) => convertValue(item, false));
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of entries) {
+    setOwnProperty(result, String(key), convertValue(item, false));
+  }
+  return result;
+}
+
+/**
+ * What {@link convertBatch} reads of an Arrow `RecordBatch`: its row count,
+ * its columns' names, and each column's vector. Spelled out, because
+ * `apache-arrow` is only a transitive dependency.
+ */
+export interface ResultBatch {
+  readonly numRows: number;
+  readonly schema: { readonly fields: readonly { readonly name: string }[] };
+  getChildAt(index: number): { get(index: number): unknown } | null;
+}
+
+/**
+ * Convert a result's record batch to rows for posting to the main thread,
+ * appended to `rows`: each a plain object whose own properties are the
+ * result's columns, each value converted by {@link convertBigInts}.
+ *
+ * Each row is read by position, from the columns' vectors. Arrow's own
+ * `StructRow.toJSON()` assigns each column to a plain object, so a column
+ * named `__proto__` became the object's prototype instead of a property,
+ * and when it held a STRUCT, the next column's assignment could throw
+ * (`'set' on proxy: trap returned falsish`). Reading the vectors also
+ * skips the proxy Arrow builds for each row, and is about three times as
+ * fast, on rows a thousand columns wide as on narrow ones. As with
+ * `toJSON()`, of two columns with one name the later one's value is kept.
+ *
+ * Column by column, so the row itself is never taken for an interval: a
+ * table with numeric `months` and `days` columns would have every row turned
+ * into an interval string.
+ */
+export function convertBatch<T = Record<string, unknown>>(batch: ResultBatch, rows: T[] = []): T[] {
+  const names = batch.schema.fields.map((field) => field.name);
+  const columns = names.map((_, index) => batch.getChildAt(index)!);
+  for (let row = 0; row < batch.numRows; row += 1) {
+    const record: Record<string, unknown> = {};
+    for (let column = 0; column < columns.length; column += 1) {
+      setOwnProperty(record, names[column]!, convertBigInts(columns[column]!.get(row)));
+    }
+    rows.push(record as T);
+  }
+  return rows;
 }
 
 /**
@@ -177,8 +364,11 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
     });
   }
 
-  const result = await conn.query(sql);
-  return result.toArray().map((row) => convertBigInts(row.toJSON()) as T);
+  const rows: T[] = [];
+  for (const batch of (await conn.query(sql)).batches) {
+    convertBatch(batch, rows);
+  }
+  return rows;
 }
 
 /**
@@ -193,8 +383,15 @@ export async function executeQuery<T = Record<string, unknown>>(sql: string): Pr
  * cancellable pending phase, whereas streaming mode would end the
  * cancellable window at the first result batch.
  *
- * Result rows are materialized exactly like {@link executeQuery}'s
- * (`row.toJSON()` → `convertBigInts`), so the two are interchangeable.
+ * Result rows are materialized like {@link executeQuery}'s, by
+ * {@link convertBatch}, with one difference. The pending-query path
+ * receives no dictionary batches, so a dictionary-encoded column, which is
+ * what an ENUM is at any depth, arrives with an empty dictionary and every
+ * value reads as null. A result holding one is read a second time through
+ * `conn.query()`, which carries them, when running the SQL again changes
+ * nothing (see {@link canRunAgain}); that read cannot be cancelled. Any
+ * other such result is the first run's, its ENUM values null, since a
+ * statement with side effects must run once.
  */
 export async function executeQueryCancellable<T = Record<string, unknown>>(
   sql: string,
@@ -212,13 +409,79 @@ export async function executeQueryCancellable<T = Record<string, unknown>>(
     throw new Error('DuckDB worker is detached; cannot execute query.');
   }
 
+  await reader.open();
   const rows: T[] = [];
-  for await (const batch of reader) {
-    for (const row of batch.toArray()) {
-      rows.push(convertBigInts(row.toJSON()) as T);
+  if (!reader.schema.fields.some((field) => holdsDictionary(field.type))) {
+    for await (const batch of reader) {
+      convertBatch(batch, rows);
     }
+    return rows;
+  }
+
+  // The result holds an ENUM, whose values read as null here. The library
+  // selects its own ENUM columns as text; this is the path of a raw read of
+  // one through `bridge.query`. The first result is read to its end before
+  // anything else runs on the connection: a query run while it is open
+  // ends it early, without an error.
+  const batches: ResultBatch[] = [];
+  for await (const batch of reader) {
+    batches.push(batch);
+  }
+  if (await canRunAgain(conn, sql)) {
+    return executeQuery<T>(sql);
+  }
+  for (const batch of batches) {
+    convertBatch(batch, rows);
   }
   return rows;
+}
+
+/**
+ * A call of `nextval`: DuckDB's sequences are not transactional, so a
+ * second run would advance one again.
+ */
+const NAMES_NEXTVAL = /\bnextval\b/i;
+
+/**
+ * Whether running `sql` a second time, to read its ENUM values, changes
+ * nothing: DuckDB binds it as a single query, and it does not name
+ * `nextval`.
+ *
+ * `DESCRIBE` binds the query in its parentheses without running it. A
+ * statement that is not a query, such as `INSERT … RETURNING`, `UPDATE` or
+ * `DELETE`, cannot stand there, nor can a second statement after a `;`, so
+ * either fails to parse, which leaves a transaction the caller has open as
+ * it was. Trailing semicolons are dropped first, and the newline before
+ * `)` ends a trailing `--` comment. A `nextval` that a view or a macro
+ * calls is not seen, and its sequence advances twice.
+ */
+async function canRunAgain(
+  connection: duckdb.AsyncDuckDBConnection,
+  sql: string,
+): Promise<boolean> {
+  if (NAMES_NEXTVAL.test(sql)) return false;
+  let query = sql.trimEnd();
+  while (query.endsWith(';')) query = query.slice(0, -1).trimEnd();
+  try {
+    await connection.query(`DESCRIBE SELECT * FROM (\n${query}\n)`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** `Type.Dictionary` in apache-arrow, which this module does not import. */
+const ARROW_DICTIONARY_TYPE_ID = -1;
+
+/** Whether an Arrow type is dictionary-encoded, or holds a type that is. */
+function holdsDictionary(type: { typeId: number; children?: { type: unknown }[] | null }): boolean {
+  const pending = [type];
+  while (pending.length > 0) {
+    const next = pending.pop()!;
+    if (next.typeId === ARROW_DICTIONARY_TYPE_ID) return true;
+    for (const child of next.children ?? []) pending.push(child.type as typeof type);
+  }
+  return false;
 }
 
 /**

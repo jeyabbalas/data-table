@@ -6,7 +6,7 @@
 
 # Interface: ExportDialogOptions
 
-Defined in: [export/ExportDialog.ts:67](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ExportDialog.ts#L67)
+Defined in: [export/ExportDialog.ts:68](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/ExportDialog.ts#L68)
 
 Construction options for [ExportDialog](../classes/ExportDialog.md).
 
@@ -16,7 +16,7 @@ Construction options for [ExportDialog](../classes/ExportDialog.md).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [export/ExportDialog.ts:69](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ExportDialog.ts#L69)
+Defined in: [export/ExportDialog.ts:70](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/ExportDialog.ts#L70)
 
 CSS class prefix (default: 'dt')
 
@@ -26,7 +26,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [export/ExportDialog.ts:82](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ExportDialog.ts#L82)
+Defined in: [export/ExportDialog.ts:84](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/ExportDialog.ts#L84)
 
 Element to mirror `data-dt-color-scheme` from. The dialog backdrop
 portals to `<body>` so it doesn't inherit from `.dt-root` via the DOM —
@@ -38,7 +38,7 @@ pass the `.dt-root` element here to keep it theme-synced.
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [export/ExportDialog.ts:76](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ExportDialog.ts#L76)
+Defined in: [export/ExportDialog.ts:78](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/ExportDialog.ts#L78)
 
 Unique per-instance identifier mixed into element IDs and radio group
 names, so two tables on the same page don't collide on
@@ -52,6 +52,6 @@ own.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [export/ExportDialog.ts:84](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ExportDialog.ts#L84)
+Defined in: [export/ExportDialog.ts:86](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/ExportDialog.ts#L86)
 
 Resolved i18n strings. Defaults to English.

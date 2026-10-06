@@ -277,14 +277,24 @@ function formatIntervalLine2(
   return parts.join(s.separator);
 }
 
+/**
+ * Format Line 2 for nested types (list, array, struct, map, union, variant):
+ * the column's type outline, `x double · y double · tier varchar`. Escaped:
+ * field names come from the data file, and the line is HTML.
+ */
+function formatNestedLine2(stats: Extract<ColumnStatsData, { kind: 'nested' }>): string {
+  return escapeHtml(stats.outline);
+}
+
 // =========================================
 // Main Formatter
 // =========================================
 
 /**
  * Format Line 2: the type-specific distribution summary. Returns text that may
- * contain pre-escaped values (dates, interval displays), or '' when there is
- * nothing to show (empty data, all-null column, or no computable summary).
+ * contain pre-escaped values (dates, interval displays, a nested column's type
+ * outline), or '' when there is nothing to show (empty data, all-null column,
+ * or no computable summary).
  *
  * @param stats - The computed column stats data
  * @param dataType - The column's DataType (needed to disambiguate categorical subtypes)
@@ -312,6 +322,8 @@ export function formatStatsLine2(
       return formatTimeLine2(stats, messages);
     case 'interval':
       return formatIntervalLine2(stats, messages);
+    case 'nested':
+      return formatNestedLine2(stats);
   }
 }
 

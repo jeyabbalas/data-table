@@ -105,7 +105,7 @@ export const NON_COLOUR_KEYWORDS = new Set([
   'initial',
   'unset',
   'none',
-  // Forced-colors system palette (11-high-contrast.css) — the user agent
+  // Forced-colors system palette (12-high-contrast.css) — the user agent
   // supplies these, and their contrast is the OS's contract, not ours.
   'canvas',
   'canvastext',

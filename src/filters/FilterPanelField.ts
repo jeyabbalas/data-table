@@ -12,6 +12,7 @@ import type { StateActions } from '../core/Actions';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
+import { outlinedColumnType } from '../nested/typeOutline';
 import type { Filter } from './FilterTypes';
 
 /**
@@ -134,7 +135,8 @@ export class FilterPanelField {
 
     if (type === 'integer' || type === 'float' || type === 'decimal') {
       this.createNumericControls();
-    } else if (type === 'string') {
+    } else if (type === 'string' || type === 'nested') {
+      // A nested value is matched by its text, as the grid shows it.
       this.createStringControls();
     } else if (type === 'boolean') {
       this.createBooleanControls();
@@ -466,7 +468,7 @@ export class FilterPanelField {
 
     if (type === 'integer' || type === 'float' || type === 'decimal') {
       return this.buildNumericFilter();
-    } else if (type === 'string') {
+    } else if (type === 'string' || type === 'nested') {
       return this.buildStringFilter();
     } else if (type === 'boolean') {
       return this.buildBooleanFilter();
@@ -558,6 +560,17 @@ export class FilterPanelField {
     const col = this.column.name;
 
     if (mode === 'exact') {
+      // A nested value is matched by its DuckDB text, the text the grid
+      // shows. Compared as a value, the text would have to read as a list,
+      // struct or map (a Conversion Error when it does not), a UNION would
+      // find only the member the text reads as, and a VARIANT would fail on
+      // values of other types. A JSON value too: compared as JSON, text that
+      // is not JSON is a Conversion Error, and JSON that is compares as its
+      // text anyway. The pattern modes below already compare text. These are
+      // the columns whose header shows a type outline.
+      if (outlinedColumnType(this.column) !== null) {
+        return { type: 'point', column: col, value, valueType: 'text' };
+      }
       return { type: 'point', column: col, value };
     }
     return {
@@ -745,7 +758,7 @@ export class FilterPanelField {
 
     if (type === 'integer' || type === 'float' || type === 'decimal') {
       this.populateNumericFromFilter(filter);
-    } else if (type === 'string') {
+    } else if (type === 'string' || type === 'nested') {
       this.populateStringFromFilter(filter);
     } else if (type === 'boolean') {
       this.populateBooleanFromFilter(filter);

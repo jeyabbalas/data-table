@@ -60,6 +60,8 @@ export async function copyToClipboard(data: string, format: 'text' | 'html'): Pr
  * TSV (tab-separated values) is the standard clipboard format understood
  * by Excel, Google Sheets, and other spreadsheet applications. The output
  * includes a header row and uses visible columns in their display order.
+ * Cells are written as {@link exportToCSV} writes them, so a nested value
+ * (LIST, STRUCT, MAP, …) is standard JSON: `["a","b"]`, `{"x":1.25}`.
  *
  * @param rows   - 0-based row indices (into the sorted/filtered view) to copy
  * @param state  - Reactive table state (signals are read, not mutated)

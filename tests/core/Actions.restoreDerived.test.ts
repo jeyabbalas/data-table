@@ -112,7 +112,7 @@ describe('a session restore with derived columns, in steps', () => {
     });
     // The rebuild: validation, type detection, the VIEW. No count goes out
     // before the VIEW does.
-    for (const rows of [[], [{ t: 'INTEGER' }], []]) {
+    for (const rows of [[], [{ column_name: 'v', column_type: 'INTEGER' }], []]) {
       await drain();
       await vi.advanceTimersByTimeAsync(0);
       expect(counts(queries)).toEqual([]);
@@ -184,7 +184,10 @@ describe('a session restore with derived columns, in steps', () => {
       await vi.advanceTimersByTimeAsync(0);
       const query = queries.at(-1)!;
       if (step === 'fail') query.deferred.reject(new Error('Binder Error: nope'));
-      else query.deferred.resolve(step === 'type' ? [{ t: 'INTEGER' }] : []);
+      else
+        query.deferred.resolve(
+          step === 'type' ? [{ column_name: 'v', column_type: 'INTEGER' }] : [],
+        );
     }
     await loading;
     warn.mockRestore();

@@ -18,7 +18,7 @@ import { DerivedColumnError } from '@/core/errors';
  * Build a mock WorkerBridge for the replace-column flow.
  *
  * Options:
- * - typeMap: maps expression text (as it appears inside `typeof((...))`) to
+ * - typeMap: maps expression text (as it appears inside `DESCRIBE SELECT (...) AS v`) to
  *   its DuckDB type. Controls what detectType returns.
  * - preflightBreaks: when the pre-flight query contains every token in this
  *   array, throw a Binder-Error-like failure. Used to simulate dependents
@@ -41,12 +41,12 @@ function createMockBridge(
     queryCalls.push(sql);
     const trimmed = sql.trim();
 
-    // Type detection: SELECT typeof((<expr>)) AS t FROM ...
-    if (sql.includes('typeof(')) {
-      const m = sql.match(/typeof\(\((.+)\)\) AS t/);
+    // Type detection: DESCRIBE SELECT (<expr>) AS v FROM ...
+    if (sql.startsWith('DESCRIBE SELECT (')) {
+      const m = sql.match(/^DESCRIBE SELECT \((.+)\) AS v FROM /);
       const expr = m?.[1] ?? '';
       const duckdbType = typeMap[expr] ?? 'DOUBLE';
-      return [{ t: duckdbType }];
+      return [{ column_name: 'v', column_type: duckdbType }];
     }
 
     // Pre-flight simulation: throw when all needles are present.
@@ -413,12 +413,13 @@ describe('replaceDerivedColumn', () => {
     // Reset call history so the assertions below count only post-replace SQL.
     mockBridge.query.mockClear();
 
-    // Throw on the first CREATE TABLE __dt_vec_ during replace, succeed
-    // on the second (the rollback restore of the old helper).
+    // Throw on the first CREATE TABLE __dt_vec_ during replace, the new
+    // helper table's.
     let helperCreateCount = 0;
     mockBridge.query.mockImplementation(async (sql: string) => {
       const trimmed = sql.trim();
-      if (sql.includes('typeof(')) return [{ t: 'INTEGER' }];
+      if (sql.startsWith('DESCRIBE SELECT ('))
+        return [{ column_name: 'v', column_type: 'INTEGER' }];
       if (/^CREATE TABLE\s+"?__dt_vec_/i.test(trimmed)) {
         helperCreateCount++;
         if (helperCreateCount === 1) {
@@ -445,15 +446,17 @@ describe('replaceDerivedColumn', () => {
     // Old definition preserved in state.
     expect(state.derivedColumns.get()).toEqual(before);
 
-    // Rollback ran: a second CREATE TABLE __dt_vec_ was issued (the
-    // restore of the old helper). Without the A2 fix, only one CREATE
-    // TABLE __dt_vec_ would have been attempted before the throw
-    // propagated, leaving DuckDB in a broken state.
+    // The old helper table was never touched: the new one is made under a
+    // name of its own, beside it, and the old one goes only once a VIEW
+    // reads the new one. Neither is the VIEW rebuilt.
     const calls = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
       (args) => args[0] as string,
     );
-    const helperCreates = calls.filter((sql) => /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim()));
-    expect(helperCreates.length).toBeGreaterThanOrEqual(2);
+    expect(calls.filter((sql) => sql.includes('"__dt_vec_0_v_0__"'))).toEqual([]);
+    expect(calls.filter((sql) => /^CREATE TABLE\s+"?__dt_vec_/i.test(sql.trim()))).toEqual([
+      expect.stringContaining('"__dt_vec_0_v_1__"'),
+    ]);
+    expect(calls.filter((sql) => sql.startsWith('CREATE OR REPLACE VIEW'))).toEqual([]);
   });
 
   // 7b. Atomicity — VIEW recreate failure rolls state back
@@ -471,10 +474,10 @@ describe('replaceDerivedColumn', () => {
     let viewCount = 0;
     mockBridge.query.mockImplementation(async (sql: string) => {
       const trimmed = sql.trim();
-      if (sql.includes('typeof(')) {
-        const m = sql.match(/typeof\(\((.+)\)\) AS t/);
+      if (sql.startsWith('DESCRIBE SELECT (')) {
+        const m = sql.match(/^DESCRIBE SELECT \((.+)\) AS v FROM /);
         const expr = m?.[1] ?? '';
-        return [{ t: expr === 'x + 2' ? 'INTEGER' : 'DOUBLE' }];
+        return [{ column_name: 'v', column_type: expr === 'x + 2' ? 'INTEGER' : 'DOUBLE' }];
       }
       if (/^CREATE OR REPLACE VIEW/i.test(trimmed)) {
         viewCount++;

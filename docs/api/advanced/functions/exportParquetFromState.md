@@ -8,7 +8,7 @@
 
 > **exportParquetFromState**(`state`, `bridge`, `options?`, `signal?`): `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [export/ParquetExport.ts:124](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/export/ParquetExport.ts#L124)
+Defined in: [export/ParquetExport.ts:132](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/ParquetExport.ts#L132)
 
 Convenience wrapper that reads Signals from a TableState and delegates
 to `exportToParquet`.

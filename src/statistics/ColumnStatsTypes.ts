@@ -88,6 +88,37 @@ export interface IntervalColumnStats extends BaseColumnStats {
 }
 
 /**
+ * Stats for nested columns: LIST, ARRAY, STRUCT, MAP, UNION and VARIANT
+ * (`DataType` `'nested'`). Their values are not grouped or ranged, so
+ * beyond the row and null counts the stats say what the values are: line 2
+ * is the column's type outline, e.g. `x double · y double · tier varchar`.
+ *
+ * @example
+ * ```ts
+ * import type { NestedColumnStats } from '@jeyabbalas/data-table/advanced';
+ *
+ * const stats: NestedColumnStats = {
+ *   kind: 'nested',
+ *   totalRows: 1000,
+ *   nonNullCount: 990,
+ *   nullCount: 10,
+ *   filteredTotalRows: null,
+ *   outline: 'x double · y double · tier varchar',
+ * };
+ * ```
+ */
+export interface NestedColumnStats extends BaseColumnStats {
+  kind: 'nested';
+  /**
+   * The column's type in one line, as the stats line shows it: a struct's
+   * fields with their types (`x double · y double · tier varchar`), a list's
+   * element type (`[integer]`), a map's (`{varchar → integer}`). Field names
+   * come from the data file: escape it before writing it as HTML.
+   */
+  outline: string;
+}
+
+/**
  * Discriminated union of all column stats types.
  * Switch on `stats.kind` for type-safe formatting.
  */
@@ -96,7 +127,8 @@ export type ColumnStatsData =
   | CategoricalColumnStats
   | TemporalColumnStats
   | TimeColumnStats
-  | IntervalColumnStats;
+  | IntervalColumnStats
+  | NestedColumnStats;
 
 /**
  * Map from DataType to the appropriate stats kind.
@@ -111,6 +143,8 @@ export function statsKindForDataType(dataType: DataType): ColumnStatsData['kind'
     case 'boolean':
     case 'uuid':
       return 'categorical';
+    case 'nested':
+      return 'nested';
     case 'date':
     case 'timestamp':
       return 'temporal';

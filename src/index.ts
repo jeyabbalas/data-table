@@ -60,7 +60,7 @@ export type {
   ColumnHeaderTooltipItem,
 } from './core/types';
 export { ROWID_COLUMN } from './core/types';
-export type { GetColumnValuesOptions } from './core/Actions';
+export type { GetCellValueOptions, GetColumnValuesOptions } from './core/Actions';
 
 // ---- Filter shapes ----
 export type {
@@ -172,6 +172,7 @@ export type {
   CompletionContext,
 } from './derived/types';
 export type { ExpressionEditor, ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
+export type { NestedFieldColumnOptions } from './core/Actions';
 
 // ---- Progress reporting ----
 export type { ProgressInfo, ProgressCallback, ProgressStage } from './core/Progress';

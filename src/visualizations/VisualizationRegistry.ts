@@ -39,6 +39,7 @@ import { Histogram } from './histogram';
 import { DateHistogram } from './histogram';
 import { TimeHistogram } from './histogram';
 import { IntervalHistogram } from './histogram';
+import { NestedSummaryVisualization } from './nested';
 import { ValueCounts } from './valuecounts';
 
 /**
@@ -94,6 +95,31 @@ export function isCategoricalType(type: DataType): boolean {
  */
 export function isIntervalType(type: DataType): boolean {
   return type === 'interval';
+}
+
+/**
+ * Check if a column type is nested: a LIST, ARRAY, STRUCT, MAP, UNION or
+ * VARIANT column. `ColumnSchema.originalType` says which.
+ *
+ * Nested columns are not categorical: a registration whose `isApplicable`
+ * accepts `'string'` does not receive them. Accept `'nested'` explicitly to
+ * chart them; the built-in `nested-summary` registration (priority 0) gives
+ * them `NestedSummaryVisualization` otherwise.
+ *
+ * @example
+ * import { VisualizationRegistry } from '@jeyabbalas/data-table';
+ * import { isNestedType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const registry = new VisualizationRegistry();
+ * registry.register({
+ *   name: 'list-length',
+ *   isApplicable: isNestedType,
+ *   constructor: ListLengthChart,
+ *   priority: 10,
+ * });
+ */
+export function isNestedType(type: DataType): boolean {
+  return type === 'nested';
 }
 
 /**
@@ -221,6 +247,15 @@ export class VisualizationRegistry {
       name: 'value-counts',
       isApplicable: isCategoricalType,
       constructor: ValueCounts,
+      priority: 0,
+    });
+
+    // One cheap count query per column, however large its values: grouping
+    // nested values as the value counts do took seconds on embeddings.
+    this.register({
+      name: 'nested-summary',
+      isApplicable: isNestedType,
+      constructor: NestedSummaryVisualization,
       priority: 0,
     });
   }

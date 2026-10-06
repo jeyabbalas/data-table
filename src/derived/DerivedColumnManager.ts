@@ -26,6 +26,7 @@
  * @see DefaultExpressionEditor
  */
 
+import { takenColumnName } from '../core/columnNames';
 import { ConfigurationError, DerivedColumnError } from '../core/errors';
 import type { ColumnSchema, DataType } from '../core/types';
 import { mapDuckDBType } from '../data/SchemaDetector';
@@ -43,6 +44,44 @@ import type {
 const VECTOR_BATCH_SIZE = 1000;
 
 /**
+ * A query that binds `select`, and so reports its errors, without reading a
+ * row or returning its columns. The result of `select` itself would have to
+ * cross Arrow even when empty, and Arrow has no VARIANT type: a VARIANT
+ * expression failed validation with "Unsupported Arrow type VARIANT".
+ */
+function bindOnly(select: string): string {
+  return `SELECT NULL FROM (${select}) LIMIT 0`;
+}
+
+/**
+ * The SELECT of the VIEW's layer for one expression column: every column of
+ * `from` and the expression's value as `name`. Validation binds the same
+ * SELECT, so that it refuses what the VIEW could not be built with.
+ */
+function layerSelect(expression: string, name: string, from: string): string {
+  return `SELECT *, (${expression}) AS ${quoteIdentifier(name)} FROM ${from}`;
+}
+
+/** An error's message, or the value as text. */
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * What a derived column is refused for when its expression returns several
+ * rows for a row, or none: `unnest(tags)` gives a row for each element.
+ */
+const SET_RETURNING_MESSAGE =
+  'An expression that returns several rows for each row, such as unnest(), cannot be a column. ' +
+  'Use a list function such as list_transform, or a subquery.';
+
+/**
+ * What a derived column is refused for when its expression is an aggregate,
+ * which makes one row of the table.
+ */
+const AGGREGATE_MESSAGE = 'sum() and other aggregates need a window to be a column: sum(x) OVER ()';
+
+/**
  * The number the next manager made on each bridge takes, which its helper
  * tables are named with. Per bridge, since a bridge is one DuckDB database:
  * two tables sharing one must not share a helper table, nor must the
@@ -52,10 +91,12 @@ const nextManagerNumbers = new WeakMap<object, number>();
 
 /**
  * Owns derived-column lifecycle: validates SQL expressions through DuckDB
- * (`PREPARE`-based syntax check), maintains a wrapper VIEW
- * (`__dt_view_<baseTableName>__`) over the source table, generates SELECT
- * lists for each derived column, and re-validates dependents on rename /
- * replace. Composed by the facade; reachable on `/advanced` for power users.
+ * (binding, without reading a row, the column each would be in the VIEW),
+ * maintains a wrapper VIEW (`__dt_view_<baseTableName>__`) over the source
+ * table, generates SELECT lists for each derived column, and re-validates
+ * dependents on rename / replace. Every change is all or nothing: when one
+ * fails, the derived columns and the VIEW are as they were. Composed by the
+ * facade; reachable on `/advanced` for power users.
  */
 export class DerivedColumnManager {
   /** VIEW name: __dt_view_<baseTableName>__ */
@@ -66,8 +107,14 @@ export class DerivedColumnManager {
 
   /** Monotonic counter for unique helper table names */
   private nextHelperTableId = 0;
-  /** Maps column name → assigned helper table ID */
-  private helperTableIds = new Map<string, number>();
+  /**
+   * The helper table of each vector column, by the column's info: every
+   * helper table this manager made and has not dropped. A change makes the
+   * new column's under a name of its own, beside the old column's, and
+   * drops the one no column reads once the VIEW is built, or, when the VIEW
+   * cannot be, the new one.
+   */
+  private helperTables = new Map<DerivedColumnInfo, string>();
   /** `__dt_vec_<n>_`, `n` this manager's number on its bridge */
   private readonly helperTablePrefix: string;
 
@@ -96,11 +143,11 @@ export class DerivedColumnManager {
 
   /**
    * Add a derived column. Validates expression (or creates helper table for vectors),
-   * detects type via DuckDB, recreates VIEW, returns ColumnSchema with isDerived: true.
+   * detects type via DuckDB, recreates VIEW, returns its info. All or nothing: when
+   * any step fails, the derived columns and the VIEW are as they were.
    */
   async addColumn(def: DerivedColumnDef): Promise<DerivedColumnInfo> {
-    let detectedType: DataType;
-    let detectedOriginalType: string;
+    let info: DerivedColumnInfo;
 
     if (def.kind === 'expression') {
       // Check for circular dependencies BEFORE SQL validation.
@@ -124,32 +171,22 @@ export class DerivedColumnManager {
       // Validate expression
       await this.validateExpressionSQL(def.expression, def.name);
       // Detect result type
-      const typeInfo = await this.detectType(def.expression);
-      detectedType = typeInfo.detectedType;
-      detectedOriginalType = typeInfo.detectedOriginalType;
+      info = { def, ...(await this.detectType(def.expression)) };
     } else {
       // Vector column: create helper table
       this.assertVectorLength(def);
-      await this.createVectorHelperTable(def);
-      detectedOriginalType = this.vectorTypeToDuckDBType(def.vectorType);
-      detectedType = mapDuckDBType(detectedOriginalType);
+      info = await this.vectorColumnInfo(def);
     }
 
-    const info: DerivedColumnInfo = {
-      def,
-      detectedType,
-      detectedOriginalType,
-    };
-
-    this.columns.push(info);
-    await this.recreateView();
-
+    await this.commitColumns([...this.columns, info]);
     return info;
   }
 
   /**
    * Update a derived column's expression/name/values.
    * Validates, recreates VIEW (and helper table if vector). Returns updated info.
+   * All or nothing: when any step fails, the column keeps its definition, and a
+   * vector column its helper table.
    */
   async updateColumn(oldName: string, def: DerivedColumnDef): Promise<DerivedColumnInfo> {
     const oldIndex = this.columns.findIndex((c) => c.def.name === oldName);
@@ -159,8 +196,6 @@ export class DerivedColumnManager {
         details: { column: oldName },
       });
     }
-
-    const oldInfo = this.columns[oldIndex]!;
 
     // Block rename if other columns depend on this one
     const isRename = oldName !== def.name;
@@ -177,8 +212,7 @@ export class DerivedColumnManager {
       }
     }
 
-    let detectedType: DataType;
-    let detectedOriginalType: string;
+    let newInfo: DerivedColumnInfo;
 
     if (def.kind === 'expression') {
       // Cycle detection: tentatively replace and check
@@ -196,49 +230,19 @@ export class DerivedColumnManager {
         throw err;
       }
       this.columns = savedColumns;
-    }
 
-    // Clean up old vector helper table if the old column was a vector
-    if (oldInfo.def.kind === 'vector') {
-      await this.dropVectorHelperTable(oldName);
-    }
-
-    if (def.kind === 'expression') {
       await this.validateExpressionSQL(def.expression, def.name);
-      const typeInfo = await this.detectType(def.expression);
-      detectedType = typeInfo.detectedType;
-      detectedOriginalType = typeInfo.detectedOriginalType;
+      newInfo = { def, ...(await this.detectType(def.expression)) };
     } else {
       this.assertVectorLength(def);
-      await this.createVectorHelperTable(def);
-      detectedOriginalType = this.vectorTypeToDuckDBType(def.vectorType);
-      detectedType = mapDuckDBType(detectedOriginalType);
+      newInfo = await this.vectorColumnInfo(def);
     }
 
-    const newInfo: DerivedColumnInfo = {
-      def,
-      detectedType,
-      detectedOriginalType,
-    };
-
-    // Replace in-place to maintain order
-    this.columns[oldIndex] = newInfo;
-
-    try {
-      await this.recreateView();
-    } catch (viewErr) {
-      // Rollback: restore old column info and attempt to recreate the old VIEW
-      this.columns[oldIndex] = oldInfo;
-      if (oldInfo.def.kind === 'vector') {
-        await this.createVectorHelperTable(oldInfo.def);
-      }
-      try {
-        await this.recreateView();
-      } catch {
-        // Best-effort restore
-      }
-      throw viewErr;
-    }
+    // Replace in-place to maintain order. An old vector column's helper
+    // table is dropped once the VIEW no longer reads it.
+    const columns = [...this.columns];
+    columns[oldIndex] = newInfo;
+    await this.commitColumns(columns);
 
     return newInfo;
   }
@@ -250,7 +254,8 @@ export class DerivedColumnManager {
    * Pre-flights every dependent against the proposed new def before touching the
    * VIEW. On dependent incompatibility, throws a `DEPENDENTS_INCOMPATIBLE` error
    * whose `details.dependentsAffected` lists the dependent names and
-   * `details.reasons` maps each name to the DuckDB error.
+   * `details.reasons` maps each name to the DuckDB error. All or nothing, as
+   * {@link updateColumn} is.
    */
   async replaceColumn(name: string, newDef: DerivedColumnDef): Promise<DerivedColumnInfo> {
     if (newDef.name !== name) {
@@ -268,28 +273,18 @@ export class DerivedColumnManager {
       });
     }
 
-    const oldInfo = this.columns[oldIndex]!;
-
-    let detectedType: DataType;
-    let detectedOriginalType: string;
+    let newInfo: DerivedColumnInfo;
 
     if (newDef.kind === 'expression') {
       // 1. Validate the new expression in isolation against the current VIEW.
       await this.validateExpressionSQL(newDef.expression, newDef.name);
 
       // 2. Detect the new expression's result type.
-      const typeInfo = await this.detectType(newDef.expression);
-      detectedType = typeInfo.detectedType;
-      detectedOriginalType = typeInfo.detectedOriginalType;
+      newInfo = { def: newDef, ...(await this.detectType(newDef.expression)) };
 
       // 3. Cycle check with tentative in-memory swap.
-      const tentativeInfo: DerivedColumnInfo = {
-        def: newDef,
-        detectedType,
-        detectedOriginalType,
-      };
       const savedColumns = [...this.columns];
-      this.columns[oldIndex] = tentativeInfo;
+      this.columns[oldIndex] = newInfo;
       try {
         this.topologicalSortExpressions();
       } catch (err) {
@@ -336,74 +331,14 @@ export class DerivedColumnManager {
           },
         );
       }
-      detectedOriginalType = this.vectorTypeToDuckDBType(newDef.vectorType);
-      detectedType = mapDuckDBType(detectedOriginalType);
+      newInfo = await this.vectorColumnInfo(newDef);
     }
 
-    // Helper-table swap. Both operations live in a try/catch so a failure
-    // here doesn't leave the store half-mutated (old helper dropped, new
-    // helper absent or partial). Bookkeeping locals capture which side of
-    // the swap completed so the rollback only undoes what actually happened.
-    let oldHelperDropped = false;
-    let newHelperCreated = false;
-    try {
-      if (oldInfo.def.kind === 'vector') {
-        await this.dropVectorHelperTable(name);
-        oldHelperDropped = true;
-      }
-      if (newDef.kind === 'vector') {
-        await this.createVectorHelperTable(newDef);
-        newHelperCreated = true;
-      }
-    } catch (helperErr) {
-      if (newHelperCreated) {
-        try {
-          await this.dropVectorHelperTable(name);
-        } catch {
-          /* best-effort */
-        }
-      }
-      if (oldHelperDropped && oldInfo.def.kind === 'vector') {
-        try {
-          await this.createVectorHelperTable(oldInfo.def);
-        } catch {
-          /* best-effort */
-        }
-      }
-      throw helperErr;
-    }
-
-    const newInfo: DerivedColumnInfo = {
-      def: newDef,
-      detectedType,
-      detectedOriginalType,
-    };
-
-    this.columns[oldIndex] = newInfo;
-
-    try {
-      await this.recreateView();
-    } catch (viewErr) {
-      // Rollback: restore old column info + helper table, retry VIEW best-effort.
-      this.columns[oldIndex] = oldInfo;
-      if (newDef.kind === 'vector') {
-        // Drop the freshly-created new helper table.
-        try {
-          await this.dropVectorHelperTable(name);
-        } catch {
-          /* best-effort */
-        }
-      }
-      if (oldInfo.def.kind === 'vector') {
-        await this.createVectorHelperTable(oldInfo.def);
-      }
-      try {
-        await this.recreateView();
-      } catch {
-        // Best-effort restore
-      }
-      throw viewErr;
-    }
+    // The new vector column's helper table stands beside the old column's
+    // until the VIEW reads it, and the one no column reads is dropped.
+    const columns = [...this.columns];
+    columns[oldIndex] = newInfo;
+    await this.commitColumns(columns);
 
     return newInfo;
   }
@@ -411,6 +346,8 @@ export class DerivedColumnManager {
   /**
    * Remove a derived column. Drops helper table if vector.
    * Recreates VIEW without column, or drops VIEW entirely if last derived column.
+   * All or nothing: when the VIEW cannot be rebuilt or dropped, the column stays,
+   * with its helper table.
    */
   async removeColumn(name: string): Promise<void> {
     const index = this.columns.findIndex((c) => c.def.name === name);
@@ -433,22 +370,8 @@ export class DerivedColumnManager {
       );
     }
 
-    const info = this.columns[index]!;
-
-    // Drop vector helper table if applicable
-    if (info.def.kind === 'vector') {
-      await this.dropVectorHelperTable(name);
-    }
-
-    // Remove from list
-    this.columns.splice(index, 1);
-
-    // Recreate or drop VIEW
-    if (this.columns.length === 0) {
-      await this.dropView();
-    } else {
-      await this.recreateView();
-    }
+    // Recreate or drop VIEW, then drop the helper table of a vector column.
+    await this.commitColumns(this.columns.filter((_, i) => i !== index));
   }
 
   /**
@@ -510,13 +433,33 @@ export class DerivedColumnManager {
   /**
    * Recreate all derived columns from saved definitions (for session restore / undo).
    * Creates helper tables for vectors, then creates VIEW.
-   * Skips columns that fail with a warning.
+   * Skips columns that fail with a warning: one whose expression no longer
+   * binds, and one named as a column of `columnNames` or one restored before
+   * it, ignoring the case of ASCII letters as DuckDB does (`Total` beside
+   * `total`, which the VIEW would rename `Total_1`, so that reads of "Total"
+   * returned `total`'s values), or `__rowid__` in any case.
+   *
+   * @param columnNames - The names of the columns of the table itself, which
+   *   the derived columns are restored beside.
    */
-  async restoreColumns(defs: DerivedColumnDef[]): Promise<ColumnSchema[]> {
+  async restoreColumns(
+    defs: DerivedColumnDef[],
+    columnNames: readonly string[] = [],
+  ): Promise<ColumnSchema[]> {
     const restoredSchemas: ColumnSchema[] = [];
 
     for (const def of defs) {
       try {
+        const taken = takenColumnName(def.name, [
+          ...columnNames,
+          ...this.columns.map((c) => c.def.name),
+        ]);
+        if (taken !== undefined) {
+          throw new DerivedColumnError(
+            `Column name "${def.name}" is taken by the column "${taken}"${taken === def.name ? '' : ' (column names ignore letter case)'}`,
+            { code: 'DUPLICATE_NAME', details: { column: def.name, taken } },
+          );
+        }
         const info = await this.addColumn(def);
         restoredSchemas.push({
           name: def.name,
@@ -536,11 +479,11 @@ export class DerivedColumnManager {
 
   /** Clean up: drop VIEW, drop all helper tables */
   async destroy(): Promise<void> {
-    // Drop every helper table this manager named: its vector columns', and
-    // one a failed add or edit left behind, which no column lists.
-    for (const name of [...this.helperTableIds.keys()]) {
+    // Drop every helper table this manager made and has not dropped: its
+    // vector columns', and one a failed change could not drop.
+    for (const tableName of [...this.helperTables.values()]) {
       try {
-        await this.dropVectorHelperTable(name);
+        await this.bridge.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
       } catch {
         // Best-effort cleanup
       }
@@ -554,7 +497,7 @@ export class DerivedColumnManager {
     }
 
     this.columns = [];
-    this.helperTableIds.clear();
+    this.helperTables.clear();
     this.nextHelperTableId = 0;
   }
 
@@ -689,10 +632,26 @@ export class DerivedColumnManager {
     return this.columns.length > 0 ? this.viewName : this.baseTableName;
   }
 
-  /** Validate expression: SELECT (<expr>) AS "<alias>" FROM "<view_or_base>" LIMIT 0 */
+  /**
+   * Validate expression as the column of the VIEW it would be: binds the
+   * VIEW's layer for it, `SELECT *, (<expr>) AS "<alias>" FROM
+   * "<view_or_base>"` (see {@link layerSelect}), without reading a row (see
+   * {@link bindOnly}). An aggregate binds alone, as `SELECT sum(price) FROM
+   * t`, and not beside the other columns, where DuckDB asks for one of them,
+   * often `__rowid__`, to be grouped by: it is refused with what to write
+   * instead. Whether the expression has one value for each row is for
+   * {@link detectType} to check.
+   */
   private async validateExpressionSQL(expression: string, alias: string): Promise<void> {
-    const sql = `SELECT (${expression}) AS ${quoteIdentifier(alias)} FROM ${quoteIdentifier(this.validationTableName)} LIMIT 0`;
-    await this.bridge.query(sql);
+    const sql = bindOnly(layerSelect(expression, alias, quoteIdentifier(this.validationTableName)));
+    try {
+      await this.bridge.query(sql);
+    } catch (err) {
+      if (/must appear in the GROUP BY clause/i.test(errorText(err))) {
+        throw new DerivedColumnError(AGGREGATE_MESSAGE, { code: 'EXPRESSION_INVALID', cause: err });
+      }
+      throw err;
+    }
   }
 
   /**
@@ -774,7 +733,7 @@ export class DerivedColumnManager {
       for (const depInfo of sortedDependents) {
         const depExpr = (depInfo.def as { expression: string }).expression;
         const preflightCTE = `WITH __dt_preflight AS (SELECT * REPLACE (CAST(${quoteIdentifier(oldName)} AS ${duckdbType}) AS ${quoteIdentifier(oldName)}) FROM ${quoteIdentifier(this.validationTableName)})`;
-        const sql = `${preflightCTE} SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM __dt_preflight LIMIT 0`;
+        const sql = `${preflightCTE} ${bindOnly(`SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM __dt_preflight`)}`;
         try {
           await this.bridge.query(sql);
         } catch (err) {
@@ -798,7 +757,7 @@ export class DerivedColumnManager {
       const layerName = `__dt_preflight_${i + 1}`;
 
       // Validate the dependent's expression against the previous layer.
-      const validateSql = `WITH ${cteLayers.join(', ')} SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer} LIMIT 0`;
+      const validateSql = `WITH ${cteLayers.join(', ')} ${bindOnly(`SELECT (${depExpr}) AS ${quoteIdentifier(depInfo.def.name)} FROM ${prevLayer}`)}`;
       try {
         await this.bridge.query(validateSql);
       } catch (err) {
@@ -818,36 +777,74 @@ export class DerivedColumnManager {
     return reasons;
   }
 
-  /** Detect type: SELECT typeof((<expr>)) AS t FROM "<view_or_base>" LIMIT 1, then mapDuckDBType() */
+  /**
+   * Detect type: `DESCRIBE SELECT (<expr>) AS v FROM "<view_or_base>"`, then
+   * mapDuckDBType().
+   *
+   * DESCRIBE binds the query without running it, so the type is known on an
+   * empty table too: a `typeof()` over the rows had none to read there, and
+   * fell back to `VARCHAR`.
+   *
+   * Its QUALIFY binds the expression once more, where DuckDB refuses UNNEST
+   * ("UNNEST not supported here"): `unnest(tags)`, and an unnest in a CASE or
+   * behind a macro such as `generate_subscripts`, which return a row for each
+   * element of a list and none for an empty one. As a column, one gave the
+   * VIEW more rows than the table, or fewer, with `__rowid__` repeated. An
+   * unnest in a subquery, `(SELECT max(u) FROM unnest(tags) AS x(u))`, is one
+   * value, and binds. QUALIFY takes window functions, and needs one: the
+   * `row_number() OVER ()`. It refuses a star expression too, which a column
+   * takes (`COLUMNS('price') * 2`): one is described without it, unchecked.
+   */
   private async detectType(expression: string): Promise<{
     detectedType: DataType;
     detectedOriginalType: string;
   }> {
-    const sql = `SELECT typeof((${expression})) AS t FROM ${quoteIdentifier(this.validationTableName)} LIMIT 1`;
-    const rows = await this.bridge.query<{ t: string }>(sql);
-
-    if (rows.length === 0) {
-      // Empty table — fallback to string
-      return { detectedType: 'string', detectedOriginalType: 'VARCHAR' };
+    const describe = `DESCRIBE SELECT (${expression}) AS v FROM ${quoteIdentifier(this.validationTableName)}`;
+    let rows: { column_name: string; column_type: string }[];
+    try {
+      rows = await this.bridge.query(
+        `${describe} QUALIFY row_number() OVER () > 0 AND (${expression}) IS NOT NULL`,
+      );
+    } catch (err) {
+      const text = errorText(err);
+      if (/UNNEST not supported here/i.test(text)) {
+        throw new DerivedColumnError(SET_RETURNING_MESSAGE, {
+          code: 'EXPRESSION_INVALID',
+          cause: err,
+        });
+      }
+      if (!/STAR expression is not supported here/i.test(text)) throw err;
+      rows = await this.bridge.query(describe);
     }
-
-    const originalType = rows[0]!.t;
+    const originalType = rows[0]?.column_type ?? 'VARCHAR';
     return {
       detectedType: mapDuckDBType(originalType),
       detectedOriginalType: originalType,
     };
   }
 
-  /** Create helper table for a vector column and INSERT values in batches */
-  private async createVectorHelperTable(def: VectorColumnDef): Promise<void> {
-    // Assign a unique ID if this column doesn't have one yet
-    if (!this.helperTableIds.has(def.name)) {
-      this.helperTableIds.set(def.name, this.nextHelperTableId++);
-    }
-    const tableName = this.helperTableName(def.name);
+  /**
+   * A vector column's info, with its helper table made and its values
+   * INSERTed in batches. The table is named
+   * `__dt_vec_<manager>_<sanitizedName>_<id>__`, `<manager>` this manager's
+   * number on its bridge and `<id>` the table's number in this manager: no
+   * two tables in one DuckDB database share a name, and the table of an
+   * update stands beside the one it replaces until the VIEW reads it. When a
+   * step fails, the table stays listed, for the next change or
+   * {@link destroy} to drop.
+   */
+  private async vectorColumnInfo(def: VectorColumnDef): Promise<DerivedColumnInfo> {
     const duckdbType = this.vectorTypeToDuckDBType(def.vectorType);
+    const info: DerivedColumnInfo = {
+      def,
+      detectedType: mapDuckDBType(duckdbType),
+      detectedOriginalType: duckdbType,
+    };
+    const sanitized = def.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const tableName = `${this.helperTablePrefix}${sanitized}_${this.nextHelperTableId++}__`;
+    this.helperTables.set(info, tableName);
 
-    // Drop if exists (for updates)
+    // Dropped first, as a CREATE TABLE of a name taken fails.
     await this.bridge.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
 
     // Create table
@@ -869,31 +866,56 @@ export class DerivedColumnManager {
         `INSERT INTO ${quoteIdentifier(tableName)} VALUES ${parts.join(', ')}`,
       );
     }
+    return info;
   }
 
-  /** DROP TABLE IF EXISTS for a vector column's helper table */
-  private async dropVectorHelperTable(name: string): Promise<void> {
-    const tableName = this.helperTableName(name);
-    await this.bridge.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
-    this.helperTableIds.delete(name);
+  /** The helper table of a vector column, by its info. */
+  private helperTableOf(info: DerivedColumnInfo): string {
+    const tableName = this.helperTables.get(info);
+    if (tableName === undefined) {
+      throw new ConfigurationError(`No helper table for column "${info.def.name}"`, {
+        code: 'INVARIANT',
+        details: { column: info.def.name },
+      });
+    }
+    return tableName;
   }
 
   /**
-   * Helper table name for a given column: `__dt_vec_<manager>_<sanitizedName>_<id>__`,
-   * `<manager>` this manager's number on its bridge and `<id>` the column's
-   * number in this manager, so no two columns in one DuckDB database share
-   * one.
+   * Make `columns` the derived columns: build the VIEW for them, or drop it
+   * for none, then drop the helper tables none of them reads. All or
+   * nothing: when the VIEW cannot be built or dropped, the columns are left
+   * as they were, and so is the VIEW (a CREATE OR REPLACE VIEW that fails
+   * leaves the one there was), and the helper tables made for the change
+   * are dropped.
    */
-  private helperTableName(columnName: string): string {
-    const id = this.helperTableIds.get(columnName);
-    if (id === undefined) {
-      throw new ConfigurationError(`No helper table ID assigned for column "${columnName}"`, {
-        code: 'INVARIANT',
-        details: { column: columnName },
-      });
+  private async commitColumns(columns: DerivedColumnInfo[]): Promise<void> {
+    const previous = this.columns;
+    this.columns = columns;
+    try {
+      await this.recreateView();
+    } catch (err) {
+      this.columns = previous;
+      await this.dropUnusedHelperTables();
+      throw err;
     }
-    const sanitized = columnName.replace(/[^a-zA-Z0-9]/g, '_');
-    return `${this.helperTablePrefix}${sanitized}_${id}__`;
+    await this.dropUnusedHelperTables();
+  }
+
+  /**
+   * Drop the helper tables no derived column reads. Best-effort: one whose
+   * DROP fails stays listed, for a later change or {@link destroy} to drop.
+   */
+  private async dropUnusedHelperTables(): Promise<void> {
+    for (const [info, tableName] of [...this.helperTables]) {
+      if (this.columns.includes(info)) continue;
+      try {
+        await this.bridge.query(`DROP TABLE IF EXISTS ${quoteIdentifier(tableName)}`);
+        this.helperTables.delete(info);
+      } catch {
+        // Stays listed.
+      }
+    }
   }
 
   /** Map VectorDataType to DuckDB type string */
@@ -951,7 +973,7 @@ export class DerivedColumnManager {
     for (const info of vectors) {
       joinCounter++;
       const alias = `h${joinCounter}`;
-      const helperTable = this.helperTableName(info.def.name);
+      const helperTable = this.helperTableOf(info);
       baseSelectParts.push(`${alias}.${quoteIdentifier(info.def.name)}`);
       // Join on the explicit `__rowid__` column synthesized at load time.
       // DuckDB's implicit `rowid` pseudo-column is reassigned whenever a
@@ -984,9 +1006,7 @@ export class DerivedColumnManager {
       const info = sortedExpressions[i]!;
       const layerName = `__dt_layer_${i + 1}`;
       const expr = (info.def as { expression: string }).expression;
-      cteParts.push(
-        `${layerName} AS (SELECT *, (${expr}) AS ${quoteIdentifier(info.def.name)} FROM ${prevLayer})`,
-      );
+      cteParts.push(`${layerName} AS (${layerSelect(expr, info.def.name, prevLayer)})`);
       prevLayer = layerName;
     }
 

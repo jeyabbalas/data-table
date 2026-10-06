@@ -21,6 +21,10 @@ import {
   containsKind,
   dataTypeOf,
   parseDuckDBType,
+  type DuckDBArrayTypeNode,
+  type DuckDBListTypeNode,
+  type DuckDBMapTypeNode,
+  type DuckDBStructTypeNode,
   type DuckDBTypeNode,
 } from '../core/duckdbType';
 import type { ColumnSchema } from '../core/types';
@@ -31,6 +35,15 @@ export const PREVIEW_ITEMS = 32;
 
 /** Graphemes of text a grid cell shows before `…`. */
 export const TEXT_CAP = 1000;
+
+/**
+ * Items of a list or an array, and entries of a map, that the grid formats
+ * when they sit inside a nested value: one more than {@link TEXT_CAP}.
+ * DuckDB writes `, ` between any two items, at any depth, and a grapheme
+ * always starts at its space, so a list's first TEXT_CAP + 1 items alone
+ * make more than TEXT_CAP graphemes: whatever follows them is past the cap.
+ */
+export const FORMATTED_ITEMS = TEXT_CAP + 1;
 
 /** Bytes of a BLOB a grid cell shows before `… +N`. */
 export const BLOB_PREVIEW = 256;
@@ -85,13 +98,12 @@ function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
  *
  * - A LIST, or an ARRAY of more than {@link PREVIEW_ITEMS} items, shows its
  *   first 32 items and then how many more there are: `[1, 2, …, 32, … +68]`.
- *   The head is DuckDB's text for the slice `c[1:32]`, its closing bracket
+ *   The head is DuckDB's text for the first 32 items, its closing bracket
  *   cut by `left(t, -1)`, which removes exactly one character where
  *   `rtrim(t, ']')` would also eat the brackets of a last item that is a
- *   list itself. Only the outer list is sliced; lists inside it are left to
- *   the text cap.
+ *   list itself.
  * - A MAP with more than 32 entries shows its first 32 the same way,
- *   rebuilt from `map_entries(c)[1:32]`: `{k1=1, k2=2, … +568}`.
+ *   rebuilt from the first 32 of `map_entries(c)`: `{k1=1, k2=2, … +568}`.
  * - A BLOB shows its first {@link BLOB_PREVIEW} bytes as DuckDB writes them
  *   (`\xAA` for a byte that is not printable ASCII), then the bytes left:
  *   `\x89PNG… +1834`.
@@ -118,17 +130,32 @@ function typeNodeOf(column: ColumnSchema): DuckDBTypeNode {
  * only from those (see {@link shownTextBound}). Embeddings such as
  * `FLOAT[768]` are the common case.
  *
- * NULL stays NULL in every form, so the cell shows its null style: each
- * `concat`, which skips NULL arguments, sits behind a `CASE` whose test is
- * NULL for a NULL value and so falls to a plain cast of it.
+ * The cap bounds the text a cell shows. What DuckDB formats before the cap
+ * is bounded too, so that a long list inside a value costs a cell no more
+ * than a short one:
+ *
+ * - The items a cell shows are copied out of their list before it is cast
+ *   (see {@link listItems}): DuckDB's cast to VARCHAR formats every item a
+ *   slice such as `c[1:32]` shares with its list. When those items are
+ *   lists or maps themselves, only the ones the cap can reach are kept
+ *   (see {@link neededItems}).
+ * - Inside the value, every list, array and map is cut to its first
+ *   {@link FORMATTED_ITEMS} items, more than the cap can show, and a struct
+ *   holding one is rebuilt around it (see {@link formattedValue}).
+ *
+ * Either way the text agrees with the whole value's until past the cap, so
+ * the cell is the same. Unions, VARIANTs and map keys are formatted whole,
+ * a list inside them included.
+ *
+ * NULL stays NULL in every form, so the cell shows its null style: the head
+ * of a NULL list or map is NULL, and `||`, unlike `concat`, keeps NULL.
  *
  * @example
  * ```ts
  * const column = { name: 'scores', type: 'nested', nullable: true, originalType: 'INTEGER[]' };
  * gridValueSQL(column, '"scores"');
- * // CASE WHEN len("scores") > 32
- * //   THEN concat(left(CAST("scores"[1:32] AS VARCHAR), -1), ', … +', len("scores") - 32, ']')
- * //   ELSE CAST("scores" AS VARCHAR) END
+ * // left(CAST(list_transform(list_resize("scores", least(len("scores"), 32)), lambda x1: x1) AS VARCHAR), -1)
+ * //   || CASE WHEN len("scores") > 32 THEN ', … +' || (len("scores") - 32) ELSE '' END || ']'
  * gridValueSQL({ ...column, type: 'integer', originalType: 'INTEGER' }, '"id"'); // null
  * ```
  */
@@ -138,21 +165,23 @@ export function gridValueSQL(column: ColumnSchema, quotedCol: string): string | 
   let text: string;
   switch (node.kind) {
     case 'list':
-    case 'array':
+    case 'array': {
+      const shown = neededItems(c, node.element) ?? PREVIEW_ITEMS;
+      const head = listItems(c, node, shown, 1);
       text =
         node.kind === 'array' && node.size <= PREVIEW_ITEMS
-          ? `CAST(${c} AS VARCHAR)`
-          : `CASE WHEN len(${c}) > ${PREVIEW_ITEMS}` +
-            ` THEN concat(left(CAST(${c}[1:${PREVIEW_ITEMS}] AS VARCHAR), -1), ', … +', len(${c}) - ${PREVIEW_ITEMS}, ']')` +
-            ` ELSE CAST(${c} AS VARCHAR) END`;
+          ? `CAST(${head ?? c} AS VARCHAR)`
+          : previewText(head!, `len(${c})`, ']');
       break;
-    case 'map':
-      text =
-        `CASE WHEN cardinality(${c}) > ${PREVIEW_ITEMS}` +
-        ` THEN concat(left(CAST(map_from_entries(map_entries(${c})[1:${PREVIEW_ITEMS}]) AS VARCHAR), -1), ', … +', cardinality(${c}) - ${PREVIEW_ITEMS}, '}')` +
-        ` ELSE CAST(${c} AS VARCHAR) END`;
+    }
+    case 'map': {
+      const shown = neededItems(`map_values(${c})`, node.value) ?? PREVIEW_ITEMS;
+      text = previewText(mapEntries(c, node, shown, 1), `cardinality(${c})`, '}');
       break;
+    }
     case 'struct':
+      text = `CAST(${structFields(c, node, 1) ?? c} AS VARCHAR)`;
+      break;
     case 'union':
     case 'variant':
       text = `CAST(${c} AS VARCHAR)`;
@@ -194,6 +223,150 @@ function capText(text: string): string {
     ` AND strlen(left_grapheme(txt, ${TEXT_CAP})) < strlen(txt)` +
     ` THEN concat(left_grapheme(txt, ${TEXT_CAP}), '…') ELSE txt END)[1]`
   );
+}
+
+/**
+ * The text of `head`, the first {@link PREVIEW_ITEMS} items of a list or
+ * entries of a map, as a cell shows it: when `count`, the whole value's
+ * item count, is larger, the text loses its closing `close` and gains
+ * `, … +N` and `close` again. `head` is named once, so DuckDB formats it
+ * once.
+ */
+function previewText(head: string, count: string, close: string): string {
+  return (
+    `left(CAST(${head} AS VARCHAR), -1)` +
+    ` || CASE WHEN ${count} > ${PREVIEW_ITEMS} THEN ', … +' || (${count} - ${PREVIEW_ITEMS}) ELSE '' END` +
+    ` || '${close}'`
+  );
+}
+
+/**
+ * How many of the first {@link PREVIEW_ITEMS} items of `list` a cell needs
+ * when they are lists, arrays or maps (`node` is their type): those whose
+ * items before them hold fewer than {@link FORMATTED_ITEMS} items in all.
+ * Each item holds at least one, so whatever follows the last one needed is
+ * past the cap. `null` for items of any other type, and for arrays too short
+ * for any of them to be left out. The count is worked out in lambdas over
+ * the items' sizes, which refer to no column; it cannot come from an
+ * array's size alone, since a NULL item holds none.
+ */
+function neededItems(list: string, node: DuckDBTypeNode): string | null {
+  if (node.kind === 'array' && node.size * (PREVIEW_ITEMS - 1) < FORMATTED_ITEMS) return null;
+  if (node.kind !== 'list' && node.kind !== 'array' && node.kind !== 'map') return null;
+  const size = node.kind === 'map' ? 'cardinality' : 'len';
+  return (
+    `list_transform([list_transform(list_resize(${list}, least(len(${list}), ${PREVIEW_ITEMS})),` +
+    ` lambda y: coalesce(${size}(y), 0))],` +
+    ` lambda n: len(list_filter(range(1, len(n) + 1),` +
+    ` lambda i: coalesce(list_sum(n[1:i - 1]), 0) < ${FORMATTED_ITEMS})))[1]`
+  );
+}
+
+/**
+ * Lists, arrays and maps nested deeper than this inside a value are
+ * formatted whole: each level adds a lambda to the query, and DuckDB parses
+ * at most 1,000 levels of expression.
+ */
+const MAX_FORMATTED_DEPTH = 16;
+
+/**
+ * SQL for `value`, of type `node`, with each list, array and map inside it
+ * cut to its first {@link FORMATTED_ITEMS} items, so that DuckDB formats
+ * only those: its text is the text of `value` up to the end of the first
+ * list cut, which is past the cap. `null` when nothing in `value` is cut:
+ * scalars, unions and VARIANTs (whose values are formatted whole, a list
+ * inside them included), and structs and short arrays holding nothing to
+ * cut.
+ *
+ * `value` is the column, or an expression over the parameters of the
+ * lambdas around it, each level's named for its depth (`x2`, `e3`): no
+ * column is named inside a lambda, where a parameter of the same name would
+ * hide it.
+ */
+function formattedValue(value: string, node: DuckDBTypeNode, depth: number): string | null {
+  if (depth > MAX_FORMATTED_DEPTH) return null;
+  switch (node.kind) {
+    case 'list':
+    case 'array':
+      return listItems(value, node, FORMATTED_ITEMS, depth);
+    case 'map':
+      return mapEntries(value, node, FORMATTED_ITEMS, depth);
+    case 'struct':
+      return structFields(value, node, depth);
+    default:
+      return null;
+  }
+}
+
+/**
+ * The first `count` items of `list`, each as {@link formattedValue} has it,
+ * as a list of their own; `null` for an array of no more than `count` items
+ * with nothing to cut in them. `count` is a number, or SQL for one
+ * ({@link neededItems}).
+ *
+ * The items are taken with `list_resize`, held to the list's length so that
+ * it never pads, and copied out with `list_transform`. A slice
+ * (`list[1:count]`) costs more: on a list of lists it copies every item,
+ * and on any list it shares the items it leaves out, which DuckDB's cast to
+ * VARCHAR then formats too.
+ */
+function listItems(
+  list: string,
+  node: DuckDBListTypeNode | DuckDBArrayTypeNode,
+  count: number | string,
+  depth: number,
+): string | null {
+  const x = `x${depth}`;
+  const item = formattedValue(x, node.element, depth + 1);
+  if (node.kind === 'array' && typeof count === 'number' && node.size <= count) {
+    return item === null ? null : `list_transform(${list}, lambda ${x}: ${item})`;
+  }
+  return `list_transform(list_resize(${list}, least(len(${list}), ${count})), lambda ${x}: ${item ?? x})`;
+}
+
+/**
+ * The first `count` entries of `map`, each value as {@link formattedValue}
+ * has it, as a map of their own. A key is kept whole: one cut short could
+ * equal another key, and a map's keys must differ. `count` is a number, or
+ * SQL for one ({@link neededItems}).
+ */
+function mapEntries(
+  map: string,
+  node: DuckDBMapTypeNode,
+  count: number | string,
+  depth: number,
+): string {
+  const e = `e${depth}`;
+  const value = formattedValue(`${e}.value`, node.value, depth + 1) ?? `${e}.value`;
+  return (
+    `map_from_entries(list_transform(list_resize(map_entries(${map}), least(cardinality(${map}), ${count})),` +
+    ` lambda ${e}: {'key': ${e}.key, 'value': ${value}}))`
+  );
+}
+
+/**
+ * `struct` rebuilt from its fields, each as {@link formattedValue} has it:
+ * `struct_pack` with the same names, or `row` when its fields have none, so
+ * that its text is the struct's own. `null` when no field has anything to
+ * cut, or when a field is named with the empty string, which SQL cannot
+ * write: such a struct is formatted whole. `struct` is named once for each
+ * field: it is a column or a lambda parameter, or a field of one, and
+ * naming it in a one-item list instead (as {@link capText} does) would copy
+ * the whole value.
+ */
+function structFields(struct: string, node: DuckDBStructTypeNode, depth: number): string | null {
+  const field = (i: number): string => `struct_extract_at(${struct}, ${i + 1})`;
+  const parts = node.fields.map((f, i) => formattedValue(field(i), f.type, depth + 1));
+  if (parts.every((part) => part === null)) return null;
+  const unnamed = node.fields.every((f) => f.name === null);
+  if (!unnamed && node.fields.some((f) => !f.name)) return null;
+  const values = parts.map((part, i) => part ?? field(i));
+  const built = unnamed
+    ? `row(${values.join(', ')})`
+    : `struct_pack(${values.map((v, i) => `${quoteIdentifier(node.fields[i]!.name!)} := ${v}`).join(', ')})`;
+  // A NULL struct stays NULL: `struct_pack` of its fields would be a struct
+  // of NULLs.
+  return `CASE WHEN ${struct} IS NULL THEN NULL ELSE ${built} END`;
 }
 
 /**

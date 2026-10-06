@@ -5,9 +5,12 @@
  * preview come out exactly as DuckDB writes them, with one closing bracket
  * cut and `… +N` added; NULL stays NULL in every form; the 1,000-grapheme
  * cap cuts long text by grapheme, keeps an emoji whole, and adds `…` only
- * when it cut something; a BLOB shows 256 bytes. Then the types the grid
- * leaves uncapped are given their widest values, to check that their text
- * really cannot pass the cap.
+ * when it cut something; a BLOB shows 256 bytes. Lists inside a value are
+ * cut before DuckDB formats them, yet each cell is still the whole value's
+ * text cut by the cell rule (the oracle in `nestedExpectations`), and a
+ * 200,000-item list inside costs about FORMATTED_ITEMS items of text. Then
+ * the types the grid leaves uncapped are given their widest values, to
+ * check that their text really cannot pass the cap.
  *
  * The exact values: every route's text is JSON that `parseJsonTree` reads
  * completely, NULL stays NULL, and the values `to_json` gets wrong or cannot
@@ -23,9 +26,17 @@ import { parseJsonTree, toStandardJson } from '@/core/jsonTree';
 import type { ColumnSchema } from '@/core/types';
 import { mapDuckDBType } from '@/data/SchemaDetector';
 import type { WorkerBridge } from '@/data/WorkerBridge';
-import { BLOB_PREVIEW, PREVIEW_ITEMS, TEXT_CAP, gridValueSQL, jsonValueSQL } from '@/data/valueSql';
+import {
+  BLOB_PREVIEW,
+  FORMATTED_ITEMS,
+  PREVIEW_ITEMS,
+  TEXT_CAP,
+  gridValueSQL,
+  jsonValueSQL,
+} from '@/data/valueSql';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from '../helpers/duckdbNode';
+import { expectedCellTexts } from '../helpers/nestedExpectations';
 import { makeNodeBridge } from '../helpers/nodeBridge';
 
 /** The man, woman, girl, boy family: seven code points, one grapheme. */
@@ -51,6 +62,12 @@ function rowsOf(type: string, values: readonly string[]): string {
 
 /** A SQL string literal. */
 const lit = (text: string) => `'${text.replaceAll("'", "''")}'`;
+
+/** `gridValueSQL`'s cap around the text `TEXT`. */
+const CAP_FORM =
+  `list_transform([TEXT], lambda txt: CASE WHEN strlen(txt) > ${TEXT_CAP}` +
+  ` AND strlen(left_grapheme(txt, ${TEXT_CAP})) < strlen(txt)` +
+  ` THEN concat(left_grapheme(txt, ${TEXT_CAP}), '…') ELSE txt END)[1]`;
 
 const codePoints = (text: string) => [...text].length;
 
@@ -218,6 +235,137 @@ describe('valueSql on real DuckDB', () => {
         `${'z'.repeat(TEXT_CAP)}…`,
         `${'z'.repeat(TEXT_CAP)}…`,
       ]);
+    });
+  });
+
+  describe('gridValueSQL: lists inside a value are cut before they are formatted', () => {
+    /** `n` copies of `item`, as SQL for a list. */
+    const many = (n: number, item: string) => `list_transform(range(${n}), lambda i: ${item})`;
+    const PREPEND = 'chr(1536)'; // ARABIC NUMBER SIGN: joins the `,` after it into its grapheme
+    const MARK = 'chr(769)'; // COMBINING ACUTE ACCENT: joins the space before it
+    const point = '[i * 0.5, -i * 0.25]';
+
+    /** The values of each type, around FORMATTED_ITEMS and far past it. */
+    const CASES: [type: string, values: string[]][] = [
+      [
+        'STRUCT(id BIGINT, v DOUBLE[])',
+        [
+          `{'id': 1, 'v': ${many(1000, '0.0')}}`,
+          `{'id': 2, 'v': ${many(FORMATTED_ITEMS, '0.0')}}`,
+          `{'id': 3, 'v': ${many(FORMATTED_ITEMS + 1, '0.0')}}`,
+          `{'id': 4, 'v': ${many(200_000, 'i * 1.0')}}`,
+          `{'id': NULL, 'v': NULL}`,
+          'NULL',
+        ],
+      ],
+      [
+        'INTEGER[][]',
+        [
+          '[range(1000)]',
+          `[range(${FORMATTED_ITEMS})]`,
+          `[range(${FORMATTED_ITEMS + 1})]`,
+          '[range(100000)]',
+          // The cell needs the second list, but not the third.
+          '[range(1000), range(1), range(5)]',
+          '[[], [], range(2000), [1]]',
+          '[NULL, range(1500), NULL]',
+          many(40, 'range(i * 30)'),
+        ],
+      ],
+      [
+        'VARCHAR[][]',
+        [999, 1000, FORMATTED_ITEMS, FORMATTED_ITEMS + 1, 3000].flatMap((n) => [
+          `[${many(n, "''")}]`,
+          `[${many(n, PREPEND)}]`,
+          `[${many(n, MARK)}]`,
+        ]),
+      ],
+      [
+        'STRUCT("type" VARCHAR, coordinates DOUBLE[][][])',
+        [
+          `{'type': 'Polygon', 'coordinates': [${many(50_000, point)}]}`,
+          `{'type': 'Polygon', 'coordinates': ${many(3, `[${point}, ${point}]`)}}`,
+          `{'type': NULL, 'coordinates': NULL}`,
+        ],
+      ],
+      ['FLOAT[][]', [many(50, `list_transform(range(384), lambda j: (i * 384 + j) * 0.5)`)]],
+      [
+        'MAP(VARCHAR, INTEGER[])',
+        [
+          `MAP {'a': range(2000), 'b': [1]}`,
+          `map_from_entries(${many(40, `{'key': 'k' || i, 'value': range(30)}`)})`,
+        ],
+      ],
+      [
+        'MAP(VARCHAR, INTEGER)[]',
+        [`[map_from_entries(${many(3000, `{'key': 'k' || i, 'value': i}`)}), MAP {}]`],
+      ],
+      ['STRUCT(INTEGER, BIGINT[])', ['row(1, range(3000))', 'row(NULL, NULL)']],
+    ];
+
+    /**
+     * A view of `values` as `type`, for the oracle, which reads a table by
+     * name (a view: an unnamed struct cannot be stored in a table).
+     */
+    async function viewOf(type: string, values: readonly string[]): Promise<string> {
+      const view = 'cut_values';
+      await bridge.query(
+        `CREATE OR REPLACE VIEW ${view} AS SELECT i AS "__rowid__", "v" FROM (${rowsOf(type, values)})`,
+      );
+      return view;
+    }
+
+    it.each(CASES)(
+      '%s: the cell is the whole value’s, cut by the cell rule',
+      async (type, values) => {
+        const expected = await expectedCellTexts(bridge, await viewOf(type, values), col(type));
+        expect(await gridTexts(type, values)).toEqual(values.map((_, i) => expected.get(i)));
+      },
+    );
+
+    /** The SQL of the text a column's cells are cut from: `gridValueSQL` without its cap. */
+    function uncapped(type: string): string {
+      const sql = gridValueSQL(col(type), '"v"')!;
+      const [before, after] = CAP_FORM.split('TEXT');
+      expect(sql.startsWith(before!) && sql.endsWith(after!), `${type} is capped`).toBe(true);
+      return sql.slice(before!.length, sql.length - after!.length);
+    }
+
+    /** How many characters DuckDB formats for one `value` of `type` before the cap. */
+    async function formatted(type: string, value: string): Promise<number> {
+      const [row] = await bridge.query<{ n: number }>(
+        `SELECT strlen(${uncapped(type)}) AS n FROM (${rowsOf(type, [value])})`,
+      );
+      return row!.n;
+    }
+
+    it('formats about FORMATTED_ITEMS items of a long list inside a value, not all of them', async () => {
+      // Each item writes at most 8 characters (`199999.0`) and its `, `.
+      expect(
+        await formatted(
+          'STRUCT(id BIGINT, v DOUBLE[])',
+          `{'id': 1, 'v': ${many(200_000, 'i * 1.0')}}`,
+        ),
+      ).toBeLessThan(FORMATTED_ITEMS * 10 + 20);
+      expect(await formatted('INTEGER[][]', '[range(200000)]')).toBeLessThan(FORMATTED_ITEMS * 8);
+      // A point writes at most 20 characters (`[24999.5, -12499.75]`) and its `, `.
+      expect(
+        await formatted(
+          'STRUCT("type" VARCHAR, coordinates DOUBLE[][][])',
+          `{'type': 'Polygon', 'coordinates': [${many(200_000, point)}]}`,
+        ),
+      ).toBeLessThan(FORMATTED_ITEMS * 22 + 50);
+    });
+
+    it('formats only the lists of a list of lists that the cap can reach', async () => {
+      // Three lists of 384 hold more than FORMATTED_ITEMS items; 32 would
+      // be about 300,000 characters. Each item writes at most 8 (`9599.5`).
+      expect(
+        await formatted(
+          'FLOAT[][]',
+          many(50, 'list_transform(range(384), lambda j: (i * 384 + j) * 0.5)'),
+        ),
+      ).toBeLessThan(3 * 384 * 10);
     });
   });
 

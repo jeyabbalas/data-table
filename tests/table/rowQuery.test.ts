@@ -122,13 +122,14 @@ describe('columns read as text', () => {
 
   it('a list shows 32 items and how many more; a short array is a plain cast', () => {
     expect(asText('tags')).toBe(
-      `CASE WHEN len("tags") > 32` +
-        ` THEN concat(left(CAST("tags"[1:32] AS VARCHAR), -1), ', … +', len("tags") - 32, ']')` +
-        ` ELSE CAST("tags" AS VARCHAR) END AS "tags"`,
+      `left(CAST(list_transform(list_resize("tags", least(len("tags"), 32)), lambda x1: x1) AS VARCHAR), -1)` +
+        ` || CASE WHEN len("tags") > 32 THEN ', … +' || (len("tags") - 32) ELSE '' END || ']' AS "tags"`,
     );
     expect(asText('trio')).toBe('CAST("trio" AS VARCHAR) AS "trio"');
     // Text items are capped at 1,000 graphemes on top.
-    expect(asText('words')).toMatch(/^list_transform\(\[CASE WHEN len\("words"\) > 32 /);
+    expect(asText('words')).toMatch(
+      /^list_transform\(\[left\(CAST\(list_transform\(list_resize\("words", /,
+    );
     expect(asText('words')).toMatch(/ AS "words"$/);
   });
 

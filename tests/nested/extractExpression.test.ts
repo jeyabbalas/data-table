@@ -5,8 +5,8 @@
  * on real DuckDB in extractExpression.duckdb.test.ts.
  */
 import { describe, expect, it } from 'vitest';
+import { columnNameKey } from '@/core/columnNames';
 import {
-  columnNameKey,
   nestedFieldExpression,
   resolveNestedPath,
   uniqueColumnName,

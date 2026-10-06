@@ -707,10 +707,6 @@ function namePart(text: string, fallback: string): string {
   return part || fallback;
 }
 
-// The key DuckDB tells column names apart by. It lives in `core/columnNames`,
-// which the action layer imports without loading this module.
-export { columnNameKey };
-
 /**
  * `base`, or `base_2`, `base_3`, … : the first that no name in
  * `existingNames` already takes, compared as DuckDB compares column names

@@ -15,7 +15,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   parseDuckDBType,
-  structPaths,
   type DuckDBStructField,
   type DuckDBTypeNode,
   type DuckDBUnionMember,
@@ -350,10 +349,24 @@ async function distinct(sql: string, table: string, limit = 1000): Promise<strin
 const values = (paths: NestedPathStep[][], options?: NestedFieldExpressionOptions): Case[] =>
   paths.map((path) => (options ? { path, options } : { path }));
 
+/**
+ * Every field of a struct type, and every field of a field that is a struct
+ * itself, as paths in declaration order (a struct before its fields). An
+ * unnamed field is its 1-based position. Lists, maps and unions inside are
+ * not entered: their fields are not at a fixed path.
+ */
+function structPaths(node: DuckDBTypeNode, prefix: NestedPathStep[] = []): NestedPathStep[][] {
+  if (node.kind !== 'struct') return [];
+  return node.fields.flatMap((field, i) => {
+    const path = [...prefix, field.name ?? i + 1];
+    return [path, ...structPaths(field.type, path)];
+  });
+}
+
 /** Every struct path of the column's type (of its elements' type, for a list). */
 async function structPathsOf(table: string, column: string): Promise<NestedPathStep[][]> {
   const type = parseDuckDBType(await typeOf(table, column));
-  return structPaths(type.kind === 'list' ? type.element : type).map((p) => [...p.path]);
+  return structPaths(type.kind === 'list' ? type.element : type);
 }
 
 const LEAVES = ['string', 'number', 'boolean', 'json'] as const;
@@ -576,7 +589,7 @@ describe('maps', () => {
     const keys = await distinct('unnest(map_keys("map_of_structs"))', parquet, 6);
     const fields = parseDuckDBType(await typeOf(parquet, 'map_of_structs'));
     if (fields.kind !== 'map') throw new Error('map_of_structs is not a map');
-    const paths = structPaths(fields.value).map((p) => [...p.path]);
+    const paths = structPaths(fields.value);
     expect(paths).toEqual([['qty'], ['price'], ['note']]);
     await check(
       parquet,

@@ -25,7 +25,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { isNestedSqlType } from '@/core/duckdbType';
+import { dataTypeOf, parseDuckDBType } from '@/core/duckdbType';
 import { filtersToWhereClause, quoteIdentifier } from '@/filters/FilterSQL';
 import type { Filter } from '@/filters/FilterTypes';
 
@@ -33,6 +33,9 @@ import { createNodeDuckDB, type NodeDuckDBHarness } from '../helpers/duckdbNode'
 import { MANIFEST, loadNestedFixture } from '../helpers/nestedFixture';
 import { SQL_ONLY_COLUMNS, createSqlOnlyTable, createSqlOnlyView } from '../helpers/nestedSql';
 import { makeNodeBridge } from '../helpers/nodeBridge';
+
+/** Whether a column of DuckDB type `text` loads as `'nested'`. */
+const isNestedSqlType = (text: string) => dataTypeOf(parseDuckDBType(text)) === 'nested';
 
 interface NestedColumn {
   name: string;

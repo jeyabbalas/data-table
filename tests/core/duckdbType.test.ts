@@ -4,10 +4,8 @@ import {
   childTypes,
   containsKind,
   dataTypeOf,
-  isNestedSqlType,
   needsTextMatch,
   parseDuckDBType,
-  structPaths,
   type DuckDBTypeNode,
 } from '@/core/duckdbType';
 
@@ -249,7 +247,10 @@ describe('dataTypeOf', () => {
   });
 });
 
-describe('isNestedSqlType', () => {
+describe('dataTypeOf, from the text DESCRIBE prints', () => {
+  /** Whether a column of DuckDB type `text` loads as `'nested'`. */
+  const nested = (text: string) => dataTypeOf(parseDuckDBType(text)) === 'nested';
+
   it.each([
     'INTEGER[]',
     'BIGINT[]',
@@ -263,7 +264,7 @@ describe('isNestedSqlType', () => {
     'struct(a integer)',
     ' MAP(VARCHAR, INTEGER) ',
   ])('%s is nested', (type) => {
-    expect(isNestedSqlType(type)).toBe(true);
+    expect(nested(type)).toBe(true);
   });
 
   it.each([
@@ -277,11 +278,7 @@ describe('isNestedSqlType', () => {
     'MAPPING',
     '',
   ])('%s is not nested', (type) => {
-    expect(isNestedSqlType(type)).toBe(false);
-  });
-
-  it('a missing type is not nested', () => {
-    expect(isNestedSqlType(undefined)).toBe(false);
+    expect(nested(type)).toBe(false);
   });
 });
 
@@ -311,40 +308,6 @@ describe('childTypes / containsKind / needsTextMatch', () => {
     ['JSON[]', false],
   ] as const)('needsTextMatch(%s) is %s', (text, expected) => {
     expect(needsTextMatch(parseDuckDBType(text))).toBe(expected);
-  });
-});
-
-describe('structPaths', () => {
-  it('walks struct fields depth-first, a struct before its fields', () => {
-    const node = parseDuckDBType(
-      'STRUCT(owner STRUCT(contact STRUCT(email VARCHAR, phones VARCHAR[]), name VARCHAR), n INTEGER)',
-    );
-    expect(structPaths(node).map((p) => p.path.join('.'))).toEqual([
-      'owner',
-      'owner.contact',
-      'owner.contact.email',
-      'owner.contact.phones',
-      'owner.name',
-      'n',
-    ]);
-  });
-
-  it('names an unnamed field by its 1-based position', () => {
-    const paths = structPaths(parseDuckDBType('STRUCT(INTEGER, STRUCT(VARCHAR, b DATE))'));
-    expect(paths.map((p) => p.path)).toEqual([[1], [2], [2, 1], [2, 'b']]);
-  });
-
-  it('does not enter lists, maps or unions, and is empty for a non-struct', () => {
-    const paths = structPaths(
-      parseDuckDBType('STRUCT(a STRUCT(x INTEGER)[], m MAP(VARCHAR, INTEGER))'),
-    );
-    expect(paths.map((p) => p.path.join('.'))).toEqual(['a', 'm']);
-    expect(structPaths(parseDuckDBType('INTEGER[]'))).toEqual([]);
-  });
-
-  it('stops at the limit', () => {
-    const fields = Array.from({ length: 50 }, (_, i) => `f${i} INTEGER`).join(', ');
-    expect(structPaths(parseDuckDBType(`STRUCT(${fields})`), 10)).toHaveLength(10);
   });
 });
 
@@ -381,7 +344,7 @@ describe('the types of the nested stress fixture', () => {
     } else if (kind === 'scalar') {
       expect(node.kind).toBe('scalar');
     } else {
-      expect(isNestedSqlType(type)).toBe(true);
+      expect(dataTypeOf(node)).toBe('nested');
     }
   });
 

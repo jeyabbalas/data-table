@@ -14,7 +14,21 @@
 
 import type { DataType } from './types';
 
-/** A scalar type: a number, text, a date, a BLOB, an ENUM, … */
+/**
+ * A scalar type: a number, text, a date, a BLOB, an ENUM, …
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('DECIMAL(18,4)');
+ * if (node.kind === 'scalar') {
+ *   node.name; // 'DECIMAL'
+ *   node.args; // ['18', '4']
+ *   node.dataType; // 'decimal'
+ * }
+ * ```
+ */
 export interface DuckDBScalarTypeNode {
   readonly kind: 'scalar';
   /** The type as written, arguments included: `DECIMAL(18,4)`. */
@@ -31,26 +45,68 @@ export interface DuckDBScalarTypeNode {
   readonly dataType: Exclude<DataType, 'nested'>;
 }
 
-/** DuckDB's `JSON` type: text the json extension knows to be JSON. */
+/**
+ * DuckDB's `JSON` type: text the json extension knows to be JSON.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * parseDuckDBType('JSON').kind; // 'json'
+ * parseDuckDBType('JSON[]').kind; // 'list', of 'json'
+ * ```
+ */
 export interface DuckDBJsonTypeNode {
   readonly kind: 'json';
   readonly sqlType: string;
 }
 
-/** DuckDB's `VARIANT` type, whose every value carries a type of its own. */
+/**
+ * DuckDB's `VARIANT` type, whose every value carries a type of its own.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * parseDuckDBType('VARIANT').kind; // 'variant'
+ * ```
+ */
 export interface DuckDBVariantTypeNode {
   readonly kind: 'variant';
   readonly sqlType: string;
 }
 
-/** A LIST: `INTEGER[]`. */
+/**
+ * A LIST: `INTEGER[]`.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('VARCHAR[]');
+ * if (node.kind === 'list') node.element.sqlType; // 'VARCHAR'
+ * ```
+ */
 export interface DuckDBListTypeNode {
   readonly kind: 'list';
   readonly sqlType: string;
   readonly element: DuckDBTypeNode;
 }
 
-/** A fixed-size ARRAY: `FLOAT[768]`. */
+/**
+ * A fixed-size ARRAY: `FLOAT[768]`.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('FLOAT[768]');
+ * if (node.kind === 'array') {
+ *   node.size; // 768
+ *   node.element.sqlType; // 'FLOAT'
+ * }
+ * ```
+ */
 export interface DuckDBArrayTypeNode {
   readonly kind: 'array';
   readonly sqlType: string;
@@ -58,7 +114,19 @@ export interface DuckDBArrayTypeNode {
   readonly element: DuckDBTypeNode;
 }
 
-/** One field of a STRUCT. */
+/**
+ * One field of a STRUCT.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const named = parseDuckDBType('STRUCT(x DOUBLE, "my field" VARCHAR)');
+ * if (named.kind === 'struct') named.fields.map((f) => f.name); // ['x', 'my field']
+ * const unnamed = parseDuckDBType('STRUCT(INTEGER, VARCHAR)');
+ * if (unnamed.kind === 'struct') unnamed.fields.map((f) => f.name); // [null, null]
+ * ```
+ */
 export interface DuckDBStructField {
   /**
    * The field's name: `null` for a field of an unnamed struct
@@ -71,14 +139,39 @@ export interface DuckDBStructField {
   readonly type: DuckDBTypeNode;
 }
 
-/** A STRUCT: `STRUCT(x DOUBLE, y DOUBLE)`. */
+/**
+ * A STRUCT: `STRUCT(x DOUBLE, y DOUBLE)`.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('STRUCT(x DOUBLE, tags VARCHAR[])');
+ * if (node.kind === 'struct') {
+ *   node.fields.map((f) => `${f.name}: ${f.type.kind}`); // ['x: scalar', 'tags: list']
+ * }
+ * ```
+ */
 export interface DuckDBStructTypeNode {
   readonly kind: 'struct';
   readonly sqlType: string;
   readonly fields: readonly DuckDBStructField[];
 }
 
-/** A MAP: `MAP(VARCHAR, INTEGER)`. */
+/**
+ * A MAP: `MAP(VARCHAR, INTEGER)`.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('MAP(DATE, INTEGER[])');
+ * if (node.kind === 'map') {
+ *   node.key.sqlType; // 'DATE'
+ *   node.value.kind; // 'list'
+ * }
+ * ```
+ */
 export interface DuckDBMapTypeNode {
   readonly kind: 'map';
   readonly sqlType: string;
@@ -86,13 +179,33 @@ export interface DuckDBMapTypeNode {
   readonly value: DuckDBTypeNode;
 }
 
-/** One member of a UNION. */
+/**
+ * One member of a UNION.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('UNION(num INTEGER, "my tag" VARCHAR)');
+ * if (node.kind === 'union') node.members.map((m) => m.tag); // ['num', 'my tag']
+ * ```
+ */
 export interface DuckDBUnionMember {
   readonly tag: string;
   readonly type: DuckDBTypeNode;
 }
 
-/** A UNION: `UNION(num INTEGER, str VARCHAR)`. */
+/**
+ * A UNION: `UNION(num INTEGER, str VARCHAR)`.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('UNION(num INTEGER, str VARCHAR)');
+ * if (node.kind === 'union') node.members[1]!.type.sqlType; // 'VARCHAR'
+ * ```
+ */
 export interface DuckDBUnionTypeNode {
   readonly kind: 'union';
   readonly sqlType: string;
@@ -102,6 +215,15 @@ export interface DuckDBUnionTypeNode {
 /**
  * A type the parser could not read: text it does not understand, or nesting
  * deeper than `MAX_TYPE_DEPTH` (256) levels.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+ *
+ * const node = parseDuckDBType('STRUCT(a INTEGER');
+ * node.kind; // 'unknown'
+ * node.sqlType; // 'STRUCT(a INTEGER'
+ * ```
  */
 export interface DuckDBUnknownTypeNode {
   readonly kind: 'unknown';
@@ -133,7 +255,17 @@ export type DuckDBTypeNode =
   | DuckDBUnionTypeNode
   | DuckDBUnknownTypeNode;
 
-/** The kinds of {@link DuckDBTypeNode}. */
+/**
+ * The kinds of {@link DuckDBTypeNode}.
+ *
+ * @example
+ * ```ts
+ * import { parseDuckDBType, type DuckDBTypeKind } from '@jeyabbalas/data-table/advanced';
+ *
+ * const lists: readonly DuckDBTypeKind[] = ['list', 'array'];
+ * lists.includes(parseDuckDBType('FLOAT[768]').kind); // true
+ * ```
+ */
 export type DuckDBTypeKind = DuckDBTypeNode['kind'];
 
 /**
@@ -678,21 +810,6 @@ export function dataTypeOf(node: DuckDBTypeNode): DataType {
 }
 
 /**
- * Whether a DuckDB type, as `DESCRIBE` names it (`ColumnSchema.originalType`),
- * is nested: a LIST, an ARRAY, a STRUCT, a MAP, a UNION or a VARIANT. Their
- * values are not scalars, and the grid reads them as text.
- *
- * @example
- * ```ts
- * isNestedSqlType('INTEGER[]');  // true
- * isNestedSqlType('JSON');       // false
- * ```
- */
-export function isNestedSqlType(originalType: string | undefined): boolean {
-  return originalType !== undefined && dataTypeOf(parseDuckDBType(originalType)) === 'nested';
-}
-
-/**
  * Whether `node`, or any type inside it, is of one of `kinds`.
  *
  * @example
@@ -724,49 +841,4 @@ export function containsKind(
  */
 export function needsTextMatch(node: DuckDBTypeNode): boolean {
   return containsKind(node, ['union', 'variant', 'unknown']);
-}
-
-/** A field of a struct, reached through fields of structs: {@link structPaths}. */
-export interface DuckDBStructPath {
-  /**
-   * Field names from the outer struct in; an unnamed field is its 1-based
-   * position.
-   */
-  readonly path: readonly (string | number)[];
-  readonly type: DuckDBTypeNode;
-}
-
-/**
- * Every field of a struct type, and every field of a field that is a struct
- * itself, at any depth, in declaration order (a struct field comes before
- * its own fields). Lists, maps and unions inside are not entered: their
- * fields are not at a fixed path. Empty for a type that is not a struct.
- *
- * @param limit - Stop after this many paths.
- *
- * @example
- * ```ts
- * structPaths(parseDuckDBType('STRUCT(owner STRUCT(name VARCHAR), n INTEGER)'))
- *   .map((p) => p.path.join('.'));
- * // ['owner', 'owner.name', 'n']
- * ```
- */
-export function structPaths(node: DuckDBTypeNode, limit = 2000): DuckDBStructPath[] {
-  const paths: DuckDBStructPath[] = [];
-  if (node.kind !== 'struct') return paths;
-  // Depth-first, in order: push children in reverse.
-  const pending: DuckDBStructPath[] = [];
-  const pushFields = (struct: DuckDBStructTypeNode, prefix: readonly (string | number)[]): void => {
-    for (let i = struct.fields.length - 1; i >= 0; i--) {
-      const field = struct.fields[i]!;
-      pending.push({ path: [...prefix, field.name ?? i + 1], type: field.type });
-    }
-  };
-  pushFields(node, []);
-  while (pending.length > 0 && paths.length < limit) {
-    const current = pending.pop()!;
-    paths.push(current);
-    if (current.type.kind === 'struct') pushFields(current.type, current.path);
-  }
-  return paths;
 }

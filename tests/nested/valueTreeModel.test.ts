@@ -812,14 +812,24 @@ describe('strings', () => {
   });
 
   it('cuts DuckDB text, numbers and keys at the cap too', () => {
-    const root = tree(JSON.stringify({ ['k'.repeat(10)]: 'b'.repeat(30) }), 'MAP(VARCHAR, BLOB)', {
-      stringCap: 5,
-    });
+    const cap = VALUE_TREE_STRING_CAP;
+    const root = tree(
+      JSON.stringify({ ['k'.repeat(cap + 10)]: 'b'.repeat(cap + 30) }),
+      'MAP(VARCHAR, BLOB)',
+    );
     const entry = kids(root)[0]!;
-    expect(entry.key?.text).toBe('kkkkk…');
-    expect(entry.value).toEqual({ text: 'bbbbb…', style: 'text', more: '25 more characters' });
-    const number = kids(tree('[123456789]', 'INTEGER[]', { stringCap: 4 }))[0]!;
-    expect(number.value).toEqual({ text: '1234…', style: 'number', more: '5 more characters' });
+    expect(entry.key?.text).toBe(`${'k'.repeat(cap)}…`);
+    expect(entry.value).toEqual({
+      text: `${'b'.repeat(cap)}…`,
+      style: 'text',
+      more: '30 more characters',
+    });
+    const number = kids(tree(`[${'1'.repeat(cap + 5)}]`, 'INTEGER[]'))[0]!;
+    expect(number.value).toEqual({
+      text: `${'1'.repeat(cap)}…`,
+      style: 'number',
+      more: '5 more characters',
+    });
   });
 
   it('cuts a string in a preview inside its quotes, never inside an escape', () => {
@@ -873,11 +883,6 @@ describe('previews', () => {
       expect(root.preview, json).toBe(preview);
       expect(root.preview!.length).toBeLessThanOrEqual(VALUE_TREE_PREVIEW_CHARS);
     }
-  });
-
-  it('follow the previewChars option', () => {
-    expect(tree('[1,2,3,4,5]', 'INTEGER[]', { previewChars: 10 }).preview).toBe('[1, 2, …]');
-    expect(tree('[123456]', 'INTEGER[]', { previewChars: 5 }).preview).toBe('[…]');
   });
 });
 
@@ -1002,18 +1007,6 @@ describe('buckets', () => {
     );
     expect(kids(struct).map((b) => b.label)).toEqual(['[1 … 100]', '[101 … 150]']);
     expect(kids(kids(struct)[1]!)[49]!.path).toEqual(['f149']);
-  });
-
-  it('follows the bucketSize option', () => {
-    const root = tree(JSON.stringify(Array.from({ length: 25 }, (_, i) => i)), 'INTEGER[]', {
-      bucketSize: 10,
-    });
-    expect(kids(root).map((b) => b.label)).toEqual(['[1 … 10]', '[11 … 20]', '[21 … 25]']);
-    const deep = tree(JSON.stringify(Array.from({ length: 101 }, (_, i) => i)), 'INTEGER[]', {
-      bucketSize: 10,
-    });
-    expect(kids(deep).map((b) => b.label)).toEqual(['[1 … 100]', '[101 … 101]']);
-    expect(kids(kids(deep)[0]!).map((b) => b.label)[9]).toBe('[91 … 100]');
   });
 });
 
@@ -1374,14 +1367,7 @@ describe('options and messages', () => {
     expect(kids(kids(root)[0]!)[0]!.value!.more).toBe('1 caractères de plus');
   });
 
-  it('falls back to the defaults for options that make no sense', () => {
-    const root = tree(JSON.stringify(Array.from({ length: 101 }, (_, i) => i)), 'INTEGER[]', {
-      bucketSize: 1,
-      stringCap: 0,
-      previewChars: Number.NaN,
-    });
-    expect(kids(root)).toHaveLength(2);
-    expect(root.preview!.length).toBeLessThanOrEqual(VALUE_TREE_PREVIEW_CHARS);
+  it('shows the root key escaped, and the empty one as ""', () => {
     expect(tree('{"k":1}', 'JSON', { rootKey: 'a\nb' }).key).toEqual({
       text: 'a\\nb',
       kind: 'column',

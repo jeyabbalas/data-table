@@ -280,12 +280,6 @@ export interface ValueTreeNode {
 export interface ValueTreeOptions {
   /** Key text of the root, such as the column's name. Without it the root has no key. */
   rootKey?: string | undefined;
-  /** Children a container lists before splitting them into buckets. Default 100. */
-  bucketSize?: number | undefined;
-  /** Characters of text a leaf or key shows before cutting the rest. Default 2,000. */
-  stringCap?: number | undefined;
-  /** The longest container preview. Default 60. */
-  previewChars?: number | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -767,9 +761,6 @@ function allUnnamed(fields: readonly DuckDBStructField[]): boolean {
 
 interface Context {
   readonly messages: ValueTreeMessages;
-  readonly bucketSize: number;
-  readonly stringCap: number;
-  readonly previewChars: number;
   /** The value was read through VARIANT: its unions hold bare values. */
   readonly throughVariant: boolean;
 }
@@ -859,7 +850,7 @@ function compact(
 
 function compactShape(shape: Shape, room: number, context: Context): string | undefined {
   // A key longer than the room cannot fit anyway: cut it there, without reading the rest.
-  const cap = Math.min(context.stringCap, room);
+  const cap = Math.min(VALUE_TREE_STRING_CAP, room);
   switch (shape.kind) {
     case 'list':
       return joinItems('[', ']', shape.items.length, room, (i, r) =>
@@ -928,7 +919,7 @@ function compactShape(shape: Shape, room: number, context: Context): string | un
 
 /** `text` cut at the cap and shown in `style`. */
 function cappedValue(text: string, style: ValueStyle, context: Context): ValueTreeValue {
-  const end = cutPoint(text, context.stringCap);
+  const end = cutPoint(text, VALUE_TREE_STRING_CAP);
   const head = end < text.length ? text.slice(0, end) : text;
   const omitted = end < text.length ? codePointsFrom(text, end) : 0;
   let shown: string;
@@ -1120,7 +1111,7 @@ class TreeNode implements ValueTreeNode {
     }
 
     const total = childTotal(shape);
-    const preview = compactShape(shape, context.previewChars, context) ?? ELLIPSIS;
+    const preview = compactShape(shape, VALUE_TREE_PREVIEW_CHARS, context) ?? ELLIPSIS;
     let countText: string | undefined;
     const messages = context.messages;
     switch (shape.kind) {
@@ -1189,7 +1180,7 @@ class TreeNode implements ValueTreeNode {
 
   #children(): readonly TreeNode[] {
     if (this.#loaded) return this.#loaded;
-    const size = this.#context.bucketSize;
+    const size = VALUE_TREE_BUCKET_SIZE;
     const owner = this.#owner;
     let loaded: TreeNode[];
     if (owner) {
@@ -1204,7 +1195,7 @@ class TreeNode implements ValueTreeNode {
   }
 
   #buckets(start: number, end: number): TreeNode[] {
-    const unit = bucketUnit(end - start, this.#context.bucketSize);
+    const unit = bucketUnit(end - start, VALUE_TREE_BUCKET_SIZE);
     const buckets: TreeNode[] = [];
     for (let s = start; s < end; s += unit) {
       buckets.push(TreeNode.#bucket(this, s, Math.min(end, s + unit)));
@@ -1222,7 +1213,7 @@ class TreeNode implements ValueTreeNode {
   #child(i: number): TreeNode {
     const shape = this.#shape!;
     const context = this.#context;
-    const cap = context.stringCap;
+    const cap = VALUE_TREE_STRING_CAP;
     const id = `${this.id}/${i}`;
     // Typed children: their own type decides whether JSON steps follow.
     const typed = (
@@ -1313,11 +1304,10 @@ class TreeNode implements ValueTreeNode {
    * How many rows expanding `node` adds: its children, or its buckets. For
    * {@link defaultExpansion}, without building them.
    */
-  static shownChildCount(node: ValueTreeNode): number {
-    if (!(node instanceof TreeNode)) return node.children?.().length ?? 0;
+  static shownChildCount(node: TreeNode): number {
     if (node.#loaded) return node.#loaded.length;
     if (!node.children) return 0;
-    const size = node.#context.bucketSize;
+    const size = VALUE_TREE_BUCKET_SIZE;
     const total = node.bucket ? node.bucket.end - node.bucket.start : childTotal(node.#shape!);
     return total > size ? Math.ceil(total / bucketUnit(total, size)) : total;
   }
@@ -1326,13 +1316,6 @@ class TreeNode implements ValueTreeNode {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
-
-/** A positive whole number from an option, or `fallback`. */
-function wholeOption(value: number | undefined, min: number, fallback: number): number {
-  return value !== undefined && Number.isFinite(value) && value >= min
-    ? Math.floor(value)
-    : fallback;
-}
 
 /**
  * Build the tree for one value: `json` (from `parseJsonTree` over
@@ -1370,18 +1353,11 @@ export function buildValueTree(
   messages: ValueTreeMessages,
   options: ValueTreeOptions = {},
 ): ValueTreeNode {
-  const throughVariant = readsThroughVariant(type);
-  const context: Context = {
-    messages,
-    bucketSize: wholeOption(options.bucketSize, 2, VALUE_TREE_BUCKET_SIZE),
-    stringCap: wholeOption(options.stringCap, 1, VALUE_TREE_STRING_CAP),
-    previewChars: wholeOption(options.previewChars, 3, VALUE_TREE_PREVIEW_CHARS),
-    throughVariant,
-  };
+  const context: Context = { messages, throughVariant: readsThroughVariant(type) };
   const key: ValueTreeKey | null =
     options.rootKey === undefined
       ? null
-      : { text: keyText(options.rootKey, context.stringCap), kind: 'column' };
+      : { text: keyText(options.rootKey, VALUE_TREE_STRING_CAP), kind: 'column' };
   return TreeNode.item(
     { id: '$', key, json, type, inJson: false, container: null, step: null },
     context,
@@ -1392,7 +1368,8 @@ export function buildValueTree(
  * Which nodes a tree view should open with: the root, and its children too
  * when that shows {@link VALUE_TREE_EXPANDED_ROWS} rows or fewer in all (the
  * root, its children, and the children of each of those that expands).
- * Builds the root's children to decide; nothing deeper.
+ * Builds the root's children to decide; nothing deeper. `root` is a root
+ * {@link buildValueTree} built.
  *
  * The returned function fits `TreeViewOptions.initiallyExpanded` once the
  * panel maps its tree nodes back to these (it ignores `level` and knows the
@@ -1416,7 +1393,8 @@ export function defaultExpansion(
     const expandable = children.filter((child) => child.children !== undefined);
     let rows = 1 + children.length;
     for (const child of expandable) {
-      rows += TreeNode.shownChildCount(child);
+      // buildValueTree builds every node of its tree as a TreeNode.
+      rows += TreeNode.shownChildCount(child as TreeNode);
       if (rows > VALUE_TREE_EXPANDED_ROWS) break;
     }
     if (rows <= VALUE_TREE_EXPANDED_ROWS) for (const child of expandable) open.add(child);

@@ -17,7 +17,13 @@
 import axe from 'axe-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModalHost, __resetModalHostForTests } from '@/core/ModalHost';
-import { TreeView, type TreeViewNode, type TreeViewOptions } from '@/table/TreeView';
+import {
+  TreeView,
+  type TreeViewNode,
+  type TreeViewOptions,
+  closeIcon,
+  element,
+} from '@/table/TreeView';
 
 type Spec = TreeViewNode<string>;
 
@@ -1295,5 +1301,25 @@ describe('TreeView — axe', () => {
     ]) {
       expect(passed, rule).toContain(rule);
     }
+  });
+});
+
+describe('TreeView — the helpers the panels share', () => {
+  it('builds an element with its class and text, and no class attribute for none', () => {
+    const title = element('span', 'dt-x__title', 'tags · Row 4');
+    expect(title.tagName).toBe('SPAN');
+    expect(title.className).toBe('dt-x__title');
+    expect(title.textContent).toBe('tags · Row 4');
+    const option = element('option', '');
+    expect(option.hasAttribute('class')).toBe(false);
+    expect(option.textContent).toBe('');
+  });
+
+  it('draws the close button’s × hidden from assistive technology', () => {
+    const icon = closeIcon();
+    expect(icon.namespaceURI).toBe('http://www.w3.org/2000/svg');
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+    expect(icon.querySelectorAll('path')).toHaveLength(1);
+    expect(closeIcon()).not.toBe(icon);
   });
 });

@@ -206,8 +206,7 @@ export class TreeView<T = unknown> {
     this.onCopy = options.onCopy;
     this.onAction = options.onAction;
 
-    this.element = document.createElement('div');
-    this.element.className = this.base;
+    this.element = element('div', this.base);
     this.element.setAttribute('role', 'tree');
     if (options.label !== undefined) this.element.setAttribute('aria-label', options.label);
 
@@ -298,8 +297,7 @@ export class TreeView<T = unknown> {
     posinset: number,
     setsize: number,
   ): Row<T> {
-    const item = document.createElement('div');
-    item.className = `${this.base}__item`;
+    const item = element('div', `${this.base}__item`);
     item.setAttribute('role', 'treeitem');
     item.setAttribute('aria-level', String(level));
     item.setAttribute('aria-setsize', String(setsize));
@@ -313,12 +311,10 @@ export class TreeView<T = unknown> {
     // The one inline style, and not a visual one: the stylesheet indents by it.
     item.style.setProperty('--dt-tree-level', String(level));
 
-    const twisty = document.createElement('span');
-    twisty.className = `${this.base}__twisty`;
+    const twisty = element('span', `${this.base}__twisty`);
     twisty.setAttribute('aria-hidden', 'true');
 
-    const content = document.createElement('span');
-    content.className = `${this.base}__content`;
+    const content = element('span', `${this.base}__content`);
     node.render(content);
 
     item.append(twisty, content);
@@ -328,8 +324,7 @@ export class TreeView<T = unknown> {
     // count it as a tab stop. The pointer never focuses it (see mousedown).
     let action: HTMLElement | null = null;
     if (node.actionable && this.onAction) {
-      action = document.createElement('span');
-      action.className = `${this.base}__add`;
+      action = element('span', `${this.base}__add`);
       action.setAttribute('aria-hidden', 'true');
       action.setAttribute('tabindex', '-1');
       if (this.actionTitle !== undefined) action.setAttribute('title', this.actionTitle);
@@ -675,6 +670,53 @@ export class TreeView<T = unknown> {
     // the tab stop and the selection never disagree with DOM focus.
     this.activate(row, false);
   }
+}
+
+/**
+ * An element of `tag` with `className` (none when empty), and `text` as its
+ * text. The tree's, and the panels' that host a tree, which load this chunk
+ * anyway: the value inspector and the extract panel.
+ *
+ * @example
+ * ```ts
+ * const title = element('span', 'dt-value-inspector__title', 'tags · Row 4');
+ * ```
+ */
+export function element<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+/**
+ * The × of a panel's close button, as the filter panel draws it. For the
+ * panels that host a tree, as {@link element} is.
+ *
+ * @example
+ * ```ts
+ * closeButton.appendChild(closeIcon());
+ * ```
+ */
+export function closeIcon(): SVGSVGElement {
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('fill', 'currentColor');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(svgNs, 'path');
+  path.setAttribute(
+    'd',
+    'M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z',
+  );
+  svg.appendChild(path);
+  return svg;
 }
 
 /** `rows` and their expanded descendants, in display order. Iterative: values nest deeply. */

@@ -45,7 +45,7 @@ import {
   uniqueColumnName,
 } from '../nested/extractExpression';
 import { columnTypeLabel, columnTypeTitle, typeOutline } from '../nested/typeOutline';
-import { TreeView, type TreeViewNode } from './TreeView';
+import { TreeView, type TreeViewNode, closeIcon, element } from './TreeView';
 
 /** Gap between the button and the panel, and the margin kept from the table's edges. In px. */
 const GAP = 4;
@@ -53,8 +53,6 @@ const EDGE = 8;
 
 /** The least height the panel is given, in px, when the button leaves less room below. */
 const MIN_HEIGHT = 160;
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** Mints the panels' element ids, unique on the page. */
 let panelCount = 0;
@@ -1070,33 +1068,4 @@ export class ExtractColumnPanel {
     this.destroyTree();
     this.onOpenChange?.(null);
   }
-}
-
-/** An element of `tag` with `className`, and `text` as its text. */
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-
-/** The × of the close button, as the filter panel draws it. */
-function closeIcon(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 16 16');
-  svg.setAttribute('width', '14');
-  svg.setAttribute('height', '14');
-  svg.setAttribute('fill', 'currentColor');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute(
-    'd',
-    'M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06z',
-  );
-  svg.appendChild(path);
-  return svg;
 }

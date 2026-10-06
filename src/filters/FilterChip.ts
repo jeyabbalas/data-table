@@ -5,6 +5,7 @@
  * a human-readable description, with a remove button.
  */
 
+import { graphemeSegmenter } from '../core/graphemes';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { Filter } from './FilterTypes';
 
@@ -69,8 +70,6 @@ function truncateSQL(sql: string, maxLen: number): string {
  */
 export const CHIP_VALUE_MAX_LENGTH = 60;
 
-let graphemeSegmenter: Intl.Segmenter | null | undefined;
-
 /**
  * Cut `text` to at most `max` characters, the last of them `…`. Characters
  * are graphemes where the runtime has `Intl.Segmenter`, so an emoji sequence
@@ -79,16 +78,11 @@ let graphemeSegmenter: Intl.Segmenter | null | undefined;
 function shortenText(text: string, max: number): string {
   // A string's UTF-16 length is never below its count of characters.
   if (text.length <= max) return text;
-  if (graphemeSegmenter === undefined) {
-    graphemeSegmenter =
-      typeof Intl.Segmenter === 'function'
-        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-        : null;
-  }
+  const segmenter = graphemeSegmenter();
   // Read one character past `max`, to learn whether there is more to cut.
   const head: string[] = [];
-  if (graphemeSegmenter) {
-    for (const { segment } of graphemeSegmenter.segment(text)) {
+  if (segmenter) {
+    for (const { segment } of segmenter.segment(text)) {
       head.push(segment);
       if (head.length > max) break;
     }

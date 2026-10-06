@@ -2,6 +2,8 @@
  * Shared utility functions for visualizations
  */
 
+import { graphemeSegmenter } from '../core/graphemes';
+
 /**
  * Format count with thousands separator
  */
@@ -107,8 +109,6 @@ export function drawSegmentRect(
   ctx.fill();
 }
 
-let graphemeSegmenter: Intl.Segmenter | null | undefined;
-
 /**
  * Where each character of `text` ends, in UTF-16 units, first to last.
  * Characters are graphemes where the runtime has `Intl.Segmenter`, so an
@@ -116,15 +116,10 @@ let graphemeSegmenter: Intl.Segmenter | null | undefined;
  * else code points, as the filter chips cut their values.
  */
 function characterEnds(text: string): number[] {
-  if (graphemeSegmenter === undefined) {
-    graphemeSegmenter =
-      typeof Intl === 'object' && typeof Intl.Segmenter === 'function'
-        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-        : null;
-  }
+  const segmenter = graphemeSegmenter();
   const ends: number[] = [];
-  if (graphemeSegmenter) {
-    for (const { index, segment } of graphemeSegmenter.segment(text)) {
+  if (segmenter) {
+    for (const { index, segment } of segmenter.segment(text)) {
       ends.push(index + segment.length);
     }
   } else {

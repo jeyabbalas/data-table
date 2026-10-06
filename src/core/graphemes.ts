@@ -5,20 +5,31 @@
  *
  * A cut is asked for at a UTF-16 index, the measure the places that cut
  * text budget in: a type outline, a value inspector's preview and keys, an
- * error message's type. Imports nothing, so the worker could use it too.
+ * error message's type. The filter chips, which count graphemes, and the
+ * charts' labels, which measure them, share its segmenter. Imports nothing,
+ * so the worker could use it too.
  */
 
-let graphemeSegmenter: Intl.Segmenter | null | undefined;
+let shared: Intl.Segmenter | null | undefined;
 
-/** A grapheme segmenter, or `null` where `Intl.Segmenter` is missing. */
-function graphemes(): Intl.Segmenter | null {
-  if (graphemeSegmenter === undefined) {
-    graphemeSegmenter =
+/**
+ * A grapheme segmenter, made once and shared, or `null` where
+ * `Intl.Segmenter` is missing: then a caller falls back to code points.
+ *
+ * @example
+ * ```ts
+ * const segmenter = graphemeSegmenter();
+ * segmenter ? [...segmenter.segment('e\u0301x')].length : 3; // 2: é and x
+ * ```
+ */
+export function graphemeSegmenter(): Intl.Segmenter | null {
+  if (shared === undefined) {
+    shared =
       typeof Intl === 'object' && typeof Intl.Segmenter === 'function'
         ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
         : null;
   }
-  return graphemeSegmenter;
+  return shared;
 }
 
 /** UTF-16 units either side of a cut that are segmented to find the grapheme it falls in. */
@@ -63,7 +74,7 @@ export function graphemeStart(text: string, at: number): number {
   if (at <= 0 || at >= text.length) return Math.max(0, Math.min(at, text.length));
   let cut = at;
   if (isLowSurrogate(text.charCodeAt(cut)) && isHighSurrogate(text.charCodeAt(cut - 1))) cut--;
-  const segmenter = graphemes();
+  const segmenter = graphemeSegmenter();
   if (!segmenter || cut === 0) return cut;
   let from = Math.max(0, cut - WINDOW);
   if (isLowSurrogate(text.charCodeAt(from)) && isHighSurrogate(text.charCodeAt(from - 1))) from--;

@@ -542,15 +542,17 @@ a single line cut off at the column's edge. Opened by `F2` on the keyboard
 cursor, a double click, or the cell's inspect icon (drawn by the stylesheet on
 hover and on the cursor's cell; no element, no tab stop), or by
 `TableContainer.openValueInspector({ row, column })` on a row the grid has
-rendered (`false` for any other). A non-modal `role="dialog"` beside the cell,
-titled `tags · Row 3`, holding the exact value, read by `__rowid__`, as a
-WAI-ARIA tree: keys, values, types, counts, and buckets of 100 for big
-containers. It shows the first 2,097,152 characters of the value's JSON text,
-and Copy JSON copies the whole value as standard JSON, up to 8,388,608
-characters. With the `derivedColumns` UI on, its "Add as column" buttons add
-the active node as a column ([Extract Panel](#extract-panel)). `Escape`
-closes it and focus returns to the grid, cursor unchanged. A lazy chunk,
-loaded the first time it opens.
+rendered (`false` for any other; a `true` still opens nothing when the user
+moves on, to another cell, panel, filter or sort, before the panel is up). A
+non-modal `role="dialog"` beside the cell, titled `tags · Row 3`, holding the
+exact value, read by `__rowid__`, as a WAI-ARIA tree: keys, values, types,
+counts, and buckets of 100 for big containers. It shows the first 2,097,152
+characters of the value's JSON text, and Copy JSON copies the whole value as
+standard JSON, up to 8,388,608 characters. With the `derivedColumns` UI on,
+its "Add as column" buttons add the active node as a column
+([Extract Panel](#extract-panel)). `Escape` closes it and focus returns to the
+grid, cursor unchanged. A lazy chunk, loaded the first time it opens; one that
+fails to download is announced and reported as `CHUNK_LOAD_FAILED`.
 See: [Nested and JSON columns](./guides/loading-data.md#the-value-inspector) · [Accessibility](./guides/accessibility.md#value-inspector-f2-on-a-nested-cell) · Source: `src/table/ValueInspector.ts`, `src/table/TreeView.ts`, `src/nested/valueTreeModel.ts`
 
 ### VectorColumnDef

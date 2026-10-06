@@ -44,9 +44,11 @@ A LIST, ARRAY, STRUCT, MAP, UNION or VARIANT column has `type: 'nested'`,
 and its chart is `NestedSummaryVisualization` (registry entry
 `nested-summary`, priority 0). Grouping such values the way `ValueCounts`
 does took 18–21 s on a 200,000-row `FLOAT[768]` column, with the worker, and
-so the grid, frozen meanwhile. The summary reads one ungrouped
-`COUNT(*), COUNT(c)` scan instead, which also counts the rows passing the
-filters, and draws:
+so the grid, frozen meanwhile. The summary reads ungrouped
+`COUNT(*), COUNT(c)` scans instead, in one query: one of every row and, with
+filters on, one of the rows passing them, with the filters in its `WHERE` as
+the other charts put them, so a raw-SQL filter counts the rows the grid
+shows. It draws:
 
 - an 18 px bar of the column's non-null share (`--dt-primary`, labelled
   with its percentage when wide enough) and null share (`--dt-accent`,
@@ -98,8 +100,9 @@ What to expect:
 - **Loading.** `loadData`, and `await createDataTable({ source })`, wait
   for the charts in view to draw their first data, not for every column's.
 - **Before its data.** A new chart stays blank until its data arrives, at
-  load and when its column scrolls into view. "No data" means the column
-  has no values and no nulls.
+  load and when its column scrolls into view. "No data"
+  (`messages.statistics.noData`) means the column has no values and no
+  nulls.
 - **Filtering.** A filter change refreshes only the charts that exist. A
   column scrolled into view later gets its chart built with the filters in
   force then, so it is correct when it appears. Until then its stats show

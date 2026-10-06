@@ -143,11 +143,15 @@ is a thin Promise-based RPC wrapper:
   ([`src/data/WorkerBridge.ts:51-78`](../../src/data/WorkerBridge.ts)):
   `cache: false` bypasses the SQL-text cache — viewport row fetches use
   it, since their rows already live in `TableBody`'s row cache (see
-  [Row fetching](#row-fetching)) — and `priority: 'high' | 'normal'`
-  picks the worker queue.
+  [Row fetching](#row-fetching)) — and
+  `priority: 'high' | 'elevated' | 'normal'` picks its place in the worker
+  queue.
 - **Serial priority queue.** The worker runs one query at a time,
-  drained from an explicit two-priority FIFO — `'high'` for viewport row
-  fetches, `'normal'` for everything else
+  drained from an explicit FIFO of three priorities — `'high'` for
+  viewport row fetches, `'elevated'` for a read a user is waiting on
+  (`getCellValue`, the value inspector), which goes ahead of every queued
+  `'normal'` query but never of a row fetch, and `'normal'` for everything
+  else
   ([`src/worker/dispatcher.ts:48-80`](../../src/worker/dispatcher.ts)).
   Serialization costs nothing real — SQL already executes serially
   inside DuckDB-WASM's single-threaded worker — and buys truthful
@@ -400,13 +404,16 @@ across block boundaries and drop others.
 Both shapes select some columns as text
 ([`gridValueSQL`](../../src/data/valueSql.ts)): a nested column (LIST,
 ARRAY, STRUCT, MAP, UNION, VARIANT) as DuckDB's text for its value, cut to
-32 items and 1,000 graphemes so a block stays kilobytes; BLOB, BIT,
-GEOMETRY and BIGNUM values, which Arrow carries as bytes, INTERVAL, which it
-carries as numbers that do not hold it, and ENUM, whose values a raw read
-makes the worker read twice (`executeQueryCancellable`,
-`src/worker/duckdb.ts`), as their text too. Each keeps its column's name as
-its alias, so the outer `ORDER BY` names the table (`"t"."col"`) to sort by
-the value rather than by the text.
+32 items and 1,000 graphemes so a block stays kilobytes, and formatted from
+only the items that text can reach, so a long list inside a value costs no
+more than a short one; BLOB, BIT, GEOMETRY and BIGNUM values, which Arrow
+carries as bytes, INTERVAL, which it carries as numbers that do not hold it,
+TIME_NS, which it carries in nanoseconds, TIME WITH TIME ZONE, which it
+carries without its offset, and ENUM, whose values a raw read makes the
+worker read twice (`executeQueryCancellable`, `src/worker/duckdb.ts`), as
+their text too. Each keeps its column's name as its alias, so the outer
+`ORDER BY` names the table (`"t"."col"`) to sort by the value rather than by
+the text.
 
 Unlike `bufferRows` and `maxVirtualHeight`, the pipeline knobs are
 public: `fetchBlockSize`, `rowCacheRows`, and `prefetch` are accepted by

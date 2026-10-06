@@ -181,6 +181,15 @@ any text that is not JSON (`abc`) is a Conversion Error (`Malformed JSON`),
 which breaks the grid's queries the same way, and valid JSON matches only
 its exact text (`{"a": 1}` does not match `{"a":1}`). So give an exact
 filter on a JSON column `valueType: 'text'` too, as the filter panel does.
+A filter saved before 0.9 has none: a session restore, in its filters and
+its undo and redo entries, and `loadFilterPreset`, imported presets
+included, give a point, set or not-set filter on a JSON column
+`valueType: 'text'` when it has no `valueType` (`jsonFiltersAsText`,
+`src/filters/jsonFilters.ts`). Compared as text, a JSON value matches the
+rows it matched as JSON. `addFilter` changes nothing, a filter on a nested
+column without `valueType` keeps comparing by value, and a derived JSON
+column's restored filters stay as saved, since its type is known only once
+its VIEW is rebuilt.
 
 The text must match the cell's text exactly, spaces and quotes included:
 DuckDB quotes a string inside only when it has to (`[a, b]` is two strings,
@@ -196,9 +205,13 @@ of an unknown type, and the rest of the preset imports (a preset left with
 no valid filter is skipped); a `valueType` on any other filter type is
 ignored (`src/filters/FilterPresets.ts`).
 
-To filter a field of a struct by its value, as a number or a date, add it
-as a column, `table.actions.addNestedFieldColumn('point', ['x'])`, and
-filter that: it gets a histogram and range filters of its own (see
+A text comparison has DuckDB format every row's whole value in each query
+the filter is in, which is every row block, the row count and every chart;
+on a column of long lists or embeddings that is seconds a query (see
+[Performance → Nested columns](../performance.md#nested-columns)). To filter
+a field of a struct by its value, as a number or a date, add it as a column,
+`table.actions.addNestedFieldColumn('point', ['x'])`, and filter that: it
+gets a histogram and range filters of its own (see
 [Derived columns → Nested columns](./derived-columns.md#nested-columns)).
 
 ## Applying, removing, clearing

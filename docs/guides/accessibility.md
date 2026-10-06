@@ -116,8 +116,10 @@ the column's edge. The value inspector shows either value whole, as a tree. It
 opens on such a cell when it holds a value, not a NULL:
 
 - **`F2` on the grid cursor.** The cell is scrolled back into view first if
-  the user has scrolled away from it. `F2` on any other body cell does
-  nothing, as before.
+  the user has scrolled away from it. On a row still loading, as after
+  `Ctrl+End` on a large table, it waits for the row (see
+  [Gotchas](#gotchas)). `F2` on any other body cell, a scalar one or a NULL,
+  does nothing, as before, and leaves the view where it is.
 - **A double click** anywhere in the cell.
 - **A click on the cell's inspect icon**, which shows at the cell's inline end
   on hover and on the cursor's cell. The click moves the cursor there and
@@ -144,7 +146,12 @@ under it:
   `Escape` then clears the cursor, as usual. A press outside the panel, other
   than on its own cell, closes it too, and so does a filter, sort or data
   change, a change of the selection, the cursor moving to another cell, or
-  another panel opening.
+  another panel opening. An open still waiting, for the panel's chunk the
+  first time, is dropped by the same things, and by focus leaving the table,
+  so the panel never takes focus from where the user has gone.
+- Asked again for the value it shows, as the second click of a double click
+  on the inspect icon asks, the panel takes focus back: onto the tree, onto
+  Retry, or onto the panel itself while the value loads.
 - A `role="status"` line in the panel says what it is doing: "Loading…"
   (only after 150 ms, so a fast read says nothing), "Showing the first
   2,097,152 of 3,000,000 characters" for a value too long to show whole,
@@ -181,11 +188,14 @@ A container too big to list at once is split into buckets of 100 items —
 more rows than it shows; `aria-setsize` and `aria-posinset` count the items
 under one parent, buckets included. Positions in a list, array or map are
 1-based, as in SQL; positions in a JSON array 0-based. Copy JSON copies the
-whole value. With the `derivedColumns` UI on (the default), the footer also
-offers "Add as column" for the active item, or its length, size or tag, and
-reports "Adding…" and any failure in the status line; the "+" a row shows on
-hover is `aria-hidden`, since the footer and `Ctrl/Cmd+Enter` do the same. The strings the panel and the tree speak are translatable — see
-[Value inspector](./i18n.md#value-inspector).
+whole value. In a value shown cut short, `Ctrl/Cmd+C` on an item the cut runs
+through (the root, its last item, that item's last item, and so on down) reads
+the value again first, as Copy JSON does, up to 8 MiB. With the `derivedColumns`
+UI on (the default), the footer also offers "Add as column" for the active item,
+or its length, size or tag, and reports "Adding…" and any failure in the status
+line; the "+" a row shows on hover is `aria-hidden`, since the footer and
+`Ctrl/Cmd+Enter` do the same. The strings the panel and the tree speak are
+translatable — see [Value inspector](./i18n.md#value-inspector).
 
 ### Extract panel
 
@@ -230,7 +240,11 @@ After an add, from the panel or the inspector, the cursor moves to the new
 column, on its header from the panel or on the same row from the inspector, the
 column scrolls into view, its header flashes, and the live region says "Column
 point_x added". A failure with neither panel open is announced as "Could not
-add the column: …".
+add the column: …". An add still running is not sent again: the panel opened
+again on its column reads "Adding…" until it lands. Once the panel that asked
+has been closed, by Cancel, `Escape`, a press outside, another panel or a
+cursor move, the column is still added and announced, but the cursor, the
+view and focus stay where the user has gone.
 
 ### Focus model (single cursor + `aria-activedescendant`)
 
@@ -563,7 +577,7 @@ messages: {
 - **Live-region announcements are `polite`, not `assertive`.** Long-running operations queue without interrupting the user's current read. For ops that need interruption (errors), raise your own `role="alert"` region.
 - **Hide button preserves the last-visible column.** Pressing hide on the only visible column does nothing — the table must have at least one visible column.
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
-- **`F2` on a body cell only opens the value inspector.** On a cell of a nested or JSON column that holds a value, it opens the inspector; on a row still loading, as after `Ctrl+End` on a large table, it opens it once the row arrives with a value there, unless first the cursor moves, a filter, sort or selection changes, or focus leaves the table; on any other body cell, a scalar one or a NULL, it does nothing. Body cells have no controls mode.
+- **`F2` on a body cell only opens the value inspector.** On a cell of a nested or JSON column that holds a value, it opens the inspector; on a row still loading, as after `Ctrl+End` on a large table, it opens it once the row arrives with a value there, unless first the cursor moves, a filter, sort, selection or the table changes, or another panel opens. When the row arrives, the cursor must still be on the cell, focus on the grid (not on a header button) and no dialog open, and a row that has left the rows rendered drops the request: it never opens later. On any other body cell, a scalar one or a NULL, it does nothing and scrolls nothing. Body cells have no controls mode.
 - **High-DPI + custom focus ring.** If you override `--dt-primary`, check that the focus outline contrast ratio stays ≥ 3:1 against the cell background.
 
 ## Manual screen-reader test plan

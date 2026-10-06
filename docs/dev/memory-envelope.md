@@ -160,8 +160,11 @@ every text column then counted 8 bytes.
   on tables of 1 to 200,000 rows, single columns of each kind match to the block; the cases are in
   `tests/worker/loaders/memoryBudget.test.ts`.
 - **Lengths come from a second sample** of 2,048 rows, caught on its own: the average length of
-  each list (`len`), map (`cardinality`) and text inside a nested value. Lists below the outermost
-  level count 4 items. The text sample now picks columns by their parsed type (top-level VARCHAR,
+  each list (`len`), map (`cardinality`) and text inside a nested value, each charged its own, so
+  a struct of several lists is sized list by list. `STRUCT(chunks VARCHAR[], ids BIGINT[])`, with
+  2 chunks of 5,000 characters and 2,000 ids a row, came out at 100 GB for 20,000 rows that take
+  0.53 GB while one average stood for both lists, and is now estimated at 0.995×. Lists below the
+  outermost level count 4 items. The text sample now picks columns by their parsed type (top-level VARCHAR,
   BLOB, BIT and JSON) and measures text as `strlen(CAST(c AS VARCHAR))`, which binds for a Parquet
   JSON column too, and BLOB and BIT as `octet_length(c)`.
 - **Whole tables** (`tests/worker/loaders/memoryBudget.duckdb.test.ts`): 20,000 `FLOAT[768]`

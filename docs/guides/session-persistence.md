@@ -64,7 +64,13 @@ On mount:
    derived columns, the filters, sort and columns are restored in one change
    with them: a filter or sort that names a derived column is read and
    counted once the VIEW that has the column is back, and one whose derived
-   column does not come back (its expression no longer binds) is dropped
+   column does not come back is dropped. A derived column does not come back
+   when its expression no longer binds, or when another column has its name
+   in any letter case (`Total` restored beside a new file's `total`; see
+   [Derived columns → Validation](./derived-columns.md#validation)), and a
+   base column of the same name keeps its place. An exact filter on a JSON
+   column saved without a `valueType`, as before 0.9, is given
+   `valueType: 'text'`, in the undo and redo entries too
 4. Subsequent mutations auto-save on a debounced timer
 
 On unmount (call `table.destroy()`): the auto-save flushes a final snapshot.

@@ -65,9 +65,10 @@ export interface QueryOptions {
    *
    * - `'high'`: viewport row fetches, the rows the grid is waiting to show.
    * - `'elevated'`: an interactive read of a few values that someone is
-   *   waiting on, such as `actions.getCellValue` or the value inspector's
-   *   read of one cell. It runs ahead of queued chart and stats queries,
-   *   and behind the viewport's row fetches.
+   *   waiting on, such as `actions.getCellValue`, the value inspector's
+   *   read of one cell, or the row count of a filter change. It runs ahead
+   *   of queued chart and stats queries, and behind the viewport's row
+   *   fetches.
    * - `'normal'` (the default): background work, such as column charts,
    *   stats, prefetches and exports.
    *

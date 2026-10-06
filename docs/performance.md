@@ -151,11 +151,11 @@ the chart and stats results the cache is for.
 
 The same options object carries `priority: 'high' | 'elevated' | 'normal'`,
 the query's place in the worker's serial dispatch queue. Viewport fetches go
-out at `'high'` and jump all queued work. `getCellValue` and the value
-inspector's read go out at `'elevated'`, behind the queued fetches and ahead
-of queued stats and histogram work, so a host that loops over `getCellValue`
-holds charts back but not the rows of a scroll. Everything else is
-`'normal'`.
+out at `'high'` and jump all queued work. `getCellValue`, the value
+inspector's read and the row count of a filter change go out at
+`'elevated'`, behind the queued fetches and ahead of queued stats and
+histogram work, so a host that loops over `getCellValue` holds charts back
+but not the rows of a scroll. Everything else is `'normal'`.
 
 ### Column charts
 

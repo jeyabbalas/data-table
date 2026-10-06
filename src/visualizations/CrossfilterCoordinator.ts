@@ -193,7 +193,12 @@ export class CrossfilterCoordinator {
     try {
       const where = filtersToWhereClause(filters);
       const sql = `SELECT COUNT(*) as cnt FROM ${quoteIdentifier(tableName)} WHERE ${where}`;
-      const result = await this.bridge.query<{ cnt: number }>(sql);
+      // Ahead of the chart and stats queries the same change queues: the
+      // grid sizes its scroll range by this count, and the row count
+      // shows it. On a large table those can take seconds in all.
+      const result = await this.bridge.query<{ cnt: number }>(sql, undefined, {
+        priority: 'elevated',
+      });
       // Only apply if this is still the latest filter change
       if (this.destroyed || seq !== this.filterSequence) return;
       this.state.filteredRows.set(Number(result[0]!.cnt));

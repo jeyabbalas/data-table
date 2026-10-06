@@ -149,7 +149,8 @@ is a thin Promise-based RPC wrapper:
 - **Serial priority queue.** The worker runs one query at a time,
   drained from an explicit FIFO of three priorities — `'high'` for
   viewport row fetches, `'elevated'` for a read a user is waiting on
-  (`getCellValue`, the value inspector), which goes ahead of every queued
+  (`getCellValue`, the value inspector, a filter change's row count), which
+  goes ahead of every queued
   `'normal'` query but never of a row fetch, and `'normal'` for everything
   else
   ([`src/worker/dispatcher.ts:48-80`](../../src/worker/dispatcher.ts)).

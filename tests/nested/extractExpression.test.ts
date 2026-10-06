@@ -301,6 +301,14 @@ describe('nestedFieldExpression', () => {
       );
     });
 
+    it('cuts a long type in a message between graphemes, never inside a surrogate pair', () => {
+      // 73 units, the emoji's two at 58 and 59: the cut at 59 would split it.
+      const type = `STRUCT("${'x'.repeat(50)}\u{1F600}" INTEGER)[1]`;
+      const error = failure('a', type, [5]);
+      expect(error.message).toBe(`Position 5 is outside 1–1 of STRUCT("${'x'.repeat(50)}…`);
+      expect(() => encodeURIComponent(error.message)).not.toThrow();
+    });
+
     it('chains into the struct of a function result', () => {
       expect(build('u', 'UNION(p STRUCT(x INTEGER), n INTEGER)', ['p', 'x']).expression).toBe(
         `union_extract("u", 'p')['x']`,

@@ -303,6 +303,25 @@ describe('typeOutline — length', () => {
     expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(text)).toBe(false);
   });
 
+  it('cuts a long name between graphemes: an emoji, a flag, an accent', () => {
+    const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const ends = (text: string) =>
+      new Set([text.length, ...[...graphemes.segment(text)].map((g) => g.index)]);
+    const cases: [name: string, form: TypeOutlineForm][] = [
+      [`${'x'.repeat(58)}\u{1F468}\u200D\u{1F469}\u200D\u{1F467}yy`, 'outline'],
+      [`${'x'.repeat(59)}\u{1F1FA}\u{1F1F8}yy`, 'outline'],
+      [`${'x'.repeat(60)}e\u0301zzzz`, 'outline'],
+      [`${'x'.repeat(112)}\u{1F468}\u200D\u{1F469}\u200D\u{1F467}yy`, 'summary'],
+    ];
+    for (const [name, form] of cases) {
+      const text = outline(`STRUCT("${name}" INTEGER)`, form);
+      expect(text.length).toBeLessThanOrEqual(TYPE_OUTLINE_MAX_LENGTH[form]);
+      const shown = text.slice(form === 'outline' ? 1 : 0, text.indexOf('…'));
+      expect(name.startsWith(shown), text).toBe(true);
+      expect(ends(name).has(shown.length), text).toBe(true);
+    }
+  });
+
   it('shows a type the parser could not read as it is, cut to the budget', () => {
     expect(outline('STRUCT(a INTEGER', 'label')).toBe('STRUCT(a INTEGER');
     const long = 'STRUCT(' + 'x'.repeat(200);

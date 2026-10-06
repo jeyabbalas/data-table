@@ -26,9 +26,9 @@
  *   DuckDB's text for them, unquoted (`2024-01-31`, `\xAA\x00`).
  * - **Containers** (lists, arrays, structs, maps, unions, JSON objects and
  *   arrays) as their type, a count, and a preview of what they hold, at most
- *   {@link VALUE_TREE_PREVIEW_CHARS} characters: `[56, 3, 91, …]`,
- *   `{x: 1.25, y: 0.58, …}`, `{k1 → 1, k2 → 2}`, `(1, "a")` for a struct
- *   whose fields have no names.
+ *   {@link VALUE_TREE_PREVIEW_CHARS} characters, text in it cut between
+ *   graphemes: `[56, 3, 91, …]`, `{x: 1.25, y: 0.58, …}`, `{k1 → 1, k2 → 2}`,
+ *   `(1, "a")` for a struct whose fields have no names.
  *
  * Under what key:
  *
@@ -64,6 +64,7 @@ import type {
   DuckDBTypeNode,
   DuckDBUnionMember,
 } from '../core/duckdbType';
+import { graphemeStart } from '../core/graphemes';
 import {
   mapEntryOf,
   mapKeyText,
@@ -348,38 +349,6 @@ function codePointsFrom(text: string, from: number): number {
   return count;
 }
 
-let graphemeSegmenter: Intl.Segmenter | null | undefined;
-
-/** A grapheme segmenter, or `null` where `Intl.Segmenter` is missing. */
-function graphemes(): Intl.Segmenter | null {
-  if (graphemeSegmenter === undefined) {
-    graphemeSegmenter =
-      typeof Intl === 'object' && typeof Intl.Segmenter === 'function'
-        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-        : null;
-  }
-  return graphemeSegmenter;
-}
-
-/** Characters either side of a cut that are segmented to find the grapheme it falls in. */
-const CLUSTER_WINDOW = 64;
-
-/**
- * Where to cut `text` at index `at` so as not to split a grapheme: the start
- * of the cluster `at` falls inside, or `at` itself when it is already
- * between two, when no segmenter is available, or when the cluster reaches
- * back past the window (then it is too long to keep whole, and `at` is
- * still never inside a surrogate pair).
- */
-function clusterStart(text: string, at: number): number {
-  const segmenter = graphemes();
-  if (!segmenter) return at;
-  const from = Math.max(0, at - CLUSTER_WINDOW);
-  const segment = segmenter.segment(text.slice(from, at + CLUSTER_WINDOW)).containing(at - from);
-  if (!segment || segment.index === 0) return at;
-  return from + segment.index;
-}
-
 /**
  * Where to cut `text` to keep `cap` code points, at a grapheme boundary at
  * or before that; `text.length` when it is not longer.
@@ -389,7 +358,7 @@ function cutPoint(text: string, cap: number): number {
   if (text.length <= cap) return text.length;
   let end = 0;
   for (let points = 0; points < cap && end < text.length; points++) end += widthAt(text, end);
-  return end >= text.length ? text.length : clusterStart(text, end);
+  return end >= text.length ? text.length : graphemeStart(text, end);
 }
 
 /** A key as shown: escaped, `""` when empty, cut with `…` past `cap` code points. */
@@ -403,8 +372,9 @@ function keyText(key: string, cap: number): string {
 
 /**
  * `value` in at most `room` characters, escaped (and quoted when `quoted`),
- * ending in `…` when cut: `"Lorem ipsu…"`. `undefined` when not even one
- * character fits. Reads only as much of `value` as it shows.
+ * ending in `…` when cut, between graphemes: `"Lorem ipsu…"`. `undefined`
+ * when not even one character fits. Reads only as much of `value` as it
+ * shows.
  */
 function shortText(value: string, room: number, quoted: boolean): string | undefined {
   const escaped = quoted ? ESCAPED_IN_QUOTES : ESCAPED_BARE;
@@ -414,13 +384,16 @@ function shortText(value: string, room: number, quoted: boolean): string | undef
     const width = widthAt(value, i);
     const char = value.slice(i, i + width);
     const piece = escaped.test(char) ? escapeChar(char) : char;
-    i += width;
     // While more follows, keep room for the ellipsis.
-    if (out.length + piece.length + frame + (i < value.length ? 1 : 0) > room) {
-      if (out === '') return undefined;
-      return quoted ? `"${out}${ELLIPSIS}"` : out + ELLIPSIS;
+    if (out.length + piece.length + frame + (i + width < value.length ? 1 : 0) > room) {
+      // Cut before this character, or before the grapheme it goes on.
+      const cut = graphemeStart(value, i);
+      const head = cut < i ? escapeText(value.slice(0, cut), quoted) : out;
+      if (head === '') return undefined;
+      return quoted ? `"${head}${ELLIPSIS}"` : head + ELLIPSIS;
     }
     out += piece;
+    i += width;
   }
   const whole = quoted ? `"${out}"` : out;
   return whole.length <= room ? whole : undefined;

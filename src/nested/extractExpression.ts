@@ -31,6 +31,7 @@
 import { columnNameKey } from '../core/columnNames';
 import { needsTextMatch, parseDuckDBType } from '../core/duckdbType';
 import type { DuckDBMapTypeNode, DuckDBTypeNode } from '../core/duckdbType';
+import { clipText } from '../core/graphemes';
 import { ROWID_COLUMN } from '../core/types';
 import { formatSQLValue, quoteIdentifier } from '../filters/FilterSQL';
 
@@ -204,9 +205,9 @@ function showStep(step: NestedPathStep): string {
   return typeof step === 'string' ? JSON.stringify(step) : String(step);
 }
 
-/** A type as a message shows it, cut short. */
+/** A type as a message shows it, cut short between graphemes. */
 function showType(node: DuckDBTypeNode): string {
-  return node.sqlType.length > 60 ? `${node.sqlType.slice(0, 59)}…` : node.sqlType;
+  return clipText(node.sqlType, 60);
 }
 
 /** DuckDB's spelling of `text` as a string literal. */

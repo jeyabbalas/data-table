@@ -802,6 +802,15 @@ describe('strings', () => {
     expect(cut.more).toBe('17 more characters');
   });
 
+  it('keeps a flag whole at the cut, however far into a run of flags it falls', () => {
+    // The cut after 2,000 code points falls 64 units into the run on a
+    // flag's second half, where segmenting from there paired the rest wrong.
+    const flag = '\u{1F1FA}\u{1F1F8}';
+    const cut = kids(tree(JSON.stringify([`a${flag.repeat(1500)}`]), 'VARCHAR[]'))[0]!.value!;
+    expect(cut.text).toBe(`"a${flag.repeat(999)}…"`);
+    expect(cut.more).toBe('1,002 more characters');
+  });
+
   it('cuts DuckDB text, numbers and keys at the cap too', () => {
     const root = tree(JSON.stringify({ ['k'.repeat(10)]: 'b'.repeat(30) }), 'MAP(VARCHAR, BLOB)', {
       stringCap: 5,
@@ -823,6 +832,23 @@ describe('strings', () => {
     const escapes = tree(JSON.stringify(['\n'.repeat(40)]), 'VARCHAR[]');
     expect(escapes.preview).toMatch(/^\["(\\n)+…"\]$/);
     expect(escapes.preview!.length).toBeLessThanOrEqual(VALUE_TREE_PREVIEW_CHARS);
+  });
+
+  it('cuts a string in a preview between graphemes: an emoji, a flag, an accent', () => {
+    const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+    const flag = '\u{1F1FA}\u{1F1F8}';
+    expect(
+      tree(JSON.stringify({ name: `${'x'.repeat(45)}${family}` }), 'STRUCT(name VARCHAR)').preview,
+    ).toBe(`{name: "${'x'.repeat(45)}…"}`);
+    expect(tree(JSON.stringify({ name: `${'x'.repeat(45)}${family}` }), 'JSON').preview).toBe(
+      `{name: "${'x'.repeat(45)}…"}`,
+    );
+    expect(tree(JSON.stringify([`${'x'.repeat(53)}${flag}zz`]), 'VARCHAR[]').preview).toBe(
+      `["${'x'.repeat(53)}…"]`,
+    );
+    expect(tree(JSON.stringify([`${'x'.repeat(54)}e\u0301zz`]), 'VARCHAR[]').preview).toBe(
+      `["${'x'.repeat(54)}…"]`,
+    );
   });
 });
 

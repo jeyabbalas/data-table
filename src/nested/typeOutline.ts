@@ -47,7 +47,9 @@
  * - **Length**: each form keeps within {@link TYPE_OUTLINE_MAX_LENGTH}
  *   characters. Fields and members that do not fit end the list as `… +N`
  *   (`{f1, f2, … +38}`), a type nested more than 8 levels deep shows as `…`,
- *   and what is still too long is cut with `…`.
+ *   and what is still too long is cut with `…`, between graphemes: an emoji
+ *   joined from several code points, a flag or an accented letter in a name
+ *   is kept whole or left out.
  *
  * {@link spokenType} says a type in words, for a header's accessible name
  * ("list of integer"), through the `values` strings.
@@ -58,6 +60,7 @@ import {
   type DuckDBTypeNode,
   parseDuckDBType,
 } from '../core/duckdbType';
+import { clipText } from '../core/graphemes';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
 
@@ -143,7 +146,7 @@ const SHORT_NAMES: Readonly<Record<string, string>> = {
  */
 export function typeOutline(node: DuckDBTypeNode, form: TypeOutlineForm): string {
   const budget = TYPE_OUTLINE_MAX_LENGTH[form];
-  return clip(render(node, form, budget, 0, true), budget);
+  return clipText(render(node, form, budget, 0, true), budget);
 }
 
 /**
@@ -267,7 +270,7 @@ function render(
       return 'variant';
     case 'unknown':
       // Text the parser could not read: shown as it is.
-      return clip(printable(node.sqlType), budget);
+      return clipText(printable(node.sqlType), budget);
     case 'list':
       return `[${render(node.element, form, budget - 2, depth + 1, false)}]`;
     case 'array': {
@@ -305,7 +308,7 @@ function renderStruct(
       const field = fields[i]!;
       return field.name === null
         ? render(field.type, 'label', room, depth + 1, false)
-        : clip(displayName(field.name), room);
+        : clipText(displayName(field.name), room);
     };
     return open + boundedJoin(fields.length, entry, ', ', budget - 2) + close;
   }
@@ -315,7 +318,7 @@ function renderStruct(
     if (field.name === null) return render(field.type, 'summary', room, depth + 1, false);
     const name = displayName(field.name);
     const type = render(field.type, 'summary', room - name.length - 1, depth + 1, false);
-    return clip(`${name} ${type}`, room);
+    return clipText(`${name} ${type}`, room);
   };
   if (top) return boundedJoin(fields.length, entry, ' · ', budget);
   return open + boundedJoin(fields.length, entry, ', ', budget - 2) + close;
@@ -332,7 +335,7 @@ function renderUnion(
   if (members.length === 0) return 'union()';
 
   if (form === 'outline') {
-    const entry = (i: number, room: number): string => clip(displayName(members[i]!.tag), room);
+    const entry = (i: number, room: number): string => clipText(displayName(members[i]!.tag), room);
     return `union(${boundedJoin(members.length, entry, ' | ', budget - 7)})`;
   }
 
@@ -340,7 +343,7 @@ function renderUnion(
     const member = members[i]!;
     const tag = displayName(member.tag);
     const type = render(member.type, 'summary', room - tag.length - 1, depth + 1, false);
-    return clip(`${tag} ${type}`, room);
+    return clipText(`${tag} ${type}`, room);
   };
   if (top) return boundedJoin(members.length, entry, ' | ', budget);
   return `union(${boundedJoin(members.length, entry, ' | ', budget - 7)})`;
@@ -401,7 +404,7 @@ function speak(node: DuckDBTypeNode, words: Strings['values'], depth: number): s
     case 'variant':
       return words.typeVariant;
     case 'unknown':
-      return clip(printable(node.sqlType), TYPE_OUTLINE_MAX_LENGTH.label);
+      return clipText(printable(node.sqlType), TYPE_OUTLINE_MAX_LENGTH.label);
     case 'list':
       return words.typeList(speak(node.element, words, depth + 1));
     case 'array':
@@ -423,14 +426,4 @@ function displayName(name: string): string {
 /** `text` with each control character (a newline, a tab) as a space. */
 function printable(text: string): string {
   return text.replace(/\p{Cc}/gu, ' ');
-}
-
-/** `text` cut to at most `max` characters, ending in `…` when cut, never inside a surrogate pair. */
-function clip(text: string, max: number): string {
-  if (text.length <= max) return text;
-  if (max <= 1) return ELLIPSIS;
-  let end = max - 1;
-  const last = text.charCodeAt(end - 1);
-  if (last >= 0xd800 && last <= 0xdbff) end--;
-  return text.slice(0, end) + ELLIPSIS;
 }

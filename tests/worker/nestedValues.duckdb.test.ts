@@ -400,18 +400,60 @@ describe('nested values on real DuckDB', () => {
         expect(hs.h).not.toBe(12);
       });
 
+      it('under a MAP or UNION, a DECIMAL or HUGEINT reads as the words of its unscaled integer', async () => {
+        // duckdb-wasm relabels a DECIMAL as a DOUBLE in a list or struct
+        // only; under a MAP or UNION, Arrow reads its 128 bits as 32-bit
+        // words, low first, and a MAP key as the integer's digits.
+        const [row] = await run<Record<string, unknown>>(
+          `SELECT MAP {'a': 1.25::DECIMAL(10,2)} AS dm, MAP {'a': -12::HUGEINT} AS hm,
+                  MAP {'a': {'d': 1.25::DECIMAL(10,2)}} AS dsm,
+                  union_value(d := 1.25::DECIMAL(10,2)) AS du,
+                  MAP {1.25::DECIMAL(10,2): 'a', -1.25::DECIMAL(10,2): 'b'} AS dk`,
+        );
+        expect(structuredClone(row)).toEqual(row);
+        const minus = (n: number) => 2 ** 32 - n;
+        expect(row).toEqual({
+          dm: { a: new Uint32Array([125, 0, 0, 0]) },
+          hm: { a: new Uint32Array([minus(12), minus(1), minus(1), minus(1)]) },
+          dsm: { a: { d: new Uint32Array([125, 0, 0, 0]) } },
+          du: new Uint32Array([125, 0, 0, 0]),
+          dk: { '125': 'a', '-125': 'b' },
+        });
+      });
+
+      it('a HUGEINT or UHUGEINT at its ends arrives with the wrong sign', async () => {
+        // Converted as a DECIMAL to a DOUBLE: the HUGEINT minimum comes out
+        // positive, and a UHUGEINT past 2^127 as itself less 2^128.
+        const [row] = await run<Record<string, unknown>>(
+          `SELECT (-170141183460469231731687303715884105728)::HUGEINT AS hmin,
+                  170141183460469231731687303715884105727::HUGEINT AS hmax,
+                  340282366920938463463374607431768211455::UHUGEINT AS umax`,
+        );
+        expect(row).toEqual({ hmin: 2 ** 127, hmax: 2 ** 127, umax: -1 });
+      });
+
       it('an INTERVAL, nested or not, reads as an Int32Array that does not hold it', async () => {
         const [row] = await run<Record<string, unknown>>(
           `SELECT INTERVAL '14 months 3 days' AS i,
                   [INTERVAL 1 DAY, INTERVAL '14 months 3 days'] AS il,
-                  {'i': INTERVAL '14 months 3 days'} AS si`,
+                  {'i': INTERVAL '14 months 3 days'} AS si,
+                  MAP {'a': INTERVAL '14 months 3 days'} AS mi,
+                  MAP {INTERVAL '14 months 3 days': 'a'} AS ik`,
         );
         expect(structuredClone(row)).toEqual(row);
-        const { i, il, si } = row as { i: unknown; il: unknown[]; si: { i: unknown } };
-        for (const value of [i, ...il, si.i]) {
+        const { i, il, si, mi, ik } = row as {
+          i: unknown;
+          il: unknown[];
+          si: { i: unknown };
+          mi: { a: unknown };
+          ik: Record<string, unknown>;
+        };
+        for (const value of [i, ...il, si.i, mi.a]) {
           expect(value).toBeInstanceOf(Int32Array);
           expect(value).toHaveLength(2);
         }
+        // As a MAP key, the text of those two numbers.
+        expect(Object.keys(ik)).toEqual([expect.stringMatching(/^-?\d+,-?\d+$/)]);
       });
 
       it('CAST(to_json(c) AS VARCHAR) reads them exactly', async () => {
@@ -420,7 +462,8 @@ describe('nested values on real DuckDB', () => {
                   CAST(to_json({'d': 1.25::DECIMAL(10,2)}) AS VARCHAR) AS ds,
                   CAST(to_json([12::HUGEINT, 170141183460469231731687303715884105727::HUGEINT])
                        AS VARCHAR) AS hl,
-                  CAST(to_json([INTERVAL 1 DAY, INTERVAL '14 months 3 days']) AS VARCHAR) AS il`,
+                  CAST(to_json([INTERVAL 1 DAY, INTERVAL '14 months 3 days']) AS VARCHAR) AS il,
+                  CAST(to_json(MAP {1.25::DECIMAL(10,2): 2.50::DECIMAL(10,2)}) AS VARCHAR) AS dm`,
         );
         expect(rows).toEqual([
           {
@@ -428,6 +471,7 @@ describe('nested values on real DuckDB', () => {
             ds: '{"d":1.25}',
             hl: '[12,170141183460469231731687303715884105727]',
             il: '["1 day","1 year 2 months 3 days"]',
+            dm: '{"1.25":2.5}',
           },
         ]);
       });

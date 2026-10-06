@@ -251,14 +251,17 @@ function copyTypedArray(view: ArrayBufferView): ArrayBufferView {
  *   interval text, unless it is inside a list or a STRUCT or MAP value: see
  *   {@link isIntervalObject}.
  *
- * DECIMAL, HUGEINT and INTERVAL values inside a LIST, ARRAY, STRUCT or MAP
- * cannot be read this way. duckdb-wasm, opened with `castDecimalToDouble`,
- * labels a nested DECIMAL (and a HUGEINT, which it passes as a DECIMAL) a
- * DOUBLE without converting its data, so `[1.25, 2.50, 3.75]` arrives as
- * `[6.2e-322, 0, 1.235e-321]`, and a HUGEINT as a number just as
- * meaningless, or NaN. Arrow reads an INTERVAL, there or as a column's own
- * value, as an `Int32Array` that does not hold it. `CAST(to_json(c) AS
- * VARCHAR)` reads all three exactly, as JSON text.
+ * DECIMAL, HUGEINT and INTERVAL values inside a nested value cannot be
+ * read this way. duckdb-wasm, opened with `castDecimalToDouble`, labels a
+ * DECIMAL (and a HUGEINT, which it passes as a DECIMAL) in a LIST, ARRAY or
+ * STRUCT a DOUBLE without converting its data, so `[1.25, 2.50, 3.75]`
+ * arrives as `[6.2e-322, 0, 1.235e-321]`, and a HUGEINT as a number just as
+ * meaningless, or NaN. Under a MAP or a UNION it leaves the DECIMAL, which
+ * Arrow reads as a `Uint32Array` of its unscaled integer's 32-bit words
+ * (`1.25` as `[125, 0, 0, 0]`), and as a MAP key as that integer's digits
+ * (`'125'`). Arrow reads an INTERVAL, anywhere, as an `Int32Array` that
+ * does not hold it. `CAST(to_json(c) AS VARCHAR)` reads all of them
+ * exactly, as JSON text.
  */
 export function convertBigInts(obj: unknown): unknown {
   return convertValue(obj, true);

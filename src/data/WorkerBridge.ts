@@ -335,22 +335,30 @@ export class WorkerBridge {
    * (viewport row fetches use this so they are not stuck behind
    * stats/histogram fan-outs).
    *
-   * Each row is a plain object keyed by column name. Integers arrive as
-   * numbers (the nearest one, past ±2^53), a LIST or ARRAY value as an
+   * Each row is a plain object whose own properties are its columns,
+   * `__proto__` included. Integers arrive as numbers, the nearest one past
+   * ±2^53, except a HUGEINT or UHUGEINT at its ends, which arrives with the
+   * wrong sign: the HUGEINT minimum positive, a UHUGEINT past 2^127
+   * negative (the maximum as `-1`). A LIST or ARRAY value arrives as an
    * array, a STRUCT or MAP value as an object (a MAP's keys as strings; an
-   * unnamed STRUCT, as `row(1, 'a')` builds, as an array), and a BLOB as a
-   * `Uint8Array`.
+   * unnamed STRUCT, as `row(1, 'a')` builds, as an array), a UNION value as
+   * its member's, and a BLOB as a `Uint8Array`.
    *
-   * DECIMAL, HUGEINT and INTERVAL values inside a LIST, ARRAY, STRUCT or MAP
-   * do not arrive intact: a nested DECIMAL or HUGEINT reads as a meaningless
-   * number (`[1.25, 2.50, 3.75]` as `[6.2e-322, 0, 1.235e-321]`), and an
-   * INTERVAL, nested or a column's own value, as an `Int32Array` that does
-   * not hold it. Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
+   * DECIMAL, HUGEINT and UHUGEINT values inside a nested value do not
+   * arrive intact. In a LIST, ARRAY or STRUCT each reads as a meaningless
+   * number (`[1.25, 2.50, 3.75]` as `[6.2e-322, 0, 1.235e-321]`,
+   * `[-12::HUGEINT]` as `[NaN]`). Anywhere under a MAP or a UNION it reads
+   * as a `Uint32Array` of the 32-bit words of its unscaled integer, low
+   * first (`MAP {'a': 1.25}` as `{ a: Uint32Array [125, 0, 0, 0] }`), and a
+   * MAP key as that integer's digits (`MAP {1.25: 'a'}` as
+   * `{ '125': 'a' }`). An INTERVAL, nested or a column's own value, reads
+   * as an `Int32Array` that does not hold it, and a MAP key as that array's
+   * text (`'0,0'`). Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
    * nested value as JSON text, which is exact: `CAST(to_json(c) AS VARCHAR)`
-   * keeps every digit and writes an INTERVAL as DuckDB does
-   * (`"1 year 2 months 3 days"`). `JSON.parse` rounds integers past 2^53
-   * and rejects the bare `NaN` and `Infinity` DuckDB writes for non-finite
-   * DOUBLEs.
+   * keeps every digit, a MAP's DECIMAL keys included, and writes an
+   * INTERVAL as DuckDB does (`"1 year 2 months 3 days"`). `JSON.parse`
+   * rounds integers past 2^53 and rejects the bare `NaN` and `Infinity`
+   * DuckDB writes for non-finite DOUBLEs.
    *
    * A VARIANT value cannot cross Arrow at all (`Unsupported Arrow type
    * VARIANT`), nor a value that holds one, and `to_json` gets those wrong

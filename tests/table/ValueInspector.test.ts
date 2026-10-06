@@ -1283,6 +1283,21 @@ describe('ValueInspector — copying from inside the click', () => {
     inspector.destroy();
   });
 
+  it('writes the text once read when a ClipboardItem write fails', async () => {
+    write.mockRejectedValueOnce(new TypeError('promises are not supported'));
+    const { bridge, gate } = slowCopyRead('["a","b"]');
+    const inspector = mount(bridge);
+    openOn(inspector);
+    await settle();
+    clickCopyJson(inspector);
+    expect(write).toHaveBeenCalledTimes(1);
+    gate.resolve();
+    await settle(10);
+    expect(writeText).toHaveBeenCalledWith('[\n  "a",\n  "b"\n]');
+    expect(message(inspector)).toBe('Copied');
+    inspector.destroy();
+  });
+
   it('writes the text once read where there is no ClipboardItem', async () => {
     vi.stubGlobal('ClipboardItem', undefined);
     const { bridge, gate } = slowCopyRead('["a","b"]');

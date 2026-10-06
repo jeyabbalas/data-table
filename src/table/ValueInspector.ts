@@ -959,21 +959,24 @@ class CopyFailure extends Error {}
  * while the click or key press that asked is being handled: a write after
  * the read's await fails with `NotAllowedError`. A `ClipboardItem` given the
  * promise starts the write now, and takes the text when it comes. Without
- * `ClipboardItem`, the text is written once it is read.
+ * `ClipboardItem`, or when that write fails (an engine that takes no
+ * promise in one), the text is written once it is read; a read that failed
+ * fails the copy with its own reason.
  */
 function writeWhenRead(text: Promise<string>): Promise<void> {
+  const once = (): Promise<void> => text.then((value) => copyToClipboard(value, 'text'));
   const clipboard = navigator.clipboard;
-  if (typeof ClipboardItem !== 'function' || typeof clipboard?.write !== 'function') {
-    return text.then((value) => copyToClipboard(value, 'text'));
-  }
+  if (typeof ClipboardItem !== 'function' || typeof clipboard?.write !== 'function') return once();
   const blob = text.then((value) => new Blob([value], { type: 'text/plain' }));
-  // Seen here: a read that failed is told below, never left unhandled.
+  // Seen here: a read that failed is told by `once`, never left unhandled.
   blob.catch(() => undefined);
-  return clipboard.write([new ClipboardItem({ 'text/plain': blob })]).then(
-    () => undefined,
-    // A read that failed fails the write too, and its reason is the one to tell.
-    (err: unknown) => text.then(() => Promise.reject(err)),
-  );
+  let written: Promise<void>;
+  try {
+    written = clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+  } catch (err) {
+    written = Promise.reject(err);
+  }
+  return written.then(() => undefined, once);
 }
 
 /**

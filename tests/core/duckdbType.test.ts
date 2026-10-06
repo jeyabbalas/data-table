@@ -4,6 +4,7 @@ import {
   childTypes,
   containsKind,
   dataTypeOf,
+  holdsVariant,
   needsTextMatch,
   parseDuckDBType,
   type DuckDBTypeNode,
@@ -282,7 +283,7 @@ describe('dataTypeOf, from the text DESCRIBE prints', () => {
   });
 });
 
-describe('childTypes / containsKind / needsTextMatch', () => {
+describe('childTypes / containsKind / holdsVariant / needsTextMatch', () => {
   it('lists child types in order', () => {
     const map = parseDuckDBType('MAP(DATE, INTEGER[])');
     expect(childTypes(map).map((c) => c.sqlType)).toEqual(['DATE', 'INTEGER[]']);
@@ -294,6 +295,19 @@ describe('childTypes / containsKind / needsTextMatch', () => {
     expect(containsKind(node, 'variant')).toBe(true);
     expect(containsKind(node, ['union', 'json'])).toBe(false);
     expect(containsKind(node, 'struct')).toBe(true);
+  });
+
+  it.each([
+    ['VARIANT', true],
+    ['VARIANT[]', true],
+    ['STRUCT(a MAP(VARCHAR, STRUCT(v VARIANT)[]))', true],
+    ['STRUCT(v VARIANT', true],
+    ['STRUCT(', false],
+    ['JSON', false],
+    ['UNION(i INTEGER, s VARCHAR)', false],
+    ['INTEGER[]', false],
+  ] as const)('holdsVariant(%s) is %s', (text, expected) => {
+    expect(holdsVariant(parseDuckDBType(text))).toBe(expected);
   });
 
   it.each([

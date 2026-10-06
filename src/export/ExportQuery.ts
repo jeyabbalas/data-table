@@ -11,7 +11,7 @@
  * file holds nested values natively.
  */
 
-import { containsKind, dataTypeOf, parseDuckDBType, type DuckDBTypeNode } from '../core/duckdbType';
+import { dataTypeOf, holdsVariant, parseDuckDBType, type DuckDBTypeNode } from '../core/duckdbType';
 import { ROWID_COLUMN, type ColumnSchema, type Filter, type SortColumn } from '../core/types';
 import { jsonValueSQL } from '../data/valueSql';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -259,14 +259,6 @@ function orderByList(
   return parts.join(', ');
 }
 
-/** Whether `column`'s type is, or holds, a VARIANT: see {@link buildSelectedRowsQuery}. */
-function holdsVariant(column: ColumnSchema): boolean {
-  const node = parseDuckDBType(column.originalType ?? '');
-  return node.kind === 'unknown'
-    ? /\bVARIANT\b/i.test(node.sqlType)
-    : containsKind(node, 'variant');
-}
-
 /**
  * Build an `ORDER BY` clause for export queries on `tableName`.
  *
@@ -415,7 +407,9 @@ export function buildSelectedRowsQuery(
   if (sortSchema) {
     for (const sort of sortColumns) {
       const column = sortSchema.find((c) => c.name === sort.column);
-      if (column && holdsVariant(column)) sortKeyColumns.add(sort.column);
+      if (column && holdsVariant(parseDuckDBType(column.originalType ?? ''))) {
+        sortKeyColumns.add(sort.column);
+      }
     }
   }
   const overClause = `ORDER BY ${orderByList(sortColumns, tableName, sortKeyColumns)}`;

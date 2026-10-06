@@ -832,6 +832,24 @@ export function containsKind(
 }
 
 /**
+ * Whether a value of `node`'s type is, or holds, a VARIANT: `VARIANT`,
+ * `VARIANT[]`, `STRUCT(v VARIANT)`. A type the parser could not read does
+ * when its text names VARIANT.
+ *
+ * @example
+ * ```ts
+ * holdsVariant(parseDuckDBType('VARIANT'));             // true
+ * holdsVariant(parseDuckDBType('STRUCT(v VARIANT)[]')); // true
+ * holdsVariant(parseDuckDBType('INTEGER[]'));           // false
+ * ```
+ */
+export function holdsVariant(node: DuckDBTypeNode): boolean {
+  return node.kind === 'unknown'
+    ? /\bVARIANT\b/i.test(node.sqlType)
+    : containsKind(node, 'variant');
+}
+
+/**
  * Whether values of this type can only be compared as text: types holding a
  * UNION, a VARIANT, or a type the parser could not read. DuckDB casts text
  * to every other type and back without loss, so `col = '[1, 2]'` matches;

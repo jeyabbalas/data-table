@@ -25,7 +25,7 @@
  * worker can use it too.
  */
 
-import { containsKind } from './duckdbType';
+import { holdsVariant } from './duckdbType';
 import type {
   DuckDBMapTypeNode,
   DuckDBStructTypeNode,
@@ -624,9 +624,7 @@ function mapKeyValue(text: string, keyType: DuckDBTypeNode): unknown {
  */
 export function readsThroughVariant(type: DuckDBTypeNode | undefined): boolean {
   if (type === undefined || type.kind === 'variant' || type.kind === 'json') return false;
-  return type.kind === 'unknown'
-    ? /\bVARIANT\b/i.test(type.sqlType)
-    : containsKind(type, 'variant');
+  return holdsVariant(type);
 }
 
 /**

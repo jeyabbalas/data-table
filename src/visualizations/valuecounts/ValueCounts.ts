@@ -1115,7 +1115,7 @@ export class ValueCounts extends BaseVisualization {
     ctx.font = FONTS.axis;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('No data', this.width / 2, this.height / 2);
+    ctx.fillText(this.statsMessages.noData, this.width / 2, this.height / 2);
   }
 
   /**

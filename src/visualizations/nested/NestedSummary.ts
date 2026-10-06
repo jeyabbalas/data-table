@@ -21,8 +21,8 @@
  * slot. There is no click-to-filter, brush or keyboard selection: a nested
  * column is filtered from its filter panel. Before its first fetch lands the
  * chart draws nothing, a fetch that fails marks the canvas
- * `data-fetch-failed`, and an empty relation draws "No data", as the other
- * charts do.
+ * `data-fetch-failed`, and an empty relation draws "No data"
+ * (`statistics.noData`), as the other charts do.
  *
  * The default `VisualizationRegistry` picks it for `'nested'` columns.
  *
@@ -532,7 +532,7 @@ export class NestedSummaryVisualization extends BaseVisualization {
     ctx.font = FONTS.outline;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('No data', this.width / 2, this.height / 2);
+    ctx.fillText(this.statsMessages.noData, this.width / 2, this.height / 2);
   }
 
   // =========================================

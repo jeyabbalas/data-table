@@ -3,7 +3,8 @@
  *
  * What a header chart draws before its data arrives: nothing. "No data" is
  * for a fetch that came back with no values, not for one still in flight, or
- * one that failed.
+ * one that failed, and it is `statistics.noData`, which `messages`
+ * translates.
  *
  * A chart's resize observer renders it as soon as it is laid out, which is
  * before its first fetch lands. Histograms drew "No data" there, so every
@@ -116,6 +117,7 @@ vi.mock('../../src/visualizations/nested/NestedSummaryData', async (importActual
   fetchNestedSummaryData: deferredFetch,
 }));
 
+import { defaultStrings, mergeStrings } from '../../src/core/Strings';
 import type { ColumnSchema } from '../../src/core/types';
 import type {
   BaseVisualization,
@@ -413,6 +415,19 @@ describe.each(CHARTS)('$name before and after its data', (chartCase) => {
     await chart.waitForData();
 
     expect(drewNoData()).toBe(true);
+    chart.destroy();
+  });
+
+  it('draws it in the words of messages.statistics.noData', async () => {
+    const messages = mergeStrings(defaultStrings, { statistics: { noData: 'Aucune donnée' } });
+    const chart = create(chartCase, { messages });
+    reportLayout();
+
+    fetches[0]!.resolve(chartCase.empty);
+    await chart.waitForData();
+
+    expect(mockContext.fillText.mock.calls.map(([text]) => text)).toContain('Aucune donnée');
+    expect(drewNoData()).toBe(false);
     chart.destroy();
   });
 

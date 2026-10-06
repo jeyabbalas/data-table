@@ -459,6 +459,11 @@ export interface Strings {
     valueListSuffix: (total: number) => string;
     /** Stats-slot line for a column whose chart's data failed to load. */
     chartFailed: string;
+    /**
+     * What a column-header chart draws for a column with no values and no
+     * nulls, as an empty table has: "No data".
+     */
+    noData: string;
   };
 
   // =========================================
@@ -997,6 +1002,7 @@ export const defaultStrings: Strings = {
     matchCount: (count) => `${count.toLocaleString()} match`,
     valueListSuffix: (total) => `, ... (${total.toLocaleString()} values)`,
     chartFailed: 'Failed to load',
+    noData: 'No data',
   },
 
   values: {

@@ -5,10 +5,11 @@
  * STRUCT, MAP, UNION and a `FLOAT[768]` embedding — each NULL on its own
  * schedule of row ids, so the expected counts come from the schedule, not
  * from DuckDB. The counts must be right with no filter, with a filter on
- * another column, with one on the column itself, and on a derived view; and
- * the query must stay one ungrouped scan that never casts the values, which
- * is what makes it cheap on embeddings (grouping a `FLOAT[768]` column by
- * value took the value counts 18–21 s).
+ * another column, with one on the column itself, with raw-SQL filters read
+ * as the grid reads them, and on a derived view; and the query must stay
+ * ungrouped scans that never cast the values, which is what makes it cheap
+ * on embeddings (grouping a `FLOAT[768]` column by value took the value
+ * counts 18–21 s).
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -163,6 +164,88 @@ describe('nested summary counts — real DuckDB', () => {
     expect(data.filtered).toEqual({ total: kept, nonNullCount: kept });
   });
 
+  describe('raw-SQL filters, counted as the grid counts them', () => {
+    const IDS_100 = IDS.slice(0, 100);
+    /** `cols.l` is NULL at every third id. */
+    const lIsNull = (id: number) => id % 3 === 0;
+
+    beforeAll(async () => {
+      // `x` is 0 or 10 by parity, `y` the last digit. `l` comes first, so a
+      // star expression over every column ends on another one.
+      await harness.conn.query(
+        `CREATE TABLE cols AS SELECT
+           CASE WHEN range % 3 = 0 THEN NULL ELSE [range, range + 1] END AS l,
+           ((range % 2) * 10)::INTEGER AS x,
+           (range % 10)::INTEGER AS y
+         FROM range(100)`,
+      );
+    });
+
+    const rawSql = (sql: string): Filter => ({
+      type: 'raw-sql',
+      column: '__raw_sql_1__',
+      sql,
+      id: '1',
+    });
+
+    /** The counts of the rows the schedule says `keep` keeps. */
+    function kept(keep: (id: number) => boolean) {
+      const rows = IDS_100.filter(keep);
+      return { total: rows.length, nonNullCount: rows.filter((id) => !lIsNull(id)).length };
+    }
+
+    /** What the grid's row count reads: the filters in a WHERE clause. */
+    async function gridCount(filters: Filter[]): Promise<number> {
+      const where = filtersToWhereClause(filters);
+      const [row] = await bridge.query<{ cnt: number }>(
+        `SELECT COUNT(*) AS cnt FROM cols WHERE ${where}`,
+      );
+      return row!.cnt;
+    }
+
+    it('ANDs a COLUMNS() filter over every column it matches', async () => {
+      // x > 5 AND y > 5: odd ids whose last digit is 7 or 9.
+      const filters = [rawSql("COLUMNS('x|y') > 5")];
+      const passing = kept((id) => id % 2 === 1 && id % 10 > 5);
+      expect(passing).toEqual({ total: 20, nonNullCount: 13 });
+      expect(await gridCount(filters)).toBe(20);
+
+      const data = await fetchNestedSummaryData('cols', 'l', filters, bridge);
+      expect(data).toEqual({ ...kept(() => true), filtered: passing });
+    });
+
+    it('keeps the rows COLUMNS(*) IS NOT NULL keeps: none with a NULL anywhere', async () => {
+      const filters = [rawSql('COLUMNS(*) IS NOT NULL')];
+      const passing = kept((id) => !lIsNull(id));
+      expect(await gridCount(filters)).toBe(passing.total);
+
+      const data = await fetchNestedSummaryData('cols', 'l', filters, bridge);
+      expect(data.filtered).toEqual(passing);
+    });
+
+    it('ANDs a COLUMNS() filter with an ordinary one', async () => {
+      // y in (6, 7), then x > 5 AND y > 5: odd ids ending in 7.
+      const filters: Filter[] = [
+        { type: 'set', column: 'y', values: [6, 7] },
+        rawSql("COLUMNS('x|y') > 5"),
+      ];
+      const passing = kept((id) => id % 10 === 7);
+      expect(await gridCount(filters)).toBe(passing.total);
+
+      const data = await fetchNestedSummaryData('cols', 'l', filters, bridge);
+      expect(data.filtered).toEqual(passing);
+    });
+
+    it('fails on a filter naming a column the relation lacks, as the grid does', async () => {
+      // `non_null` is the query's own alias, not a column of `cols`.
+      const filters = [rawSql('non_null > 5')];
+      await expect(gridCount(filters)).rejects.toThrow(/non_null/);
+      await expect(fetchNestedSummaryData('cols', 'l', filters, bridge)).rejects.toMatchObject({
+        code: 'QUERY_RUNTIME',
+      });
+    });
+  });
+
   it('counts derived nested columns of a view', async () => {
     const pair = await fetchNestedSummaryData('v', 'pair', [], bridge);
     expect(pair).toEqual({ total: 200, nonNullCount: 100, filtered: null });
@@ -209,14 +292,15 @@ describe('nested summary counts — real DuckDB', () => {
     }
   });
 
-  it('counts an embedding column in one ungrouped scan, with no work per value', async () => {
+  it('counts an embedding column in two ungrouped scans, with no work per value', async () => {
     const filters: Filter[] = [{ type: 'set', column: 'n', values: [1, 2, 3] }];
     const sql = nestedSummarySQL('t', 'emb', filters);
     const plan = (await bridge.query<{ explain_value: string }>(`EXPLAIN ${sql}`))
       .map((r) => r.explain_value)
       .join('\n');
-    expect(plan).toContain('UNGROUPED_AGGREGATE');
-    expect(plan).not.toMatch(/HASH_GROUP_BY|ORDER_BY|CAST/);
+    // All rows, and the rows passing the filters.
+    expect(plan.match(/UNGROUPED_AGGREGATE/g)).toHaveLength(2);
+    expect(plan).not.toMatch(/HASH_GROUP_BY|ORDER_BY|CAST|JOIN|CROSS_PRODUCT/);
 
     // A loose bound on a loaded machine; it measures milliseconds.
     const started = performance.now();

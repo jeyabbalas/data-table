@@ -5,7 +5,7 @@
  * histogram can bin, and grouping them by value as the value counts do is
  * slow: 18–21 seconds for a `FLOAT[768]` embedding column of 200k rows, with
  * the worker, and so the grid, frozen meanwhile. This chart reads two counts
- * instead, in one scan with no GROUP BY and no cast of the values (see
+ * instead, in one query with no GROUP BY and no cast of the values (see
  * `NestedSummaryData`), and draws:
  *
  * - an 18 px bar of the column's non-null share (`--dt-primary`, labelled

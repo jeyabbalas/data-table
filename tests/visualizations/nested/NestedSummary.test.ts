@@ -123,6 +123,20 @@ interface Counts {
   filtered_non_null?: number;
 }
 
+/** A row of the summary query's result: all rows' counts, or those passing the filters. */
+interface CountsRow {
+  filtered: boolean;
+  total: number;
+  non_null: number;
+}
+
+/** The rows the summary query returns for `counts`, the filtered one first, as a UNION ALL may. */
+function rowsOf({ total, non_null, filtered_total, filtered_non_null }: Counts): CountsRow[] {
+  const all: CountsRow = { filtered: false, total, non_null };
+  if (filtered_total === undefined) return [all];
+  return [{ filtered: true, total: filtered_total, non_null: filtered_non_null ?? 0 }, all];
+}
+
 let root: HTMLElement;
 let container: HTMLElement;
 let query: ReturnType<typeof vi.fn>;
@@ -141,7 +155,7 @@ async function mount(
   counts: Counts,
   options: { originalType?: string; filters?: Filter[] } = {},
 ): Promise<NestedSummaryVisualization> {
-  query.mockResolvedValue([counts]);
+  query.mockResolvedValue(rowsOf(counts));
   const viz = new NestedSummaryVisualization(container, column(options.originalType), {
     tableName: 't',
     bridge: { query } as unknown as VisualizationOptions['bridge'],
@@ -410,13 +424,13 @@ describe('NestedSummaryVisualization — crossfilter', () => {
 
   it('refetches with new filters through updateFilters', async () => {
     const viz = await mount({ total: 100, non_null: 50 });
-    expect(query.mock.calls[0]![0]).not.toContain('FILTER');
+    expect(query.mock.calls[0]![0]).not.toContain('WHERE');
 
-    query.mockResolvedValue([
-      { total: 100, non_null: 50, filtered_total: 20, filtered_non_null: 5 },
-    ]);
+    query.mockResolvedValue(
+      rowsOf({ total: 100, non_null: 50, filtered_total: 20, filtered_non_null: 5 }),
+    );
     await viz.updateFilters(FILTERS);
-    expect(query.mock.calls[1]![0]).toContain('FILTER (WHERE');
+    expect(query.mock.calls[1]![0]).toContain('WHERE ("n" >= 1 AND "n" < 5)');
     expect(filled(LIGHT.primaryGhost)).toHaveLength(1);
     viz.destroy();
   });
@@ -496,9 +510,9 @@ describe('NestedSummaryVisualization — hover', () => {
   it('posts the hovered segment’s new counts when a refetch lands', async () => {
     const viz = await mount({ total: 1000, non_null: 750 });
     move(viz, 40);
-    query.mockResolvedValue([
-      { total: 1000, non_null: 750, filtered_total: 10, filtered_non_null: 7 },
-    ]);
+    query.mockResolvedValue(
+      rowsOf({ total: 1000, non_null: 750, filtered_total: 10, filtered_non_null: 7 }),
+    );
     await viz.updateFilters([{ type: 'not-null', column: 'point' }]);
     expect(lastDetail()).toBe(
       '<span class="stats-label">Category:</span> non-null · {x, y, tier}<br>' +
@@ -548,9 +562,9 @@ describe('NestedSummaryVisualization — data and stats', () => {
       outline: 'x double · y double · tier varchar',
     } satisfies NestedColumnStats);
 
-    query.mockResolvedValue([
-      { total: 1000, non_null: 990, filtered_total: 120, filtered_non_null: 118 },
-    ]);
+    query.mockResolvedValue(
+      rowsOf({ total: 1000, non_null: 990, filtered_total: 120, filtered_non_null: 118 }),
+    );
     await viz.updateFilters([{ type: 'range', column: 'n', min: 0, max: 1 }]);
     expect(onDefaultStatsChange).toHaveBeenLastCalledWith({
       kind: 'nested',
@@ -572,7 +586,9 @@ describe('NestedSummaryVisualization — data and stats', () => {
     const sql = query.mock.calls[0]![0] as string;
     expect(sql).not.toMatch(/GROUP BY/i);
     expect(sql).not.toMatch(/CAST\(/i);
-    expect(sql).toMatch(/COUNT\("point"\) FILTER \(WHERE/);
+    // The filters in a WHERE clause, as the grid's queries put them.
+    expect(sql).not.toMatch(/FILTER \(/);
+    expect(sql).toMatch(/COUNT\("point"\) AS non_null FROM "t" WHERE \("n" >= 1 AND "n" < 2\)$/);
     viz.destroy();
   });
 
@@ -598,7 +614,7 @@ describe('NestedSummaryVisualization — data and stats', () => {
     expect(texts).toEqual([]);
 
     // A later fetch that lands clears the mark.
-    query.mockResolvedValue([{ total: 5, non_null: 5 }]);
+    query.mockResolvedValue(rowsOf({ total: 5, non_null: 5 }));
     await viz.fetchData();
     expect(canvasOf(viz).hasAttribute('data-fetch-failed')).toBe(false);
     expect(filled(LIGHT.primary)).toHaveLength(1);
@@ -606,10 +622,10 @@ describe('NestedSummaryVisualization — data and stats', () => {
   });
 
   it('drops a fetch that lands after a newer one', async () => {
-    let resolveFirst!: (rows: Counts[]) => void;
+    let resolveFirst!: (rows: CountsRow[]) => void;
     query.mockImplementationOnce(
       () =>
-        new Promise<Counts[]>((resolve) => {
+        new Promise<CountsRow[]>((resolve) => {
           resolveFirst = resolve;
         }),
     );
@@ -621,11 +637,11 @@ describe('NestedSummaryVisualization — data and stats', () => {
     });
     const first = viz.waitForData();
 
-    query.mockResolvedValueOnce([{ total: 10, non_null: 10 }]);
+    query.mockResolvedValueOnce(rowsOf({ total: 10, non_null: 10 }));
     await viz.fetchData();
     expect(onDefaultStatsChange).toHaveBeenCalledTimes(1);
 
-    resolveFirst([{ total: 99, non_null: 1 }]);
+    resolveFirst(rowsOf({ total: 99, non_null: 1 }));
     await first;
     expect(onDefaultStatsChange).toHaveBeenCalledTimes(1);
     expect(segments(viz)).toMatchObject([{ kind: 'value', width: 142 }]);
@@ -647,8 +663,8 @@ describe('NestedSummaryVisualization — data and stats', () => {
   });
 
   it('stops after destroy', async () => {
-    let resolve!: (rows: Counts[]) => void;
-    query.mockReturnValue(new Promise<Counts[]>((r) => (resolve = r)));
+    let resolve!: (rows: CountsRow[]) => void;
+    query.mockReturnValue(new Promise<CountsRow[]>((r) => (resolve = r)));
     const viz = new NestedSummaryVisualization(container, column(), {
       tableName: 't',
       bridge: { query } as unknown as VisualizationOptions['bridge'],
@@ -657,7 +673,7 @@ describe('NestedSummaryVisualization — data and stats', () => {
       onStatsChange,
     });
     viz.destroy();
-    resolve([{ total: 10, non_null: 10 }]);
+    resolve(rowsOf({ total: 10, non_null: 10 }));
     await viz.waitForData();
     expect(onDefaultStatsChange).not.toHaveBeenCalled();
     expect(onStatsChange).not.toHaveBeenCalled();

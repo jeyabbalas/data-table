@@ -2,11 +2,11 @@
  * NestedSummaryData - the counts behind a nested column's summary chart
  *
  * A nested column's chart shows how many of its values are NULL, with and
- * without the active filters. Both come from one scan of the relation, with
- * no GROUP BY and no cast of the values: `COUNT(c)` reads only the column's
- * validity, so a `FLOAT[768]` embedding column costs what an integer column
- * does. (Grouping such a column by value, as the value counts do, took 18–21
- * seconds on 200k rows and froze the worker meanwhile.)
+ * without the active filters. Both come from one query of two ungrouped
+ * scans, with no GROUP BY and no cast of the values: `COUNT(c)` reads only
+ * the column's validity, so a `FLOAT[768]` embedding column costs what an
+ * integer column does. (Grouping such a column by value, as the value counts
+ * do, took 18–21 seconds on 200k rows and froze the worker meanwhile.)
  */
 
 import { QueryError } from '../../core/errors';
@@ -39,29 +39,33 @@ export interface NestedSummaryData {
   filtered: { total: number; nonNullCount: number } | null;
 }
 
+/** One row of {@link nestedSummarySQL}'s result. */
 interface CountsRow {
+  /** Whether the row counts the rows passing the filters, or all of them. */
+  filtered: boolean;
   total: number | bigint;
   non_null: number | bigint;
-  filtered_total?: number | bigint;
-  filtered_non_null?: number | bigint;
 }
 
 /**
- * The SQL {@link fetchNestedSummaryData} runs: one ungrouped scan counting
- * rows and non-NULL values, and with filters the same two counts of the rows
- * passing them, as `FILTER (WHERE …)` aggregates of the same scan.
+ * The SQL {@link fetchNestedSummaryData} runs: an ungrouped scan counting
+ * rows and non-NULL values, and with filters a second one counting those of
+ * the rows passing them, a row each, which `filtered` tells apart.
+ *
+ * The filters go in a WHERE clause, as the table's other queries put them. A
+ * raw-SQL filter reads differently in an aggregate's `FILTER (WHERE …)`,
+ * which is part of the SELECT list: there `COLUMNS('x|y') > 5` makes one
+ * aggregate per matched column, not `x > 5 AND y > 5`. The two scans are a
+ * UNION ALL rather than a join of two subqueries, where DuckDB lets the
+ * second read the first's columns: a filter naming a column the relation
+ * lacks would read a count there instead of failing, as it fails in the grid.
  */
 export function nestedSummarySQL(tableName: string, column: string, filters: Filter[]): string {
-  const col = quoteIdentifier(column);
+  const counts = `COUNT(*) AS total, COUNT(${quoteIdentifier(column)}) AS non_null`;
+  const from = `FROM ${quoteIdentifier(tableName)}`;
+  const all = `SELECT FALSE AS filtered, ${counts} ${from}`;
   const where = filtersToWhereClause(filters);
-  const counts = ['COUNT(*) AS total', `COUNT(${col}) AS non_null`];
-  if (where) {
-    counts.push(
-      `COUNT(*) FILTER (WHERE ${where}) AS filtered_total`,
-      `COUNT(${col}) FILTER (WHERE ${where}) AS filtered_non_null`,
-    );
-  }
-  return `SELECT ${counts.join(', ')} FROM ${quoteIdentifier(tableName)}`;
+  return where ? `${all} UNION ALL SELECT TRUE AS filtered, ${counts} ${from} WHERE ${where}` : all;
 }
 
 /**
@@ -90,17 +94,16 @@ export async function fetchNestedSummaryData(
 ): Promise<NestedSummaryData> {
   try {
     const rows = await bridge.query<CountsRow>(nestedSummarySQL(tableName, column, filters));
-    const row = rows[0];
-    const total = Number(row?.total ?? 0);
-    const nonNullCount = Number(row?.non_null ?? 0);
-    const filtered =
-      row?.filtered_total === undefined
-        ? null
-        : {
-            total: Number(row.filtered_total),
-            nonNullCount: Number(row.filtered_non_null ?? 0),
-          };
-    return { total, nonNullCount, filtered };
+    const counts = (row: CountsRow | undefined) => ({
+      total: Number(row?.total ?? 0),
+      nonNullCount: Number(row?.non_null ?? 0),
+    });
+    // A UNION ALL keeps no order: each row says which count it is.
+    const passing = rows.find((row) => row.filtered);
+    return {
+      ...counts(rows.find((row) => !row.filtered)),
+      filtered: passing ? counts(passing) : null,
+    };
   } catch (error) {
     throw new QueryError(
       `Failed to fetch the summary of column "${column}": ${error instanceof Error ? error.message : String(error)}`,

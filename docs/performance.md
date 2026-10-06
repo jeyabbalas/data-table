@@ -119,6 +119,12 @@ column-oriented and vectorized), but not CPU-parallel in the default
 setup. The `coi` bundle is the big lever if you're consistently seeing
 10M+ row queries.
 
+The worker builds a result's rows from its column vectors, by position,
+rather than through the proxy Arrow makes for each row: 100,000 rows of 20
+columns read in 0.28 s where they took 0.94 s, 2,000 rows of 1,000 columns
+in 0.41 s where they took 1.11 s, and a 128-row grid block of 30 columns in
+1.4 ms where it took 2.5 ms (`convertBatch`, `src/worker/duckdb.ts`).
+
 ### Query cache
 
 `WorkerBridge` has an LRU query cache, default size 100 entries. Cached
@@ -136,9 +142,20 @@ is the authoritative store for scroll data, invalidated in lockstep with
 the fetch epoch; a second SQL-keyed copy would only add a second
 staleness domain. Keeping scroll SQL out of the LRU also means a fast
 scroll no longer evicts the header-stats and histogram entries the cache
-exists to serve. The same options object carries
-`priority: 'high' | 'normal'`: viewport fetches go out at `'high'` and
-jump queued stats/histogram work in the worker's serial dispatch queue.
+exists to serve. The batches of CSV, JSON and clipboard exports skip it
+too, as `getCellValue`, the value inspector and `getColumnValues` of a nested
+column do: nothing reads a batch twice, and a nested column's batch is
+megabytes of JSON text (a 30,000-row CSV export of one `FLOAT[768]` column
+left 460 MB in the cache when it went through it), which would also evict
+the chart and stats results the cache is for.
+
+The same options object carries `priority: 'high' | 'elevated' | 'normal'`,
+the query's place in the worker's serial dispatch queue. Viewport fetches go
+out at `'high'` and jump all queued work. `getCellValue` and the value
+inspector's read go out at `'elevated'`, behind the queued fetches and ahead
+of queued stats and histogram work, so a host that loops over `getCellValue`
+holds charts back but not the rows of a scroll. Everything else is
+`'normal'`.
 
 ### Column charts
 
@@ -181,10 +198,34 @@ one, in ways each kept bounded (see
   128-row block holds at most 128 such cells of each nested column (a
   grapheme can be several UTF-16 code units: an emoji sequence, a letter
   with its accents). A block of a `FLOAT[768]` embedding column is about
-  50 KB; its whole text was 1.18 MB.
-- **Header charts.** A nested column's summary bar is one ungrouped
-  `COUNT(*), COUNT(c)` scan. Grouping the values, as the value counts do,
-  took 18–21 s on a 200,000-row embedding column.
+  50 KB; its whole text was 1.18 MB. DuckDB formats only what that text can
+  reach: the items a cell shows are copied out of their list before the
+  cast, and every list, array or map inside a value is cut to its first
+  1,001 items, more than the cap can show. A 128-row block of
+  `STRUCT(id BIGINT, v DOUBLE[])` with 200,000-item lists took 4.3–5.4 s
+  when DuckDB formatted the whole values, and takes 34 ms. Still formatted
+  whole: a UNION's or a VARIANT's value, a list inside one included, a map's
+  keys, a struct with a field named with the empty string, and lists nested
+  more than 16 levels deep in a value; and a value of several levels of long
+  lists, such as a GeoJSON MultiPolygon, can still format some
+  1,001 × 1,001 items.
+- **Header charts.** A nested column's summary bar is one query of
+  ungrouped `COUNT(*), COUNT(c)` scans: one of every row, and with filters
+  on a second with the filters in its `WHERE`, as the other charts have
+  them. `COUNT(c)` reads only the column's validity. Grouping the values, as
+  the value counts do, took 18–21 s on a 200,000-row embedding column.
+- **Exact filters.** A point, set or not-set filter with `valueType: 'text'`,
+  as the filter panel makes on a nested column, compares
+  `CAST(col AS VARCHAR)`, so DuckDB formats every row's whole value in each
+  query the filter is in: every row block, the row count and every chart.
+  On 20,000 rows of `FLOAT[768]`, each such query took about 1.7 s in
+  duckdb-wasm under Node, where a filter on an integer column took under
+  1 ms; on 200,000 rows of three-item `VARCHAR[]` lists, about 19 ms. A
+  pattern filter casts the same way, and took about 2.3 s there, and a
+  derived column of the text costs the same, since the VIEW computes it in
+  each query. To filter on one part of a long value, add that part as a
+  column ([`addNestedFieldColumn`](./guides/derived-columns.md#nested-columns))
+  and filter it.
 - **Sorting.** A sort compares whole values, and deep pages of a sorted table
   pay `OFFSET` as any sort does. A wide value such as an embedding is the
   expensive case.
@@ -193,22 +234,34 @@ one, in ways each kept bounded (see
   `FLOAT[768]` embedding about 3 KB a row. The memory check before a Parquet
   load sizes them that way (`src/worker/loaders/memoryBudget.ts`).
 - **The value inspector** reads one cell, by `__rowid__`, ahead of queued
-  chart queries, and at most the first 2,097,152 characters of its JSON text
+  chart queries and behind the grid's row fetches (`priority: 'elevated'`),
+  and at most the first 2,097,152 characters of its JSON text
   (8,388,608 for Copy JSON); its tree builds only the rows it shows, in
   buckets of 100.
 - **Lazy chunks.** The inspector and the extract panel load the first time a
-  table opens them, and a failed load is tried again on the next open. Their
-  brotli sizes: the `ValueInspector` chunk 8.51 kB, the `ExtractColumnPanel`
-  chunk 5.13 kB, the `TreeView` chunk the two share 2.71 kB, and the
-  `extractExpression` chunk 2.80 kB, which both panels and
+  table opens them. A load that fails is said in the live region and
+  reported as an `error` event coded `CHUNK_LOAD_FAILED`, and the next open
+  asks for the chunk again, which Chrome answers with the same failure until
+  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.51 kB,
+  the `ExtractColumnPanel` chunk 5.13 kB, the `TreeView` chunk the two share
+  2.71 kB, and the `extractExpression` chunk 2.80 kB, which both panels and
   `actions.addNestedFieldColumn` load. The shared chunk every table loads is
   95.22 kB, the stylesheet 22.57 kB, the root entry 10.93 kB and `/advanced`
   2.50 kB (`.size-limit.cjs` holds the caps).
-- **Value reads and exports.** `getCellValue`, `getColumnValues` and the
-  CSV and JSON exports read nested values as exact JSON text. The two value
-  reads skip the query cache, which must not keep megabytes of text; the
-  exports' batches go through it as any query does. A 768-float embedding is
-  some 15,000 characters of JSON, so a CSV or JSON export of many of them can
+- **Value reads and exports.** `getCellValue`, `getColumnValues` and the CSV
+  and JSON exports read nested values as exact JSON text, and none of those
+  reads goes through the query cache, which must not keep megabytes of text.
+  An export batch, a clipboard copy and a paged `getColumnValues` pick the
+  page's `__rowid__`s first and read the values of those rows only, where
+  one `SELECT` would compute the JSON of every row before keeping the page:
+  a 10-row copy at row 30,000 of 100,000 `FLOAT[768]` rows went from 4.6 s
+  to 4 ms, a 10,000-row export batch from about 4.5 s to 0.5 s, and
+  `getColumnValues(name, { scope: 'filtered', limit: 1000 })` of 60,000 such
+  rows from 2.3 s to 55 ms. A type built only from lists, arrays and named
+  structs of integers up to `UINTEGER`, `FLOAT`s, `DOUBLE`s and `BOOLEAN`s,
+  an embedding's for one, is read with `JSON.parse`, about twice as fast as
+  the lossless reader the other types need. A 768-float embedding is some
+  15,000 characters of JSON, so a CSV or JSON export of many of them can
   pass the browser's limit on a string; export them to Parquet.
 
 Medians from `tests/performance/nestedCells.bench.duckdb.test.ts` on one
@@ -436,10 +489,10 @@ The Performance tab in Chrome / Firefox DevTools shows where time is
 spent — worker messages, DOM updates, canvas rendering. Typical hot paths:
 
 - **WorkerBridge.query** — DuckDB query time + message round-trip. Every
-  query rides the worker's serial two-priority queue: viewport row fetches
-  go out at `'high'` and jump queued `'normal'` work, and an aborted fetch
-  is dequeued for free — or genuinely cancelled mid-query via DuckDB's
-  pending-query path
+  query rides the worker's serial three-level queue: viewport row fetches go
+  out at `'high'` and jump all queued work, a cell read at `'elevated'`
+  jumps queued `'normal'` work, and an aborted fetch is dequeued for free —
+  or genuinely cancelled mid-query via DuckDB's pending-query path
 - **TableBody.renderVisibleRows** — row painting on every scroll frame:
   cached rows paint as data, missing rows paint as placeholders that are
   replaced whole when their block fetch lands

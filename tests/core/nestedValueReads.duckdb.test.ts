@@ -710,6 +710,42 @@ describe('getColumnValues agrees with getCellValue', () => {
   });
 });
 
+describe('getColumnValues of a page reads the page’s rows only', () => {
+  beforeAll(async () => {
+    // `boom` cannot be computed outside rows 10 to 14, as a derived column's
+    // expression might fail on rows nobody asked for.
+    await harness.conn.query(
+      `CREATE OR REPLACE TABLE page_base AS SELECT CAST(range AS BIGINT) AS "__rowid__",
+         CAST(range % 4 AS INTEGER) AS k FROM range(5000)`,
+    );
+    await harness.conn.query(
+      `CREATE OR REPLACE VIEW page_view AS SELECT *,
+         CASE WHEN "__rowid__" BETWEEN 10 AND 14 THEN ["__rowid__", k]
+           ELSE error('boom computed for row ' || "__rowid__") END AS boom
+       FROM page_base`,
+    );
+    relations.set('page_view', { schema: await describeSchema('page_view'), rows: 5000 });
+  });
+
+  it.each([
+    ['filtered', []],
+    ['all', [{ column: 'k', direction: 'desc' }]],
+  ] as const)('scope %s, sorted by %j', async (scope, sort) => {
+    const { actions } = tableOn('page_view');
+    actions.setSort([...sort]);
+    expectSame(await actions.getColumnValues('boom', { scope, limit: 5, offset: 10 }), [
+      [10, 2],
+      [11, 3],
+      [12, 0],
+      [13, 1],
+      [14, 2],
+    ]);
+    expect(await actions.getColumnValues('k', { scope, offset: 12, limit: 2 })).toEqual(
+      new Int32Array([0, 1]),
+    );
+  });
+});
+
 describe('getColumnValues of selected rows, sorted by a VARIANT whose values differ in kind', () => {
   // variant_value holds numbers, text, lists, structs and NULL. A window's
   // ORDER BY cannot compare two of different kinds; the grid's plain ORDER

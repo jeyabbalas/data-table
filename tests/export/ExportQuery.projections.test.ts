@@ -156,23 +156,28 @@ describe('projections in the export query builders', () => {
 
   it('quotes odd column and table names in projections and ORDER BY alike', () => {
     const sort: SortColumn[] = [{ column: 'my "col"', direction: 'desc' }];
+    const orderBy = 'ORDER BY "my ""data"""."my ""col""" DESC, "my ""data"""."__rowid__" ASC';
     expect(buildBaseQuery('my "data"', ['my "col"', 'x,y'], [], sort, 10, 20, SCHEMA)).toBe(
       'SELECT CAST(to_json("my ""col""") AS VARCHAR) AS "my ""col""", "x,y" FROM "my ""data""" ' +
-        'ORDER BY "my ""data"""."my ""col""" DESC, "my ""data"""."__rowid__" ASC LIMIT 10 OFFSET 20',
+        'WHERE "my ""data"""."__rowid__" IN (SELECT "my ""data"""."__rowid__" FROM "my ""data""" ' +
+        `${orderBy} LIMIT 10 OFFSET 20) ${orderBy}`,
     );
   });
 
-  it('buildBaseQuery sorts a projected column by its value: ORDER BY names the table', () => {
+  it('buildBaseQuery picks the batch by rowid, then reads the values of its rows only', () => {
     const sort: SortColumn[] = [{ column: 'tags', direction: 'asc' }];
     const sql = buildBaseQuery('t', ['tags'], [], sort, 100, 0, SCHEMA);
+    const orderBy = 'ORDER BY "t"."tags" ASC, "t"."__rowid__" ASC';
     expect(sql).toBe(
-      `SELECT ${JSON_TAGS} FROM "t" ORDER BY "t"."tags" ASC, "t"."__rowid__" ASC LIMIT 100 OFFSET 0`,
+      `SELECT ${JSON_TAGS} FROM "t" WHERE "t"."__rowid__" IN ` +
+        `(SELECT "t"."__rowid__" FROM "t" ${orderBy} LIMIT 100 OFFSET 0) ${orderBy}`,
     );
-    // Unqualified, `ORDER BY "tags"` would bind to the JSON-text alias.
+    // Sorted by the value: unqualified, `ORDER BY "tags"` would bind to the
+    // JSON-text alias.
     expect(sql).not.toMatch(/ORDER BY "tags"/);
   });
 
-  it('keeps a filter on a projected column on its value: WHERE binds to the table first', () => {
+  it('filters the rows of a batch on their values, in the subquery that picks them', () => {
     const sql = buildBaseQuery(
       't',
       ['tags'],
@@ -183,7 +188,9 @@ describe('projections in the export query builders', () => {
       SCHEMA,
     );
     expect(sql).toBe(
-      `SELECT ${JSON_TAGS} FROM "t" WHERE "tags" IS NULL ORDER BY "t"."__rowid__" ASC LIMIT 100 OFFSET 0`,
+      `SELECT ${JSON_TAGS} FROM "t" WHERE "t"."__rowid__" IN (SELECT "t"."__rowid__" FROM "t" ` +
+        'WHERE "tags" IS NULL ORDER BY "t"."__rowid__" ASC LIMIT 100 OFFSET 0) ' +
+        'ORDER BY "t"."__rowid__" ASC',
     );
   });
 
@@ -240,7 +247,8 @@ describe('projections in the export query builders', () => {
       'SELECT "tags", "span", "v" FROM "t" ORDER BY "t"."__rowid__" ASC',
     );
     expect(buildBaseQuery('t', columns, [], [], 5, 0)).toBe(
-      'SELECT "tags", "span", "v" FROM "t" ORDER BY "t"."__rowid__" ASC LIMIT 5 OFFSET 0',
+      'SELECT "tags", "span", "v" FROM "t" WHERE "t"."__rowid__" IN (SELECT "t"."__rowid__" ' +
+        'FROM "t" ORDER BY "t"."__rowid__" ASC LIMIT 5 OFFSET 0) ORDER BY "t"."__rowid__" ASC',
     );
     expect(buildSelectedRowsQuery('t', columns, [], sort, [2])).toBe(
       'WITH numbered AS (SELECT "tags", "span", "v", ' +

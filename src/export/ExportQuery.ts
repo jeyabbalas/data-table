@@ -287,6 +287,24 @@ export function buildSelectQuery(
  * Build one batch of an export: `LIMIT` rows from `OFFSET` in the sorted,
  * filtered view.
  *
+ * Two steps, in one query: a subquery picks the batch's rows by
+ * `__rowid__`, then the outer SELECT reads the columns of those rows only,
+ * sorted again the same way:
+ *
+ * ```sql
+ * SELECT CAST(to_json("emb") AS VARCHAR) AS "emb" FROM "t"
+ * WHERE "t"."__rowid__" IN (SELECT "t"."__rowid__" FROM "t" WHERE … ORDER BY … LIMIT 10000 OFFSET 30000)
+ * ORDER BY …
+ * ```
+ *
+ * In a single SELECT, DuckDB computes the select list for every row of the
+ * view before `ORDER BY … LIMIT` keeps the batch: `to_json` of every
+ * nested value, some 15,000 characters for a `FLOAT[768]`, to keep 10,000
+ * of them. A 10-row clipboard copy at row 30,000 of 100,000 such rows took
+ * 4 s, and is now a few milliseconds. The order ends with `__rowid__`, so
+ * it is total, and sorting the batch's rows again gives them in the same
+ * order, ties included.
+ *
  * @param schema - Read columns as {@link exportColumnRead} says; without
  *   it, every column is read as it is.
  */
@@ -299,18 +317,20 @@ export function buildBaseQuery(
   offset: number,
   schema?: readonly ColumnSchema[],
 ): string {
-  let sql = `SELECT ${selectList(columns, schema)} FROM ${quoteIdentifier(tableName)}`;
+  const table = quoteIdentifier(tableName);
+  const rowid = `${table}.${quoteIdentifier(ROWID_COLUMN)}`;
+  const orderBy = buildOrderByClause(sortColumns, tableName);
 
+  let page = `SELECT ${rowid} FROM ${table}`;
   if (filters.length > 0) {
     const where = filtersToWhereClause(filters);
     if (where) {
-      sql += ` WHERE ${where}`;
+      page += ` WHERE ${where}`;
     }
   }
+  page += `${orderBy} LIMIT ${limit} OFFSET ${offset}`;
 
-  sql += buildOrderByClause(sortColumns, tableName);
-  sql += ` LIMIT ${limit} OFFSET ${offset}`;
-  return sql;
+  return `SELECT ${selectList(columns, schema)} FROM ${table} WHERE ${rowid} IN (${page})${orderBy}`;
 }
 
 /**

@@ -580,6 +580,102 @@ describe('scalars read as text', () => {
   });
 });
 
+describe('batches read their values for their own rows only', () => {
+  const ROWS = 25_000;
+  let t: ExportTable;
+
+  beforeAll(async () => {
+    // `boom` cannot be computed outside rows 10 to 14, as a derived column's
+    // expression might fail on rows a user never asked for: copying those
+    // rows must not compute it for any other. The other columns hold ties,
+    // NULLs and a VARIANT of mixed kinds, over more rows than one batch.
+    await harness.conn.query(
+      `CREATE OR REPLACE TABLE batch_base AS SELECT
+         CAST(range AS BIGINT) AS "__rowid__",
+         CAST(range AS BIGINT) AS id,
+         CASE WHEN range % 7 = 0 THEN NULL ELSE CAST(range % 3 AS INTEGER) END AS k,
+         CASE WHEN range % 11 = 0 THEN NULL ELSE [CAST(range % 4 AS INTEGER)] END AS l,
+         CASE range % 3 WHEN 0 THEN CAST(range % 5 AS VARIANT)
+           WHEN 1 THEN CAST('s' || (range % 5) AS VARIANT) ELSE NULL END AS v
+       FROM range(${ROWS})`,
+    );
+    await harness.conn.query(
+      `CREATE OR REPLACE VIEW batch_view AS SELECT *,
+         CASE WHEN "__rowid__" BETWEEN 10 AND 14 THEN ["__rowid__"]
+           ELSE error('boom computed for row ' || "__rowid__") END AS boom
+       FROM batch_base`,
+    );
+    t = { name: 'batch_view', schema: await describeSchema('batch_view') };
+  });
+
+  it('copies rows 10 to 14 without computing anything for another row', async () => {
+    const tsv = await exportToCSV(
+      t.name,
+      { scope: 'selected', columns: ['id', 'boom'], delimiter: '\t' },
+      contextFor(t, { selectedRows: new Set([10, 11, 12, 13, 14]) }),
+    );
+    expect(tsv.split('\n')).toEqual([
+      'id\tboom',
+      '10\t[10]',
+      '11\t[11]',
+      '12\t[12]',
+      '13\t[13]',
+      '14\t[14]',
+    ]);
+  });
+
+  /** Row ids of `ORDER BY …, "__rowid__"` with `where`, as the grid sorts. */
+  async function viewOrder(orderBy: string, where = ''): Promise<number[]> {
+    const rows = await select<{ id: number }>(
+      `SELECT "id" FROM "batch_base" ${where} ORDER BY ${orderBy}, "__rowid__" ASC`,
+    );
+    return rows.map((row) => Number(row.id));
+  }
+
+  it.each([
+    { sort: { column: 'k', direction: 'desc' }, orderBy: '"k" DESC' },
+    { sort: { column: 'l', direction: 'asc' }, orderBy: '"l" ASC' },
+    { sort: { column: 'v', direction: 'desc' }, orderBy: '"v" DESC' },
+  ] as const)(
+    'writes every batch in the sort’s order, ties and NULLs included: $sort.column',
+    async ({ sort, orderBy }) => {
+      const base: ExportTable = { name: 'batch_base', schema: await describeSchema('batch_base') };
+      const filters: Filter[] = [{ type: 'not-null', column: 'l' }];
+      for (const scope of ['all', 'filtered'] as const) {
+        const context = contextFor(base, { sortColumns: [sort], filters });
+        const csv = await exportToCSV(base.name, { scope, columns: ['id', 'l'] }, context);
+        const expected = await viewOrder(
+          orderBy,
+          scope === 'filtered' ? `WHERE ${filtersToWhereClause(filters)}` : '',
+        );
+        const rows = parseDelimited(csv, ',');
+        expect(columnOf(rows, 'id').map(Number), scope).toEqual(expected);
+        expect(expected.length).toBeGreaterThan(20_000);
+      }
+      // A selection across the first batch boundary, in one run and not.
+      const order = await viewOrder(orderBy);
+      for (const positions of [
+        Array.from({ length: 30 }, (_, i) => 9_985 + i),
+        [0, 9_999, 10_000, 10_001, 24_999],
+      ]) {
+        const context = contextFor(base, {
+          sortColumns: [sort],
+          selectedRows: new Set(positions),
+        });
+        const ndjson = await exportToJSON(
+          base.name,
+          { scope: 'selected', columns: ['id'], format: 'ndjson' },
+          context,
+        );
+        expect(ndjson.split('\n').map((line) => (JSON.parse(line) as { id: number }).id)).toEqual(
+          positions.map((p) => order[p]),
+        );
+      }
+    },
+    60_000,
+  );
+});
+
 describe('TSV of selected rows, as the clipboard copies them', () => {
   it('writes nested values as standard JSON, tab-separated', async () => {
     const t = table('sqlOnly');

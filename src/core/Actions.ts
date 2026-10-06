@@ -2747,8 +2747,21 @@ export class StateActions {
       // matches and an explicit ORDER BY would be a redundant N log N pass.
       const needsExplicitOrder =
         scope !== 'all' || where !== '' || this.state.sortColumns.get().length > 0;
-      const orderBy = needsExplicitOrder ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}` : '';
-      sql = `SELECT ${valueReadSQL(read, entry, quotedCol)} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
+      const value = valueReadSQL(read, entry, quotedCol);
+      if (needsExplicitOrder && pagination) {
+        // The page's rows are picked by rowid first, and the value read for
+        // those rows only. In one SELECT, DuckDB reads the value of every
+        // row, `to_json` of a nested one included, before ORDER BY … LIMIT
+        // keeps the page: 2.3 s for a page of 1,000 FLOAT[768] values out of
+        // 60,000, against 55 ms. Without ORDER BY, it reads only the rows
+        // the LIMIT keeps.
+        const rowid = `${quotedTbl}.${quoteIdentifier(ROWID_COLUMN)}`;
+        const page = `SELECT ${rowid} FROM ${quotedTbl}${where} ORDER BY ${rowid}${pagination}`;
+        sql = `SELECT ${value} AS val FROM ${quotedTbl} WHERE ${rowid} IN (${page}) ORDER BY ${rowid}`;
+      } else {
+        const orderBy = needsExplicitOrder ? ` ORDER BY ${quoteIdentifier(ROWID_COLUMN)}` : '';
+        sql = `SELECT ${value} AS val FROM ${quotedTbl}${where}${orderBy}${pagination}`;
+      }
       valKey = 'val';
     }
 

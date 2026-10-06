@@ -359,11 +359,12 @@ describe('exportToCSV', () => {
 
       expect(csv).toBe('id,name,price\n1,Alice,10.5\n2,Bob,20');
 
-      // Verify SQL has no WHERE clause
+      // Verify SQL has no filter: its one WHERE picks the batch's rows by
+      // rowid (see buildBaseQuery)
       const sql = mockBridge.query.mock.calls[0][0] as string;
       expect(sql).toContain('SELECT "id", "name", "price"');
       expect(sql).toContain('FROM "test_table"');
-      expect(sql).not.toContain('WHERE');
+      expect(sql).not.toMatch(/WHERE (?!"test_table"\."__rowid__" IN \()/);
       expect(sql).toContain('LIMIT 10000 OFFSET 0');
     });
 
@@ -485,7 +486,8 @@ describe('exportToCSV', () => {
       await exportToCSV('test_table', { scope: 'all' }, context);
 
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).not.toContain('WHERE');
+      expect(sql).not.toMatch(/WHERE (?!"test_table"\."__rowid__" IN \()/);
+      expect(sql).not.toContain('"price" >=');
     });
   });
 

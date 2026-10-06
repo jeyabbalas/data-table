@@ -297,8 +297,10 @@ describe('exportToJSON', () => {
 
       await exportToJSON('test', { scope: 'all' }, context);
 
+      // The one WHERE picks the batch's rows by rowid (see buildBaseQuery).
       const sql = mockBridge.query.mock.calls[0][0] as string;
-      expect(sql).not.toContain('WHERE');
+      expect(sql).not.toMatch(/WHERE (?!"test"\."__rowid__" IN \()/);
+      expect(sql).not.toContain("'Alice'");
     });
 
     it('should include WHERE for scope filtered', async () => {

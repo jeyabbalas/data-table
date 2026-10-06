@@ -139,6 +139,17 @@ describe('StateActions.getColumnValues', () => {
     expect(sql).toMatch(/OFFSET 5/);
   });
 
+  it('picks an ordered page by rowid first, then reads the values of its rows only', async () => {
+    actions.addFilter({ column: 'qty', type: 'range', min: 0, max: 100 });
+    harness.setRowProducer(async () => []);
+    await actions.getColumnValues('id', { scope: 'filtered', limit: 10, offset: 5 });
+    expect(harness.queryCalls[0]).toBe(
+      'SELECT "id" AS val FROM "t" WHERE "t"."__rowid__" IN (SELECT "t"."__rowid__" FROM "t" ' +
+        'WHERE ("qty" >= 0 AND "qty" < 100) ORDER BY "t"."__rowid__" LIMIT 10 OFFSET 5) ' +
+        'ORDER BY "t"."__rowid__"',
+    );
+  });
+
   // -------------------------------------------------------------------------
   // SQL construction — scope 'filtered'
   // -------------------------------------------------------------------------

@@ -762,9 +762,12 @@ export class ExportDialog {
   }
 
   private getExportFilename(ext: string): string {
-    // sourceName is already sanitised in setSourceName(); tableName comes from
-    // data loading and may reflect the source filename, so re-sanitise here.
-    const raw = this.sourceName ?? this.state.tableName.get() ?? 'export';
+    // sourceName is already sanitised in setSourceName(); the table name comes
+    // from data loading and may reflect the source filename, so re-sanitise
+    // here. The base table's: with derived columns, `tableName` is their
+    // VIEW's, `__dt_view_<table>__`.
+    const raw =
+      this.sourceName ?? this.state.baseTableName.get() ?? this.state.tableName.get() ?? 'export';
     const baseName = sanitizeFilenameStem(raw) || 'export';
     return `${baseName}_export.${ext}`;
   }

@@ -1,8 +1,8 @@
 # Visualizations
 
 The row of tiny charts above each column header in `@jeyabbalas/data-table`
-is rendered by a pluggable visualization system. Five built-in classes cover
-numeric, date, time, interval, and categorical columns. You can register
+is rendered by a pluggable visualization system. Six built-in classes cover
+numeric, date, time, interval, categorical, and nested columns. You can register
 custom classes to add new chart types or override a built-in for a specific
 column type.
 
@@ -22,19 +22,49 @@ column type.
 
 ## Built-in visualizations
 
-Five classes are registered by default:
+Six classes are registered by default:
 
-| Class               | Applicable column types       | Description                                       |
-| ------------------- | ----------------------------- | ------------------------------------------------- |
-| `Histogram`         | `integer`, `float`, `decimal` | Bucketed bars with brushable range selection      |
-| `DateHistogram`     | `date`, `timestamp`           | Adaptive bin widths (day/week/month/quarter/year) |
-| `TimeHistogram`     | `time`                        | Hour/minute/second bins                           |
-| `IntervalHistogram` | `interval`                    | Bucketed by interval unit                         |
-| `ValueCounts`       | `string`, `boolean`, `uuid`   | Top-N bars plus an "Other" bucket                 |
+| Class                        | Applicable column types       | Description                                                  |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------ |
+| `Histogram`                  | `integer`, `float`, `decimal` | Bucketed bars with brushable range selection                 |
+| `DateHistogram`              | `date`, `timestamp`           | Adaptive bin widths (day/week/month/quarter/year)            |
+| `TimeHistogram`              | `time`                        | Hour/minute/second bins                                      |
+| `IntervalHistogram`          | `interval`                    | Bucketed by interval unit                                    |
+| `ValueCounts`                | `string`, `boolean`, `uuid`   | Top-N bars plus an "Other" bucket                            |
+| `NestedSummaryVisualization` | `nested`                      | Non-null / null share bar and the type outline; no filtering |
 
-All five support crossfilter — brushing a range or clicking a category emits
-a filter that's applied to the underlying data and propagated to every other
-visualization.
+All six redraw for the filters on other columns. The first five also make
+filters: brushing a range or clicking a category emits a filter that's
+applied to the underlying data and propagated to every other visualization.
+The nested summary makes none.
+
+### Nested columns
+
+A LIST, ARRAY, STRUCT, MAP, UNION or VARIANT column has `type: 'nested'`,
+and its chart is `NestedSummaryVisualization` (registry entry
+`nested-summary`, priority 0). Grouping such values the way `ValueCounts`
+does took 18–21 s on a 200,000-row `FLOAT[768]` column, with the worker, and
+so the grid, frozen meanwhile. The summary reads one ungrouped
+`COUNT(*), COUNT(c)` scan instead, which also counts the rows passing the
+filters, and draws:
+
+- an 18 px bar of the column's non-null share (`--dt-primary`, labelled
+  with its percentage when wide enough) and null share (`--dt-accent`,
+  labelled `∅`), sized by the unfiltered counts, and with filters on, the
+  share of each passing them drawn solid over a faded segment;
+- the column's type outline under the bar: `{x, y, tier}`, `[integer]`,
+  `{varchar → integer}`.
+
+Hovering a segment shows its counts in the stats slot ("Category: non-null ·
+{x, y, tier}", then the rows and the share). It has no click-to-filter,
+brush or keyboard selection: filter a nested column from its filter panel.
+A `JSON` column is `'string'` and keeps `ValueCounts`.
+
+A registration whose `isApplicable` accepts `'string'` does not receive
+nested columns. To chart them yourself, accept `'nested'`, or use
+`isNestedType` from `/advanced`, at a priority above 0; read the column's
+`originalType` (with `parseDuckDBType` from `/advanced`) to tell a list from
+a struct.
 
 To disable visualizations entirely:
 
@@ -109,7 +139,8 @@ and selection.
 
 **Detail region — lines 2+.** Normally the type-specific summary
 (`min · med · max`, `12 unique`, a date range …), computed on the
-filtered rows. When the column's **own** filter has a chart
+filtered rows; for a nested column, its type (`x double · y double · tier
+varchar`). When the column's **own** filter has a chart
 representation, the detail instead shows the committed selection:
 
 ```
@@ -237,7 +268,7 @@ await createDataTable({ container, source, visualizationRegistry: registry });
 | Field                | Meaning                                                                                                               |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `name`               | Unique identifier; registering a second time with the same name replaces the previous registration                    |
-| `isApplicable(type)` | Return `true` if this viz can render the column type (`integer`, `string`, `date`, etc.)                              |
+| `isApplicable(type)` | Return `true` if this viz can render the column type (`integer`, `string`, `date`, `nested`, etc.)                    |
 | `constructor`        | Class to instantiate. Must extend `BaseVisualization`                                                                 |
 | `priority`           | Higher priority wins when multiple registrations match. Built-ins use `0`; custom classes commonly use `10` or higher |
 
@@ -428,4 +459,4 @@ registry.unregister('date-histogram');
 - Multi-table: [Multi-table dashboards](./multi-table.md) for per-instance registry across tables
 - [Stats panels](./stats-panels.md) — sibling extension point for the `.dt-col-stats` slot below each visualization (replace the two-line stats display with your own DOM and DuckDB queries)
 - API reference: [`BaseVisualization`, `VisualizationRegistry`](../api-reference.md#visualizations)
-- Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VisualizationRegistry.ts:78-226`, `src/visualizations/utils.ts`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`
+- Source: `src/visualizations/BaseVisualization.ts`, `src/visualizations/VisualizationRegistry.ts:57-262`, `src/visualizations/utils.ts`, `src/visualizations/histogram/`, `src/visualizations/valuecounts/`, `src/visualizations/nested/`

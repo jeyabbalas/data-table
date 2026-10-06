@@ -6,9 +6,9 @@
 
 # Function: statsKindForDataType()
 
-> **statsKindForDataType**(`dataType`): `"time"` \| `"interval"` \| `"numeric"` \| `"categorical"` \| `"temporal"`
+> **statsKindForDataType**(`dataType`): `"time"` \| `"interval"` \| `"nested"` \| `"numeric"` \| `"categorical"` \| `"temporal"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:104](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/statistics/ColumnStatsTypes.ts#L104)
+Defined in: [statistics/ColumnStatsTypes.ts:136](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L136)
 
 Map from DataType to the appropriate stats kind.
 
@@ -20,4 +20,4 @@ Map from DataType to the appropriate stats kind.
 
 ## Returns
 
-`"time"` \| `"interval"` \| `"numeric"` \| `"categorical"` \| `"temporal"`
+`"time"` \| `"interval"` \| `"nested"` \| `"numeric"` \| `"categorical"` \| `"temporal"`

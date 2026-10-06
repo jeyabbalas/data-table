@@ -8,7 +8,7 @@
 
 > **isIntervalType**(`type`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:95](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/VisualizationRegistry.ts#L95)
+Defined in: [visualizations/VisualizationRegistry.ts:96](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/VisualizationRegistry.ts#L96)
 
 Check if a column type is interval (suitable for interval histogram).
 

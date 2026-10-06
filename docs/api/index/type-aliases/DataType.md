@@ -6,8 +6,14 @@
 
 # Type Alias: DataType
 
-> **DataType** = `"integer"` \| `"float"` \| `"decimal"` \| `"string"` \| `"boolean"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"`
+> **DataType** = `"integer"` \| `"float"` \| `"decimal"` \| `"string"` \| `"boolean"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"` \| `"nested"`
 
-Defined in: [core/types.ts:6](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/types.ts#L6)
+Defined in: [core/types.ts:14](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/types.ts#L14)
 
-Core type definitions for the Interactive Data Table Library
+Column data types supported by the library.
+
+`'nested'` covers DuckDB's container types: LIST (`INTEGER[]`), fixed-size
+ARRAY (`FLOAT[768]`), STRUCT, MAP, UNION and VARIANT. Their values are not
+scalars; the grid shows DuckDB's text for them, and
+`ColumnSchema.originalType` says which container a column is. A `JSON`
+column is `'string'`.

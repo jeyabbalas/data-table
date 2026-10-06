@@ -55,9 +55,12 @@ await table.actions.addDerivedColumn({
 });
 ```
 
-DuckDB evaluates the expression against the base table; the library uses
-`DESCRIBE` on the generated VIEW to detect the result type. Any valid DuckDB
-expression works, including:
+DuckDB evaluates the expression against the base table. The library types it
+with `DESCRIBE SELECT (expression) …`, which binds the query without reading
+a row, so an expression on an empty table gets its own type rather than
+`VARCHAR` (`src/derived/DerivedColumnManager.ts`, `detectType`). An
+expression may return a nested value, a list or a struct, which makes a
+`'nested'` column. Any valid DuckDB expression works, including:
 
 - Arithmetic and string operations (`price * 1.1`, `UPPER(name)`)
 - `CASE WHEN ... THEN ... ELSE ... END`
@@ -71,9 +74,25 @@ expression works, including:
   includes a name an earlier call is still adding: changes
   [run one at a time](#changes-run-one-at-a-time), and the second add is
   validated once the first has landed.
+- **Names ignore letter case.** DuckDB binds `"LABEL"` to a column named
+  `label`, so a `LABEL` beside `label` is refused, with an `error` that
+  ends `already exists as "label" (column names ignore letter case)`. Only
+  ASCII letters fold: `é` and `É` are two names. A rename that changes only the
+  case of a column's own name (`total` to `Total`) is allowed, and
+  `__rowid__` is reserved in any case. Before 0.9 such a column was added,
+  and its values were `label`'s. The add-column dialog and the edit panel
+  check the name the same way as you type, naming the column it collides
+  with: `PRICE` shows "A column named "price" already exists".
 - **Empty name.** Returns `{ success: false, error: 'Column name cannot be empty' }`.
-- **Syntax errors.** The library runs the VIEW creation and surfaces DuckDB's
-  parse or type-inference error in the `error` string.
+- **Syntax errors.** The library binds the expression in a query that reads
+  no row and returns none of the expression's values, only a NULL column
+  (`SELECT NULL FROM (…) LIMIT 0`, `bindOnly` in
+  `src/derived/DerivedColumnManager.ts`), so a VARIANT expression validates
+  too, and surfaces DuckDB's parse or binder error in the `error` string.
+  Binding checks no value: an expression that fails on some rows only, such
+  as a `CAST` of text that is not a number, is added, and its failure shows
+  when those rows are fetched (see
+  [Troubleshooting §30](../troubleshooting.md#30-error-fetching-rows-in-the-console-and-rows-that-stay-placeholders)).
 
 ## Vector columns
 
@@ -102,6 +121,121 @@ shorter or longer array is a validation error.
 Vector values are stored in a DuckDB helper table (`__dt_helper_<id>__`) and
 persist across page reloads when session persistence is enabled.
 
+## Nested columns
+
+A derived column can read one part of a
+[nested column](./loading-data.md#nested-and-json-columns) (a list, struct,
+map, union or JSON value), and the column it makes is an ordinary one: a
+number column gets a histogram, stats and range filters, which the nested
+column's own summary chart does not offer.
+
+`actions.addNestedFieldColumn(column, path, options?)` writes the expression
+for you, names the column, and puts it right after its source:
+
+```ts
+// point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+await table.actions.addNestedFieldColumn('point', ['x']); // { success: true, name: 'point_x' }
+// people: STRUCT(name VARCHAR, langs VARCHAR[])[]: the first person's second language
+await table.actions.addNestedFieldColumn('people', [1, 'langs', 2]); // people_1_langs_2
+// attrs: MAP(VARCHAR, INTEGER): its number of entries
+await table.actions.addNestedFieldColumn('attrs', [], { extract: 'length' }); // attrs_size
+// doc: JSON such as {"score": 0.92}, read as a number
+await table.actions.addNestedFieldColumn('doc', ['score'], { jsonLeaf: 'number' }); // doc_score
+```
+
+Each step of `path` is read against the column's DuckDB type: a struct
+field's name or 1-based position, a list or array element's 1-based
+position, a map key, a union member's tag, and inside JSON or a VARIANT,
+object keys and 0-based array indexes. Field names and union tags match
+ignoring the case of ASCII letters; map keys and JSON keys match exactly, and
+a JSON key in the wrong case reads NULL in every row. `extract` reads the value
+(`'value'`, the default), the `'length'` of a list, array, map or JSON array,
+or a union's `'tag'`; `jsonLeaf` says how a value inside JSON reads
+(`'string'`, `'number'`, `'boolean'` or `'json'`; `'number'` and `'boolean'`
+cast the value's text, so `"12.5"` reads as 12.5 and `1`, `0` and `"true"` as
+booleans). The default name, such as
+`point_x`, needs no quoting and gets `_2`, `_3` when taken; pass `name` to
+choose one. Extracts of one column stay together in the order made
+(`point, point_x, point_y`), a pinned source's go right after the pinned
+columns, and each add is one undo entry. A path that does not fit, or a name
+that is taken, resolves `{ success: false, error }` with a message naming
+the step. See
+[API reference → Extracting a nested field](../api-reference.md#extracting-a-nested-field).
+
+### From the column header
+
+A nested or JSON column's header has an extract button, after its filter
+button, which opens the extract panel under it. The panel shows the column's
+type as a keyboard tree: a struct's fields at any depth, an unnamed one by its
+1-based position; a union's tag, then its members; a list's or an array's
+length, then its element; a map's size, then its value. The elements and map
+values at the top level start expanded, so a list of structs shows its fields
+at once. A JSON or VARIANT column has no tree: the panel starts with the JSON
+path. Pick a part, and the panel asks for what it still needs:
+
+- a 1-based position for each list or array element on the way, labelled
+  after its container ("Position in people", "Position in matrix › element"),
+  at most an array's size;
+- a key for each map value ("Key in attrs");
+- for a part that is JSON or VARIANT, a JSON path and how to read what it
+  leads to. The path is written as `$.a.b[0]`: the `$` is optional, keys
+  follow dots, array indexes start at 0, and a key with a dot, a bracket or a
+  quote goes in brackets with JSON escapes, `$["a.b"]` or `$['it\'s']`.
+  Wildcards, slices and `..` are refused. "Read as" is Text, Number, Boolean,
+  JSON or Array length, which reads the length of the array there.
+
+The column's name follows the part picked until you type one; emptied, it
+follows again, and the placeholder shows the name it would get. A name that
+another column has in any letter case, or `__rowid__`, is refused. The SQL the
+column will read is shown beneath, and an error, such as a position past an
+array's end, shows under the fields as you type. Add column, `Enter` in a
+text or number field (not the "Read as" select) or `Ctrl/Cmd+Enter` adds it.
+
+The value inspector does the same for the node it is on: its footer's "Add as
+column", "Add length as column", "Add size as column" and "Add tag as column",
+a row's "+" on hover, or `Ctrl/Cmd+Enter`. From either, the column goes right
+after its source as one undo entry, the cursor moves to it, on its header
+from the panel or on the inspected row from the inspector, the view scrolls
+to it and the live region says "Column point_x added". A failure stays in
+the panel that asked. Both are part of the `derivedColumns` UI:
+`derivedColumns: false` removes the extract button and the inspector's add
+buttons, and `addNestedFieldColumn` works either way.
+`table.container.extractColumn({ column, path, ...options, row })` is the
+same add from code, with the cursor move and the announcement.
+
+### Written by hand
+
+The expressions it writes, which `addDerivedColumn` takes as well:
+
+| To read                     | Expression                                                                                                             |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| A struct's field            | `"point"['x']`; a field without a name by its position, `struct_extract("pair", 1)`                                    |
+| A list's or array's element | `"tags"[1]`: positions start at 1, as in SQL                                                                           |
+| A list's or array's length  | `len("tags")`, a `BIGINT`                                                                                              |
+| A map's value               | `map_extract_value("attrs", 'size')`; the key is a literal of the key type                                             |
+| A map's number of entries   | `cardinality("attrs")`, a `UBIGINT`                                                                                    |
+| A union's member, its tag   | `union_extract("u", 'num')`; `union_tag("u")`, an `ENUM` of the tags                                                   |
+| A key inside JSON           | `json_extract_string("doc", '$.k')` for text, `TRY_CAST(json_extract_string("doc", '$.score') AS DOUBLE)` for a number |
+
+```ts
+// point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+await table.actions.addDerivedColumn({
+  kind: 'expression',
+  name: 'point_x',
+  expression: `"point"['x']`,
+});
+```
+
+Write a field with brackets, `"point"['x']`, rather than a dot: DuckDB reads
+`"point"."x"` as column `x` of a table named `point` when the query has one
+(the table you loaded, say), and as the field only otherwise. Brackets
+always mean the field. Quote a field name with single quotes, doubling any
+inside (`"odd"['it''s']`), and a column name with double quotes.
+
+A derived column's own value may be nested too, a list or a struct built by
+the expression; it is then a `'nested'` column like any other, shown,
+filtered and exported as nested columns are.
+
 ## Updating a derived column
 
 ```ts
@@ -128,7 +262,9 @@ A rename propagates to:
 
 If the updated type differs from the old type (e.g., expression was
 `INTEGER`, now `VARCHAR`), filters on the column are dropped — they no longer
-make sense against the new type.
+make sense against the new type. Between nested types the DuckDB type
+decides: a STRUCT made a LIST, or `INTEGER[]` made `BIGINT[]`, drops the
+filters too, though both types are `'nested'`.
 
 ## Replacing a derived column (same-name + dependent re-validation)
 
@@ -339,7 +475,7 @@ if (!existing.includes('revenue_per_user')) {
 - **Vector length must equal total row count.** Not filtered row count. If you re-derive after a filter, pass a full-length array.
 - **Expression columns can reference earlier derived columns.** `col_b = col_a * 2` works _if_ `col_a` was added first. Circular references are rejected.
 - **Renaming a derived column also retains its filters.** Filters referencing the old name get updated. Filters on base columns are untouched.
-- **Type changes drop filters on that column.** If a derived column's detected type changes (e.g., a rewrite turns `INTEGER` into `VARCHAR`), the old filter doesn't survive.
+- **Type changes drop filters on that column.** If a derived column's detected type changes (e.g., a rewrite turns `INTEGER` into `VARCHAR`), the old filter doesn't survive. For a nested column, any change of its DuckDB type counts (`STRUCT(…)` to `INTEGER[]`, `INTEGER[]` to `BIGINT[]`).
 - **Undo/redo for derived changes is async.** `await` the result if you need to observe post-reconciliation state.
 - **Vector columns stay in memory (and IDB snapshots).** Large vectors — hundreds of thousands of entries — cost memory and enlarge session snapshots. Prefer expression columns whenever the derivation can be expressed as SQL.
 - **`removeDerivedColumn` on a non-derived column rejects with `NOT_FOUND`.** It only removes columns marked `isDerived`, and leaves the table as it was. To hide a base column, use `hideColumn()`.
@@ -349,4 +485,4 @@ if (!existing.includes('revenue_per_user')) {
 - State model: [Concepts → State model](../concepts/state-model.md) for snapshot shape and reconciliation timing
 - Events: [Events guide — `derivedChange`](./events.md)
 - API reference: [Derived columns](../api-reference.md#derived-columns)
-- Source: `src/derived/types.ts:1-59`, `src/derived/DerivedColumnManager.ts`, `src/core/Actions.ts:998-1300`
+- Source: `src/derived/types.ts:1-58`, `src/derived/DerivedColumnManager.ts`, `src/core/Actions.ts` (`addDerivedColumn` … `removeDerivedColumn`)

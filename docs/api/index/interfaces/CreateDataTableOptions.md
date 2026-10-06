@@ -6,7 +6,7 @@
 
 # Interface: CreateDataTableOptions
 
-Defined in: [DataTable.ts:123](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L123)
+Defined in: [DataTable.ts:137](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L137)
 
 Options accepted by [createDataTable](../functions/createDataTable.md). All feature toggles default
 to `true`; pass `false` (or a configuration object) to customize.
@@ -17,7 +17,7 @@ to `true`; pass `false` (or a configuration object) to customize.
 
 > `optional` **bridge?**: [`WorkerBridge`](../classes/WorkerBridge.md)
 
-Defined in: [DataTable.ts:223](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L223)
+Defined in: [DataTable.ts:265](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L265)
 
 Share a WorkerBridge across tables. If omitted, one is created and owned by this table.
 
@@ -27,7 +27,7 @@ Share a WorkerBridge across tables. If omitted, one is created and owned by this
 
 > `optional` **bridgeOptions?**: [`WorkerBridgeOptions`](WorkerBridgeOptions.md)
 
-Defined in: [DataTable.ts:225](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L225)
+Defined in: [DataTable.ts:267](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L267)
 
 Options for the owned WorkerBridge (ignored if `bridge` is supplied).
 
@@ -37,7 +37,7 @@ Options for the owned WorkerBridge (ignored if `bridge` is supplied).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [DataTable.ts:230](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L230)
+Defined in: [DataTable.ts:272](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L272)
 
 CSS class prefix. Default: `'dt'`.
 
@@ -47,7 +47,7 @@ CSS class prefix. Default: `'dt'`.
 
 > `optional` **colorScheme?**: [`ColorScheme`](../type-aliases/ColorScheme.md)
 
-Defined in: [DataTable.ts:304](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L304)
+Defined in: [DataTable.ts:346](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L346)
 
 Initial light/dark theme selector. Defaults to `'auto'` (follows
 `prefers-color-scheme`). Pass `'light'` or `'dark'` to force a theme per
@@ -60,7 +60,7 @@ runtime.
 
 > **container**: `HTMLElement`
 
-Defined in: [DataTable.ts:144](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L144)
+Defined in: [DataTable.ts:158](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L158)
 
 Element that will host the table. The library takes full ownership of its
 contents.
@@ -88,13 +88,15 @@ rows and logs a console warning. See "Sizing the container" in the README.
 
 > `optional` **derivedColumns?**: `boolean`
 
-Defined in: [DataTable.ts:188](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L188)
+Defined in: [DataTable.ts:223](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L223)
 
-Show the derived-column UI: the "+" button at the table's right edge and
-the f(x) edit icon on every derived-column header. The programmatic API
+Show the derived-column UI: the "+" button at the table's right edge,
+the f(x) edit icon on every derived-column header, and "extract field →
+column": the extract button on every nested and JSON column header and
+the value inspector's "add as column" buttons. The programmatic API
 (`actions.addDerivedColumn`, `actions.removeDerivedColumn`,
-`actions.updateDerivedColumn`) is unaffected by this flag — only the
-user-visible affordances are removed.
+`actions.updateDerivedColumn`, `actions.addNestedFieldColumn`) is
+unaffected by this flag — only the user-visible affordances are removed.
 
 Set this to `false` together with `expressionFilter: false` to skip
 loading CodeMirror entirely. Consumers in that mode can omit the
@@ -109,7 +111,7 @@ Default: `true`.
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [DataTable.ts:245](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L245)
+Defined in: [DataTable.ts:287](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L287)
 
 Custom expression editor factory (replaces the CodeMirror-based default).
 
@@ -119,7 +121,7 @@ Custom expression editor factory (replaces the CodeMirror-based default).
 
 > `optional` **exportDialog?**: `boolean`
 
-Defined in: [DataTable.ts:216](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L216)
+Defined in: [DataTable.ts:258](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L258)
 
 Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`.
 
@@ -129,7 +131,7 @@ Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`.
 
 > `optional` **expressionFilter?**: `boolean`
 
-Defined in: [DataTable.ts:172](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L172)
+Defined in: [DataTable.ts:205](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L205)
 
 Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `true`.
 
@@ -139,7 +141,7 @@ Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `tru
 
 > `optional` **fetchBlockSize?**: `number`
 
-Defined in: [DataTable.ts:275](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L275)
+Defined in: [DataTable.ts:317](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L317)
 
 Rows fetched per scroll block. Default: 128. Clamped to [16, 1024].
 
@@ -158,7 +160,7 @@ smaller transfers.
 
 > `optional` **headerHeight?**: `number`
 
-Defined in: [DataTable.ts:262](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L262)
+Defined in: [DataTable.ts:304](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L304)
 
 Header height in pixels. Default: 120. Applied as the header row's
 `min-height` and published as the `--dt-header-height` custom property.
@@ -171,7 +173,7 @@ plots have nowhere to draw.
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [DataTable.ts:243](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L243)
+Defined in: [DataTable.ts:285](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L285)
 
 Identifier mixed into element IDs so multiple tables on the same page
 don't collide on `aria-labelledby` / `aria-activedescendant` targets.
@@ -190,7 +192,7 @@ to predict element IDs.
 
 > `optional` **messages?**: `object`
 
-Defined in: [DataTable.ts:314](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L314)
+Defined in: [DataTable.ts:356](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L356)
 
 Override user-facing strings (button labels, placeholders, aria-live
 announcements, stats templates). Every key is optional; missing leaves
@@ -1372,6 +1374,13 @@ Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 
 > `optional` **min?**: `object`
 
+##### statistics.nonNullCategory?
+
+> `optional` **nonNullCategory?**: `string`
+
+Display value for the non-null segment of a nested column's summary
+bar in a hover detail line, the counterpart of `nullBinLabel`.
+
 ##### statistics.nullBinLabel?
 
 > `optional` **nullBinLabel?**: `string`
@@ -1432,13 +1441,383 @@ Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
 
 Truncation suffix for a long multi-select value list (total = selected values).
 
+#### values?
+
+> `optional` **values?**: `object`
+
+##### values.addAsColumn?
+
+> `optional` **addAsColumn?**: `string`
+
+Value inspector button that adds the active node's value as a column
+("extract field → column"); also the `title` of the "+" a row shows
+under the pointer.
+
+##### values.addColumn?
+
+> `optional` **addColumn?**: `string`
+
+The extract panel's submit button.
+
+##### values.adding?
+
+> `optional` **adding?**: `string`
+
+Status while a column is being added (the value inspector, the extract panel's button).
+
+##### values.addLengthAsColumn?
+
+> `optional` **addLengthAsColumn?**: `string`
+
+Value inspector button that adds a list's, an array's or a JSON array's length as a column.
+
+##### values.addSizeAsColumn?
+
+> `optional` **addSizeAsColumn?**: `string`
+
+Value inspector button that adds a map's number of entries as a column.
+
+##### values.addTagAsColumn?
+
+> `optional` **addTagAsColumn?**: `string`
+
+Value inspector button that adds which member a union holds as a column.
+
+##### values.bucketLabel?
+
+> `optional` **bucketLabel?**: `object`
+
+One bucket of a container too big to list at once, by the numbers of
+its first and last child (1-based for DuckDB values, 0-based inside
+JSON, the same number twice for a bucket of one): "[1 … 100]",
+"[10001 … 10001]".
+
+##### values.closeLabel?
+
+> `optional` **closeLabel?**: `string`
+
+`aria-label` of the value inspector's × button.
+
+##### values.columnAdded?
+
+> `optional` **columnAdded?**: `object`
+
+Live-region text once a column has been added: "Column point_x added".
+
+##### values.columnNameLabel?
+
+> `optional` **columnNameLabel?**: `string`
+
+Label of the extract panel's input for the new column's name.
+
+##### values.copied?
+
+> `optional` **copied?**: `string`
+
+Value inspector status after a copy (Copy JSON, or Ctrl/Cmd+C on a node).
+
+##### values.copyFailed?
+
+> `optional` **copyFailed?**: `string`
+
+Value inspector status when the clipboard refused the copy.
+
+##### values.copyJson?
+
+> `optional` **copyJson?**: `string`
+
+Value inspector button that copies the whole value as JSON.
+
+##### values.elementNode?
+
+> `optional` **elementNode?**: `string`
+
+The tree's node for a list's or an array's elements, read at a position.
+
+##### values.entryCount?
+
+> `optional` **entryCount?**: `object`
+
+Entries of a map, in the tree: "600 entries".
+
+##### values.expressionLabel?
+
+> `optional` **expressionLabel?**: `string`
+
+Label of the extract panel's preview of the SQL expression the column reads.
+
+##### values.extractButtonLabel?
+
+> `optional` **extractButtonLabel?**: `object`
+
+`aria-label` of a nested or JSON column header's extract button: "Extract from point".
+
+##### values.extractButtonTitle?
+
+> `optional` **extractButtonTitle?**: `string`
+
+`title` of the header's extract button.
+
+##### values.extractCloseLabel?
+
+> `optional` **extractCloseLabel?**: `string`
+
+`aria-label` of the extract panel's × button.
+
+##### values.extractFailed?
+
+> `optional` **extractFailed?**: `object`
+
+A column could not be added, with the reason (in English, from the action): "Could not add the column: …".
+
+##### values.extractTitle?
+
+> `optional` **extractTitle?**: `object`
+
+Title of the extract panel, which names it for assistive technology: "Extract from point".
+
+##### values.extractTreeLabel?
+
+> `optional` **extractTreeLabel?**: `object`
+
+Accessible name of the extract panel's tree of the column's type: "Parts of point".
+
+##### values.fieldCount?
+
+> `optional` **fieldCount?**: `object`
+
+Fields of a struct, in the tree: "3 fields".
+
+##### values.inspectorTitle?
+
+> `optional` **inspectorTitle?**: `object`
+
+Title of the value inspector, the panel that shows one nested or JSON
+cell's whole value (F2, a double click, or the cell's inspect icon):
+the column and `rowLabel`'s text, "tags · Row 1,235". It also
+names the panel for assistive technology.
+
+##### values.itemCount?
+
+> `optional` **itemCount?**: `object`
+
+Elements of a list, an array or a JSON array, in the tree: "3 items".
+
+##### values.jsonPathHint?
+
+> `optional` **jsonPathHint?**: `string`
+
+How to write a JSON path, under the input.
+
+##### values.jsonPathInvalid?
+
+> `optional` **jsonPathInvalid?**: `object`
+
+The JSON path does not parse, by the 1-based character where it goes wrong.
+
+##### values.jsonPathLabel?
+
+> `optional` **jsonPathLabel?**: `string`
+
+Label of the extract panel's JSON path input, for a part that is JSON or VARIANT.
+
+##### values.keyCount?
+
+> `optional` **keyCount?**: `object`
+
+Keys of a JSON object, in the tree: "2 keys".
+
+##### values.keyLabel?
+
+> `optional` **keyLabel?**: `object`
+
+Label of the input for a map value's key, by the map: "Key in attrs".
+
+##### values.keyRequired?
+
+> `optional` **keyRequired?**: `string`
+
+The key input is empty.
+
+##### values.lengthNode?
+
+> `optional` **lengthNode?**: `string`
+
+The tree's leaf for a list's or an array's number of elements.
+
+##### values.loadFailed?
+
+> `optional` **loadFailed?**: `string`
+
+Value inspector status when the value could not be read.
+
+##### values.loading?
+
+> `optional` **loading?**: `string`
+
+Value inspector status while the value loads, shown after 150 ms.
+
+##### values.mapValueNode?
+
+> `optional` **mapValueNode?**: `string`
+
+The tree's node for a map's values, read by key.
+
+##### values.moreCharacters?
+
+> `optional` **moreCharacters?**: `object`
+
+After text the tree cut short, by the characters left out: "18,000 more characters".
+
+##### values.nothingToExtract?
+
+> `optional` **nothingToExtract?**: `string`
+
+The extract panel's text when the column's type could not be read, so has no parts.
+
+##### values.positionInvalid?
+
+> `optional` **positionInvalid?**: `string`
+
+The position input holds something other than a whole number from 1 up.
+
+##### values.positionLabel?
+
+> `optional` **positionLabel?**: `object`
+
+Label of the input for an element's 1-based position, by the list or
+array it is in: "Position in people". A list inside a list is named
+after the outer one's element: "Position in matrix › element".
+
+##### values.readAs?
+
+> `optional` **readAs?**: `object`
+
+The "Read as" choices: a value inside JSON or VARIANT as text, a
+number, a boolean or JSON, or the length of the array there.
+
+##### values.readAs.boolean?
+
+> `optional` **boolean?**: `string`
+
+##### values.readAs.json?
+
+> `optional` **json?**: `string`
+
+##### values.readAs.length?
+
+> `optional` **length?**: `string`
+
+##### values.readAs.number?
+
+> `optional` **number?**: `string`
+
+##### values.readAs.string?
+
+> `optional` **string?**: `string`
+
+##### values.readAsLabel?
+
+> `optional` **readAsLabel?**: `string`
+
+Label of the extract panel's "Read as" select, for a part that is JSON or VARIANT.
+
+##### values.retry?
+
+> `optional` **retry?**: `string`
+
+Button that reads the value again after it failed to load.
+
+##### values.rowLabel?
+
+> `optional` **rowLabel?**: `object`
+
+The row a value inspector shows, by its 1-based position in the table
+as sorted and filtered (the number a loading row shows): "Row 1,235".
+
+##### values.sizeNode?
+
+> `optional` **sizeNode?**: `string`
+
+The tree's leaf for a map's number of entries.
+
+##### values.tagNode?
+
+> `optional` **tagNode?**: `string`
+
+The tree's leaf for which member a union holds.
+
+##### values.tooLargeToCopy?
+
+> `optional` **tooLargeToCopy?**: `string`
+
+Value inspector status when the value is too long to copy: over 8 MiB of JSON.
+
+##### values.treeLabel?
+
+> `optional` **treeLabel?**: `object`
+
+Accessible name of the value inspector's tree: "Value of tags".
+
+##### values.truncatedNotice?
+
+> `optional` **truncatedNotice?**: `object`
+
+Value inspector status for a value too long to show whole, by the
+characters shown and the value's length:
+"Showing the first 2,097,152 of 3,000,000 characters".
+
+##### values.typeArray?
+
+> `optional` **typeArray?**: `object`
+
+Spoken type of a fixed-size ARRAY: "array of 768 float".
+
+##### values.typeJson?
+
+> `optional` **typeJson?**: `string`
+
+Spoken name of the JSON type.
+
+##### values.typeList?
+
+> `optional` **typeList?**: `object`
+
+Spoken type of a LIST, given its element's spoken type: "list of
+integer". A column header's accessible name ends with it ("tags, list
+of integer"); the visible label stays DuckDB's notation (`[integer]`).
+
+##### values.typeMap?
+
+> `optional` **typeMap?**: `object`
+
+Spoken type of a MAP, given its key's and value's: "map from varchar to integer".
+
+##### values.typeStruct?
+
+> `optional` **typeStruct?**: `object`
+
+Spoken type of a STRUCT, by its number of fields: "struct with 3 fields".
+
+##### values.typeUnion?
+
+> `optional` **typeUnion?**: `object`
+
+Spoken type of a UNION, by its number of members: "union of 2 types".
+
+##### values.typeVariant?
+
+> `optional` **typeVariant?**: `string`
+
+Spoken name of the VARIANT type.
+
 ***
 
 ### persistence?
 
 > `optional` **persistence?**: `boolean` \| \{ `sessionStore?`: [`SessionStore`](../classes/SessionStore.md); \}
 
-Defined in: [DataTable.ts:160](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L160)
+Defined in: [DataTable.ts:193](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L193)
 
 Persist UI state (filters, sort, columns, derived columns) to IndexedDB
 and auto-restore on next mount. Pass `{ sessionStore }` to reuse an
@@ -1450,7 +1829,7 @@ existing store across tables. Default: `true`.
 
 > `optional` **portalTarget?**: `HTMLElement`
 
-Defined in: [DataTable.ts:221](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L221)
+Defined in: [DataTable.ts:263](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L263)
 
 Where fixed-position modals mount. Default: `document.body`.
 
@@ -1460,7 +1839,7 @@ Where fixed-position modals mount. Default: `document.body`.
 
 > `optional` **prefetch?**: `boolean`
 
-Defined in: [DataTable.ts:296](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L296)
+Defined in: [DataTable.ts:338](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L338)
 
 Speculatively fetch one block beyond the viewport in the current
 scroll direction while the fetch pipeline is idle. Default: `true`.
@@ -1476,7 +1855,7 @@ shares its DuckDB worker with heavier analytical queries).
 
 > `optional` **presets?**: `boolean` \| \{ `manager?`: [`FilterPresetManager`](../classes/FilterPresetManager.md); \}
 
-Defined in: [DataTable.ts:166](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L166)
+Defined in: [DataTable.ts:199](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L199)
 
 Enable the "Presets" button for saving/loading named filter sets.
 Pass `{ manager }` to reuse an existing preset manager. Default: `true`.
@@ -1487,7 +1866,7 @@ Pass `{ manager }` to reuse an existing preset manager. Default: `true`.
 
 > `optional` **rowCacheRows?**: `number`
 
-Defined in: [DataTable.ts:286](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L286)
+Defined in: [DataTable.ts:328](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L328)
 
 Maximum rows held in the in-memory row cache. Default: 2048 (rounded
 up to whole blocks, floor 4 blocks).
@@ -1504,7 +1883,7 @@ how often previously seen blocks are re-fetched.
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [DataTable.ts:255](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L255)
+Defined in: [DataTable.ts:297](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L297)
 
 Row height in pixels. Default: 32.
 
@@ -1520,7 +1899,7 @@ CSS-only change would move the rows and not the scroller.
 
 > `optional` **source?**: `string` \| `File` \| `Blob` \| `ArrayBuffer`
 
-Defined in: [DataTable.ts:147](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L147)
+Defined in: [DataTable.ts:164](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L164)
 
 Optional initial data source. If omitted, call
 `table.loadData(source, { tableName, sourceFormat, sourceOptions })` later.
@@ -1531,7 +1910,7 @@ Optional initial data source. If omitted, call
 
 > `optional` **sourceFormat?**: [`DataFormat`](../type-aliases/DataFormat.md)
 
-Defined in: [DataTable.ts:149](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L149)
+Defined in: [DataTable.ts:170](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L170)
 
 Override the format detected from `source` (e.g., if its URL has no
 extension). Applies to `source` only; pass `sourceFormat` to
@@ -1543,7 +1922,7 @@ extension). Applies to `source` only; pass `sourceFormat` to
 
 > `optional` **sourceOptions?**: [`SourceOptions`](SourceOptions.md)
 
-Defined in: [DataTable.ts:170](https://github.com/jeyabbalas/data-table/blob/84bc22716ae6fbd54ed52c48655671e063bd7ac4/src/DataTable.ts#L170)
+Defined in: [DataTable.ts:177](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L177)
 
 How `source` is read, per format: a CSV delimiter, header or null
 strings, the rows sampled to detect types, the Parquet columns to load,
@@ -1556,7 +1935,7 @@ only; pass `sourceOptions` to `table.loadData()` for a later load.
 
 > `optional` **statsPanelRegistry?**: [`StatsPanelRegistry`](../classes/StatsPanelRegistry.md)
 
-Defined in: [DataTable.ts:213](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L213)
+Defined in: [DataTable.ts:255](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L255)
 
 Per-instance stats panel registry. Register a [BaseStatsPanel](../../advanced/classes/BaseStatsPanel.md)
 subclass to replace the library's built-in two-line stats display in
@@ -1575,7 +1954,7 @@ for tables that don't opt in.
 
 > `optional` **strictBrowserCheck?**: `boolean`
 
-Defined in: [DataTable.ts:324](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L324)
+Defined in: [DataTable.ts:366](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L366)
 
 When `true`, probe for required browser APIs before attempting worker
 init. Rejects with [WorkerInitError](../classes/WorkerInitError.md) (`code: 'WORKER_UNSUPPORTED'`,
@@ -1590,7 +1969,7 @@ dedicated "unsupported browser" screen instead of a half-mounted table.
 
 > `optional` **tableName?**: `string`
 
-Defined in: [DataTable.ts:151](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L151)
+Defined in: [DataTable.ts:184](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L184)
 
 Table name used inside DuckDB for `source`, which is also the key its
 saved session is stored under. Auto-generated if omitted. Applies to
@@ -1603,7 +1982,7 @@ loads under a generated name, so no saved session is restored.
 
 > `optional` **undoRedo?**: `boolean`
 
-Defined in: [DataTable.ts:169](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L169)
+Defined in: [DataTable.ts:202](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L202)
 
 Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
 
@@ -1613,7 +1992,7 @@ Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
 
 > `optional` **visualizationRegistry?**: [`VisualizationRegistry`](../classes/VisualizationRegistry.md)
 
-Defined in: [DataTable.ts:199](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L199)
+Defined in: [DataTable.ts:241](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L241)
 
 Per-instance visualization registry. Use this to register custom
 visualizations (or override built-ins) without affecting other tables
@@ -1626,7 +2005,7 @@ is used.
 
 > `optional` **visualizations?**: `boolean`
 
-Defined in: [DataTable.ts:191](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/DataTable.ts#L191)
+Defined in: [DataTable.ts:233](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/DataTable.ts#L233)
 
 Enable auto-attached column header visualizations (histograms, value counts). Default: `true`.
 

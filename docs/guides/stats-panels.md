@@ -13,7 +13,8 @@ mount into the column header, both can issue their own DuckDB queries via
 visualization owns the canvas (the chart itself); a stats panel owns the
 two text lines below it. They are independent extensibility points — you
 can register one without touching the other, and a column without a
-visualization (e.g. `uuid`) can still host a stats panel.
+visualization (with `visualizations: false`, say) can still host a stats
+panel.
 
 ## You'll learn how to
 
@@ -123,6 +124,28 @@ Same-name re-register **replaces** the existing entry. Pass a per-instance
 registry to keep custom panels scoped to one table — multi-table dashboards
 should give each instance its own registry to avoid leaking between
 unrelated tables.
+
+### Nested columns
+
+`isApplicable` receives the column's `DataType`, and a LIST, ARRAY, STRUCT,
+MAP, UNION or VARIANT column's is `'nested'`. A registration that accepts
+`'string'` does not receive nested columns; accept `'nested'` to handle them,
+and read `column.originalType` (with `parseDuckDBType` from `/advanced`) to
+tell a list from a struct. A `JSON` column is `'string'`.
+
+A nested column's chart reports `NestedColumnStats`:
+
+```ts
+interface NestedColumnStats extends BaseColumnStats {
+  kind: 'nested'; // statsKindForDataType('nested') === 'nested'
+  outline: string; // the type summary: 'x double · y double · tier varchar'
+}
+```
+
+`outline` is what the built-in line 2 shows. Field names in it come from the
+data file: write it with `textContent`, or escape it, as the built-in
+formatter does. Its values are not grouped or ranged, so the row and null
+counts are all the numbers it carries.
 
 ### Module-scoped fallback
 
@@ -355,12 +378,12 @@ the library renders its built-in formatter.
 
 ### Panel on a no-visualization column
 
-`uuid`, `interval`, and other types without a registered visualization
-still get filter-broadcast callbacks. The coordinator broadcasts to
-**every** registered panel regardless of whether its column has a
-visualization, so a panel can compute its own stats independently — for
-example, a `uuid` panel that runs `SELECT COUNT(DISTINCT col)` on every
-filter change.
+A column without a chart, as every column is with `visualizations: false`,
+or one whose type's registration you removed, still gets filter-broadcast
+callbacks. The coordinator broadcasts to **every** registered panel
+regardless of whether its column has a visualization, so a panel can compute
+its own stats independently — for example, a `uuid` panel that runs
+`SELECT COUNT(DISTINCT col)` on every filter change.
 
 ### Sharing state across panels
 

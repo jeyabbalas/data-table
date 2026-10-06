@@ -6,7 +6,7 @@
 
 # Class: CellRenderer
 
-Defined in: [table/Cell.ts:66](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L66)
+Defined in: [table/Cell.ts:96](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L96)
 
 CellRenderer handles formatting and rendering of cell values.
 
@@ -29,7 +29,7 @@ const formatted = renderer.formatValue(1234567, 'integer');
 
 > **new CellRenderer**(`options?`): `CellRenderer`
 
-Defined in: [table/Cell.ts:70](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L70)
+Defined in: [table/Cell.ts:100](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L100)
 
 #### Parameters
 
@@ -47,7 +47,7 @@ Defined in: [table/Cell.ts:70](https://github.com/jeyabbalas/data-table/blob/c94
 
 > **formatValue**(`value`, `type?`, `originalType?`): `string`
 
-Defined in: [table/Cell.ts:114](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L114)
+Defined in: [table/Cell.ts:175](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L175)
 
 Format a value to string based on its data type.
 
@@ -83,7 +83,7 @@ Formatted string representation
 
 > **render**(`cellEl`, `value`, `schema?`): `void`
 
-Defined in: [table/Cell.ts:82](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/Cell.ts#L82)
+Defined in: [table/Cell.ts:112](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L112)
 
 Render a value into a cell element with appropriate formatting and styling.
 
@@ -110,3 +110,42 @@ Optional column schema for type-aware formatting
 #### Returns
 
 `void`
+
+***
+
+### setInspectable()
+
+> **setInspectable**(`cellEl`, `inspectable`): `void`
+
+Defined in: [table/Cell.ts:153](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L153)
+
+Mark a cell as one the value inspector opens, or unmark it: the
+`-cell--inspectable` class, which shows the inspect icon (drawn by the
+stylesheet, no element of its own) on hover and on the cursor, and
+`aria-haspopup="dialog"` with `aria-keyshortcuts="F2"`, which tell
+assistive technology that the cell opens a dialog and how.
+
+For the non-NULL values of nested and JSON columns
+(`isInspectableColumn`). A cell is reused across rows and columns, so
+every render says which it is now; nothing is written unless that
+changes, since this runs for every cell of every render.
+
+#### Parameters
+
+##### cellEl
+
+`HTMLElement`
+
+##### inspectable
+
+`boolean`
+
+#### Returns
+
+`void`
+
+#### Example
+
+```typescript
+renderer.setInspectable(cellEl, value != null && isInspectableColumn(column));
+```

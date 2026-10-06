@@ -6,7 +6,7 @@
 
 # Class: WorkerBridge
 
-Defined in: [data/WorkerBridge.ts:151](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L151)
+Defined in: [data/WorkerBridge.ts:154](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L154)
 
 Promise-based RPC layer between the main thread and the DuckDB Web Worker.
 
@@ -44,7 +44,7 @@ bridge.terminate();
 
 > **new WorkerBridge**(`options?`): `WorkerBridge`
 
-Defined in: [data/WorkerBridge.ts:162](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L162)
+Defined in: [data/WorkerBridge.ts:171](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L171)
 
 #### Parameters
 
@@ -62,7 +62,7 @@ Defined in: [data/WorkerBridge.ts:162](https://github.com/jeyabbalas/data-table/
 
 > **clearQueryCache**(): `void`
 
-Defined in: [data/WorkerBridge.ts:425](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L425)
+Defined in: [data/WorkerBridge.ts:498](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L498)
 
 Clear all cached query results
 
@@ -76,7 +76,7 @@ Clear all cached query results
 
 > **dropTable**(`tableName`): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:440](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L440)
+Defined in: [data/WorkerBridge.ts:513](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L513)
 
 Drop a table from DuckDB if it exists. The identifier is double-quoted
 (matching the worker-side loaders), so any tableName the bridge issued
@@ -104,7 +104,7 @@ without re-implementing identifier quoting.
 
 > **exportToBuffer**(`sql`, `format`, `signal?`): `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [data/WorkerBridge.ts:392](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L392)
+Defined in: [data/WorkerBridge.ts:457](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L457)
 
 Export data to a binary file format via DuckDB COPY TO.
 
@@ -135,12 +135,17 @@ Returns the file contents as a Uint8Array.
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:220](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L220)
+Defined in: [data/WorkerBridge.ts:234](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L234)
 
 Create the worker and wait for it to be ready.
 
 Rejects with a descriptive error if the worker fails to signal ready
 or DuckDB fails to initialize within `initializeTimeoutMs` (default 30s).
+
+If the worker fails later, with an error it does not catch, every
+pending request rejects with a `WorkerInitError` whose code is
+`WORKER_CRASHED`, and so does every later call, until `initialize()` is
+called again: it starts a new worker, with an empty database.
 
 #### Returns
 
@@ -152,7 +157,7 @@ or DuckDB fails to initialize within `initializeTimeoutMs` (default 30s).
 
 > **isInitialized**(): `boolean`
 
-Defined in: [data/WorkerBridge.ts:449](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L449)
+Defined in: [data/WorkerBridge.ts:522](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L522)
 
 Check if the bridge is initialized
 
@@ -166,7 +171,7 @@ Check if the bridge is initialized
 
 > **loadData**(`source`, `options`, `onProgress?`, `signal?`): `Promise`\<[`LoadDataResult`](../interfaces/LoadDataResult.md)\>
 
-Defined in: [data/WorkerBridge.ts:358](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L358)
+Defined in: [data/WorkerBridge.ts:423](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L423)
 
 Load data into DuckDB
 
@@ -212,7 +217,7 @@ any other key here, such as a `delimiter` next to `format`, is ignored.
 
 > **query**\<`T`\>(`sql`, `signal?`, `options?`): `Promise`\<`T`[]\>
 
-Defined in: [data/WorkerBridge.ts:314](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L314)
+Defined in: [data/WorkerBridge.ts:373](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L373)
 
 Execute a SQL query.
 
@@ -221,6 +226,29 @@ cache unless `options.cache === false`. `options.priority: 'high'`
 makes the worker run this query ahead of queued normal-priority work
 (viewport row fetches use this so they are not stuck behind
 stats/histogram fan-outs).
+
+Each row is a plain object keyed by column name. Integers arrive as
+numbers (the nearest one, past ±2^53), a LIST or ARRAY value as an
+array, a STRUCT or MAP value as an object (a MAP's keys as strings; an
+unnamed STRUCT, as `row(1, 'a')` builds, as an array), and a BLOB as a
+`Uint8Array`.
+
+DECIMAL, HUGEINT and INTERVAL values inside a LIST, ARRAY, STRUCT or MAP
+do not arrive intact: a nested DECIMAL or HUGEINT reads as a meaningless
+number (`[1.25, 2.50, 3.75]` as `[6.2e-322, 0, 1.235e-321]`), and an
+INTERVAL, nested or a column's own value, as an `Int32Array` that does
+not hold it. Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
+nested value as JSON text, which is exact: `CAST(to_json(c) AS VARCHAR)`
+keeps every digit and writes an INTERVAL as DuckDB does
+(`"1 year 2 months 3 days"`). `JSON.parse` rounds integers past 2^53
+and rejects the bare `NaN` and `Infinity` DuckDB writes for non-finite
+DOUBLEs.
+
+A VARIANT value cannot cross Arrow at all (`Unsupported Arrow type
+VARIANT`), nor a value that holds one, and `to_json` gets those wrong
+(`to_json(42::VARIANT)` is the string `"42"`). Select a VARIANT column
+as `CAST(c AS JSON)`, or read any of these with `actions.getCellValue`
+or `actions.getColumnValues`, which pick the SQL for each type.
 
 #### Type Parameters
 
@@ -269,7 +297,7 @@ const rows = await bridge.query(sql, controller.signal, {
 
 > **terminate**(): `void`
 
-Defined in: [data/WorkerBridge.ts:403](https://github.com/jeyabbalas/data-table/blob/9d2827c2aed0dec8cb778c7931896c3a77a1754d/src/data/WorkerBridge.ts#L403)
+Defined in: [data/WorkerBridge.ts:468](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L468)
 
 Terminate the worker
 

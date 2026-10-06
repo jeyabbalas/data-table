@@ -279,7 +279,7 @@ can interleave your own layers without hunting through the stylesheet.
 | `--dt-z-header`             |    `21` | Column header row + hidden-columns gutter.                                                                           |
 | `--dt-z-action-panel`       |    `30` | Per-column action panel popovers (reserved).                                                                         |
 | `--dt-z-filter-bar`         |    `40` | Filter bar at the top of the table.                                                                                  |
-| `--dt-z-floating-panel`     |    `50` | In-page panels (filter, preset, derived-edit, drop indicator).                                                       |
+| `--dt-z-floating-panel`     |    `50` | In-page panels (filter, preset, derived-edit, value inspector, extract, drop indicator).                             |
 | `--dt-z-annotation-popover` |    `55` | Annotation popover (sits between floating panels and the autocomplete tooltip).                                      |
 | `--dt-z-col-tooltip`        |    `56` | Column-header tooltip popover (one above the annotation popover so a column with both renders the tooltip in front). |
 | `--dt-z-autocomplete`       |    `60` | CodeMirror autocomplete tooltip (portalled to `<body>`).                                                             |

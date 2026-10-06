@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:867](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/core/Strings.ts#L867)
+Defined in: [core/Strings.ts:1106](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Strings.ts#L1106)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -1139,7 +1139,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1198,6 +1198,13 @@ Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 #### statistics.min?
 
 \{ \}
+
+#### statistics.nonNullCategory?
+
+`string`
+
+Display value for the non-null segment of a nested column's summary
+bar in a hover detail line, the counterpart of `nullBinLabel`.
 
 #### statistics.nullBinLabel?
 
@@ -1258,6 +1265,376 @@ Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
 \{ \}
 
 Truncation suffix for a long multi-select value list (total = selected values).
+
+#### values?
+
+\{ `addAsColumn?`: `string`; `addColumn?`: `string`; `adding?`: `string`; `addLengthAsColumn?`: `string`; `addSizeAsColumn?`: `string`; `addTagAsColumn?`: `string`; `bucketLabel?`: \{ \}; `closeLabel?`: `string`; `columnAdded?`: \{ \}; `columnNameLabel?`: `string`; `copied?`: `string`; `copyFailed?`: `string`; `copyJson?`: `string`; `elementNode?`: `string`; `entryCount?`: \{ \}; `expressionLabel?`: `string`; `extractButtonLabel?`: \{ \}; `extractButtonTitle?`: `string`; `extractCloseLabel?`: `string`; `extractFailed?`: \{ \}; `extractTitle?`: \{ \}; `extractTreeLabel?`: \{ \}; `fieldCount?`: \{ \}; `inspectorTitle?`: \{ \}; `itemCount?`: \{ \}; `jsonPathHint?`: `string`; `jsonPathInvalid?`: \{ \}; `jsonPathLabel?`: `string`; `keyCount?`: \{ \}; `keyLabel?`: \{ \}; `keyRequired?`: `string`; `lengthNode?`: `string`; `loadFailed?`: `string`; `loading?`: `string`; `mapValueNode?`: `string`; `moreCharacters?`: \{ \}; `nothingToExtract?`: `string`; `positionInvalid?`: `string`; `positionLabel?`: \{ \}; `readAs?`: \{ `boolean?`: `string`; `json?`: `string`; `length?`: `string`; `number?`: `string`; `string?`: `string`; \}; `readAsLabel?`: `string`; `retry?`: `string`; `rowLabel?`: \{ \}; `sizeNode?`: `string`; `tagNode?`: `string`; `tooLargeToCopy?`: `string`; `treeLabel?`: \{ \}; `truncatedNotice?`: \{ \}; `typeArray?`: \{ \}; `typeJson?`: `string`; `typeList?`: \{ \}; `typeMap?`: \{ \}; `typeStruct?`: \{ \}; `typeUnion?`: \{ \}; `typeVariant?`: `string`; \}
+
+#### values.addAsColumn?
+
+`string`
+
+Value inspector button that adds the active node's value as a column
+("extract field → column"); also the `title` of the "+" a row shows
+under the pointer.
+
+#### values.addColumn?
+
+`string`
+
+The extract panel's submit button.
+
+#### values.adding?
+
+`string`
+
+Status while a column is being added (the value inspector, the extract panel's button).
+
+#### values.addLengthAsColumn?
+
+`string`
+
+Value inspector button that adds a list's, an array's or a JSON array's length as a column.
+
+#### values.addSizeAsColumn?
+
+`string`
+
+Value inspector button that adds a map's number of entries as a column.
+
+#### values.addTagAsColumn?
+
+`string`
+
+Value inspector button that adds which member a union holds as a column.
+
+#### values.bucketLabel?
+
+\{ \}
+
+One bucket of a container too big to list at once, by the numbers of
+its first and last child (1-based for DuckDB values, 0-based inside
+JSON, the same number twice for a bucket of one): "[1 … 100]",
+"[10001 … 10001]".
+
+#### values.closeLabel?
+
+`string`
+
+`aria-label` of the value inspector's × button.
+
+#### values.columnAdded?
+
+\{ \}
+
+Live-region text once a column has been added: "Column point_x added".
+
+#### values.columnNameLabel?
+
+`string`
+
+Label of the extract panel's input for the new column's name.
+
+#### values.copied?
+
+`string`
+
+Value inspector status after a copy (Copy JSON, or Ctrl/Cmd+C on a node).
+
+#### values.copyFailed?
+
+`string`
+
+Value inspector status when the clipboard refused the copy.
+
+#### values.copyJson?
+
+`string`
+
+Value inspector button that copies the whole value as JSON.
+
+#### values.elementNode?
+
+`string`
+
+The tree's node for a list's or an array's elements, read at a position.
+
+#### values.entryCount?
+
+\{ \}
+
+Entries of a map, in the tree: "600 entries".
+
+#### values.expressionLabel?
+
+`string`
+
+Label of the extract panel's preview of the SQL expression the column reads.
+
+#### values.extractButtonLabel?
+
+\{ \}
+
+`aria-label` of a nested or JSON column header's extract button: "Extract from point".
+
+#### values.extractButtonTitle?
+
+`string`
+
+`title` of the header's extract button.
+
+#### values.extractCloseLabel?
+
+`string`
+
+`aria-label` of the extract panel's × button.
+
+#### values.extractFailed?
+
+\{ \}
+
+A column could not be added, with the reason (in English, from the action): "Could not add the column: …".
+
+#### values.extractTitle?
+
+\{ \}
+
+Title of the extract panel, which names it for assistive technology: "Extract from point".
+
+#### values.extractTreeLabel?
+
+\{ \}
+
+Accessible name of the extract panel's tree of the column's type: "Parts of point".
+
+#### values.fieldCount?
+
+\{ \}
+
+Fields of a struct, in the tree: "3 fields".
+
+#### values.inspectorTitle?
+
+\{ \}
+
+Title of the value inspector, the panel that shows one nested or JSON
+cell's whole value (F2, a double click, or the cell's inspect icon):
+the column and `rowLabel`'s text, "tags · Row 1,235". It also
+names the panel for assistive technology.
+
+#### values.itemCount?
+
+\{ \}
+
+Elements of a list, an array or a JSON array, in the tree: "3 items".
+
+#### values.jsonPathHint?
+
+`string`
+
+How to write a JSON path, under the input.
+
+#### values.jsonPathInvalid?
+
+\{ \}
+
+The JSON path does not parse, by the 1-based character where it goes wrong.
+
+#### values.jsonPathLabel?
+
+`string`
+
+Label of the extract panel's JSON path input, for a part that is JSON or VARIANT.
+
+#### values.keyCount?
+
+\{ \}
+
+Keys of a JSON object, in the tree: "2 keys".
+
+#### values.keyLabel?
+
+\{ \}
+
+Label of the input for a map value's key, by the map: "Key in attrs".
+
+#### values.keyRequired?
+
+`string`
+
+The key input is empty.
+
+#### values.lengthNode?
+
+`string`
+
+The tree's leaf for a list's or an array's number of elements.
+
+#### values.loadFailed?
+
+`string`
+
+Value inspector status when the value could not be read.
+
+#### values.loading?
+
+`string`
+
+Value inspector status while the value loads, shown after 150 ms.
+
+#### values.mapValueNode?
+
+`string`
+
+The tree's node for a map's values, read by key.
+
+#### values.moreCharacters?
+
+\{ \}
+
+After text the tree cut short, by the characters left out: "18,000 more characters".
+
+#### values.nothingToExtract?
+
+`string`
+
+The extract panel's text when the column's type could not be read, so has no parts.
+
+#### values.positionInvalid?
+
+`string`
+
+The position input holds something other than a whole number from 1 up.
+
+#### values.positionLabel?
+
+\{ \}
+
+Label of the input for an element's 1-based position, by the list or
+array it is in: "Position in people". A list inside a list is named
+after the outer one's element: "Position in matrix › element".
+
+#### values.readAs?
+
+\{ `boolean?`: `string`; `json?`: `string`; `length?`: `string`; `number?`: `string`; `string?`: `string`; \}
+
+The "Read as" choices: a value inside JSON or VARIANT as text, a
+number, a boolean or JSON, or the length of the array there.
+
+#### values.readAs.boolean?
+
+`string`
+
+#### values.readAs.json?
+
+`string`
+
+#### values.readAs.length?
+
+`string`
+
+#### values.readAs.number?
+
+`string`
+
+#### values.readAs.string?
+
+`string`
+
+#### values.readAsLabel?
+
+`string`
+
+Label of the extract panel's "Read as" select, for a part that is JSON or VARIANT.
+
+#### values.retry?
+
+`string`
+
+Button that reads the value again after it failed to load.
+
+#### values.rowLabel?
+
+\{ \}
+
+The row a value inspector shows, by its 1-based position in the table
+as sorted and filtered (the number a loading row shows): "Row 1,235".
+
+#### values.sizeNode?
+
+`string`
+
+The tree's leaf for a map's number of entries.
+
+#### values.tagNode?
+
+`string`
+
+The tree's leaf for which member a union holds.
+
+#### values.tooLargeToCopy?
+
+`string`
+
+Value inspector status when the value is too long to copy: over 8 MiB of JSON.
+
+#### values.treeLabel?
+
+\{ \}
+
+Accessible name of the value inspector's tree: "Value of tags".
+
+#### values.truncatedNotice?
+
+\{ \}
+
+Value inspector status for a value too long to show whole, by the
+characters shown and the value's length:
+"Showing the first 2,097,152 of 3,000,000 characters".
+
+#### values.typeArray?
+
+\{ \}
+
+Spoken type of a fixed-size ARRAY: "array of 768 float".
+
+#### values.typeJson?
+
+`string`
+
+Spoken name of the JSON type.
+
+#### values.typeList?
+
+\{ \}
+
+Spoken type of a LIST, given its element's spoken type: "list of
+integer". A column header's accessible name ends with it ("tags, list
+of integer"); the visible label stays DuckDB's notation (`[integer]`).
+
+#### values.typeMap?
+
+\{ \}
+
+Spoken type of a MAP, given its key's and value's: "map from varchar to integer".
+
+#### values.typeStruct?
+
+\{ \}
+
+Spoken type of a STRUCT, by its number of fields: "struct with 3 fields".
+
+#### values.typeUnion?
+
+\{ \}
+
+Spoken type of a UNION, by its number of members: "union of 2 types".
+
+#### values.typeVariant?
+
+`string`
+
+Spoken name of the VARIANT type.
 
 ## Returns
 

@@ -26,22 +26,23 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 ### SUPPORTS
 
-- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:160).
-- Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–63).
-- Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation) (src/derived/types.ts, src/core/Actions.ts).
-- Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`) (src/core/types.ts, src/core/Actions.ts).
+- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:160-164).
+- Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–179). Point, set and not-set filters take `valueType: 'text'`, which compares `CAST(col AS VARCHAR)`: how a nested value is matched exactly.
+- Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation), and `addNestedFieldColumn(column, path, options?)`, which adds one part of a nested or JSON column (a struct field, list element, map value, JSON key, a list's length) as an expression column right after it; in the UI, a nested or JSON column header's extract button and the value inspector's "Add as column" do the same, both part of the `derivedColumns` UI. Names are unique ignoring ASCII letter case, as DuckDB binds them (src/derived/types.ts, src/core/Actions.ts, src/core/columnNames.ts, src/table/ExtractColumnPanel.ts).
+- Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`), and `actions.getCellValue(rowId, column)` for one cell. Both are exact: every `BIGINT`…`UHUGEINT` digit, a `DECIMAL` as the double nearest its value, nested values as arrays, objects, `Map`s and `{ [tag]: value }` (src/core/types.ts, src/core/Actions.ts).
 - Programmatic row / column / cell annotations on `table.annotations.*` — severity tiers, intersection lookup, JSON I/O, IndexedDB persistence, intersection popover (src/annotations/AnnotationStore.ts).
 - Programmatic column-header tooltips via `actions.setColumnHeaderTooltip` — XSS-safe structured popover for JSON-Schema-style metadata (src/core/Actions.ts, src/core/columnHeaderTooltip.ts).
-- Filter presets (save/load/export/import) — built-in UI + `FilterPresetManager` (src/index.ts:69–70).
+- Filter presets (save/load/export/import) — built-in UI + `FilterPresetManager` (src/index.ts:83–84).
 - Session persistence to IndexedDB (filters, sort, columns, derived columns, presets, undo/redo, annotations, column-header tooltips) (src/persistence/SessionStore.ts).
 - Column visibility, reorder, resize, pin — all undoable (src/core/Actions.ts).
-- Histograms and value-counts in column headers; subclassable via `BaseVisualization` (src/visualizations/BaseVisualization.ts).
+- Histograms and value-counts in column headers, and a non-null / null summary bar for nested columns; subclassable via `BaseVisualization` (src/visualizations/BaseVisualization.ts).
+- Nested columns — LIST, fixed-size ARRAY, STRUCT, MAP, UNION and VARIANT load as `type: 'nested'` (`originalType` holds the DuckDB type; JSON stays `'string'`). Cells show DuckDB's text, bounded to 32 items and 1,000 graphemes; sorting goes by value; headers show a type outline (`[integer]`, `struct(3)`); CSV and the clipboard write standard JSON, JSON export real structures, Parquet the native type. A value inspector shows any non-NULL nested or JSON cell's whole value as a keyboard tree, with Copy JSON: `F2` on the cursor, a double click, or the cell's inspect icon; `table.container.openValueInspector({ row, column })` from code, on a row the grid has rendered (`false` otherwise) (src/table/ValueInspector.ts). `parseDuckDBType` and `isNestedType` are on `/advanced` (src/core/duckdbType.ts, src/data/valueSql.ts, src/core/jsonTree.ts; [`docs/guides/loading-data.md#nested-and-json-columns`](./docs/guides/loading-data.md#nested-and-json-columns)).
 - Custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry` — replace the `.dt-col-stats` slot with your own DOM and DuckDB queries (src/visualizations/BaseStatsPanel.ts, src/visualizations/StatsPanelRegistry.ts, src/visualizations/StatsPanelCoordinator.ts).
 - Public SQL editor primitives — host-app embedded CodeMirror SQL editors via `createSqlExtensions` / `buildCompletionContext` from `/advanced`; live-schema refresh via `Compartment.reconfigure` (src/sql-editor/extensions.ts).
 - Exports to CSV, JSON, Parquet, or clipboard (src/export/\*).
 - Internationalization via `messages: DeepPartial<Strings>` (src/core/Strings.ts).
 - Light/dark themes (manual + `prefers-color-scheme`), CSS-variable theming (src/styles/data-table.css).
-- WCAG-oriented accessibility (ARIA grid on `.dt-grid`, `aria-activedescendant` cursor, keyboard nav, live region). A loaded table is a constant five tab stops — filter bar, grid, header scroller, body scroller, hidden-columns gutter — regardless of column count, hidden columns or active filters (src/table/KeyboardNavigator.ts, src/core/RovingTabindex.ts).
+- WCAG-oriented accessibility (ARIA grid on `.dt-grid`, `aria-activedescendant` cursor, keyboard nav, live region). A loaded table is a constant five tab stops — filter bar, grid, header scroller, body scroller, hidden-columns gutter — regardless of column count, hidden columns or active filters; a nested cell's inspect icon adds none, and `F2` on such a cell opens the value inspector, a `role="dialog"` holding a WAI-ARIA tree; a nested or JSON column header's extract button is one more control in its `F2` cycle, not a tab stop (src/table/KeyboardNavigator.ts, src/core/RovingTabindex.ts, src/table/TreeView.ts).
 - **Keyboard column resize and reorder** via `Shift+F2` from the header cursor — column layout mode: `←`/`→` resize by 16px (clamped 50–500), `Shift`+`←`/`→` move the column, `Home`/`End` hit the width bounds, `Backspace` resets, `Enter` commits, `Escape` restores both width and position. The whole gesture is one undo entry. Nothing becomes focusable, so the tab-stop census is unchanged; the resize handle (`role="separator"`) and the drag handle stay out of `ColumnHeader.getControls()` and the `F2` cycle on purpose (src/table/KeyboardNavigator.ts, src/table/ColumnHeader.ts).
 - Multi-table on one page with shared `WorkerBridge`, `SessionStore`, `FilterPresetManager`.
 - CSP/offline deployment — self-host the WASM bundles via `bridgeOptions`.
@@ -49,7 +50,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 ### DOES NOT SUPPORT
 
 - **No SSR.** `window`, `document`, `Worker`, `IndexedDB` are required. Guard with `'use client'` / `dynamic({ ssr: false })`.
-- **No row-click event.** Use `selectionChange` instead (src/core/TableEvents.ts:104–105). Row selection is driven by checkbox/keyboard, not row clicks.
+- **No row-click event.** Use `selectionChange` instead (src/core/TableEvents.ts:122–123). Row selection is driven by checkbox/keyboard, not row clicks.
 - **No in-cell editing.** Derived columns cover computed fields; raw cell edits are not in scope.
 - **No built-in mobile touch gestures** beyond what the browser provides.
 - **No latency guarantees on very large tables.** Scrolling stays correct at 50M+ rows, but filter/sort queries are DuckDB-bound and slow down as rows grow, and deep scrolls of a sorted or filtered table pay `OFFSET` cost that grows with depth.
@@ -60,6 +61,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - **Browser matrix.** Modern evergreen browsers only. Probe with `checkBrowserSupport()` (src/core/checkBrowserSupport.ts).
 - **Custom expression editors.** Default is CodeMirror 6; swap via `editorFactory` option.
 - **Custom visualizations.** Subclass `BaseVisualization` and register through a `VisualizationRegistry`.
+- **Nested values.** Their header chart counts non-null values only (no value grouping, no click-to-filter), and exact filters compare DuckDB's text. A raw `bridge.query` loses `DECIMAL`, `HUGEINT` and `INTERVAL` values inside a nested value and cannot select a VARIANT or a value holding one; select `CAST(to_json(c) AS VARCHAR)` for the first, `CAST(c AS JSON)` for a VARIANT and `CAST(CAST(c AS VARIANT) AS JSON)` for a type holding one, or use `getColumnValues` / `getCellValue`. Every read of a type holding a VARIANT goes through VARIANT, so a UNION inside it loses its tag, and CSV and the clipboard write a MAP inside it as a key/value list. Parquet export reloads an ARRAY as a LIST, a `HUGEINT` as a `DOUBLE`, and an `ENUM` in a struct or a `BIT` in a list as `VARCHAR`; a UNION or unnamed STRUCT column's file does not load again, a VARIANT inside a list or struct does not export, and neither do non-contiguous selected rows sorted by a VARIANT of mixed kinds. A CSV or JSON export of a large embedding column can pass the browser's string limit; export it to Parquet.
 
 ---
 
@@ -67,7 +69,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 Ask these **before writing integration code**, in order. The first answer often rules out later questions.
 
-1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed? A CSV in an unusual dialect (`;` between fields, no header row, `NA` for missing values), or a Parquet file of which only some columns are needed? Those go in `sourceOptions` ([`docs/guides/loading-data.md#how-a-source-is-read`](./docs/guides/loading-data.md#how-a-source-is-read)).
+1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed? A CSV in an unusual dialect (`;` between fields, no header row, `NA` for missing values), or a Parquet file of which only some columns are needed? Those go in `sourceOptions` ([`docs/guides/loading-data.md#how-a-source-is-read`](./docs/guides/loading-data.md#how-a-source-is-read)). Lists, structs, maps or JSON in it? They load as `type: 'nested'` (JSON as `'string'`), which changes what a custom chart or stats panel receives; see [pitfall 13](#5-common-pitfalls).
 2. **Volume.** Approximate rows × columns at peak. Above ~5M rows expect noticeable UI latency. The loaded table must fit in browser memory — about 2.5 GiB, or 200K rows × 1,000 numeric columns — and large Parquet files should arrive as a `File`, `Blob`, or URL, not an `ArrayBuffer` ([`docs/guides/loading-data.md#large-parquet-files`](./docs/guides/loading-data.md#large-parquet-files)).
 3. **Mount point and height.** Which `HTMLElement` does the table mount into (`container` takes an element, not a selector), and where does that element's height come from — an explicit `height`, a `flex: 1; min-height: 0` child, a grid track? It must be bounded. If the answer is "it grows with its content", fix that before writing any other integration code; see [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 4. **Persistence.** Should filters/sort/columns survive page reloads? Default: yes (IndexedDB). Say so if the user wants incognito-clean behavior.
@@ -141,6 +143,13 @@ table.actions.addFilter({ type: 'set', column: 'country', values: ['US', 'CA'] }
 table.actions.addFilter({ type: 'not-set', column: 'status', values: ['archived'] });
 table.actions.addFilter({ type: 'null', column: 'deleted_at' }); // or 'not-null'
 table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mode: 'contains' });
+// A nested (list/struct/map) column, by the text its cell shows:
+table.actions.addFilter({
+  type: 'point',
+  column: 'tags',
+  value: '[red, green]',
+  valueType: 'text',
+});
 const rawId = table.actions.addRawSQLFilter(`price > 100 AND quantity > 0`, 'Premium in-stock');
 ```
 
@@ -155,7 +164,12 @@ const result = await table.actions.addDerivedColumn({
   expression: `CASE WHEN age < 18 THEN 'minor' ELSE 'adult' END`,
 });
 if (!result.success) console.warn(result.error);
+
+// One part of a nested column, as a column of its own (STRUCT(x DOUBLE, …)):
+const x = await table.actions.addNestedFieldColumn('point', ['x']); // { success: true, name: 'point_x' }
 ```
+
+A name another column has in any letter case (`LABEL` beside `label`) is refused: DuckDB would read `label` for it. Struct fields go by name or 1-based position, list positions start at 1, JSON indexes at 0 ([`docs/api-reference.md#extracting-a-nested-field`](./docs/api-reference.md#extracting-a-nested-field)).
 
 ### (d) Derived column — vector-based
 
@@ -281,8 +295,9 @@ Distinct `tableName`s matter — `SessionStore` snapshots are keyed by table nam
 ### (i) Read a column out as a typed JS array (`getColumnValues`)
 
 ```ts
-// Float64Array for numeric, BigInt64Array for __rowid__ / BIGINT,
-// Int32Array for INTEGER, unknown[] for strings/dates/booleans.
+// Float64Array for FLOAT / DOUBLE / DECIMAL, BigInt64Array for __rowid__ and
+// BIGINT…UHUGEINT (every digit), Int32Array for smaller integers; unknown[] for
+// everything else, and whenever a value is NULL or does not fit the typed array.
 const fares = await table.actions.getColumnValues('fare_amount', {
   scope: 'filtered', // 'all' | 'filtered' | 'selected'
   limit: 1000,
@@ -290,7 +305,16 @@ const fares = await table.actions.getColumnValues('fare_amount', {
 
 const ids = await table.actions.getColumnValues('__rowid__'); // BigInt64Array
 const idsAsNumbers = Array.from(ids, (v) => Number(v)); // safe up to 2^53 rows
+
+// Nested columns ('nested'): unknown[] of arrays, objects, Maps, { [tag]: value };
+// integers past 2^53 as bigints. INTERVAL / ENUM / BIT / GEOMETRY are DuckDB text.
+const tags = await table.actions.getColumnValues('tags'); // e.g. [['red', 'green'], null, [], …]
+
+// One cell, by its __rowid__ (number or bigint), exactly:
+const point = await table.actions.getCellValue(10, 'point'); // { x: 1.5, y: -0.5, tier: 'gold' }
 ```
+
+A MAP value is a `Map`, which `JSON.stringify` writes as `{}`, and a bigint makes `JSON.stringify` throw; convert first (`Object.fromEntries(map)`). Errors: `COLUMN_NOT_FOUND`, `NO_TABLE`, `INVALID_PAGINATION`, `INVALID_ROWID` (`getCellValue`: also a rowid no row has), `QUERY_ABORTED` — all `QueryError` ([`docs/api-reference.md#column-values-read-only-export`](./docs/api-reference.md#column-values-read-only-export)).
 
 `__rowid__` is reserved and synthesized at load — sources containing a column named `__rowid__` reject with `LoadError('RESERVED_COLUMN_NAME')`. The column is hidden in the grid by default; toggle with `actions.showColumn('__rowid__')`. Excluded from default exports unless the user ticks "Include system columns" in the export dialog.
 
@@ -508,7 +532,7 @@ table.on('derivedChange', refresh);
 
 ## 4. Default config cheat-sheet
 
-All values source `src/DataTable.ts:136-345`.
+All values source `src/DataTable.ts:133-367`.
 
 | Option               | Default         | Notes                                                                                            |
 | -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
@@ -516,7 +540,7 @@ All values source `src/DataTable.ts:136-345`.
 | `presets`            | `true`          | Filter preset UI + storage.                                                                      |
 | `undoRedo`           | `true`          | Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z.                                                                    |
 | `expressionFilter`   | `true`          | Raw-SQL filter button.                                                                           |
-| `visualizations`     | `true`          | Column header histograms / value counts.                                                         |
+| `visualizations`     | `true`          | Column header histograms / value counts / nested summary bars.                                   |
 | `exportDialog`       | `true`          | CSV/JSON/Parquet export dialog.                                                                  |
 | `rowHeight`          | `32`            | Pixels. Published as `--dt-row-height`; set it here, not in CSS.                                 |
 | `headerHeight`       | `120`           | Pixels — ≥ 96 recommended when visualizations are on. Published as `--dt-header-height`.         |
@@ -534,7 +558,7 @@ All values source `src/DataTable.ts:136-345`.
 
 ## 5. Common pitfalls
 
-1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:448-452`) grows to the spacer height that `setTotalRows()` writes onto `.dt-body` — `min(totalRows × rowHeight, 15,000,000)` px, capped by the module-private `DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000` (`src/table/VirtualScroller.ts:73`, applied in `setTotalRows`, `:426-464`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:353`) is then that whole capped element, so the visible range is everything under the cap: rows are fetched in blocks (`src/table/TableBody.ts`) and a DOM row — data or placeholder — is built per row, up to ~468,750 rows at the default 32px `rowHeight` (the entire dataset when it is smaller). At 1M rows × 32px that is a 15,000,000px element and ~468,750 DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
+1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:464-468`) grows to the spacer height that `setTotalRows()` writes onto `.dt-body` — `min(totalRows × rowHeight, 15,000,000)` px, capped by the module-private `DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000` (`src/table/VirtualScroller.ts:73`, applied in `setTotalRows`, `:426-464`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:353`) is then that whole capped element, so the visible range is everything under the cap: rows are fetched in blocks (`src/table/TableBody.ts`) and a DOM row — data or placeholder — is built per row, up to ~468,750 rows at the default 32px `rowHeight` (the entire dataset when it is smaller). At 1M rows × 32px that is a 15,000,000px element and ~468,750 DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
 
    ```html
    <div id="table" style="height: 600px"></div>
@@ -549,7 +573,7 @@ All values source `src/DataTable.ts:136-345`.
    }
    ```
 
-   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:401-408`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:422-433`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 
@@ -580,6 +604,12 @@ All values source `src/DataTable.ts:136-345`.
 
 12. **Blocking network for the WASM bundle.** DuckDB fetches from a CDN by default. On a strict CSP, supply `bridgeOptions.duckdbBundles` with self-hosted paths.
 
+13. **Expecting list or struct columns in a `'string'` registration.** LIST, ARRAY, STRUCT, MAP, UNION and VARIANT columns are `type: 'nested'` (src/core/types.ts:14-25), so a custom visualization or stats panel whose `isApplicable` accepts `'string'` never sees them. Accept `'nested'` too, or test with `isNestedType` from `/advanced`; read `originalType` with `parseDuckDBType` to tell the kinds apart. JSON columns are still `'string'`.
+
+14. **Reading nested values through `bridge.query`.** Arrow corrupts a `DECIMAL` or `HUGEINT` inside a list or struct (`[1.25, 2.50]` arrives as `[6.2e-322, 0]`), reads an `INTERVAL` as an `Int32Array`, and cannot carry a VARIANT (`Unsupported Arrow type VARIANT`). Use `actions.getColumnValues` / `getCellValue`, or select `CAST(to_json(c) AS VARCHAR)`; a VARIANT as `CAST(c AS JSON)`, and a type holding one (`VARIANT[]`, `STRUCT(v VARIANT)`) as `CAST(CAST(c AS VARIANT) AS JSON)`, since `to_json` writes a VARIANT as a string (`"42"`, `["42"]`) and fails on some types holding one (see the `WorkerBridge.query` JSDoc, src/data/WorkerBridge.ts).
+
+15. **An exact filter on a nested or JSON column without `valueType: 'text'`.** `{ type: 'point', column: 'tags', value: '[red' }` makes DuckDB cast the text to `VARCHAR[]`, a Conversion Error that fails every grid query until the filter goes; on a JSON column, any text that is not JSON does the same (`Conversion Error: Malformed JSON`). With `valueType: 'text'` it compares `CAST(col AS VARCHAR)` and simply matches nothing. The filter panel sets it on nested and JSON columns; a filter added in code must set it itself.
+
 ---
 
 ## 6. When to use `/advanced`
@@ -589,7 +619,7 @@ All values source `src/DataTable.ts:136-345`.
 Reach into `/advanced` (`@jeyabbalas/data-table/advanced`) only when at least one of these applies:
 
 - **Custom UI shell.** You want to render `TableContainer` inside your own chrome without the built-in `FilterBar` / `ModalHost`.
-- **Custom visualization type.** Subclass `BaseVisualization` (advanced) and register via `VisualizationRegistry` (root).
+- **Custom visualization type.** Subclass `BaseVisualization` (advanced) and register via `VisualizationRegistry` (root). For nested columns, `isNestedType` and `parseDuckDBType` (advanced) say what a column holds.
 - **Custom persistence flow.** You're writing your own `AutoSave` or pre-populating state from a remote snapshot via `SerializedStateSnapshot`.
 - **Manual undo/redo capture.** You have imperative mutations outside `StateActions` and need to push your own snapshots via `UndoManager` + `captureSnapshot`/`applySnapshot`.
 - **Custom export pipeline.** You call `exportFromState`/`exportJSONFromState`/`exportParquetFromState` directly (e.g., to pipe rows into a download worker).
@@ -696,6 +726,6 @@ If the initial load fails, `createDataTable()` first tears down what it built, a
 **Source-of-truth (prefer these over the docs when they disagree)**
 
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
-- **Options definition** — `src/DataTable.ts:136-345`
+- **Options definition** — `src/DataTable.ts:133-367`
 - **Event payloads** — `src/core/TableEvents.ts`
 - **Action methods** — `src/core/Actions.ts`

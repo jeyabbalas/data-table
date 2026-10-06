@@ -6,13 +6,22 @@ analytics run entirely in the browser, so no data ever leaves the user's
 machine.
 
 - Per-column visualizations (histograms, value counts, date/time histograms)
-  with brush/click crossfilter
+  with brush/click crossfilter; nested columns get a non-null / null summary
+  bar, which does not filter
 - Manual filter UI per column + raw-SQL `WHERE` filters
 - Pin / hide / reorder / resize columns; virtual scrolling
 - Derived columns (SQL expressions or JS-provided value vectors), with
   same-name dependency-aware replacement
-- Stable synthetic `__rowid__` + read-only column export
-  (`actions.getColumnValues`) for app-side row alignment and chart feeds
+- Stable synthetic `__rowid__` + exact read-only value reads
+  (`actions.getColumnValues`, `actions.getCellValue`) for app-side row
+  alignment and chart feeds
+- Nested columns (lists, arrays, structs, maps, unions, VARIANT): DuckDB's
+  text in cells, bounded to 32 items; sorting by value; standard JSON in CSV
+  and on the clipboard. For them and for JSON columns: exact filters that
+  compare the text (the filter panel's, or `valueType: 'text'` in code), a
+  value inspector that shows a whole value as a keyboard tree (`F2` or
+  double-click) and copies it as JSON, and an extract button that turns any
+  field into a column of its own (`actions.addNestedFieldColumn` in code)
 - Programmatic row / column / cell annotations — severity tiers, intersection
   popover, JSON round-trip, session-persisted
 - Programmatic column-header tooltips — XSS-safe structured popover
@@ -302,15 +311,15 @@ Check `table.isDestroyed()` in long-lived closures before calling them.
 
 All features are on by default; pass `false` or a config object to customize:
 
-| Option             | Default | Notes                                                          |
-| ------------------ | ------- | -------------------------------------------------------------- |
-| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                    |
-| `presets`          | `true`  | Show the "Presets" button for saving filter sets               |
-| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                       |
-| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                  |
-| `derivedColumns`   | `true`  | Show the "+" add-column button and per-header `f(x)` edit icon |
-| `visualizations`   | `true`  | Auto-attach column header histograms / value counts            |
-| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal      |
+| Option             | Default | Notes                                                                                           |
+| ------------------ | ------- | ----------------------------------------------------------------------------------------------- |
+| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                                                     |
+| `presets`          | `true`  | Show the "Presets" button for saving filter sets                                                |
+| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                                                        |
+| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                                                   |
+| `derivedColumns`   | `true`  | Show the "+", `f(x)` and nested/JSON extract buttons, and the value inspector's "Add as column" |
+| `visualizations`   | `true`  | Auto-attach column header charts (histograms, value counts, …)                                  |
+| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal                                       |
 
 For the full options surface (mounting, worker, UI, customization), see
 [docs/api-reference.md#createdatatableoptions](./docs/api-reference.md#createdatatableoptions).
@@ -392,7 +401,7 @@ table.on('error', ({ error, source }) => {
 });
 ```
 
-For the full list of 34 error codes with triggers and fixes, see
+For the full list of error codes with triggers and fixes, see
 [docs/troubleshooting.md](./docs/troubleshooting.md).
 
 ## Multiple tables, CSP, and offline

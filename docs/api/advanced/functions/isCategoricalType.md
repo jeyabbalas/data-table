@@ -8,7 +8,7 @@
 
 > **isCategoricalType**(`type`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:88](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/VisualizationRegistry.ts#L88)
+Defined in: [visualizations/VisualizationRegistry.ts:89](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/VisualizationRegistry.ts#L89)
 
 Check if a column type is categorical (suitable for value counts).
 

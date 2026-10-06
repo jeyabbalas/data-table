@@ -6,7 +6,7 @@
 
 # Abstract Class: BaseStatsPanel
 
-Defined in: [visualizations/BaseStatsPanel.ts:128](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L128)
+Defined in: [visualizations/BaseStatsPanel.ts:140](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L140)
 
 Abstract base class for column stats panels.
 
@@ -15,7 +15,10 @@ default. The library guarantees:
 
 - The constructor is called with an empty `container` element (the
   `.dt-col-stats` slot inside a column header), when the column comes
-  within about a viewport of the view. A panel lives while its column is
+  within about a viewport of the view and the columns there have held
+  still for 150 ms: a scroll builds no panel for the columns it passes.
+  Those near the view on load, new data or a derived-column change, and a
+  column just shown, get theirs at once. A panel lives while its column is
   near the view, through hides, shows and moves of other columns.
 - [update](#update) fires on mount, with the stats the column's chart last
   emitted if it has one, `null` otherwise; with `null` whenever the chart
@@ -27,8 +30,9 @@ default. The library guarantees:
   runs, it waits for the change to settle, then fires once, with the
   filters in force then; a change that succeeds replaces the panel instead.
 - [setHoverStats](#sethoverstats) fires when a viz emits a hover snippet for this
-  column (and again with `null` to clear). Columns without a viz never
-  trigger this.
+  column (and again with `null` to clear), and as the panel is built, with
+  the snippet its column's chart shows then, if any. Columns without a viz
+  never trigger this.
 - [destroy](#destroy) is called exactly once: when the column moves away from
   the view or is hidden, before the container is reused for a
   freshly-constructed panel (new data, a derived column changed), or when
@@ -41,7 +45,7 @@ default. The library guarantees:
 
 > **new BaseStatsPanel**(`container`, `column`, `options`): `BaseStatsPanel`
 
-Defined in: [visualizations/BaseStatsPanel.ts:134](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L134)
+Defined in: [visualizations/BaseStatsPanel.ts:146](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L146)
 
 #### Parameters
 
@@ -67,7 +71,7 @@ Defined in: [visualizations/BaseStatsPanel.ts:134](https://github.com/jeyabbalas
 
 > `protected` `readonly` **column**: [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseStatsPanel.ts:130](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L130)
+Defined in: [visualizations/BaseStatsPanel.ts:142](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L142)
 
 ***
 
@@ -75,7 +79,7 @@ Defined in: [visualizations/BaseStatsPanel.ts:130](https://github.com/jeyabbalas
 
 > `protected` `readonly` **container**: `HTMLElement`
 
-Defined in: [visualizations/BaseStatsPanel.ts:129](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L129)
+Defined in: [visualizations/BaseStatsPanel.ts:141](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L141)
 
 ***
 
@@ -83,7 +87,7 @@ Defined in: [visualizations/BaseStatsPanel.ts:129](https://github.com/jeyabbalas
 
 > `protected` **destroyed**: `boolean` = `false`
 
-Defined in: [visualizations/BaseStatsPanel.ts:132](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L132)
+Defined in: [visualizations/BaseStatsPanel.ts:144](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L144)
 
 ***
 
@@ -91,7 +95,7 @@ Defined in: [visualizations/BaseStatsPanel.ts:132](https://github.com/jeyabbalas
 
 > `protected` **options**: [`StatsPanelOptions`](../interfaces/StatsPanelOptions.md)
 
-Defined in: [visualizations/BaseStatsPanel.ts:131](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L131)
+Defined in: [visualizations/BaseStatsPanel.ts:143](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L143)
 
 ## Methods
 
@@ -99,7 +103,7 @@ Defined in: [visualizations/BaseStatsPanel.ts:131](https://github.com/jeyabbalas
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/BaseStatsPanel.ts:199](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L199)
+Defined in: [visualizations/BaseStatsPanel.ts:211](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L211)
 
 Tear down the panel. Subclasses must clear any DOM nodes they appended
 to `container` and any subscriptions or listeners they registered, then
@@ -124,7 +128,7 @@ states instead, and let the library's lifecycle drive `destroy()`.
 
 > **getColumn**(): [`ColumnSchema`](../../index/interfaces/ColumnSchema.md)
 
-Defined in: [visualizations/BaseStatsPanel.ts:209](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L209)
+Defined in: [visualizations/BaseStatsPanel.ts:221](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L221)
 
 The column this panel renders stats for.
 
@@ -138,7 +142,7 @@ The column this panel renders stats for.
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [visualizations/BaseStatsPanel.ts:204](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L204)
+Defined in: [visualizations/BaseStatsPanel.ts:216](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L216)
 
 True after [destroy](#destroy) has been called.
 
@@ -152,7 +156,7 @@ True after [destroy](#destroy) has been called.
 
 > **setHoverStats**(`_html`): `void`
 
-Defined in: [visualizations/BaseStatsPanel.ts:168](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L168)
+Defined in: [visualizations/BaseStatsPanel.ts:180](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L180)
 
 Called when the user hovers a visualization bin / segment. `null`
 clears the hover and signals the panel should restore its resting state.
@@ -190,7 +194,7 @@ Default implementation is a no-op so simple panels can ignore hover.
 
 > `abstract` **update**(`stats`): `void`
 
-Defined in: [visualizations/BaseStatsPanel.ts:145](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L145)
+Defined in: [visualizations/BaseStatsPanel.ts:157](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L157)
 
 Called when default stats become available or change. Receives `null`
 on the initial render before the visualization has fetched, when the
@@ -212,7 +216,7 @@ column's chart is removed, or when no visualization is registered.
 
 > **updateFilters**(`filters`): `Promise`\<`void`\>
 
-Defined in: [visualizations/BaseStatsPanel.ts:180](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/visualizations/BaseStatsPanel.ts#L180)
+Defined in: [visualizations/BaseStatsPanel.ts:192](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/BaseStatsPanel.ts#L192)
 
 Called when the table's active filter array changes. The default
 implementation only refreshes `this.options.filters`; subclasses that

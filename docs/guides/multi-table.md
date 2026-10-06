@@ -327,5 +327,5 @@ async function teardownDashboard() {
 - Session persistence: [Session persistence guide](./session-persistence.md) for `SessionStore` lifecycle
 - Filter presets: [Filter presets guide](./filter-presets.md) for CRUD and export/import
 - Visualizations: [Visualizations guide](./visualizations.md) for per-instance registries
-- API reference: [`presets` option](../api-reference.md#createdatatable), [`persistence` option](../api-reference.md#createdatatable), [`FilterPresetManager`](../api-reference.md#filterpresetmanager)
+- API reference: [`presets` option](../api-reference.md#createdatatable), [`persistence` option](../api-reference.md#createdatatable), [`FilterPresetManager`](../api-reference.md#filter-presets)
 - Source: `src/filters/FilterPresets.ts`, `src/persistence/SessionStore.ts`

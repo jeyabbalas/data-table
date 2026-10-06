@@ -17,7 +17,7 @@ lowest level.
 ## Prerequisites
 
 - Read: [Architecture](./architecture.md) for the 10-second big picture
-- API reference: [TableState](../api-reference.md#state-signals), [StateActions](../api-reference.md#state-actions)
+- API reference: [TableState](../api-reference.md#state-signals), [StateActions](../api-reference.md#actions-methods)
 
 ## The `TableState` interface
 
@@ -284,5 +284,5 @@ calls this after every successful data load.
 
 - Architecture: [Architecture](./architecture.md) — big-picture context for these signals
 - Events: [Events guide](../guides/events.md) — higher-level subscription API
-- API reference: [TableState](../api-reference.md#state-signals), [StateActions](../api-reference.md#state-actions)
+- API reference: [TableState](../api-reference.md#state-signals), [StateActions](../api-reference.md#actions-methods)
 - Source: `src/core/State.ts:22-70`, `src/core/Signal.ts`, `src/core/UndoManager.ts`

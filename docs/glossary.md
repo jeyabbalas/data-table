@@ -151,9 +151,12 @@ See: [API reference](./api-reference.md) · [Troubleshooting](./troubleshooting.
 A user-added column whose values are computed from existing columns. Comes in
 two shapes: [`ExpressionColumnDef`](#expressioncolumndef) — a SQL expression
 evaluated by DuckDB as a VIEW; [`VectorColumnDef`](#vectorcolumndef) — a
-pre-computed array the library registers as a DuckDB table function. Changes
-kick off [Reconciliation](#reconciliation) so the UI stays aligned with the
-underlying view.
+pre-computed array the library stores in a DuckDB helper table joined on
+`__rowid__`. `actions.addNestedFieldColumn(column, path)` writes an
+expression column that reads one part of a [Nested Column](#nested-column).
+Names are unique ignoring the case of ASCII letters, as DuckDB binds them.
+Changes kick off [Reconciliation](#reconciliation) so the UI stays aligned
+with the underlying view.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
 
 ### DuckDBFunctionInfo / DuckDBFunctionCategory
@@ -173,13 +176,41 @@ older names-only `DUCKDB_FUNCTIONS` constant is now derived from
 `DUCKDB_FUNCTION_DETAILS` so the two cannot drift.
 See: [SQL editor primitives](./guides/sql-editor-primitives.md) · [API reference](./api-reference.md#sql-editor-primitives) · Source: `src/sql-editor/duckdbFunctionDetails.ts`
 
+### DuckDBTypeNode
+
+A DuckDB type as a tree, from `parseDuckDBType(originalType)` (Tier-2,
+`@jeyabbalas/data-table/advanced`). Nodes are discriminated by `kind`:
+`scalar` (with its upper-case `name`, `args` and the library's `dataType`),
+`json`, `variant`, `list` (`element`), `array` (`size`, `element`), `struct`
+(`fields`, a `name` of `null` for an unnamed field), `map` (`key`, `value`),
+`union` (`members`, each a `tag` and a `type`), and `unknown` for text the
+parser cannot read or nesting past 256 levels. Every node keeps its own type
+text in `sqlType`. The parser never throws and memoizes its results, so the
+same text gives back the same frozen node. Every part of the library that
+treats a [Nested Column](#nested-column) differently reads its type this way.
+See: [Nested and JSON columns](./guides/loading-data.md#nested-and-json-columns) · [API reference](./api-reference.md#duckdb-types) · Source: `src/core/duckdbType.ts`
+
 ### ExpressionColumnDef
 
 A [Derived Column](#derived-column) definition whose values come from a SQL
 expression (`ax + b`, `CASE WHEN …`, `REGEXP_EXTRACT(url, …)`). Evaluated by
-DuckDB inside the worker — no JavaScript round-trip per row. Shapes: `{ kind:
-'expression', name, expression, dataType }`.
+DuckDB inside the worker — no JavaScript round-trip per row. Shape: `{ kind:
+'expression', name, expression }`; the type is DuckDB's for the expression,
+from `DESCRIBE`.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
+
+### Extract Panel
+
+The panel a [Nested Column](#nested-column) or JSON column header's extract
+button opens, to turn one part of the column into a column of its own: a
+keyboard tree of the column's type (struct fields, a union's tag and members,
+a list's length and element, a map's size and value), a field for each
+position, key or JSON path the part needs, a "Read as" choice inside JSON,
+the new column's name, and the SQL it will read. Add column adds it through
+`actions.addNestedFieldColumn`, right after its source, as one undo entry, and
+the cursor moves to it. The value inspector's "Add as column" buttons do the
+same for the node they are on. Part of the `derivedColumns` UI; a lazy chunk.
+See: [Derived columns → Nested columns](./guides/derived-columns.md#nested-columns) · [Accessibility](./guides/accessibility.md#extract-panel) · Source: `src/table/ExtractColumnPanel.ts`, `src/nested/extractExpression.ts`
 
 ### Filter
 
@@ -229,7 +260,7 @@ focus-trap, Escape to close, scroll-lock (modals only, reference-counted),
 focus-restore to the opener, and stack-index-aware z-indexes. `ModalHost` is
 what lets the SQL filter modal, the derived-column editor, the export dialog,
 and the preset panel coexist without fighting over focus or layering.
-See: [Architecture](./concepts/architecture.md) · Source: `src/table/ModalHost.ts`
+See: [Architecture](./concepts/architecture.md) · Source: `src/core/ModalHost.ts`
 
 ### Mount Container
 
@@ -245,24 +276,49 @@ A container that is zero-tall at mount renders nothing and logs a one-shot
 console warning; an unbounded one is not detected at all.
 See: [Sizing the container](../README.md#sizing-the-container) · [Architecture](./concepts/architecture.md#virtual-scroller) · [API reference](./api-reference.md#createdatatableoptions) · Source: `src/table/TableContainer.ts`
 
+### Nested Column
+
+A column of one of DuckDB's container types: a LIST (`INTEGER[]`), a
+fixed-size ARRAY (`FLOAT[768]`), a STRUCT, a MAP, a UNION or a VARIANT. Its
+`ColumnSchema.type` is `'nested'` and its `originalType` the full DuckDB
+type, which [`parseDuckDBType`](#duckdbtypenode) reads; a `JSON` column is
+`'string'`. Cells show DuckDB's text for the value, bounded (32 items, 1,000
+graphemes); the header shows a [Type Outline](#type-outline); the chart is
+`NestedSummaryVisualization`, a non-null / null bar with no click-to-filter;
+exact filters compare text ([`valueType: 'text'`](#pointfilter)); CSV and the
+clipboard write standard JSON, JSON export real structures, Parquet the
+native type; the [Value Inspector](#value-inspector) shows a whole value;
+`getCellValue` and `getColumnValues` read values exactly; and
+`addNestedFieldColumn` turns a field into a column of its own. A
+registration whose `isApplicable` accepts `'string'` does not receive nested
+columns.
+See: [Nested and JSON columns](./guides/loading-data.md#nested-and-json-columns) · Source: `src/core/types.ts`, `src/data/valueSql.ts`
+
 ### NullFilter
 
-[Filter](#filter) variant matching rows where a column is `NULL` (or
-non-`NULL`, when `mode: 'notnull'`). Use for "show me the missing-data rows" or
-the inverse.
+[Filter](#filter) variant matching rows where a column is `NULL`
+(`type: 'null'`), or is not (`type: 'not-null'`). Use for "show me the
+missing-data rows" or the inverse.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### PatternFilter
 
-[Filter](#filter) variant matching a column against a string pattern — `contains`,
-`startsWith`, `endsWith`, or a regex. Case-insensitive by default; pass
-`caseSensitive: true` to opt in.
+[Filter](#filter) variant matching a column's text, `CAST(col AS VARCHAR)`,
+against a pattern: `mode` is `'contains'`, `'starts'` or `'ends'` (an
+`ILIKE`, which ignores case) or `'regex'` (DuckDB's `regexp_matches`, which
+does not). Works on any column, nested ones included, since every value has
+a text.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### PointFilter
 
 [Filter](#filter) variant matching rows where a column equals a single value.
 Use for a dashboard drill-down where the user clicked one bar of a histogram.
+With `valueType: 'text'` it compares the column's DuckDB text,
+`CAST(col AS VARCHAR)`, with the value as text: how a
+[Nested Column](#nested-column) is matched exactly, `[red, green]` by the
+text its cell shows. The filter panel's "exact" mode sets it on nested and
+JSON columns.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### Portal Target
@@ -284,9 +340,11 @@ See: [Filter presets](./guides/filter-presets.md)
 
 ### RangeFilter
 
-[Filter](#filter) variant matching rows where a numeric, date, or time column
-falls within `[min, max]`. Bounds are inclusive; `null` on either side means
-unbounded.
+[Filter](#filter) variant matching rows where a numeric, date, time or
+interval column falls between `min` and `max`: `min` inclusive unless
+`minExclusive`, `max` exclusive unless `maxInclusive`. `±Infinity` on either
+side leaves it open. `valueType: 'interval'` writes the bounds as INTERVAL
+literals.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### RawSQLFilter
@@ -318,9 +376,9 @@ reassigns it. Hidden from the rendered grid by default (toggle with
 explicit `columns: ['__rowid__', …]`). Sources that already contain a
 column named `__rowid__` reject with `LoadError('RESERVED_COLUMN_NAME')`.
 The constant is exported as `ROWID_COLUMN`; the row-id type is `RowId =
-number`. Both [annotations](#annotation) and the read-only
-`actions.getColumnValues` API key on this column for app-side row
-alignment. `getColumnValues('__rowid__')` returns a `BigInt64Array`;
+bigint`. [Annotations](#annotation), the read-only `actions.getColumnValues`
+API and `actions.getCellValue(rowId, column)`, which takes a number or a
+bigint, key on this column for app-side row alignment. `getColumnValues('__rowid__')` returns a `BigInt64Array`;
 convert with `Number(rowIds[i])` before passing back as a `rowId: number`.
 See: [`actions.getColumnValues`](./api-reference.md#column-values-read-only-export) · [Annotations](./guides/annotations.md) · Source: `src/core/types.ts`, `src/worker/loaders/`
 
@@ -368,7 +426,8 @@ See: [Session persistence](./guides/session-persistence.md) · Source: `src/pers
 Companion [Filter](#filter) variants. `SetFilter` matches rows where a column
 value is in a set of allowed values; `NotSetFilter` matches rows where it is
 _not_ in a set of excluded values. Used for categorical "select many" UIs and
-their inverses.
+their inverses. Both take `valueType: 'text'`, as
+[PointFilter](#pointfilter) does, to compare a nested column's text.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### Signal
@@ -418,7 +477,7 @@ calls `panel.updateFilters(filters)` on every registered, non-destroyed
 panel whenever the filter array changes. Parallels
 [`CrossfilterCoordinator`](#crossfilter) for visualizations, and is a
 sibling rather than a hook on it because a stats panel can exist for a
-column with no visualization (e.g. `uuid`). Stamps a monotonic
+column with no visualization (with `visualizations: false`, say). Stamps a monotonic
 `filterSequence` per broadcast and short-circuits per-panel
 `updateFilters()` calls whose tag has been superseded — without this the
 base-class default's last-write-wins on `this.options.filters` could land
@@ -454,6 +513,19 @@ widths, pinning, hidden-column metadata, derived columns, selection. Exposed
 as `table.state` for _reads_; mutations go through `table.actions`.
 See: [State model](./concepts/state-model.md) · Source: `src/core/State.ts`
 
+### Type Outline
+
+The short form of a DuckDB type the column header shows for a
+[Nested Column](#nested-column) or a JSON one, written by the library's
+internal `typeOutline` in one of three forms: as a header `label`, `[integer]`, `struct(3)`, `{varchar → integer}`,
+`float[768]`, `union(2)`, `json`, `variant`; as the summary chart's
+`outline`, a struct's field names (`{x, y, tier}`); as the stats line's
+`summary`, its fields with their types (`x double · y double · tier
+varchar`). Each is cut to fit (48, 64 and 120 characters). The header's
+`title` holds the full type, and its accessible name says the type in words
+("list of integer") through the `values` strings.
+See: [Nested and JSON columns](./guides/loading-data.md#header-chart-and-stats) · [i18n](./guides/i18n.md#nested-column-types) · Source: `src/nested/typeOutline.ts`
+
 ### UndoManager
 
 The undo/redo history stack on `/advanced`. Stores up to 50
@@ -462,13 +534,32 @@ bridge between `TableState` signals and the snapshot shape. Instantiated
 automatically by `createDataTable({ undoRedo: true })` (default).
 See: [State model](./concepts/state-model.md) · Source: `src/core/UndoManager.ts`
 
+### Value Inspector
+
+The panel that shows one [Nested Column](#nested-column) or JSON cell's whole
+value, where the grid shows a nested value as a bounded text and a JSON one on
+a single line cut off at the column's edge. Opened by `F2` on the keyboard
+cursor, a double click, or the cell's inspect icon (drawn by the stylesheet on
+hover and on the cursor's cell; no element, no tab stop), or by
+`TableContainer.openValueInspector({ row, column })` on a row the grid has
+rendered (`false` for any other). A non-modal `role="dialog"` beside the cell,
+titled `tags · Row 3`, holding the exact value, read by `__rowid__`, as a
+WAI-ARIA tree: keys, values, types, counts, and buckets of 100 for big
+containers. It shows the first 2,097,152 characters of the value's JSON text,
+and Copy JSON copies the whole value as standard JSON, up to 8,388,608
+characters. With the `derivedColumns` UI on, its "Add as column" buttons add
+the active node as a column ([Extract Panel](#extract-panel)). `Escape`
+closes it and focus returns to the grid, cursor unchanged. A lazy chunk,
+loaded the first time it opens.
+See: [Nested and JSON columns](./guides/loading-data.md#the-value-inspector) · [Accessibility](./guides/accessibility.md#value-inspector-f2-on-a-nested-cell) · Source: `src/table/ValueInspector.ts`, `src/table/TreeView.ts`, `src/nested/valueTreeModel.ts`
+
 ### VectorColumnDef
 
 A [Derived Column](#derived-column) definition whose values are supplied as a
 pre-computed array matching the row order. Useful when a column's value comes
 from JavaScript logic (a geocoding lookup, a cached ML score) that DuckDB SQL
-cannot express. The library registers the vector as a DuckDB table function
-internally; it behaves like any other column afterwards.
+cannot express. The library stores the vector in a DuckDB helper table joined
+on `__rowid__`; it behaves like any other column afterwards.
 See: [Derived columns](./guides/derived-columns.md) · Source: `src/derived/types.ts`
 
 ### Virtual Scrolling
@@ -497,8 +588,9 @@ See: [Sizing the container](../README.md#sizing-the-container) · [Architecture]
 
 ### Visualization
 
-A per-column summary widget — histogram, date histogram, value-counts bar,
-time histogram — rendered in the column header. Implements `BaseVisualization`
+A per-column summary widget — histogram, date histogram, time histogram,
+interval histogram, value-counts bar, or a nested column's summary bar —
+rendered in the column header. Implements `BaseVisualization`
 (on `/advanced`); participates in [Crossfilter](#crossfilter) via
 `fetchData()`. Custom visualizations are registered through
 [VisualizationRegistry](#visualizationregistry).

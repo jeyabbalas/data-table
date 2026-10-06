@@ -8,16 +8,16 @@
 
 > **clampUnpinnedIndex**(`index`, `columns`, `pinnedColumns`): `number`
 
-Defined in: [table/ColumnReorder.ts:60](https://github.com/jeyabbalas/data-table/blob/c94803d261acc081fec39bff6f2e4d947bd8bc07/src/table/ColumnReorder.ts#L60)
+Defined in: [table/ColumnReorder.ts:80](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/ColumnReorder.ts#L80)
 
 Clamp an insertion index so an unpinned column cannot land inside the
 pinned block.
 
 Pinned columns are assumed to occupy the leading positions of the presented
-order — `TableContainer.updatePinnedColumnStyles` and
-`TableBody.updateRowContent` both compute sticky `left` offsets by walking
-`pinnedColumns` in order, so dropping an unpinned column at index 0 of a
-table with two pinned columns desyncs every offset after it.
+order — the sticky `left` offsets (`ColumnLayout.pinnedPlacement`) are the
+widths of the pinned columns before each one, which is where it sits only
+while nothing unpinned comes between them. Dropping an unpinned column at
+index 0 of a table with two pinned columns would put it under both.
 
 ## Parameters
 

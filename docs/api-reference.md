@@ -85,19 +85,22 @@ All extend `Error` and carry a `code: string` and optional `details: Record<stri
 
 ### Core types
 
-| Symbol                       | Kind         | Purpose                                                                                                                                         |
-| ---------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DataType`                   | type         | `'integer' \| 'float' \| 'decimal' \| 'string' \| 'boolean' \| 'uuid' \| 'date' \| 'timestamp' \| 'time' \| 'interval'`.                        |
-| `ColumnSchema`               | interface    | `{ name, type, nullable, originalType, system?: boolean }`. `system: true` marks library-injected columns (notably `__rowid__`).                |
-| `Filter`                     | type         | Discriminated union of 7 filter shapes.                                                                                                         |
-| `FilterType`                 | type         | `Filter['type']`.                                                                                                                               |
-| `SortColumn`                 | interface    | `{ column: string; direction: SortDirection }`.                                                                                                 |
-| `SortDirection`              | type         | `'asc' \| 'desc'`.                                                                                                                              |
-| `RowId`                      | type         | Alias for `number`. The annotation API and `getColumnValues` consume / return this.                                                             |
-| `ROWID_COLUMN`               | const string | The literal `'__rowid__'`. The reserved system-column name; sources containing it reject with `LoadError('RESERVED_COLUMN_NAME')`.              |
-| `GetColumnValuesOptions`     | type         | Options for `actions.getColumnValues` — `{ scope?: 'all' \| 'filtered' \| 'selected'; limit?: number; offset?: number; signal?: AbortSignal }`. |
-| `ColumnHeaderTooltipContent` | interface    | Structured popover content — `{ title?, description?, items? }`. See [Column-header tooltip content](#column-header-tooltip-content).           |
-| `ColumnHeaderTooltipItem`    | interface    | `{ label: string; value: string \| string[] }`. `string[]` renders as wrapping enum chips.                                                      |
+| Symbol                       | Kind         | Purpose                                                                                                                                                                                                                     |
+| ---------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DataType`                   | type         | `'integer' \| 'float' \| 'decimal' \| 'string' \| 'boolean' \| 'uuid' \| 'date' \| 'timestamp' \| 'time' \| 'interval' \| 'nested'`. `'nested'` is a LIST, ARRAY, STRUCT, MAP, UNION or VARIANT column; JSON is `'string'`. |
+| `ColumnSchema`               | interface    | `{ name, type, nullable, originalType, system?: boolean }`. `originalType` is the DuckDB type as `DESCRIBE` prints it (`STRUCT(x DOUBLE, y DOUBLE)`). `system: true` marks library-injected columns (notably `__rowid__`).  |
+| `Filter`                     | type         | Discriminated union of 7 filter shapes.                                                                                                                                                                                     |
+| `FilterType`                 | type         | `Filter['type']`.                                                                                                                                                                                                           |
+| `SortColumn`                 | interface    | `{ column: string; direction: SortDirection }`.                                                                                                                                                                             |
+| `SortDirection`              | type         | `'asc' \| 'desc'`.                                                                                                                                                                                                          |
+| `RowId`                      | type         | Alias for `bigint`: a `__rowid__` value, as `getColumnValues('__rowid__')` returns them in a `BigInt64Array`. The annotation API takes a `number` rowId; `getCellValue` takes either.                                       |
+| `ROWID_COLUMN`               | const string | The literal `'__rowid__'`. The reserved system-column name; sources containing it reject with `LoadError('RESERVED_COLUMN_NAME')`.                                                                                          |
+| `GetColumnValuesOptions`     | type         | Options for `actions.getColumnValues` — `{ scope?: 'all' \| 'filtered' \| 'selected'; limit?: number; offset?: number; signal?: AbortSignal }`.                                                                             |
+| `GetCellValueOptions`        | type         | Options for `actions.getCellValue` — `{ signal?: AbortSignal }`. Aborting rejects with `QueryError` `QUERY_ABORTED`.                                                                                                        |
+| `ColumnHeaderTooltipContent` | interface    | Structured popover content — `{ title?, description?, items? }`. See [Column-header tooltip content](#column-header-tooltip-content).                                                                                       |
+| `ColumnHeaderTooltipItem`    | interface    | `{ label: string; value: string \| string[] }`. `string[]` renders as wrapping enum chips.                                                                                                                                  |
+
+A nested column's values, and what the grid, filters, exports and charts do with them, are covered in [Nested and JSON columns](./guides/loading-data.md#nested-and-json-columns).
 
 ### Filter shapes
 
@@ -105,10 +108,11 @@ See [Filter types](#filter-types) for full fields. Union members: `RangeFilter`,
 
 ### SQL authoring helpers
 
-| Symbol            | Signature                                     | Purpose                                     |
-| ----------------- | --------------------------------------------- | ------------------------------------------- |
-| `quoteIdentifier` | `(name: string) => string`                    | Quote a column/table identifier for DuckDB. |
-| `formatSQLValue`  | `(value: unknown, type?: DataType) => string` | Format a JS value as a DuckDB literal.      |
+| Symbol                 | Signature                                               | Purpose                                                                                           |
+| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `quoteIdentifier`      | `(name: string) => string`                              | Quote a column/table identifier for DuckDB.                                                       |
+| `formatSQLValue`       | `(value: unknown) => string`                            | Format a JS value as a DuckDB literal.                                                            |
+| `filtersToWhereClause` | `(filters: Filter[], excludeColumn?: string) => string` | The `WHERE` clause (without the keyword) of a filter list, as the table builds it; `''` for none. |
 
 ### Filter presets
 
@@ -150,6 +154,8 @@ Types for the [`table.annotations`](#tableannotations-namespace) namespace and t
 | `DataFormat`          | type      | `'csv' \| 'json' \| 'parquet'`.                                                                                                                                                                                                                                        |
 | `LoadResult`          | interface | `{ tableName, rowCount, schema }` returned by the bridge.                                                                                                                                                                                                              |
 
+`WorkerBridge.query` returns each row as a plain object keyed by column name, as Arrow carries the values (`src/data/WorkerBridge.ts`, `src/worker/duckdb.ts`). Integers arrive as numbers, the nearest one past 2^53, and a `HUGEINT` or `UHUGEINT` column's value can arrive with the wrong sign at the edges (a `UHUGEINT` past 2^127 negative, the `HUGEINT` minimum positive); a LIST or ARRAY value as an array; a STRUCT or MAP value as an object, every field or key an own property (`size`, `toJSON` and `__proto__` included), and an unnamed STRUCT, as `row(1, 'a')` builds, as an array; a BLOB as a `Uint8Array`. Arrow loses some values on the way: a `DECIMAL` or `HUGEINT` inside a nested value reads as a meaningless number (`[1.25, 2.50, 3.75]` as `[6.2e-322, 0, 1.235e-321]`), an `INTERVAL` as an `Int32Array`, and a VARIANT, or a value that holds one, cannot be selected at all (`Unsupported Arrow type VARIANT`). Select a nested column as `CAST(to_json(c) AS VARCHAR)`, which is exact, unless it is or holds a VARIANT: `to_json` writes a VARIANT as a string (`to_json([42::VARIANT])` is `["42"]`), and on some types holding one fails with an INTERNAL error that invalidates the database. Select a VARIANT as `CAST(c AS JSON)` (a NULL then reads as the text `null`) and a type holding one as `CAST(CAST(c AS VARIANT) AS JSON)`, as the library does (`jsonValueSQL`, `src/data/valueSql.ts`), or read the values with [`getCellValue` / `getColumnValues`](#column-values-read-only-export). A result holding an `ENUM`, at any depth, is read a second time through the DuckDB query path that carries ENUM values. That read cannot be cancelled: an abort still rejects the promise at once, but the worker finishes the read before its next query.
+
 ### Persistence
 
 | Symbol                          | Kind     | Purpose                                                       |
@@ -181,16 +187,17 @@ Types for the [Stats panels](#stats-panels) extension point. Source: `src/visual
 
 ### Derived columns
 
-| Symbol                    | Kind      | Purpose                                                           |
-| ------------------------- | --------- | ----------------------------------------------------------------- |
-| `DerivedColumnKind`       | type      | `'expression' \| 'vector'`.                                       |
-| `VectorDataType`          | type      | Supported vector types (see [Derived columns](#derived-columns)). |
-| `ExpressionColumnDef`     | interface | `{ kind: 'expression', name, expression }`.                       |
-| `VectorColumnDef`         | interface | `{ kind: 'vector', name, vectorType, values }`.                   |
-| `DerivedColumnDef`        | type      | Union of the two.                                                 |
-| `CompletionContext`       | interface | Schema + function list passed to expression editors.              |
-| `ExpressionEditor`        | type      | Editor contract (`getValue`, `setValue`, `focus`, `destroy`, …).  |
-| `ExpressionEditorFactory` | type      | `(container, context, classPrefix, config?) => ExpressionEditor`. |
+| Symbol                     | Kind      | Purpose                                                                                                                                         |
+| -------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DerivedColumnKind`        | type      | `'expression' \| 'vector'`.                                                                                                                     |
+| `VectorDataType`           | type      | Supported vector types (see [Derived columns](#derived-columns)).                                                                               |
+| `ExpressionColumnDef`      | interface | `{ kind: 'expression', name, expression }`.                                                                                                     |
+| `VectorColumnDef`          | interface | `{ kind: 'vector', name, vectorType, values }`.                                                                                                 |
+| `DerivedColumnDef`         | type      | Union of the two.                                                                                                                               |
+| `CompletionContext`        | interface | Schema + function list passed to expression editors.                                                                                            |
+| `ExpressionEditor`         | type      | Editor contract (`getValue`, `setValue`, `focus`, `destroy`, …).                                                                                |
+| `ExpressionEditorFactory`  | type      | `(container, context, classPrefix, config?) => ExpressionEditor`.                                                                               |
+| `NestedFieldColumnOptions` | interface | `{ name?, extract?: 'value' \| 'length' \| 'tag', jsonLeaf?: 'string' \| 'number' \| 'boolean' \| 'json' }` for `actions.addNestedFieldColumn`. |
 
 ### Progress
 
@@ -221,7 +228,7 @@ Types for the [Stats panels](#stats-panels) extension point. Source: `src/visual
 
 ## Tier-2 exports
 
-Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reach into these only when the facade doesn't expose what you need — see [When to use `/advanced`](../AGENTS.md#when-to-use-advanced).
+Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reach into these only when the facade doesn't expose what you need — see [When to use `/advanced`](../AGENTS.md#6-when-to-use-advanced).
 
 ### Low-level state & reactive primitives
 
@@ -245,8 +252,8 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 
 | Symbol                              | Kind           | Purpose                                                                                                                                                                                                                                                                                                                          |
 | ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TableContainer`                    | class          | Main DOM container that composes every UI piece. `announce(message)` speaks a transient message through its second polite live region.                                                                                                                                                                                           |
-| `TableContainerOptions`             | interface      | Ctor options (rowHeight, headerHeight, classPrefix, instanceId, colorScheme, messages, …).                                                                                                                                                                                                                                       |
+| `TableContainer`                    | class          | Main DOM container that composes every UI piece. `announce(message)` speaks a transient message through its second polite live region. `openValueInspector` and `extractColumn` open the value inspector and add an extracted column; see below the table.                                                                       |
+| `TableContainerOptions`             | interface      | Ctor options (rowHeight, headerHeight, classPrefix, instanceId, colorScheme, messages, extractColumns, …).                                                                                                                                                                                                                       |
 | `ResizeCallback`                    | type           | `(rect: DOMRect) => void` for resize observers.                                                                                                                                                                                                                                                                                  |
 | `ColumnHeader`                      | class          | Renders a single column header cell (label, stats, viz canvas). See [Column layout mode](#column-layout-mode-shiftf2) for its keyboard width API.                                                                                                                                                                                |
 | `ColumnHeaderOptions`               | interface      | Header ctor options. `announce?: (message: string) => void` writes to the transient live region (used to announce the width at the end of a resize drag).                                                                                                                                                                        |
@@ -278,6 +285,12 @@ Exported from `@jeyabbalas/data-table/advanced`. Source: `src/advanced.ts`. Reac
 | `StatsPanelErrorContext`            | interface      | Context object passed to `options.onError` — `{ source: 'stats-panel', column: string, phase: StatsPanelErrorPhase }`.                                                                                                                                                                                                           |
 | `StatsPanelErrorPhase`              | type           | `'construct' \| 'update' \| 'hover' \| 'fetch' \| 'destroy'` — discriminator for where in the panel lifecycle the error originated.                                                                                                                                                                                              |
 | `StatsPanelCoordinator`             | class          | Composed by `createDataTable`; subscribes to `state.filters` and broadcasts `panel.updateFilters(filters)` to every registered panel. Stamps a monotonic `filterSequence` per broadcast to drop stale in-flight calls; bounded fan-out (`DEFAULT_PANEL_CONCURRENCY = 4`). Exposed for power users orchestrating panels manually. |
+
+`TableContainer` (reach the table's own as `table.container`) also carries the nested-column entry points:
+
+- `openValueInspector({ row, column })` opens the [value inspector](./guides/loading-data.md#the-value-inspector) on a body cell, `row` being its 0-based position in the sorted, filtered view. It works on a row the grid has rendered, in or near the view, that holds a non-NULL value of a nested or JSON column, and returns `false` for any other cell.
+- `extractColumn(request)` adds a column as the extract panel and the inspector's "Add as column" do: `request` is `NestedFieldColumnOptions & { column, path, row? }`, and it resolves what `actions.addNestedFieldColumn` resolves, `{ success, name?, error? }`. On success the cursor moves to the new column, on `row` when given or else on its header, the view scrolls to it, its header flashes and the live region says "Column point_x added"; a failure is announced when no panel is open to show it.
+- `TableContainerOptions.extractColumns` (default `true`) shows the extract button on nested and JSON column headers and the inspector's add buttons. `createDataTable` ties it to `derivedColumns`.
 
 ### Filter UI components
 
@@ -346,22 +359,24 @@ when assembling a custom container shell.
 
 ### Export (low-level)
 
-| Symbol                                        | Kind      | Purpose                                                     |
-| --------------------------------------------- | --------- | ----------------------------------------------------------- |
-| `ExportDialog`                                | class     | Modal dialog (format, scope, columns, download/copy).       |
-| `ExportDialogOptions`                         | interface | Dialog ctor options.                                        |
-| `exportToCSV(rows, opts)`                     | function  | Serialize a row array to CSV.                               |
-| `exportFromState(state, bridge, opts)`        | function  | CSV export straight from a live table.                      |
-| `ExportOptions`                               | interface | `{ scope, columns, includeHeaders, delimiter, nullValue }`. |
-| `exportToJSON(rows, opts)`                    | function  | Serialize to JSON.                                          |
-| `exportJSONFromState(state, bridge, opts)`    | function  | JSON export from a live table.                              |
-| `JSONExportOptions`                           | interface | JSON-specific options.                                      |
-| `exportToParquet(rows, opts)`                 | function  | Serialize to Parquet.                                       |
-| `exportParquetFromState(state, bridge, opts)` | function  | Parquet export from a live table.                           |
-| `ParquetExportOptions`                        | interface | Parquet-specific options.                                   |
-| `copyToClipboard(rows, opts)`                 | function  | Copy rendered rows to the system clipboard.                 |
-| `copyRowsToClipboard(rows, opts)`             | function  | Alias kept for legacy callers.                              |
-| `ExportContext`                               | type      | Shared context passed between export helpers.               |
+| Symbol                                                  | Kind      | Purpose                                                                                |
+| ------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------- |
+| `ExportDialog`                                          | class     | Modal dialog (format, scope, columns, download/copy).                                  |
+| `ExportDialogOptions`                                   | interface | Dialog ctor options.                                                                   |
+| `exportToCSV(tableName, opts, context, signal?)`        | function  | CSV text of a table, as `context` (filters, sort, selection, schema) says.             |
+| `exportFromState(state, bridge, opts?, signal?)`        | function  | CSV export straight from a live table.                                                 |
+| `ExportOptions`                                         | interface | `{ scope, columns, includeHeaders, delimiter, nullValue }`.                            |
+| `exportToJSON(tableName, opts, context, signal?)`       | function  | JSON (array or NDJSON) text of a table.                                                |
+| `exportJSONFromState(state, bridge, opts?, signal?)`    | function  | JSON export from a live table.                                                         |
+| `JSONExportOptions`                                     | interface | JSON-specific options.                                                                 |
+| `exportToParquet(tableName, opts, context, signal?)`    | function  | Parquet bytes (`Uint8Array`) of a table.                                               |
+| `exportParquetFromState(state, bridge, opts?, signal?)` | function  | Parquet export from a live table.                                                      |
+| `ParquetExportOptions`                                  | interface | Parquet-specific options.                                                              |
+| `copyToClipboard(data, format)`                         | function  | Write a string to the system clipboard as `'text'` or `'html'`.                        |
+| `copyRowsToClipboard(rows, state, bridge)`              | function  | Copy rows (0-based positions in the sorted, filtered view) as TSV, a header row first. |
+| `ExportContext`                                         | type      | Shared context passed between export helpers.                                          |
+
+CSV and the clipboard's TSV write a nested value (`type: 'nested'`) as standard JSON, `[56,3,91]` or `{"x":1.25,"tier":"bronze"}`: a MAP as an object in key order, a UNION as `{"tag":value}`, every digit kept, `NaN` and `±Infinity` as `null`. JSON export writes real arrays and objects, a MAP as an object keyed by each key's text, an unnamed struct as an array, an integer inside past 2^53 as a string of its digits. A `BIGINT`-family column of its own is read as numbers, as [`bridge.query`](#data-layer) reads them, in both: rounded past 2^53, and a `HUGEINT` or `UHUGEINT` with the wrong sign at its extremes. Take such a column from `getColumnValues`, or export it to Parquet, when its digits matter. Both read nested values as exact JSON text from DuckDB, write `INTERVAL`, `BLOB`, `BIT`, `GEOMETRY`, `BIGNUM` and `ENUM` values as DuckDB's text, a JSON column's value as its text, and sort by value as the grid does. A CSV or JSON export is one string, so a large nested column (a `FLOAT[768]` value is some 15,000 characters of JSON) can pass the browser's string limit: export it to Parquet, which writes every column natively. See [Nested and JSON columns → Exporting](./guides/loading-data.md#exporting).
 
 ### Persistence internals
 
@@ -380,39 +395,67 @@ when assembling a custom container shell.
 
 ### Statistics
 
-| Symbol                                               | Kind     | Purpose                                              |
-| ---------------------------------------------------- | -------- | ---------------------------------------------------- |
-| `ColumnStatsData`                                    | type     | Union of all stat-kind data shapes.                  |
-| `NumericColumnStats`                                 | type     | Numeric stats (min, max, median, sum, …).            |
-| `CategoricalColumnStats`                             | type     | Categorical stats (distinct count, top values, …).   |
-| `TemporalColumnStats`                                | type     | Date/timestamp stats.                                |
-| `TimeColumnStats`                                    | type     | TIME stats.                                          |
-| `IntervalColumnStats`                                | type     | INTERVAL stats.                                      |
-| `BaseColumnStats`                                    | type     | Common fields (`totalCount`, `nullCount`).           |
-| `statsKindForDataType(type)`                         | function | Pick the stats kind for a `DataType`.                |
-| `formatStatValue(value, type, locale?)`              | function | Format a single stat value.                          |
-| `formatCount(n, locale?)`                            | function | Locale-aware integer formatting.                     |
-| `formatDefaultStats(stats, type, messages)`          | function | Produce the multi-line stats block shown in headers. |
-| `fetchIntervalStats(bridge, table, column, filters)` | function | Compute interval stats on demand.                    |
+| Symbol                                                                 | Kind     | Purpose                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ColumnStatsData`                                                      | type     | Union of all stat-kind data shapes.                                                                                                                                                                                                            |
+| `NumericColumnStats`                                                   | type     | Numeric stats (min, max, median, sum, …).                                                                                                                                                                                                      |
+| `CategoricalColumnStats`                                               | type     | Categorical stats (distinct count, top values, …).                                                                                                                                                                                             |
+| `TemporalColumnStats`                                                  | type     | Date/timestamp stats.                                                                                                                                                                                                                          |
+| `TimeColumnStats`                                                      | type     | TIME stats.                                                                                                                                                                                                                                    |
+| `IntervalColumnStats`                                                  | type     | INTERVAL stats.                                                                                                                                                                                                                                |
+| `NestedColumnStats`                                                    | type     | Stats of a `'nested'` column: `kind: 'nested'`, the row and null counts, and `outline`, the type summary line 2 shows (`x double · y double · tier varchar`). Field names come from the data file: escape `outline` before writing it as HTML. |
+| `BaseColumnStats`                                                      | type     | Common fields: `totalRows`, `nonNullCount`, `nullCount`, `filteredTotalRows`.                                                                                                                                                                  |
+| `statsKindForDataType(type)`                                           | function | Pick the stats kind for a `DataType`; `'nested'` gives `'nested'`.                                                                                                                                                                             |
+| `formatStatValue(value)`                                               | function | Format a single numeric stat value.                                                                                                                                                                                                            |
+| `formatCount(count)`                                                   | function | Locale-aware integer formatting.                                                                                                                                                                                                               |
+| `formatDefaultStats(stats, type, messages?)`                           | function | Produce the two-line stats HTML shown in headers. For a nested column, line 2 is the escaped type summary.                                                                                                                                     |
+| `fetchIntervalStats(table, column, filters, bridge, unfilteredTotal?)` | function | Compute interval stats on demand.                                                                                                                                                                                                              |
 
 ### Visualization internals
 
-| Symbol                                                                                                                                                                             | Kind                   | Purpose                                                                                                    |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `BaseVisualization`                                                                                                                                                                | abstract class         | Base for canvas visualizations (subclass to add custom viz types).                                         |
-| `VisualizationOptions`                                                                                                                                                             | interface              | Ctor options (`bridge`, `state`, `filters`, `classPrefix`, …).                                             |
-| `Histogram`                                                                                                                                                                        | class                  | Numeric histogram.                                                                                         |
-| `DateHistogram`                                                                                                                                                                    | class                  | Date/timestamp histogram.                                                                                  |
-| `TimeHistogram`                                                                                                                                                                    | class                  | TIME histogram.                                                                                            |
-| `IntervalHistogram`                                                                                                                                                                | class                  | INTERVAL histogram.                                                                                        |
-| `ValueCounts`                                                                                                                                                                      | class                  | Categorical stacked-segment bar.                                                                           |
-| `HistogramBin`, `HistogramData`, `DateHistogramBin`, `DateHistogramData`, `TimeInterval`, `TimeHistogramBin`, `TimeHistogramData`, `IntervalHistogramBin`, `IntervalHistogramData` | types                  | Per-viz data shapes.                                                                                       |
-| `CategorySegment`, `ValueCountsData`                                                                                                                                               | types                  | Shapes for `ValueCounts`.                                                                                  |
-| `CrossfilterCoordinator`                                                                                                                                                           | class                  | Broadcasts filter changes to registered visualizations.                                                    |
-| `InteractionManager`                                                                                                                                                               | class                  | LIFO Escape-key stack for brush/selection interactions.                                                    |
-| `InteractiveVisualization`                                                                                                                                                         | type                   | Interface implemented by visualizations participating in `InteractionManager`.                             |
-| `isNumericType`, `isDateType`, `isTimeType`, `isCategoricalType`, `isIntervalType`, `needsVisualization`                                                                           | functions              | `DataType` predicates.                                                                                     |
-| `VisualizationFactory`                                                                                                                                                             | class (**deprecated**) | Legacy static wrapper kept on `/advanced` only. New code uses `VisualizationRegistry` from the root entry. |
+| Symbol                                                                                                                                                                             | Kind                   | Purpose                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BaseVisualization`                                                                                                                                                                | abstract class         | Base for canvas visualizations (subclass to add custom viz types).                                                                                                                                      |
+| `VisualizationOptions`                                                                                                                                                             | interface              | Ctor options (`bridge`, `state`, `filters`, `classPrefix`, …).                                                                                                                                          |
+| `Histogram`                                                                                                                                                                        | class                  | Numeric histogram.                                                                                                                                                                                      |
+| `DateHistogram`                                                                                                                                                                    | class                  | Date/timestamp histogram.                                                                                                                                                                               |
+| `TimeHistogram`                                                                                                                                                                    | class                  | TIME histogram.                                                                                                                                                                                         |
+| `IntervalHistogram`                                                                                                                                                                | class                  | INTERVAL histogram.                                                                                                                                                                                     |
+| `ValueCounts`                                                                                                                                                                      | class                  | Categorical stacked-segment bar.                                                                                                                                                                        |
+| `NestedSummaryVisualization`                                                                                                                                                       | class                  | Summary bar of a `'nested'` column: its non-null and null shares and its type outline, from one ungrouped `COUNT(*), COUNT(c)` scan. No click-to-filter. The default registry's `nested-summary` entry. |
+| `HistogramBin`, `HistogramData`, `DateHistogramBin`, `DateHistogramData`, `TimeInterval`, `TimeHistogramBin`, `TimeHistogramData`, `IntervalHistogramBin`, `IntervalHistogramData` | types                  | Per-viz data shapes.                                                                                                                                                                                    |
+| `CategorySegment`, `ValueCountsData`                                                                                                                                               | types                  | Shapes for `ValueCounts`.                                                                                                                                                                               |
+| `NestedSummaryData`                                                                                                                                                                | type                   | `{ total, nonNullCount, filtered: { total, nonNullCount } \| null }`, the counts behind `NestedSummaryVisualization`.                                                                                   |
+| `CrossfilterCoordinator`                                                                                                                                                           | class                  | Broadcasts filter changes to registered visualizations.                                                                                                                                                 |
+| `InteractionManager`                                                                                                                                                               | class                  | LIFO Escape-key stack for brush/selection interactions.                                                                                                                                                 |
+| `InteractiveVisualization`                                                                                                                                                         | type                   | Interface implemented by visualizations participating in `InteractionManager`.                                                                                                                          |
+| `isNumericType`, `isDateType`, `isTimeType`, `isCategoricalType`, `isIntervalType`, `isNestedType`, `needsVisualization`                                                           | functions              | `DataType` predicates. `isNestedType(type)` is `type === 'nested'`; `isCategoricalType` stays `string` / `boolean` / `uuid`, so nested columns are not categorical.                                     |
+| `VisualizationFactory`                                                                                                                                                             | class (**deprecated**) | Legacy static wrapper kept on `/advanced` only. New code uses `VisualizationRegistry` from the root entry.                                                                                              |
+
+### DuckDB types
+
+For code that looks inside a nested column's type, such as a custom chart, a stats panel or an extract picker of its own. Source: `src/core/duckdbType.ts`.
+
+| Symbol                                                                 | Kind     | Purpose                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `parseDuckDBType(text)`                                                | function | Read a type as `DESCRIBE` prints it (`ColumnSchema.originalType`) into a `DuckDBTypeNode` tree. Handles quoted, bare and unnamed struct fields, stacked suffixes (`INTEGER[2][]` is a list of 2-arrays) and multi-word names, in any case. Never throws: text it cannot read, or nesting past 256 levels, is an `unknown` node. Memoized; nodes are frozen. |
+| `DuckDBTypeNode`                                                       | type     | Union of the node types below, discriminated by `kind`. Every node keeps its own type text in `sqlType`.                                                                                                                                                                                                                                                    |
+| `DuckDBTypeKind`                                                       | type     | `'scalar' \| 'json' \| 'variant' \| 'list' \| 'array' \| 'struct' \| 'map' \| 'union' \| 'unknown'`.                                                                                                                                                                                                                                                        |
+| `DuckDBScalarTypeNode`                                                 | type     | `{ kind: 'scalar', name, args, dataType }`: the upper-case name, its arguments (`DECIMAL(18,4)`), and the library's `DataType` for it.                                                                                                                                                                                                                      |
+| `DuckDBListTypeNode`, `DuckDBArrayTypeNode`                            | types    | `{ element }`; an array also has its fixed `size`.                                                                                                                                                                                                                                                                                                          |
+| `DuckDBStructTypeNode`, `DuckDBStructField`                            | types    | `{ fields: { name, type }[] }`; `name` is `null` for an unnamed field.                                                                                                                                                                                                                                                                                      |
+| `DuckDBMapTypeNode`                                                    | type     | `{ key, value }`.                                                                                                                                                                                                                                                                                                                                           |
+| `DuckDBUnionTypeNode`, `DuckDBUnionMember`                             | types    | `{ members: { tag, type }[] }`.                                                                                                                                                                                                                                                                                                                             |
+| `DuckDBJsonTypeNode`, `DuckDBVariantTypeNode`, `DuckDBUnknownTypeNode` | types    | `JSON`, `VARIANT`, and a type the parser could not read.                                                                                                                                                                                                                                                                                                    |
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+const node = parseDuckDBType('STRUCT(x DOUBLE, tags VARCHAR[])');
+if (node.kind === 'struct') {
+  node.fields.map((f) => f.name); // ['x', 'tags']
+}
+```
 
 ---
 
@@ -430,7 +473,7 @@ If that load fails, the table first tears itself down, as `destroy()` would: its
 
 ## `CreateDataTableOptions`
 
-Source: `src/DataTable.ts:136-345`.
+Source: `src/DataTable.ts:133-367`.
 
 ### Mounting
 
@@ -438,7 +481,7 @@ Source: `src/DataTable.ts:136-345`.
 | ----------- | ------------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `container` | `HTMLElement` | yes       | —       | Element that will host the table. The library takes full ownership of its contents. Must have a bounded height — see the note below. |
 
-A bounded container height is a performance requirement, not a style preference. The library appends a `height: 100%` root into `container` (`src/styles/02-shell.css:11-23`) and the virtual scroller sizes its render window from the `clientHeight` of the internal `.dt-body-scroll` viewport (`src/table/VirtualScroller.ts:347-390`) — `⌈clientHeight / rowHeight⌉ + 10` rows. When `container` is content-sized, that chain resolves to the height of the scroll spacer, which is `min(totalRows × rowHeight, 15,000,000 px)` (`src/table/VirtualScroller.ts:426-438`): the render window saturates at ~468,750 rows at the default 32 px row height instead of covering the whole dataset, and rows are fetched in block-aligned chunks (128 rows per block by default, at most 2 in flight — `src/table/TableBody.ts:910-1019`) rather than as a single unbounded query. That caps the damage without removing it: virtualization is defeated with no error and no warning. The degenerate opposite — a container that is zero-tall at mount — renders nothing and does log a one-shot `console.warn` (`src/table/TableContainer.ts:401-408`).
+A bounded container height is a performance requirement, not a style preference. The library appends a `height: 100%` root into `container` (`src/styles/02-shell.css:11-23`) and the virtual scroller sizes its render window from the `clientHeight` of the internal `.dt-body-scroll` viewport (`src/table/VirtualScroller.ts:347-390`) — `⌈clientHeight / rowHeight⌉ + 10` rows. When `container` is content-sized, that chain resolves to the height of the scroll spacer, which is `min(totalRows × rowHeight, 15,000,000 px)` (`src/table/VirtualScroller.ts:426-438`): the render window saturates at ~468,750 rows at the default 32 px row height instead of covering the whole dataset, and rows are fetched in block-aligned chunks (128 rows per block by default, at most 2 in flight — `src/table/TableBody.ts:910-1019`) rather than as a single unbounded query. That caps the damage without removing it: virtualization is defeated with no error and no warning. The degenerate opposite — a container that is zero-tall at mount — renders nothing and does log a one-shot `console.warn` (`src/table/TableContainer.ts:422-433`).
 
 There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is the host page's job, and the library never writes styles onto it. The inverse holds for `rowHeight` / `headerHeight` below: those are options rather than CSS knobs, and the library publishes them as the `--dt-row-height` / `--dt-header-height` custom properties on its own root, so overriding those tokens in a stylesheet has no effect. Selector strings are not accepted — pass the `HTMLElement`. See [Sizing the container](../README.md#sizing-the-container) for the two layouts that work and the failure modes, and [Architecture § Virtual scroller](./concepts/architecture.md#virtual-scroller) for the mechanism in full.
 
@@ -459,8 +502,8 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 | `presets`               | `boolean \| { manager?: FilterPresetManager }` | `true`                         | Filter preset UI + storage. Pass `{ manager }` to share across tables.                                                                                                                                                                                                                            |
 | `undoRedo`              | `boolean`                                      | `true`                         | Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z, plus Ctrl+Y for redo.                                                                                                                                                                                                                                              |
 | `expressionFilter`      | `boolean`                                      | `true`                         | Raw-SQL filter button in the filter bar.                                                                                                                                                                                                                                                          |
-| `derivedColumns`        | `boolean`                                      | `true`                         | "+" add-column button and per-header `f(x)` edit icon. The programmatic API (`actions.addDerivedColumn` etc.) is unaffected by this flag.                                                                                                                                                         |
-| `visualizations`        | `boolean`                                      | `true`                         | Auto-attach column-header histograms and value counts.                                                                                                                                                                                                                                            |
+| `derivedColumns`        | `boolean`                                      | `true`                         | The "+" add-column button, the per-header `f(x)` edit icon, a nested or JSON column header's extract button and the value inspector's "Add as column" buttons. The programmatic API (`actions.addDerivedColumn`, `actions.addNestedFieldColumn`, …) is unaffected by this flag.                   |
+| `visualizations`        | `boolean`                                      | `true`                         | Auto-attach column-header charts: histograms, value counts, and a summary bar for nested columns.                                                                                                                                                                                                 |
 | `visualizationRegistry` | `VisualizationRegistry`                        | `defaultVisualizationRegistry` | Per-instance registry for custom visualizations.                                                                                                                                                                                                                                                  |
 | `statsPanelRegistry`    | `StatsPanelRegistry`                           | `defaultStatsPanelRegistry`    | Per-instance registry for custom column-stats panels. Both the per-instance and module-scoped fallback are empty by default — register a `BaseStatsPanel` subclass to replace the library's built-in `formatDefaultStats` rendering for matching column types. See [Stats panels](#stats-panels). |
 | `exportDialog`          | `boolean`                                      | `true`                         | Built-in export dialog (CSV/JSON/Parquet).                                                                                                                                                                                                                                                        |
@@ -498,7 +541,7 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 
 ## `DataTable` interface
 
-Returned by `createDataTable()`. Source: `src/DataTable.ts:350-439`.
+Returned by `createDataTable()`. Source: `src/DataTable.ts:369-472`.
 
 ### Properties
 
@@ -654,14 +697,46 @@ table.actions.addFilter({ type: 'pattern', column: 'name', pattern: 'smith', mod
 
 | Method                 | Signature                                                                                                                                          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `addDerivedColumn`     | `(def: DerivedColumnDef) => Promise<{ success: boolean; error?: string }>`                                                                         | Expression or vector.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `addDerivedColumn`     | `(def: DerivedColumnDef) => Promise<{ success: boolean; error?: string }>`                                                                         | Expression or vector. A name another column has, ignoring the case of ASCII letters, is refused (`already exists as "label"`): DuckDB binds `"LABEL"` to `label`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `updateDerivedColumn`  | `(oldName: string, def: DerivedColumnDef) => Promise<{ success: boolean; error?: string }>`                                                        | Handles renames; if `def.name !== oldName` the column is renamed and references are propagated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `replaceDerivedColumn` | `(name: string, newDef: DerivedColumnDef) => Promise<{ success: true; info: DerivedColumnInfo } \| { success: false; error: DerivedColumnError }>` | Same-name replacement with dependent re-validation. Pre-flight order: existence → expression validation → type detection → dependent re-validation → cycle check → commit. Errors: `NOT_FOUND`, `EXPRESSION_INVALID`, `DEPENDENTS_INCOMPATIBLE` (`details.dependentsAffected: string[]`, `details.reasons: Record<string,string>`), `CIRCULAR_DEPENDENCY`, `VECTOR_LENGTH_MISMATCH`. Fires `derivedChange` with `kind: 'replaced'` on success. See [Derived columns guide → Replacing](./guides/derived-columns.md#replacing-a-derived-column-same-name--dependent-re-validation). |
 | `removeDerivedColumn`  | `(name: string) => Promise<void>`                                                                                                                  | Fires `derivedChange` with `kind: 'removed'` and `columnName` set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `addNestedFieldColumn` | `(column: string, path: (string \| number)[], options?: NestedFieldColumnOptions) => Promise<{ success: boolean; name?: string; error?: string }>` | Add a derived expression column that reads one part of a nested or JSON column, right after it. See [Extracting a nested field](#extracting-a-nested-field).                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `validateExpression`   | `(expression: string) => Promise<{ valid: boolean; type?: DataType; originalType?: string; error?: string }>`                                      | Validate without committing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `getCompletionContext` | `() => CompletionContext`                                                                                                                          | For autocompletion in custom editors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 Derived-column changes, `undo`, `redo`, `resetToInitial`, `loadData` and `clearSession` run one at a time, in call order. Each starts once the one before it has landed and validates against the columns that one left, so a second add of one name gets `already exists`, and an `undo` called while an add runs undoes the add. A change still waiting or running when `loadData` or `clearSession` is called does not apply: an add or update resolves `{ success: false }`, a replacement resolves `NOT_FOUND`, a removal rejects with `NOT_FOUND`, and an undo, redo or reset resolves `false`. An `undo`, `redo` or `resetToInitial` called while a load is under way resolves `false`: it would act on the session the load restores.
+
+#### Extracting a nested field
+
+```ts
+// point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+await table.actions.addNestedFieldColumn('point', ['x']); // { success: true, name: 'point_x' }
+// tags: VARCHAR[]
+await table.actions.addNestedFieldColumn('tags', [], { extract: 'length' }); // tags_length
+// doc: JSON. A key with a dot in it, then an array index, read as a number
+await table.actions.addNestedFieldColumn('doc', ['a.b', 0], { jsonLeaf: 'number' }); // doc_a_b_0
+```
+
+`addNestedFieldColumn` writes the expression that reads `path` in a nested or JSON column and adds it as an ordinary derived expression column (`src/core/Actions.ts`, `src/nested/extractExpression.ts`), with the chart, stats and filters of its type. `path` is read against the column's DuckDB type, a step at a time: a STRUCT field's name or 1-based position (the only way to an unnamed field), a LIST or ARRAY element's 1-based position, a MAP key (text or a number), a UNION member's tag, and inside JSON or a VARIANT, object keys and 0-based array indexes. Struct field names and union tags match ignoring the case of ASCII letters, as DuckDB binds them; map keys and JSON keys match exactly, and a JSON key in the wrong case reads NULL in every row.
+
+| Reads                                                | Expression                                                     | Default name      |
+| ---------------------------------------------------- | -------------------------------------------------------------- | ----------------- |
+| struct field `['geo', 'lat']` of `point`             | `"point"['geo']['lat']`                                        | `point_geo_lat`   |
+| unnamed struct field `[2]` of `pair`                 | `struct_extract("pair", 2)`                                    | `pair_2`          |
+| list element `[3]` of `tags`                         | `"tags"[3]`                                                    | `tags_3`          |
+| `tags`, `extract: 'length'`                          | `len("tags")`                                                  | `tags_length`     |
+| map value `['k']` of `m`                             | `map_extract_value("m", 'k')`                                  | `m_k`             |
+| `m`, `extract: 'length'`                             | `cardinality("m")`                                             | `m_size`          |
+| union member `['num']` of `u`; `u`, `extract: 'tag'` | `union_extract("u", 'num')`; `union_tag("u")`                  | `u_num`; `u_tag`  |
+| JSON `['a.b', 0]` of `doc`                           | `json_extract_string("doc", '$."a.b"[0]')`                     | `doc_a_b_0`       |
+| the same, `jsonLeaf: 'number'`                       | `TRY_CAST(json_extract_string("doc", '$."a.b"[0]') AS DOUBLE)` | `doc_a_b_0`       |
+| JSON `['tags']` of `doc`, `extract: 'length'`        | `json_array_length("doc", '$.tags')`                           | `doc_tags_length` |
+
+- **Options.** `extract`: `'value'` (default), `'length'` (a list's, array's or JSON array's length, a map's number of entries), or `'tag'` (a union's member tag). `jsonLeaf`, for a value inside JSON or a VARIANT: `'string'` (default; a JSON string unquoted, anything else as its JSON text), `'number'` or `'boolean'`, the value's text cast with `TRY_CAST` (so a string holding a number reads as one, `"12.5"` as 12.5, and `1`, `0`, `"true"` and `"yes"` as booleans; NULL where the text does not cast), or `'json'`. `name`: the column's name; refused, as in `addDerivedColumn`, when another column has it in any letter case.
+- **Default name.** The column's name and one part per step, joined by `_`, in lowercase ASCII letters, digits and `_`, so it needs no quoting; `_2`, `_3`, … after it when another column has that name, ignoring case.
+- **Placement and undo.** The column goes right after its source, past the extracts already made of it (`point, point_x, point_y`); for a pinned source, right after the pinned columns, unpinned. One undo entry.
+- **Failures** resolve `{ success: false, error }` and never reject: a column that is not in the schema or is neither nested nor JSON, an option it does not know, a path that does not fit the type (the message names the step; see the path codes in [troubleshooting](./troubleshooting.md#error-code-reference)), a name that is taken, an expression DuckDB refuses, a destroyed table, or new data loaded first. It runs in its turn, as `addDerivedColumn` does.
 
 ### Column values (read-only export)
 
@@ -679,30 +754,82 @@ interface GetColumnValuesOptions {
 }
 ```
 
-Returns the named column's values in `__rowid__` order (or selection insertion order when `scope: 'selected'`). The return type narrows by data type:
+Returns the named column's values in `__rowid__` order for `scope: 'all'` and `'filtered'`, and in the sorted, filtered view's order for `scope: 'selected'`. Every value is exact (`src/core/Actions.ts`, `getColumnValues`). The return type narrows by data type:
 
-| `DataType`                                                                               | Returned as     |
-| ---------------------------------------------------------------------------------------- | --------------- |
-| `'integer'`                                                                              | `Int32Array`    |
-| `'float'` / `'decimal'`                                                                  | `Float64Array`  |
-| `'integer'` BIGINT (incl. `__rowid__`)                                                   | `BigInt64Array` |
-| `'string'` / `'date'` / `'timestamp'` / `'time'` / `'boolean'` / `'uuid'` / `'interval'` | `unknown[]`     |
+| Column                                                                      | Returned as                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'integer'`: `TINYINT` … `INTEGER`, `UTINYINT` … `UINTEGER`                 | `Int32Array`; `unknown[]` of numbers when a `UINTEGER` passes 2^31 − 1                                                                                                                                                            |
+| `'integer'`: `BIGINT`, `UBIGINT`, `HUGEINT`, `UHUGEINT` (incl. `__rowid__`) | `BigInt64Array`, every digit kept; `unknown[]` of numbers (exact) and bigints (beyond ±(2^53 − 1)) when a value does not fit 64 bits                                                                                              |
+| `'float'` / `'decimal'`                                                     | `Float64Array`; a `DECIMAL` is the double nearest its value                                                                                                                                                                       |
+| `'nested'`                                                                  | `unknown[]` of JS values, as [`getCellValue`](#getcellvalue) returns them: arrays, objects, `Map`s, `{ [tag]: value }`                                                                                                            |
+| Everything else                                                             | `unknown[]`. `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY` and `TIME WITH TIME ZONE` values are DuckDB's text; a `BLOB` is a `Uint8Array`; `DATE` and `TIMESTAMP` are epoch milliseconds; `VARCHAR`, `UUID` and `JSON` are text |
 
 Notes:
 
-- Empty selection + `scope: 'selected'` returns `[]` (no throw).
+- A `NULL` anywhere in the result makes it an `unknown[]` holding `null`, whatever the type: a typed array would read it as `0`.
+- Empty selection + `scope: 'selected'` returns an empty array of the column's kind (no throw).
 - `__rowid__` is queryable by name even though it's hidden in the grid by default.
 - Pagination is enforced by SQL (`LIMIT` / `OFFSET`) — not slicing afterwards.
+- A nested column's values are read as JSON text and skip the query cache; `BIGINT`-family columns are read as text and parsed, which is slower than reading numbers.
 
-Errors (all `QueryError`):
+Errors (`QueryError`, except the last):
 
-| Code                 | When                                            |
-| -------------------- | ----------------------------------------------- |
-| `NO_TABLE`           | Called before data is loaded.                   |
-| `COLUMN_NOT_FOUND`   | `name` is not in `state.schema`.                |
-| `INVALID_PAGINATION` | `limit` or `offset` is negative or non-integer. |
+| Code                 | When                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `COLUMN_NOT_FOUND`   | `name` is not in `state.schema`. Before any load the schema is empty, so a call then rejects with this code.       |
+| `INVALID_PAGINATION` | `limit` or `offset` is negative or non-integer.                                                                    |
+| `INVALID_ROWID`      | `scope: 'selected'` and a row in `state.selectedRows` is not a non-negative integer.                               |
+| `NO_TABLE`           | No table is loaded while the schema still names the column, which a table built by `createDataTable` never leaves. |
+| `QUERY_ABORTED`      | `opts.signal` aborted the read.                                                                                    |
+| `DESTROYED`          | `DestroyedError`: the table was destroyed before or during the call.                                               |
 
 See [`examples/10-column-export/`](../examples/10-column-export/) for a runnable demo, including `BigInt64Array` ergonomics for `__rowid__`.
+
+#### `getCellValue`
+
+```ts
+async getCellValue(
+  rowId: number | bigint,
+  column: string,
+  options?: GetCellValueOptions, // { signal?: AbortSignal }
+): Promise<unknown>;
+```
+
+Reads one cell exactly: the value in `column` of the row whose `__rowid__` is `rowId`, from the current effective table (the derived-column VIEW when there is one). One query by `__rowid__`, which skips the query cache and runs ahead of queued chart and stats queries. `rowId` is the row's `__rowid__`, not its position in the sorted view.
+
+A nested column's value is read as exact JSON text and turned into JS values (`src/core/jsonTree.ts`, `materialize`):
+
+| DuckDB value                                          | Returned as                                                                                                                                                                                            |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| LIST, ARRAY                                           | An array.                                                                                                                                                                                              |
+| STRUCT                                                | An object keyed by field name, every key an own property (`__proto__`, `constructor` and `toJSON` included); an unnamed struct, an array.                                                              |
+| MAP                                                   | A `Map`, entries in order. Integer keys are numbers (bigints beyond ±(2^53 − 1)), FLOAT, DOUBLE and DECIMAL keys numbers, BOOLEAN keys booleans, other keys their text (`'2024-01-02'`, `"{'k': 1}"`). |
+| UNION                                                 | `{ [tag]: value }`.                                                                                                                                                                                    |
+| Integers inside                                       | A number when exact, a `bigint` beyond ±(2^53 − 1).                                                                                                                                                    |
+| DECIMAL, FLOAT, DOUBLE inside                         | A number, `NaN`, `±Infinity` and `-0` kept. A FLOAT is its float32 value: `0.10000000149011612` for `0.1`.                                                                                             |
+| Dates, times, UUIDs, INTERVAL, BLOB, ENUM, BIT inside | DuckDB's text: `'2024-01-02'`, `'1 year 2 months'`, `'\xAA\xBB'`.                                                                                                                                      |
+| VARIANT, or JSON inside a value                       | What its JSON holds.                                                                                                                                                                                   |
+
+Any other column's value is the one `getColumnValues` returns for the row: a `bigint` for `BIGINT` to `UHUGEINT`, however small (where `getColumnValues` falls back to an `unknown[]`, for a NULL or a value past 64 bits, it holds the small ones as numbers: `[12, null, 18446744073709551615n]`), a number for the other integers and for `FLOAT`, `DOUBLE` and `DECIMAL`, DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY` and `TIME WITH TIME ZONE`, a JSON column's text, a `Uint8Array` for a `BLOB`. SQL NULL, at the top or anywhere inside, is `null`. Test object keys with `Object.hasOwn`: a field named `hasOwnProperty` hides the method.
+
+```ts
+// point: STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)
+await table.actions.getCellValue(10, 'point'); // { x: 1.5, y: -0.5, tier: 'gold' }
+
+// attrs: MAP(VARCHAR, INTEGER): keys in order, `size` a key like any other
+const attrs = (await table.actions.getCellValue(11n, 'attrs')) as Map<string, number>;
+attrs.get('size'); // 1
+```
+
+Errors (`QueryError`, except the last):
+
+| Code               | When                                                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `COLUMN_NOT_FOUND` | `column` is not in `state.schema`; also a call before any load, when the schema is empty.                                                 |
+| `INVALID_ROWID`    | `rowId` is not a non-negative integer (a safe integer, or a bigint within the BIGINT range), or no row has it. `details.rowId` echoes it. |
+| `NO_TABLE`         | No table is loaded while the schema still names the column, which a table built by `createDataTable` never leaves.                        |
+| `QUERY_ABORTED`    | `options.signal` aborted the read.                                                                                                        |
+| `DESTROYED`        | `DestroyedError`: the table was destroyed before or during the call.                                                                      |
 
 ### Column-header tooltips
 
@@ -850,9 +977,10 @@ table.on('error', ({ error, source }) => {
 | `DUPLICATE_NAME`          | `DerivedColumnError`    | `src/core/Actions.ts`                                                              | A column with that name already exists.                                                                                                              |
 | `VECTOR_LENGTH_MISMATCH`  | `DerivedColumnError`    | `src/core/Actions.ts`                                                              | Vector length doesn't match row count.                                                                                                               |
 | `RESERVED_COLUMN_NAME`    | `LoadError`             | `src/worker/loaders/{csv,json,parquet}.ts`                                         | Source contains a column named `__rowid__`, which is reserved for the synthetic row id.                                                              |
-| `COLUMN_NOT_FOUND`        | `QueryError`            | `src/core/Actions.ts` (`getColumnValues`)                                          | Column does not exist on the loaded schema.                                                                                                          |
+| `COLUMN_NOT_FOUND`        | `QueryError`            | `src/core/Actions.ts` (`getColumnValues`, `getCellValue`)                          | Column does not exist on the loaded schema.                                                                                                          |
 | `INVALID_PAGINATION`      | `QueryError`            | `src/core/Actions.ts` (`getColumnValues`)                                          | `limit` or `offset` is negative or non-integer.                                                                                                      |
-| `NO_TABLE`                | `QueryError`            | `src/core/Actions.ts` (`getColumnValues`)                                          | Action invoked before data was loaded.                                                                                                               |
+| `INVALID_ROWID`           | `QueryError`            | `src/core/Actions.ts`, `src/data/cellValue.ts`                                     | A selected row in `getColumnValues({ scope: 'selected' })`, or `getCellValue`'s `rowId`, is not a non-negative integer, or no row has that `rowId`.  |
+| `NO_TABLE`                | `QueryError`            | `src/core/Actions.ts` (`getColumnValues`, `getCellValue`)                          | No table is loaded while the schema names the column. Before any load the schema is empty, and `COLUMN_NOT_FOUND` comes first.                       |
 | `DUPLICATE_ID`            | `AnnotationError`       | `src/annotations/AnnotationStore.ts`                                               | Annotation `id` already exists in the store (during `add`, `addMany`, or `loadJSON('merge')`).                                                       |
 | `INVALID_SHAPE`           | `AnnotationError`       | `src/annotations/AnnotationStore.ts`                                               | `loadJSON` rejected a malformed entry — wrong scope, missing required field, wrong field type.                                                       |
 | `VERSION_UNSUPPORTED`     | `AnnotationError`       | `src/annotations/AnnotationStore.ts`                                               | `loadJSON` was given a file whose `version > ANNOTATION_FILE_VERSION`.                                                                               |
@@ -903,10 +1031,36 @@ interface PointFilter {
   type: 'point';
   column: string;
   value: string | number | boolean | Date | null;
+  /** 'text': compare the column's DuckDB text, CAST(col AS VARCHAR), with the value as text. */
+  valueType?: 'text';
 }
 
 table.actions.addFilter({ type: 'point', column: 'sku', value: 'A-42' });
 ```
+
+#### `valueType: 'text'`
+
+Point, set and not-set filters compare the column's value by default: `"col" = 'x'`, where DuckDB reads the literal as the column's type. With `valueType: 'text'` they compare the column's DuckDB text instead, `CAST("col" AS VARCHAR)`, the text the grid shows, and take every value as text (a number or boolean by its `String()` form, a `Date` by its ISO string). That is how a nested column is matched exactly; the filter panel's "exact" mode sets it on `'nested'` columns and on JSON columns. Compared as a value, text that does not read as a list, struct or map is a Conversion Error, a UNION finds only the member the text reads as, and a VARIANT fails on values of another type. A `null` value, and `includeNull`, still test `"col" IS NULL` (`src/filters/FilterTypes.ts`, `src/filters/FilterSQL.ts`).
+
+```ts
+// tags: VARCHAR[], a cell that reads [red, green]
+table.actions.addFilter({
+  type: 'point',
+  column: 'tags',
+  value: '[red, green]',
+  valueType: 'text',
+});
+// Every row but the empty lists, NULL rows included
+table.actions.addFilter({
+  type: 'not-set',
+  column: 'tags',
+  values: ['[]'],
+  includeNull: true,
+  valueType: 'text',
+});
+```
+
+The field is kept by `serializeFilter`, sessions, presets and undo. On preset import, a range, point, set or not-set filter whose `valueType` is not the one its type reads (`'interval'` for a range, `'text'` for the others) is dropped, like a filter of an unknown type, and the rest of the preset imports, though a preset left with no valid filter is skipped (`src/filters/FilterPresets.ts`); a `valueType` on any other filter type is ignored. An exact filter on a JSON column needs `valueType: 'text'` too: compared as JSON, any text that is not JSON is a Conversion Error (`Malformed JSON`). The filter panel sets it on nested and JSON columns.
 
 ### `SetFilter`
 
@@ -917,6 +1071,8 @@ interface SetFilter {
   values: unknown[];
   /** When true, NULL rows are included — generates `col IN (...) OR col IS NULL`. */
   includeNull?: boolean;
+  /** 'text': CAST(col AS VARCHAR) IN (…), the values as text. See valueType above. */
+  valueType?: 'text';
 }
 
 table.actions.addFilter({ type: 'set', column: 'country', values: ['US', 'CA'] });
@@ -931,6 +1087,8 @@ interface NotSetFilter {
   values: unknown[];
   /** When true, NULL rows are included — generates `col NOT IN (...) OR col IS NULL`. */
   includeNull?: boolean;
+  /** 'text': CAST(col AS VARCHAR) NOT IN (…), the values as text. See valueType above. */
+  valueType?: 'text';
 }
 
 table.actions.addFilter({ type: 'not-set', column: 'status', values: ['archived'] });
@@ -1069,7 +1227,7 @@ type StatsPanelConstructor = new (
 ) => BaseStatsPanel;
 ```
 
-Pass via `createDataTable({ statsPanelRegistry })`; or register on the module-scoped `defaultStatsPanelRegistry` to share across every table that doesn't pass a per-instance registry. To restrict a panel to a specific column **name** rather than a `DataType`, subclass `StatsPanelRegistry` and override `create()` (same pattern as `examples/08-custom-visualization`'s `StateAwareRegistry`).
+`isApplicable` receives the column's `DataType`, `'nested'` for a LIST, ARRAY, STRUCT, MAP, UNION or VARIANT column: a registration that accepts `'string'` does not receive those. Pass via `createDataTable({ statsPanelRegistry })`; or register on the module-scoped `defaultStatsPanelRegistry` to share across every table that doesn't pass a per-instance registry. To restrict a panel to a specific column **name** rather than a `DataType`, subclass `StatsPanelRegistry` and override `create()` (same pattern as `examples/08-custom-visualization`'s `StateAwareRegistry`).
 
 ### Panel constructor and lifecycle
 
@@ -1558,7 +1716,7 @@ Source: `src/core/checkBrowserSupport.ts`. Probes are synchronous and safe in an
 
 Source: `src/core/Strings.ts`. Override any subset via `messages: DeepPartial<Strings>`.
 
-Top-level groups: `common`, `filters`, `presets`, `export`, `derived`, `a11y`, `statistics`, `errors`.
+Top-level groups: `common`, `filters`, `presets`, `export`, `derived`, `a11y`, `statistics`, `values`, `errors`. `values` says nested types in words for a column header's accessible name ("list of integer") and holds the value inspector's and the extract panel's strings; see the [i18n guide](./guides/i18n.md#nested-column-types), its [value inspector table](./guides/i18n.md#value-inspector) and [Extract panel and "add as column"](./guides/i18n.md#extract-panel-and-add-as-column).
 
 ```ts
 import { createDataTable } from '@jeyabbalas/data-table';

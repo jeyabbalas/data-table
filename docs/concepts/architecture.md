@@ -376,7 +376,7 @@ its own TTL/LRU would be a second staleness domain.
 The SQL itself has two shapes. With no filters and no user sort, a block
 is fetched by a range predicate on the dense synthetic row id —
 `WHERE "__rowid__" >= start AND "__rowid__" < end ORDER BY "__rowid__" ASC LIMIT n`
-([`src/table/rowQuery.ts:78-84`](../../src/table/rowQuery.ts)) —
+([`src/table/rowQuery.ts:113-118`](../../src/table/rowQuery.ts)) —
 which DuckDB prunes via zonemaps, so a block fetch costs about the same
 at any scroll depth, where `LIMIT/OFFSET` grows with the offset. Every
 loader materializes `__rowid__` densely, and a runtime density valve
@@ -386,7 +386,7 @@ correct, never wrong rows.
 
 Sorted or filtered fetches page with `ORDER BY … LIMIT n OFFSET k` in two
 phases
-([`src/table/rowQuery.ts:99-125`](../../src/table/rowQuery.ts)). A
+([`src/table/rowQuery.ts:147-161`](../../src/table/rowQuery.ts)). A
 subquery sorts only the sort keys and `"__rowid__"` to find the block's
 row ids, and the outer query reads the visible columns for those ids,
 `WHERE "__rowid__" IN (…)`, and restores the order. Paging the full
@@ -396,6 +396,17 @@ WASM memory. Both `ORDER BY`s end with `"__rowid__" ASC` as a
 tiebreaker: DuckDB's `ORDER BY` is non-deterministic for ties, and two
 block queries that permute ties differently would duplicate some rows
 across block boundaries and drop others.
+
+Both shapes select some columns as text
+([`gridValueSQL`](../../src/data/valueSql.ts)): a nested column (LIST,
+ARRAY, STRUCT, MAP, UNION, VARIANT) as DuckDB's text for its value, cut to
+32 items and 1,000 graphemes so a block stays kilobytes; BLOB, BIT,
+GEOMETRY and BIGNUM values, which Arrow carries as bytes, INTERVAL, which it
+carries as numbers that do not hold it, and ENUM, whose values a raw read
+makes the worker read twice (`executeQueryCancellable`,
+`src/worker/duckdb.ts`), as their text too. Each keeps its column's name as
+its alias, so the outer `ORDER BY` names the table (`"t"."col"`) to sort by
+the value rather than by the text.
 
 Unlike `bufferRows` and `maxVirtualHeight`, the pipeline knobs are
 public: `fetchBlockSize`, `rowCacheRows`, and `prefetch` are accepted by
@@ -431,7 +442,7 @@ zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
 ([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:401-408`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:422-433`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 

@@ -170,6 +170,68 @@ columns keep their headers, and the rows keep what they fetched, so a hide or
 a move fetches no rows and a column shown is read by itself. On a
 50,000-row × 1,000-column table a hide takes about 25 ms.
 
+### Nested columns
+
+A LIST, ARRAY, STRUCT, MAP, UNION or VARIANT column costs more than a scalar
+one, in ways each kept bounded (see
+[Nested and JSON columns](./guides/loading-data.md#nested-and-json-columns)):
+
+- **Row fetches.** The grid reads a nested column as DuckDB's text, cut to
+  32 items of a list or map and to 1,000 graphemes and a `…` per cell, so a
+  128-row block holds at most 128 such cells of each nested column (a
+  grapheme can be several UTF-16 code units: an emoji sequence, a letter
+  with its accents). A block of a `FLOAT[768]` embedding column is about
+  50 KB; its whole text was 1.18 MB.
+- **Header charts.** A nested column's summary bar is one ungrouped
+  `COUNT(*), COUNT(c)` scan. Grouping the values, as the value counts do,
+  took 18–21 s on a 200,000-row embedding column.
+- **Sorting.** A sort compares whole values, and deep pages of a sorted table
+  pay `OFFSET` as any sort does. A wide value such as an embedding is the
+  expensive case.
+- **Memory.** A nested value takes what its parts take, as DuckDB stores
+  them: a list 8 bytes a row plus its items, a struct its fields, a
+  `FLOAT[768]` embedding about 3 KB a row. The memory check before a Parquet
+  load sizes them that way (`src/worker/loaders/memoryBudget.ts`).
+- **The value inspector** reads one cell, by `__rowid__`, ahead of queued
+  chart queries, and at most the first 2,097,152 characters of its JSON text
+  (8,388,608 for Copy JSON); its tree builds only the rows it shows, in
+  buckets of 100.
+- **Lazy chunks.** The inspector and the extract panel load the first time a
+  table opens them, and a failed load is tried again on the next open. Their
+  brotli sizes: the `ValueInspector` chunk 8.51 kB, the `ExtractColumnPanel`
+  chunk 5.13 kB, the `TreeView` chunk the two share 2.71 kB, and the
+  `extractExpression` chunk 2.80 kB, which both panels and
+  `actions.addNestedFieldColumn` load. The shared chunk every table loads is
+  95.22 kB, the stylesheet 22.57 kB, the root entry 10.93 kB and `/advanced`
+  2.50 kB (`.size-limit.cjs` holds the caps).
+- **Value reads and exports.** `getCellValue`, `getColumnValues` and the
+  CSV and JSON exports read nested values as exact JSON text. The two value
+  reads skip the query cache, which must not keep megabytes of text; the
+  exports' batches go through it as any query does. A 768-float embedding is
+  some 15,000 characters of JSON, so a CSV or JSON export of many of them can
+  pass the browser's limit on a string; export them to Parquet.
+
+Medians from `tests/performance/nestedCells.bench.duckdb.test.ts` on one
+Apple-silicon machine (Node `worker_threads`), over 200,000 rows of 40 scalar
+and 6 nested columns: a `FLOAT[64]` embedding, two lists holding 2,000 items
+in 2% of rows, a struct, a map and a list of structs. They are one machine's
+numbers, not guarantees:
+
+| Operation                                                                 | Median                             |
+| ------------------------------------------------------------------------- | ---------------------------------- |
+| A 128-row block of all 46 columns, unsorted, at the top or at row 150,000 | ~11 ms                             |
+| A deep page (row 150,000) sorted by the struct                            | ~35 ms                             |
+| A deep page sorted by the `FLOAT[64]` embedding                           | ~400 ms                            |
+| A nested column's header-chart counts                                     | ~2–4 ms (~42 ms for a `VARCHAR[]`) |
+| The exact JSON of one 2,000-item list cell, as `getCellValue` reads it    | ~2 ms                              |
+| A 128-row block of `FLOAT[768]` embeddings (20,000 rows)                  | ~12 ms                             |
+
+A 2,000-item list cell reads `[0, 1, …, 31, … +1968]` in such a block.
+Measure your own with `npm run test:perf`, or this benchmark alone with
+`RUN_DUCKDB_PERF=1 npx vitest run --config vitest.perf.config.ts nestedCells`;
+its budgets are 5–6× these medians, and 10–12× for the two that take a few
+milliseconds (the projection's plan and the exact JSON read).
+
 ### Derived columns
 
 - **Expression columns** cost only the VIEW creation (metadata, cheap)
@@ -239,8 +301,9 @@ loaded data, is what the tiers grade:
 | > 100 M rows      | Don't — the loaded data outgrows browser memory long before the scroller cares                                                                       |
 
 Memory usage grows roughly linearly with row count × column count: DuckDB
-takes 5–20 bytes per value for numbers, dates, and booleans, and about 4
-bytes plus the text for strings. That memory lives in WebAssembly, which
+takes 5–20 bytes per value for numbers, dates, and booleans, about 4
+bytes plus the text for strings, and for a nested value what its parts take
+(a 768-float embedding is about 3 KB). That memory lives in WebAssembly, which
 browsers cap at 4 GiB, and DuckDB's own `memory_limit` defaults to 3.1 GiB,
 so around 2.5 GiB of table is the practical ceiling — 200,000 rows × 1,000
 numeric columns is about 2.2 GiB. Pass large Parquet files as a `File`,
@@ -321,7 +384,7 @@ await createDataTable({
   presets: false, // no preset panel
   exportDialog: false, // no export modal
   expressionFilter: false, // no raw-SQL filter button
-  derivedColumns: false, // no "+" add-column button / f(x) edit icon
+  derivedColumns: false, // no "+" button, f(x) icon or nested extract buttons
 });
 ```
 

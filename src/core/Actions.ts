@@ -10,6 +10,7 @@ import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { fetchCellJson, readJsonValue, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
+import { rejectsSourceOptions } from '../data/sourceOptions';
 import { jsonValueSQL } from '../data/valueSql';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
@@ -33,6 +34,7 @@ import {
 import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import {
+  captureTableState,
   resetTableState,
   initializeColumnsFromSchema,
   mergeMissingColumns,
@@ -880,10 +882,10 @@ export class StateActions {
     options: LoadDataOptions = {},
   ): Promise<void> {
     this.throwIfDestroyed('loadData');
-    this.loadEpoch++;
+    const epoch = ++this.loadEpoch;
     this.openLoads++;
     try {
-      return await this.inTurn(() => this.loadDataInTurn(source, options));
+      return await this.inTurn(() => this.loadDataInTurn(source, options, epoch));
     } finally {
       this.openLoads--;
     }
@@ -973,10 +975,15 @@ export class StateActions {
     this.throwIfDestroyed('loadData');
   }
 
-  /** The turn of {@link loadData}. */
+  /**
+   * The turn of {@link loadData}, which `epoch` counted. A load rejected for
+   * its source options keeps the data it had, unless a newer load or a clear
+   * has been asked for since `epoch`, which empties the table anyway.
+   */
   private async loadDataInTurn(
     source: File | Blob | string | ArrayBuffer,
     options: LoadDataOptions,
+    epoch: number,
   ): Promise<void> {
     this.throwIfDestroyed('loadData');
     // The table this load replaces is left behind, for the facade to drop
@@ -986,6 +993,13 @@ export class StateActions {
     const replaced = this.state.baseTableName.get() ?? this.state.tableName.get();
     const replacedInPlace = replaced !== null && replaced === options.tableName;
     if (replaced && !replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+    // What the reset below clears, for a load rejected for its source
+    // options, which the worker turns away before it creates or replaces a
+    // table: the table it replaces is still there, with the derived
+    // columns' VIEW and helper tables, which are dropped only once a load
+    // has landed.
+    const restoreState = captureTableState(this.state);
+    const undoStacks = this.undoManager?.getStacks();
     // Reset state for new data
     resetTableState(this.state);
     this.undoManager?.clear();
@@ -995,7 +1009,15 @@ export class StateActions {
     try {
       result = await this.loader.load(source, options);
     } catch (err) {
-      if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+      if (rejectsSourceOptions(err) && !this.destroyed && epoch === this.loadEpoch) {
+        // A replaced table of another name stays among the facade's
+        // stranded ones: the next load that lands replaces it again, and a
+        // destroy() drops it either way.
+        restoreState();
+        if (undoStacks) this.undoManager?.loadStacks(undoStacks.undoStack, undoStacks.redoStack);
+      } else if (replacedInPlace) {
+        this.onBaseTableReplacedCallback?.(replaced);
+      }
       throw err;
     }
     await this.abandonIfDestroyed(result.tableName);

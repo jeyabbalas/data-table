@@ -172,7 +172,7 @@ the case differs.
   of the worker's DuckDB connection, so it holds for every table sharing a
   `WorkerBridge`, and every load sets it, to UTC unless given. A name DuckDB
   does not know rejects the load with `LOAD_INVALID_TIMEZONE`, listing the
-  zones it suggests.
+  zones it suggests, and the table keeps the data it had.
 
 ## Progress reporting
 

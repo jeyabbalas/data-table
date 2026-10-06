@@ -139,7 +139,7 @@ describe('ValueInspector — how an "add as column" request ends', () => {
     inspector.destroy();
   });
 
-  it('drops the outcome once the panel has closed, and lets a new request go after reopening', async () => {
+  it('closed and opened again on the column while adding, says it is adding and asks nothing new', async () => {
     const first = deferred<ValueInspectorExtractResult>();
     const onExtract = vi.fn<ValueInspectorExtract['onExtract']>(() => first.promise);
     const { inspector, leaf } = await openWith(onExtract);
@@ -151,16 +151,47 @@ describe('ValueInspector — how an "add as column" request ends', () => {
     await vi.waitFor(() =>
       expect(inspector.getElement().querySelectorAll('[role="treeitem"]').length).toBe(3),
     );
-    first.resolve({ success: false, error: 'late' });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(message(inspector)).toBe('');
+    expect(message(inspector)).toBe('Adding…');
+    const again = inspector.getElement().querySelectorAll<HTMLElement>('[role="treeitem"]')[1]!;
+    again.click();
+    ctrlEnter(again);
+    expect(onExtract).toHaveBeenCalledTimes(1);
 
+    first.resolve({ success: false, error: 'late' });
+    await vi.waitFor(() => expect(message(inspector)).toBe('Could not add the column: late'));
+    // Settled: the next request goes out.
+    onExtract.mockReturnValueOnce(Promise.resolve({ success: true }));
+    ctrlEnter(again);
+    expect(onExtract).toHaveBeenCalledTimes(2);
+    inspector.destroy();
+  });
+
+  it('drops the outcome once the panel has closed, and lets another column ask meanwhile', async () => {
+    const first = deferred<ValueInspectorExtractResult>();
+    const onExtract = vi.fn<ValueInspectorExtract['onExtract']>(() => first.promise);
+    const { inspector, leaf } = await openWith(onExtract);
+    leaf.click();
+    ctrlEnter(leaf);
+    inspector.close();
+
+    const other: ColumnSchema = { ...TAGS, name: 'labels' };
+    inspector.open({ tableName: 't', column: other, rowId: 3, row: 3, anchor: cell });
+    await vi.waitFor(() =>
+      expect(inspector.getElement().querySelectorAll('[role="treeitem"]').length).toBe(3),
+    );
+    expect(message(inspector)).toBe('');
+    // Another column's add goes ahead while the first runs.
     onExtract.mockReturnValueOnce(Promise.resolve({ success: true }));
     const again = inspector.getElement().querySelectorAll<HTMLElement>('[role="treeitem"]')[1]!;
     again.click();
     ctrlEnter(again);
     expect(onExtract).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(message(inspector)).toBe(''));
+
+    first.resolve({ success: false, error: 'late' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(message(inspector)).toBe('');
     inspector.destroy();
   });
 

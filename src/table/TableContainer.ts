@@ -176,6 +176,18 @@ type PanelName =
   | 'valueInspector'
   | 'extractPanel';
 
+/** What `TableContainer.extractColumn` resolves to. */
+type ExtractResult = { success: boolean; name?: string; error?: string };
+
+/** An "extract field → column" add still running (see `TableContainer.extractColumn`). */
+interface RunningExtract {
+  readonly promise: Promise<ExtractResult>;
+  /** The panel waiting on it; `null` for an add asked for from code. */
+  asker: 'valueInspector' | 'extractPanel' | null;
+  /** The panel that asked has closed since, by the user's doing. */
+  abandoned: boolean;
+}
+
 /**
  * The panel asked for last (see `TableContainer.makeWayFor`). A panel whose
  * chunk is still loading opens only while its request is still this one.
@@ -257,6 +269,13 @@ export class TableContainer {
   // A newer request replaces it; the cursor leaving the inspector's cell,
   // and a new filter, sort, selection or table, drop the inspector's.
   private panelRequest: PanelRequest | null = null;
+  // The "extract field → column" adds still running, by what they add: an
+  // identical request gets the same one.
+  private extracts = new Map<string, RunningExtract>();
+  // Set while the table itself closes the panels, not the user: a render
+  // tearing them down, or the relation changing under them, as adding a
+  // derived column renames it to its VIEW (see closeForTable).
+  private closingForTable = false;
   // The header's extract panel, a lazy chunk too, built and torn down the same way.
   private extractPanel: ExtractColumnPanel | null = null;
   private extractPanelModule: Promise<{ ExtractColumnPanel: typeof ExtractColumnPanel }> | null =
@@ -1199,7 +1218,7 @@ export class TableContainer {
     this.unsubscribes.push(
       this.state.filters.subscribe(closeInspector),
       this.state.sortColumns.subscribe(closeInspector),
-      this.state.tableName.subscribe(closeInspector),
+      this.state.tableName.subscribe(() => this.closeForTable(closeInspector)),
       this.state.selectedRows.subscribe(closeInspector),
       this.state.focusedCell.subscribe((cell) => {
         const elsewhere = (at: { row: number; column: string }): boolean =>
@@ -1526,18 +1545,18 @@ export class TableContainer {
 
     // Destroy the value inspector (recreated on the next open). Focus goes
     // back to the grid.
-    if (this.valueInspector) {
-      this.valueInspector.destroy();
+    this.closeForTable(() => {
+      this.valueInspector?.destroy();
       this.valueInspector = null;
-    }
+    });
     this.pendingInspect = null;
 
     // Destroy the extract panel (recreated on the next extract click). Focus
     // goes back to its button; `extractColumn` takes it on from there.
-    if (this.extractPanel) {
-      this.extractPanel.destroy();
+    this.closeForTable(() => {
+      this.extractPanel?.destroy();
       this.extractPanel = null;
-    }
+    });
 
     if (schema.length === 0 || !tableName) {
       // No data loaded - show placeholder
@@ -2215,20 +2234,24 @@ export class TableContainer {
         // Not the cell: a pooled cell can hold another row by the time the
         // panel closes. The grid keeps the cursor.
         returnFocus: this.gridElement,
-        onOpenChange: this.holdWhileOpen(),
+        onOpenChange: this.extractingPanelOpenChange('valueInspector'),
+        instanceId: this.resolvedOptions.instanceId,
         // "Add as column": the column goes in after its source, and the
         // cursor to the same row in it.
         extract:
           this.resolvedOptions.extractColumns !== false
             ? {
                 onExtract: (request) =>
-                  this.extractColumn({
-                    column: request.column,
-                    path: request.path,
-                    extract: request.extract,
-                    jsonLeaf: request.jsonLeaf,
-                    row: request.row,
-                  }),
+                  this.addExtract(
+                    {
+                      column: request.column,
+                      path: request.path,
+                      extract: request.extract,
+                      jsonLeaf: request.jsonLeaf,
+                      row: request.row,
+                    },
+                    'valueInspector',
+                  ),
                 labels: {
                   value: v.addAsColumn,
                   length: v.addLengthAsColumn,
@@ -2276,10 +2299,11 @@ export class TableContainer {
         const { ExtractColumnPanel } = loaded;
         this.extractPanel = new ExtractColumnPanel(this.state, {
           classPrefix: this.resolvedOptions.classPrefix,
+          instanceId: this.resolvedOptions.instanceId,
           messages: this.messages,
           colorSchemeSource: this.element,
-          onSubmit: (request) => this.extractColumn(request),
-          onOpenChange: this.holdWhileOpen(),
+          onSubmit: (request) => this.addExtract(request, 'extractPanel'),
+          onOpenChange: this.extractingPanelOpenChange('extractPanel'),
         });
         this.element.appendChild(this.extractPanel.getElement());
       }
@@ -2304,7 +2328,12 @@ export class TableContainer {
    * What the extract panel and the value inspector's "add as column" call.
    * The work is here, not in them: the new column re-renders the table,
    * which tears both panels down. A failure leaves them up, and they show
-   * its reason; with neither open any more, the live region says it.
+   * its reason; with neither open any more, the live region says it. The
+   * same request (column, path, options and name) while one is still
+   * running gets that one's promise, and adds no second column. When the
+   * panel that asked was closed before the add landed, the live region
+   * still says the column was added, but the cursor, the view and focus
+   * stay where they are.
    *
    * @param request - The column, the path into it and the options
    *   `addNestedFieldColumn` takes, and the body row (0-based, as sorted and
@@ -2318,33 +2347,77 @@ export class TableContainer {
    * await container.extractColumn({ column: 'tags', path: [], extract: 'length', row: 12 });
    * ```
    */
-  async extractColumn(
+  extractColumn(
     request: NestedFieldColumnOptions & {
       column: string;
       path: readonly (string | number)[];
       row?: number | undefined;
     },
-  ): Promise<{ success: boolean; name?: string; error?: string }> {
-    const actions = this.actions;
-    if (this.destroyed || !actions) return { success: false, error: 'TableContainer is destroyed' };
-    const { column, path, row, ...options } = request;
-    let result: { success: boolean; name?: string; error?: string };
-    try {
-      result = await actions.addNestedFieldColumn(column, path, options);
-    } catch (err) {
-      result = { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
-    if (this.destroyed) return result;
-    const name = result.name;
-    if (!result.success || name === undefined) {
-      if (!this.extractPanel?.getIsOpen() && !this.valueInspector?.getIsOpen()) {
-        this.announce(this.messages.values.extractFailed(result.error ?? ''));
-      }
-      return result;
-    }
+  ): Promise<ExtractResult> {
+    return this.addExtract(request, null);
+  }
 
+  /**
+   * {@link extractColumn}, for the value inspector, the extract panel, or
+   * code (`asker` null). A request for an add still running, the same
+   * column, path, options and name, gets that add's promise: one column,
+   * however often it is asked for. Once the panel that asked has closed (by
+   * the user's doing, not the re-render the new column causes), the add
+   * still lands and the live region says so, but the cursor, the view and
+   * focus stay where the user has since put them.
+   */
+  private addExtract(
+    request: Parameters<TableContainer['extractColumn']>[0],
+    asker: RunningExtract['asker'],
+  ): Promise<ExtractResult> {
+    const actions = this.actions;
+    if (this.destroyed || !actions) {
+      return Promise.resolve({ success: false, error: 'TableContainer is destroyed' });
+    }
+    const { column, path, row, ...options } = request;
+    const key = JSON.stringify([
+      column,
+      path,
+      options.extract ?? 'value',
+      options.jsonLeaf ?? null,
+      options.name ?? null,
+    ]);
+    const running = this.extracts.get(key);
+    if (running) {
+      // Asked again: whoever asked last is waiting on it now.
+      running.asker = asker;
+      running.abandoned = false;
+      return running.promise;
+    }
+    const run = async (): Promise<ExtractResult> => {
+      let result: ExtractResult;
+      try {
+        result = await actions.addNestedFieldColumn(column, path, options);
+      } catch (err) {
+        result = { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+      this.extracts.delete(key);
+      if (this.destroyed) return result;
+      const name = result.name;
+      if (!result.success || name === undefined) {
+        if (!this.extractPanel?.getIsOpen() && !this.valueInspector?.getIsOpen()) {
+          this.announce(this.messages.values.extractFailed(result.error ?? ''));
+        }
+        return result;
+      }
+      if (!add.abandoned) this.showExtracted(name, row);
+      this.announce(this.messages.values.columnAdded(name));
+      return result;
+    };
+    const add: RunningExtract = { promise: run(), asker, abandoned: false };
+    this.extracts.set(key, add);
+    return add.promise;
+  }
+
+  /** Put the cursor on a column just added, in `row` or on its header, bring it into view, and focus the grid. */
+  private showExtracted(name: string, row: number | undefined): void {
     if (this.state.visibleColumns.get().includes(name)) {
-      actions.setFocusedCell({ row: row ?? HEADER_ROW_INDEX, column: name });
+      this.actions?.setFocusedCell({ row: row ?? HEADER_ROW_INDEX, column: name });
       this.columnWindow.revealColumn(name);
     }
     // The add re-rendered the table, which closed the panel that asked and
@@ -2360,8 +2433,36 @@ export class TableContainer {
     ) {
       this.gridElement.focus({ preventScroll: true });
     }
-    this.announce(this.messages.values.columnAdded(name));
-    return result;
+  }
+
+  /**
+   * The `onOpenChange` of a panel that adds columns: hold its column while
+   * it is open (see {@link holdWhileOpen}), and once the user closes it, by
+   * a button, Escape, a press outside, another panel or the cursor moving
+   * on, let go of the adds it asked for: they land without moving the
+   * cursor, the view or focus. Not when the table closes it (see
+   * {@link closeForTable}): the add that re-renders the table, renaming the
+   * relation to its VIEW, is the one the panel waits on.
+   */
+  private extractingPanelOpenChange(
+    asker: 'valueInspector' | 'extractPanel',
+  ): (column: string | null) => void {
+    const hold = this.holdWhileOpen();
+    return (column) => {
+      hold(column);
+      if (column !== null || this.closingForTable) return;
+      for (const add of this.extracts.values()) if (add.asker === asker) add.abandoned = true;
+    };
+  }
+
+  /** Run `close`, which closes panels for the table's own reasons rather than the user's. */
+  private closeForTable(close: () => void): void {
+    this.closingForTable = true;
+    try {
+      close();
+    } finally {
+      this.closingForTable = false;
+    }
   }
 
   /**

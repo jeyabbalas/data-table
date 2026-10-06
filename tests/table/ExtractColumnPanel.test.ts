@@ -10,6 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { takenColumnName } from '@/core/columnNames';
 import { __resetModalHostForTests } from '@/core/ModalHost';
 import { createTableState, type TableState } from '@/core/State';
 import { defaultStrings, mergeStrings } from '@/core/Strings';
@@ -662,7 +663,7 @@ describe('ExtractColumnPanel', () => {
       expect(anchor.getAttribute('aria-expanded')).toBe('false');
     });
 
-    it('sends how to read JSON with a value, and not with a length', () => {
+    it('sends how to read JSON with a value, and not with a length', async () => {
       mount().open('doc', anchor);
       type(pathInput(), '$.score');
       choose(readAs(), 'number');
@@ -673,6 +674,7 @@ describe('ExtractColumnPanel', () => {
         extract: 'value',
         jsonLeaf: 'number',
       });
+      await vi.waitFor(() => expect(panel.getIsOpen()).toBe(false));
 
       panel.open('doc', anchor);
       type(pathInput(), '$.tags');
@@ -738,13 +740,35 @@ describe('ExtractColumnPanel', () => {
       );
     });
 
-    it('drops the outcome of a request made before it closed or was destroyed', async () => {
+    it('closed while adding and opened again for that column, says it is adding, and asks nothing new', async () => {
       const first = deferred<ExtractColumnPanelResult>();
       onSubmit.mockReturnValueOnce(first.promise);
       mount().open('point', anchor);
       addButton().click();
       panel.close();
       panel.open('point', anchor);
+      expect(addButton().textContent).toBe('Adding…');
+      expect(addButton().getAttribute('aria-disabled')).toBe('true');
+      addButton().click();
+      key(nameInput(), 'Enter');
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+
+      first.resolve({ success: false, error: 'late' });
+      await vi.waitFor(() => expect(alertEl().textContent).toBe('Could not add the column: late'));
+      expect(addButton().textContent).toBe('Add column');
+      addButton().click();
+      expect(onSubmit).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops the outcome once it closes, or opens for another column, or is destroyed', async () => {
+      const first = deferred<ExtractColumnPanelResult>();
+      onSubmit.mockReturnValueOnce(first.promise);
+      mount().open('point', anchor);
+      addButton().click();
+      panel.close();
+      panel.open('tags', anchor);
+      // Another column's add goes ahead.
+      expect(addButton().textContent).toBe('Add column');
       first.resolve({ success: false, error: 'late' });
       await Promise.resolve();
       await Promise.resolve();
@@ -754,6 +778,7 @@ describe('ExtractColumnPanel', () => {
       const second = deferred<ExtractColumnPanelResult>();
       onSubmit.mockReturnValueOnce(second.promise);
       addButton().click();
+      expect(onSubmit).toHaveBeenCalledTimes(2);
       panel.destroy();
       second.resolve({ success: false, error: 'late' });
       await Promise.resolve();
@@ -789,27 +814,35 @@ describe('ExtractColumnPanel', () => {
       expect(item('element: struct(3)').getAttribute('aria-expanded')).toBe('false');
       expect(onSubmit).not.toHaveBeenCalled();
 
+      // Each add closes the panel once it lands.
+      const landed = (): Promise<void> => vi.waitFor(() => expect(panel.getIsOpen()).toBe(false));
       key(item('length'), 'Enter');
       expect(onSubmit).toHaveBeenCalledTimes(1);
+      await landed();
 
       panel.open('point', anchor);
       key(nameInput(), 'Enter');
       expect(onSubmit).toHaveBeenCalledTimes(2);
+      await landed();
 
       panel.open('doc', anchor);
       key(pathInput(), 'Enter');
       expect(onSubmit).toHaveBeenCalledTimes(3);
+      await landed();
 
       panel.open('doc', anchor);
       key(readAs(), 'Enter');
       expect(onSubmit).toHaveBeenCalledTimes(3);
       key(readAs(), 'Enter', { ctrlKey: true });
       expect(onSubmit).toHaveBeenCalledTimes(4);
+      await landed();
 
       panel.open('point', anchor);
       key(q('.dt-extract-panel__button'), 'Enter', { metaKey: true });
       expect(onSubmit).toHaveBeenCalledTimes(5);
+      await landed();
       // Shift and Alt are left alone.
+      panel.open('point', anchor);
       key(nameInput(), 'Enter', { shiftKey: true });
       key(nameInput(), 'Enter', { altKey: true });
       expect(onSubmit).toHaveBeenCalledTimes(5);
@@ -911,5 +944,42 @@ describe('ExtractColumnPanel', () => {
     expect(anchor.getAttribute('aria-expanded')).toBe('false');
     panel.open('point', anchor);
     expect(panel.getIsOpen()).toBe(false);
+  });
+});
+
+describe('ExtractColumnPanel — its ids and the name rule', () => {
+  it('mints its ids from the table instance id it is given', () => {
+    mount({ instanceId: 't7-ab12' }).open('point', anchor);
+    expect(el().getAttribute('aria-labelledby')).toBe('dt-t7-ab12-extract-panel-title');
+    expect(nameInput().id).toBe('dt-t7-ab12-extract-panel-name');
+    expect(errorEl().id).toBe('dt-t7-ab12-extract-panel-error');
+  });
+
+  it('mints ids that two copies of the module on one page do not share', async () => {
+    vi.resetModules();
+    const one = await import('@/table/ExtractColumnPanel');
+    vi.resetModules();
+    const two = await import('@/table/ExtractColumnPanel');
+    expect(two.ExtractColumnPanel).not.toBe(one.ExtractColumnPanel);
+    const a = new one.ExtractColumnPanel(state, { onSubmit });
+    const b = new two.ExtractColumnPanel(state, { onSubmit });
+    expect(a.getElement().getAttribute('aria-labelledby')).not.toBe(
+      b.getElement().getAttribute('aria-labelledby'),
+    );
+    a.destroy();
+    b.destroy();
+  });
+
+  it('takes a name by the rule a new column is checked by', () => {
+    expect(takenColumnName('__RowId__', ['id'])).toBe('__rowid__');
+    expect(takenColumnName('point_x', ['id', 'point_x'])).toBe('point_x');
+    expect(takenColumnName('POINT_X', ['id', 'point_x'])).toBe('point_x');
+    expect(takenColumnName('x_coord', ['id', 'point_x'])).toBeUndefined();
+    // The row id's name is taken where the schema does not list it, too.
+    state.schema.set(SCHEMA.filter((c) => c.name !== '__rowid__'));
+    mount().open('point', anchor);
+    type(nameInput(), '__RowId__');
+    expect(error()).toBe('A column named "__rowid__" already exists');
+    expect(addButton().disabled).toBe(true);
   });
 });

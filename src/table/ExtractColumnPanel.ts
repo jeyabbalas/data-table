@@ -19,6 +19,9 @@
  * `onSubmit`. `TableContainer.extractColumn` serves it, because adding the
  * column re-renders the table, which tears this panel down; a failure comes
  * back while the panel is still there, and the panel shows it (`role="alert"`).
+ * Closed while it adds, the panel drops the outcome but not the add: opened
+ * again for that column before the add is done, it shows it adding, and
+ * sends nothing new until it is.
  *
  * A non-modal ModalHost panel in `.dt-root`, like the filter panel: Tab cycles
  * inside it, Escape closes it, and focus goes back to the button that opened
@@ -31,12 +34,13 @@
  * never downloads it.
  */
 
-import { collidingColumnName, columnNameKey } from '../core/columnNames';
+import { takenColumnName } from '../core/columnNames';
 import { type DuckDBTypeNode, parseDuckDBType } from '../core/duckdbType';
+import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
-import { type ColumnSchema, ROWID_COLUMN } from '../core/types';
+import type { ColumnSchema } from '../core/types';
 import {
   type JsonLeafKind,
   type NestedExtractKind,
@@ -53,9 +57,6 @@ const EDGE = 8;
 
 /** The least height the panel is given, in px, when the button leaves less room below. */
 const MIN_HEIGHT = 160;
-
-/** Mints the panels' element ids, unique on the page. */
-let panelCount = 0;
 
 // ---------------------------------------------------------------------------
 // JSON paths
@@ -358,13 +359,21 @@ export interface ExtractColumnPanelResult {
 export interface ExtractColumnPanelOptions {
   /** CSS class prefix (default: 'dt'). */
   classPrefix?: string | undefined;
+  /**
+   * The table's instance id (`TableContainer.getInstanceId`), mixed into the
+   * ids the panel mints so that two tables never share one, two copies of
+   * the library on one page included. Minted when left out.
+   */
+  instanceId?: string | undefined;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
   /** Element to mirror `data-dt-color-scheme` from: the table's `.dt-root`. */
   colorSchemeSource?: HTMLElement | undefined;
   /**
    * Add the column. The panel says "Adding…" meanwhile, closes on success if
-   * it is still there, and shows a failure's reason.
+   * it is still there, and shows a failure's reason. It never asks again
+   * while an add for the same column is running, closed and opened again
+   * meanwhile or not.
    */
   onSubmit: (request: ExtractColumnPanelRequest) => Promise<ExtractColumnPanelResult>;
   /**
@@ -454,6 +463,11 @@ export class ExtractColumnPanel {
   /** What Add column sends now; `null` while something is wrong. */
   private request: ExtractColumnPanelRequest | null = null;
   private pending = false;
+  /**
+   * The add asked for last, until it settles: closing the panel drops its
+   * outcome, not the add, which an open for the same column waits on.
+   */
+  private adding: { column: string; outcome: Promise<ExtractColumnPanelResult> } | null = null;
   private isOpen = false;
   private destroyed = false;
   // Bumped by every submit, open and close: an outcome that comes back to
@@ -469,7 +483,7 @@ export class ExtractColumnPanel {
     this.colorSchemeSource = options.colorSchemeSource;
     this.onSubmit = options.onSubmit;
     this.onOpenChange = options.onOpenChange;
-    const id = `${this.prefix}-extract-panel-${++panelCount}`;
+    const id = `${this.prefix}-${options.instanceId || nextInstanceId()}-extract-panel`;
     this.idBase = id;
     this.titleId = `${id}-title`;
     this.errorId = `${id}-error`;
@@ -562,7 +576,7 @@ export class ExtractColumnPanel {
     cancel.addEventListener('click', () => this.close());
     this.addButton = element('button', `${p}__button ${p}__button--primary`, m.addColumn);
     this.addButton.type = 'button';
-    this.addButton.addEventListener('click', () => void this.submit());
+    this.addButton.addEventListener('click', () => this.submit());
     footer.append(this.alertEl, cancel, this.addButton);
 
     this.element.append(header, body, footer);
@@ -582,7 +596,7 @@ export class ExtractColumnPanel {
         (target instanceof HTMLElement && target.getAttribute('role') === 'treeitem');
       if (!submits) return;
       e.preventDefault();
-      void this.submit();
+      this.submit();
     });
   }
 
@@ -640,6 +654,8 @@ export class ExtractColumnPanel {
     this.addButton.textContent = m.addColumn;
     this.addButton.removeAttribute('aria-disabled');
     this.buildTree(entry, type);
+    // Asked for before the panel last closed, and still adding.
+    if (this.adding?.column === entry.name) this.waitFor(this.adding.outcome);
 
     this.anchor = anchor;
     anchor.setAttribute('aria-expanded', 'true');
@@ -943,8 +959,7 @@ export class ExtractColumnPanel {
     if (!this.nameEdited && !keepName) this.nameInput.value = defaultName;
     const typed = this.nameInput.value.trim();
     const name = this.nameEdited && typed !== '' ? typed : defaultName;
-    const taken =
-      columnNameKey(name) === ROWID_COLUMN ? ROWID_COLUMN : collidingColumnName(name, names);
+    const taken = takenColumnName(name, names);
     if (taken !== undefined) {
       this.fail(this.messages.derived.nameDuplicate(taken), this.nameInput, true);
       return;
@@ -980,7 +995,7 @@ export class ExtractColumnPanel {
   // Add
   // =========================================
 
-  private async submit(): Promise<void> {
+  private submit(): void {
     const request = this.request;
     if (!this.isOpen || this.pending) return;
     if (!request) {
@@ -995,34 +1010,55 @@ export class ExtractColumnPanel {
       if (marked) this.update();
       return;
     }
+    let outcome: Promise<ExtractColumnPanelResult>;
+    try {
+      outcome = this.onSubmit(request);
+    } catch (err) {
+      outcome = Promise.reject(err);
+    }
+    outcome = outcome.catch((err: unknown) => ({
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    }));
+    const adding = { column: request.column, outcome };
+    this.adding = adding;
+    void outcome.then(() => {
+      if (this.adding === adding) this.adding = null;
+    });
+    ++this.submitSeq;
+    this.waitFor(outcome);
+  }
+
+  /**
+   * Say "Adding…" until `outcome` settles, sending nothing meanwhile, then
+   * close on success or show why it failed: unless the panel closes or
+   * opens anew first, which drops the outcome.
+   */
+  private waitFor(outcome: Promise<ExtractColumnPanelResult>): void {
     const m = this.messages.values;
-    const seq = ++this.submitSeq;
+    const seq = this.submitSeq;
     this.pending = true;
     this.alertEl.textContent = '';
     // Not `disabled`: the button keeps focus, and with it Escape and the
     // focus trap, while the column is added.
     this.addButton.setAttribute('aria-disabled', 'true');
     this.addButton.textContent = m.adding;
-    let result: ExtractColumnPanelResult;
-    try {
-      result = await this.onSubmit(request);
-    } catch (err) {
-      result = { success: false, error: err instanceof Error ? err.message : String(err) };
-    }
-    // Added, the table re-rendered and destroyed the panel; closed or
-    // opened anew meanwhile, the outcome is not this one's.
-    if (this.destroyed || seq !== this.submitSeq) return;
-    this.pending = false;
-    this.addButton.removeAttribute('aria-disabled');
-    this.addButton.textContent = m.addColumn;
-    if (result.success) {
-      this.close();
-      return;
-    }
-    // Against the columns there are now: a name taken meanwhile is not the
-    // default any more.
-    this.update();
-    this.alertEl.textContent = m.extractFailed(result.error ?? '');
+    void outcome.then((result) => {
+      // Added, the table re-rendered and destroyed the panel; closed or
+      // opened anew meanwhile, the outcome is not this one's.
+      if (this.destroyed || seq !== this.submitSeq) return;
+      this.pending = false;
+      this.addButton.removeAttribute('aria-disabled');
+      this.addButton.textContent = m.addColumn;
+      if (result.success) {
+        this.close();
+        return;
+      }
+      // Against the columns there are now: a name taken meanwhile is not
+      // the default any more.
+      this.update();
+      this.alertEl.textContent = m.extractFailed(result.error ?? '');
+    });
   }
 
   // =========================================

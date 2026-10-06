@@ -7,6 +7,8 @@
  * after `point`, holding what SQL reads there, with the cursor on its
  * header; and Ctrl/Cmd+Enter on a node of the value inspector adds that
  * node's value as a column and leaves the cursor on the same row, in it.
+ * An add the user cancels while it runs still lands, once, and leaves the
+ * cursor where the user went.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -59,11 +61,19 @@ afterAll(async () => {
   await harness?.cleanup();
 });
 
+/** While set, a query that reads `"point"['x']` waits for it: the add, queued behind other work. */
+let gate: Promise<void> | null = null;
+
 /** A bridge over the node connection, with the lifecycle `createDataTable` touches. */
 function facadeBridge(): WorkerBridge {
   const conn = harness!.conn;
+  const base = makeNodeBridge(conn, harness!.db);
   return {
-    ...makeNodeBridge(conn, harness!.db),
+    ...base,
+    query: async (text: string, ...rest: unknown[]) => {
+      if (gate && text.includes(`"point"['x']`)) await gate;
+      return (base.query as (...args: unknown[]) => Promise<unknown[]>)(text, ...rest);
+    },
     initialize: async () => {},
     isInitialized: () => true,
     clearQueryCache: () => {},
@@ -220,5 +230,53 @@ describe('extract field → column from the UI (real DuckDB, nested fixture)', (
       },
       { timeout: 10_000 },
     );
+  }, 60_000);
+
+  it('adds once what was asked for again after a Cancel, and leaves the cursor where the user went', async () => {
+    const { table, container } = await mount('extract_ui_cancel');
+    const button = header(container, 'point').querySelector<HTMLButtonElement>(
+      '.dt-col-extract-btn',
+    )!;
+    const openPanel = async (): Promise<HTMLElement> => {
+      button.click();
+      return vi.waitFor(
+        () => {
+          const el = container.querySelector<HTMLElement>('.dt-extract-panel');
+          expect(el?.style.display).toBe('');
+          return el!;
+        },
+        { timeout: 10_000 },
+      );
+    };
+    const addButton = (panel: HTMLElement): HTMLButtonElement =>
+      panel.querySelector<HTMLButtonElement>('.dt-extract-panel__button--primary')!;
+    const cancel = (panel: HTMLElement): void =>
+      [...panel.querySelectorAll<HTMLButtonElement>('.dt-extract-panel__button')]
+        .find((b) => b.textContent === 'Cancel')!
+        .click();
+    let release!: () => void;
+    gate = new Promise<void>((resolve) => (release = resolve));
+    try {
+      let panel = await openPanel();
+      addButton(panel).click();
+      cancel(panel);
+      panel = await openPanel();
+      expect(addButton(panel).textContent).toBe('Adding…');
+      addButton(panel).click();
+      cancel(panel);
+      grid(container).focus();
+      table.actions.setFocusedCell({ row: 2, column: 'point' });
+    } finally {
+      gate = null;
+      release();
+    }
+
+    await vi.waitFor(() => expect(announced(container)).toBe('Column point_x added'), {
+      timeout: 10_000,
+    });
+    const derived = table.state.schema.get().filter((c) => c.isDerived);
+    expect(derived.map((c) => [c.name, c.expression])).toEqual([['point_x', `"point"['x']`]]);
+    expect(table.state.focusedCell.get()).toEqual({ row: 2, column: 'point' });
+    expect(document.activeElement).toBe(grid(container));
   }, 60_000);
 });

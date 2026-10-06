@@ -1329,3 +1329,31 @@ describe('ValueInspector — a value too deep to write out', () => {
     inspector.destroy();
   });
 });
+
+describe('ValueInspector — its ids', () => {
+  it('mints its title id from the table instance id it is given', () => {
+    const { bridge } = makeBridge(() => jsonRow('["a"]'));
+    const inspector = mount(bridge, { instanceId: 't3-9f0c' });
+    expect(panel(inspector).getAttribute('aria-labelledby')).toBe(
+      'dt-t3-9f0c-value-inspector-title',
+    );
+    expect(q(inspector, '.dt-value-inspector__title').id).toBe('dt-t3-9f0c-value-inspector-title');
+    inspector.destroy();
+  });
+
+  it('mints ids that two copies of the module on one page do not share', async () => {
+    const { bridge } = makeBridge(() => jsonRow('["a"]'));
+    vi.resetModules();
+    const one = await import('@/table/ValueInspector');
+    vi.resetModules();
+    const two = await import('@/table/ValueInspector');
+    expect(two.ValueInspector).not.toBe(one.ValueInspector);
+    const a = new one.ValueInspector({ bridge });
+    const b = new two.ValueInspector({ bridge });
+    expect(a.getElement().getAttribute('aria-labelledby')).not.toBe(
+      b.getElement().getAttribute('aria-labelledby'),
+    );
+    a.destroy();
+    b.destroy();
+  });
+});

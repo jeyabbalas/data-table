@@ -7,9 +7,11 @@
  * `label`'s values. Every other character is compared as it is: `é` and `É`
  * are two names.
  *
- * Without dependencies, so the action layer and the lazily loaded
- * extract-expression module can both import it.
+ * Without dependencies but the row id's name, which has none, so the action
+ * layer and the lazily loaded extract-expression module can both import it.
  */
+
+import { ROWID_COLUMN } from './types';
 
 /**
  * The key DuckDB tells column names apart by: ASCII letters in either case
@@ -46,4 +48,24 @@ export function collidingColumnName(name: string, names: Iterable<string>): stri
     if (collision === undefined && columnNameKey(other) === key) collision = other;
   }
   return collision;
+}
+
+/**
+ * The name a new column called `name` would clash with, the rule a new
+ * column's name is checked by: the synthetic row id's, `__rowid__`, for
+ * `name` that spells it in any letter case, whether `names` lists the row id
+ * or not; otherwise {@link collidingColumnName}'s answer, `name` itself
+ * when `names` holds it and a name that differs from it only in letter case
+ * when that is all there is. `undefined` when the name is free.
+ *
+ * @example
+ * ```ts
+ * takenColumnName('__RowId__', ['id']); // '__rowid__'
+ * takenColumnName('label', ['id', 'label']); // 'label'
+ * takenColumnName('LABEL', ['id', 'label']); // 'label'
+ * takenColumnName('total', ['id', 'label']); // undefined
+ * ```
+ */
+export function takenColumnName(name: string, names: Iterable<string>): string | undefined {
+  return columnNameKey(name) === ROWID_COLUMN ? ROWID_COLUMN : collidingColumnName(name, names);
 }

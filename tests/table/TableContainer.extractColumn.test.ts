@@ -92,13 +92,15 @@ let add: ReturnType<typeof vi.spyOn>;
 /**
  * `addNestedFieldColumn` without DuckDB: the expression and name the real
  * one makes, and the same state writes, in one batch (the relation renamed
- * to its VIEW, the column after its source), or `failure` when given.
+ * to its VIEW, the column after its source), or `failure` when given. With
+ * `gate`, the add waits for it first, as one queued behind other work does.
  */
-function fakeAdd(failure?: string): void {
+function fakeAdd(failure?: string, gate?: Promise<void>): void {
   add = vi
     .spyOn(actions, 'addNestedFieldColumn')
     .mockImplementation(async (column, path, options = {}) => {
       await Promise.resolve();
+      await gate;
       if (failure !== undefined) return { success: false, error: failure };
       const source = state.schema.get().find((c) => c.name === column)!;
       const built = nestedFieldExpression(
@@ -264,6 +266,10 @@ describe('TableContainer — extract field → column', () => {
     // In the root, beside the grid: `role="grid"` owns only rowgroups.
     expect(panel.parentElement).toBe(root());
     expect(grid().contains(panel)).toBe(false);
+    // Its ids are this table's.
+    expect(panel.getAttribute('aria-labelledby')).toBe(
+      `dt-${table.getInstanceId()}-extract-panel-title`,
+    );
     expect(extractButton('point')!.getAttribute('aria-expanded')).toBe('true');
 
     treeItem(panel, 'y: double').click();
@@ -291,6 +297,9 @@ describe('TableContainer — extract field → column', () => {
     fakeAdd();
     actions.setFocusedCell({ row: 3, column: 'point' });
     const inspector = await openInspector(3, 'point');
+    expect(inspector.getAttribute('aria-labelledby')).toBe(
+      `dt-${table.getInstanceId()}-value-inspector-title`,
+    );
     // Its "add as column" buttons are there: the hook is wired.
     expect(
       [...inspector.querySelectorAll('.dt-value-inspector__button')].map((b) => b.textContent),
@@ -473,5 +482,110 @@ describe('TableContainer — extract field → column', () => {
     });
     x.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  describe('an add still running', () => {
+    function gate(): { promise: Promise<void>; release: () => void } {
+      let release!: () => void;
+      const promise = new Promise<void>((resolve) => (release = resolve));
+      return { promise, release };
+    }
+    const derivedNames = (): string[] => state.derivedColumns.get().map((d) => d.name);
+    const cancelButton = (panel: HTMLElement): HTMLButtonElement =>
+      [...panel.querySelectorAll<HTMLButtonElement>('.dt-extract-panel__button')].find(
+        (b) => b.textContent === 'Cancel',
+      )!;
+
+    it('is the one an identical request gets: one column, one promise', async () => {
+      await mount();
+      const held = gate();
+      fakeAdd(undefined, held.promise);
+      const first = table.extractColumn({ column: 'point', path: ['x'] });
+      const again = table.extractColumn({ column: 'point', path: ['x'], extract: 'value' });
+      expect(again).toBe(first);
+      held.release();
+      await expect(first).resolves.toEqual({ success: true, name: 'point_x' });
+      expect(add).toHaveBeenCalledTimes(1);
+      expect(derivedNames()).toEqual(['point_x']);
+      // Settled: the same request adds again.
+      await table.extractColumn({ column: 'point', path: ['x'] });
+      expect(derivedNames()).toEqual(['point_x', 'point_x_2']);
+    });
+
+    it('from the extract panel: cancelled, opened again, not sent again, and lands where the user is', async () => {
+      await mount();
+      const held = gate();
+      fakeAdd(undefined, held.promise);
+      let panel = await openPanel('point');
+      panel.querySelector<HTMLButtonElement>('.dt-extract-panel__button--primary')!.click();
+      cancelButton(panel).click();
+      expect(panelShown()).toBe(false);
+
+      panel = await openPanel('point');
+      const addColumn = panel.querySelector<HTMLButtonElement>(
+        '.dt-extract-panel__button--primary',
+      )!;
+      expect(addColumn.textContent).toBe('Adding…');
+      addColumn.click();
+      expect(add).toHaveBeenCalledTimes(1);
+      cancelButton(panel).click();
+
+      // The user goes on, to a body cell.
+      grid().focus();
+      actions.setFocusedCell({ row: 2, column: 'id' });
+      held.release();
+      await vi.waitFor(() => expect(announced()).toBe('Column point_x added'));
+      expect(derivedNames()).toEqual(['point_x']);
+      expect(state.focusedCell.get()).toEqual({ row: 2, column: 'id' });
+      expect(document.activeElement).toBe(grid());
+    });
+
+    it('from the value inspector: closed, opened again, not sent again, and lands where the user is', async () => {
+      await mount();
+      const held = gate();
+      fakeAdd(undefined, held.promise);
+      actions.setFocusedCell({ row: 3, column: 'point' });
+      let inspector = await openInspector(3, 'point');
+      const x = treeItem(inspector, 'x: 1.5');
+      x.click();
+      ctrlEnter(x);
+      x.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+      expect(inspectorShown()).toBe(false);
+
+      inspector = await openInspector(3, 'point');
+      await vi.waitFor(() =>
+        expect(inspector.querySelector('.dt-value-inspector__message')!.textContent).toBe(
+          'Adding…',
+        ),
+      );
+      const again = treeItem(inspector, 'x: 1.5');
+      again.click();
+      ctrlEnter(again);
+      expect(add).toHaveBeenCalledTimes(1);
+      again.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      );
+
+      held.release();
+      await vi.waitFor(() => expect(announced()).toBe('Column point_x added'));
+      expect(derivedNames()).toEqual(['point_x']);
+      expect(state.focusedCell.get()).toEqual({ row: 3, column: 'point' });
+      expect(document.activeElement).toBe(grid());
+    });
+
+    it('moves the cursor when the panel that asked is still open as it lands', async () => {
+      await mount();
+      const held = gate();
+      fakeAdd(undefined, held.promise);
+      const panel = await openPanel('point');
+      panel.querySelector<HTMLButtonElement>('.dt-extract-panel__button--primary')!.click();
+      held.release();
+      await vi.waitFor(() =>
+        expect(state.focusedCell.get()).toEqual({ row: HEADER_ROW_INDEX, column: 'point_x' }),
+      );
+      expect(document.activeElement).toBe(grid());
+    });
   });
 });

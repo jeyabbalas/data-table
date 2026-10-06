@@ -27,6 +27,7 @@
  */
 
 import { parseDuckDBType } from '../core/duckdbType';
+import { nextInstanceId } from '../core/instanceId';
 import { type JsonNode, parseJsonTree, prettyJson } from '../core/jsonTree';
 import { ModalHost } from '../core/ModalHost';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -80,9 +81,6 @@ const MIN_HEIGHT = 120;
 
 /** A JSON null, for a value that turned out to be SQL NULL. */
 const NULL_JSON: JsonNode = { kind: 'null' };
-
-/** Mints the panels' element ids, unique on the page. */
-let panelCount = 0;
 
 /**
  * The "add as column" buttons, each offered on the nodes that have one:
@@ -158,7 +156,9 @@ export interface ValueInspectorExtract {
    * Add it. The panel stays open; closing it, or not, is the caller's. Given
    * a promise of how it ends, the panel says "Adding…" in its status line
    * meanwhile and a failure's reason after, and drops further requests
-   * until it settles.
+   * until it settles. Closed meanwhile, it drops the outcome, but still
+   * asks nothing new until the add settles; opened again on the same column
+   * before then, it says "Adding…" again.
    */
   onExtract(request: ValueInspectorExtractRequest): void | Promise<ValueInspectorExtractResult>;
   /** Text of each footer button; `value`'s is also the row affordance's `title`. */
@@ -180,6 +180,12 @@ export interface ValueInspectorOptions {
   bridge: WorkerBridge;
   /** CSS class prefix (default: 'dt'). */
   classPrefix?: string | undefined;
+  /**
+   * The table's instance id (`TableContainer.getInstanceId`), mixed into the
+   * ids the panel mints so that two tables never share one, two copies of
+   * the library on one page included. Minted when left out.
+   */
+  instanceId?: string | undefined;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
   /** Element to mirror `data-dt-color-scheme` from: the table's `.dt-root`. */
@@ -274,10 +280,14 @@ export class ValueInspector {
   /** What each node offers to add as a column; `null` for nothing. */
   private extractChoices = new WeakMap<ValueTreeNode, ExtractChoices | null>();
   /**
-   * The `loadSeq` an "add as column" request was made at, until it settles:
-   * the next one is dropped meanwhile. A close lets go of it.
+   * The "add as column" request asked for last, until it settles: the next
+   * one for its column is dropped meanwhile. A close drops its outcome, not
+   * the add, which an open on the same column says is still adding.
    */
-  private extracting: number | null = null;
+  private extracting: {
+    column: string;
+    outcome: Promise<ValueInspectorExtractResult>;
+  } | null = null;
 
   // Opened, and focus not yet handed on: see the constructor's focus listener.
   private focusPending = false;
@@ -297,7 +307,7 @@ export class ValueInspector {
     this.returnFocus = options.returnFocus;
     this.onOpenChange = options.onOpenChange;
     this.extract = options.extract;
-    this.titleId = `${this.prefix}-value-inspector-${++panelCount}-title`;
+    this.titleId = `${this.prefix}-${options.instanceId || nextInstanceId()}-value-inspector-title`;
 
     const p = `${this.prefix}-value-inspector`;
     const m = this.messages.values;
@@ -530,6 +540,8 @@ export class ValueInspector {
     const json = cell.text === null ? NULL_JSON : parseJsonTree(cell.text).root;
     this.loaded = { json, truncated: cell.truncated };
     this.showTree(target, json);
+    // Asked for before the panel last closed, and still adding.
+    if (this.extracting?.column === target.column.name) this.sayExtracting();
     if (cell.truncated) {
       this.noticeEl.textContent = this.messages.values.truncatedNotice(
         INSPECTOR_DISPLAY_CHARS,
@@ -713,9 +725,11 @@ export class ValueInspector {
   private requestExtract(node: ValueTreeNode, kind: ValueInspectorExtractKind): void {
     const target = this.target;
     const choices = this.choicesOf(node);
-    if (!this.extract || !target || !choices?.kinds.has(kind) || this.extracting !== null) return;
+    if (!this.extract || !target || !choices?.kinds.has(kind)) return;
+    // One add at a time for a column, through closes and opens.
+    if (this.extracting?.column === target.column.name) return;
     const extract: NestedExtractKind = kind === 'size' ? 'length' : kind;
-    const outcome = this.extract.onExtract({
+    const asked = this.extract.onExtract({
       column: target.column.name,
       path: choices.path,
       extract,
@@ -726,20 +740,33 @@ export class ValueInspector {
       row: target.row,
       rowId: target.rowId,
     });
-    if (!outcome) return;
-    // Said in the status line, which a load or a close numbers anew: an
-    // outcome for a value no longer shown is dropped.
+    if (!asked) return;
+    const outcome = asked.catch((err: unknown) => ({
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    }));
+    const extracting = { column: target.column.name, outcome };
+    this.extracting = extracting;
+    void outcome.then(() => {
+      if (this.extracting === extracting) this.extracting = null;
+    });
+    this.sayExtracting();
+  }
+
+  /**
+   * Say "Adding…" in the status line until the add asked for last settles,
+   * then a failure's reason. The line is numbered anew by a load and a
+   * close: an outcome for a value no longer shown is dropped.
+   */
+  private sayExtracting(): void {
+    const extracting = this.extracting;
+    if (!extracting) return;
     const seq = this.loadSeq;
-    this.extracting = seq;
     this.setMessage(this.messages.values.adding);
-    const settle = (result: ValueInspectorExtractResult): void => {
-      if (this.extracting === seq) this.extracting = null;
+    void extracting.outcome.then((result) => {
       if (seq !== this.loadSeq || this.destroyed) return;
       this.setMessage(result.success ? '' : this.messages.values.extractFailed(result.error ?? ''));
-    };
-    outcome.then(settle, (err: unknown) =>
-      settle({ success: false, error: err instanceof Error ? err.message : String(err) }),
-    );
+    });
   }
 
   // =========================================
@@ -919,7 +946,6 @@ export class ValueInspector {
     this.loaded = null;
     this.updateExtractButtons(undefined);
     this.extractChoices = new WeakMap();
-    this.extracting = null;
     this.target = null;
     this.onOpenChange?.(null);
   }

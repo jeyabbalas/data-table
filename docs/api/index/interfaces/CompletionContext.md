@@ -6,7 +6,7 @@
 
 # Interface: CompletionContext
 
-Defined in: [derived/types.ts:55](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/derived/types.ts#L55)
+Defined in: [derived/types.ts:55](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/derived/types.ts#L55)
 
 Completion context exposed for expression editor autocompletion.
 Downstream apps can use this with CodeMirror or similar editors.
@@ -17,7 +17,7 @@ Downstream apps can use this with CodeMirror or similar editors.
 
 > **columns**: `object`[]
 
-Defined in: [derived/types.ts:56](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/derived/types.ts#L56)
+Defined in: [derived/types.ts:56](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/derived/types.ts#L56)
 
 #### isDerived
 
@@ -37,4 +37,4 @@ Defined in: [derived/types.ts:56](https://github.com/jeyabbalas/data-table/blob/
 
 > `optional` **functions?**: `string`[]
 
-Defined in: [derived/types.ts:57](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/derived/types.ts#L57)
+Defined in: [derived/types.ts:57](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/derived/types.ts#L57)

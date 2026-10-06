@@ -6,7 +6,7 @@
 
 # Interface: GetColumnValuesOptions
 
-Defined in: [core/Actions.ts:80](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L80)
+Defined in: [core/Actions.ts:80](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L80)
 
 Options for [StateActions.getColumnValues](../../advanced/classes/StateActions.md#getcolumnvalues).
 
@@ -16,7 +16,7 @@ Options for [StateActions.getColumnValues](../../advanced/classes/StateActions.m
 
 > `optional` **limit?**: `number`
 
-Defined in: [core/Actions.ts:91](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L91)
+Defined in: [core/Actions.ts:91](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L91)
 
 Optional cap on the number of returned values. Non-negative integer.
 
@@ -26,7 +26,7 @@ Optional cap on the number of returned values. Non-negative integer.
 
 > `optional` **offset?**: `number`
 
-Defined in: [core/Actions.ts:93](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L93)
+Defined in: [core/Actions.ts:93](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L93)
 
 Optional offset applied after WHERE and ORDER BY. Non-negative integer.
 
@@ -36,7 +36,7 @@ Optional offset applied after WHERE and ORDER BY. Non-negative integer.
 
 > `optional` **scope?**: `"all"` \| `"filtered"` \| `"selected"`
 
-Defined in: [core/Actions.ts:89](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L89)
+Defined in: [core/Actions.ts:89](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L89)
 
 Which rows to include:
 - `'all'` (default) — every row in the effective table.
@@ -51,6 +51,6 @@ Which rows to include:
 
 > `optional` **signal?**: `AbortSignal`
 
-Defined in: [core/Actions.ts:95](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L95)
+Defined in: [core/Actions.ts:95](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L95)
 
 Optional AbortSignal forwarded to the DuckDB worker.

@@ -6,7 +6,7 @@
 
 # Interface: LoadOptions
 
-Defined in: [data/WorkerBridge.ts:34](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L34)
+Defined in: [data/WorkerBridge.ts:34](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/WorkerBridge.ts#L34)
 
 Low-level options accepted by [WorkerBridge.loadData](../classes/WorkerBridge.md#loaddata): the format,
 the table name, and how the source is read, per format (the fields of
@@ -24,7 +24,7 @@ the table name, and how the source is read, per format (the fields of
 
 > `optional` **csv?**: [`CSVSourceOptions`](CSVSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:91](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L91)
+Defined in: [data/sourceOptions.ts:91](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L91)
 
 Read by a CSV load.
 
@@ -38,7 +38,7 @@ Read by a CSV load.
 
 > **format**: `"csv"` \| `"json"` \| `"parquet"`
 
-Defined in: [data/WorkerBridge.ts:35](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L35)
+Defined in: [data/WorkerBridge.ts:35](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/WorkerBridge.ts#L35)
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: [data/WorkerBridge.ts:35](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **json?**: [`JSONSourceOptions`](JSONSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:93](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L93)
+Defined in: [data/sourceOptions.ts:93](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L93)
 
 Read by a JSON load.
 
@@ -60,7 +60,7 @@ Read by a JSON load.
 
 > `optional` **parquet?**: [`ParquetSourceOptions`](ParquetSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:95](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L95)
+Defined in: [data/sourceOptions.ts:95](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L95)
 
 Read by a Parquet load.
 
@@ -74,7 +74,7 @@ Read by a Parquet load.
 
 > `optional` **tableName?**: `string`
 
-Defined in: [data/WorkerBridge.ts:36](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/WorkerBridge.ts#L36)
+Defined in: [data/WorkerBridge.ts:36](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/WorkerBridge.ts#L36)
 
 ***
 
@@ -82,7 +82,7 @@ Defined in: [data/WorkerBridge.ts:36](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **timezone?**: `string`
 
-Defined in: [data/sourceOptions.ts:89](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L89)
+Defined in: [data/sourceOptions.ts:89](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L89)
 
 The time zone DuckDB works in, as an IANA name such as
 `'America/New_York'`. SQL on TIMESTAMPTZ values uses it: date parts,

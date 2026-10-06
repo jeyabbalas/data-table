@@ -6,7 +6,7 @@
 
 # Interface: CSVSourceOptions
 
-Defined in: [data/sourceOptions.ts:10](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L10)
+Defined in: [data/sourceOptions.ts:10](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L10)
 
 How a CSV source is read. DuckDB detects whatever is left out.
 
@@ -16,7 +16,7 @@ How a CSV source is read. DuckDB detects whatever is left out.
 
 > `optional` **delimiter?**: `string`
 
-Defined in: [data/sourceOptions.ts:15](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L15)
+Defined in: [data/sourceOptions.ts:15](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L15)
 
 The character between fields: one character (one UTF-16 code unit),
 not a line break or NUL. Default: detected.
@@ -27,7 +27,7 @@ not a line break or NUL. Default: detected.
 
 > `optional` **header?**: `boolean`
 
-Defined in: [data/sourceOptions.ts:17](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L17)
+Defined in: [data/sourceOptions.ts:17](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L17)
 
 Whether the first row holds the column names. Default: detected.
 
@@ -37,7 +37,7 @@ Whether the first row holds the column names. Default: detected.
 
 > `optional` **nullValues?**: readonly `string`[]
 
-Defined in: [data/sourceOptions.ts:31](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L31)
+Defined in: [data/sourceOptions.ts:31](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L31)
 
 Field values read as NULL. They replace DuckDB's default, under which
 only an empty field is NULL: include `''` to keep that. None may hold a
@@ -49,7 +49,7 @@ NUL character.
 
 > `optional` **sampleSize?**: `number`
 
-Defined in: [data/sourceOptions.ts:23](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L23)
+Defined in: [data/sourceOptions.ts:23](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L23)
 
 Rows DuckDB reads to detect the dialect and the column types, or `-1`
 for every row. Default: DuckDB's, 20,480. A value that does not fit the
@@ -61,6 +61,6 @@ type detected from the rows read fails the load.
 
 > `optional` **skip?**: `number`
 
-Defined in: [data/sourceOptions.ts:25](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L25)
+Defined in: [data/sourceOptions.ts:25](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L25)
 
 Lines to skip at the start of the file, before the header. Default: 0.

@@ -6,18 +6,22 @@
 
 # Class: DerivedColumnError
 
-Defined in: [core/errors.ts:182](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L182)
+Defined in: [core/errors.ts:186](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L186)
 
 Derived-column expression / vector / lifecycle error.
+
+The derived-column actions resolve with their failures rather than throw:
+`replaceDerivedColumn` with this error, `addDerivedColumn` and
+`updateDerivedColumn` with its message. A derived column a restored
+session, an undo or a redo cannot bring back is reported with it in a
+`console.warn`, coded `DUPLICATE_NAME` for a name another column has.
 
 ## Example
 
 ```ts
-try { await table.actions.addDerivedColumn(def); }
-catch (err) {
-  if (err instanceof DerivedColumnError && err.code === 'DUPLICATE_NAME') {
-    toast('A column with that name already exists.');
-  }
+const result = await table.actions.replaceDerivedColumn('tip_pct', def);
+if (!result.success && result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
+  console.warn('It would break:', result.error.details?.dependentsAffected);
 }
 ```
 
@@ -31,7 +35,7 @@ catch (err) {
 
 > **new DerivedColumnError**(`message`, `options?`): `DerivedColumnError`
 
-Defined in: [core/errors.ts:183](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L183)
+Defined in: [core/errors.ts:187](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L187)
 
 #### Parameters
 
@@ -57,7 +61,7 @@ Defined in: [core/errors.ts:183](https://github.com/jeyabbalas/data-table/blob/1
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -69,7 +73,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/14
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -81,7 +85,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/14
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L66)
 
 #### Returns
 

@@ -6,7 +6,7 @@
 
 # Interface: SourceOptions
 
-Defined in: [data/sourceOptions.ts:75](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L75)
+Defined in: [data/sourceOptions.ts:75](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L75)
 
 How a source is read: passed as `sourceOptions` to `createDataTable()`,
 `table.loadData()` and `actions.loadData()`, and spread into
@@ -28,7 +28,7 @@ the data it had.
 
 > `optional` **csv?**: [`CSVSourceOptions`](CSVSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:91](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L91)
+Defined in: [data/sourceOptions.ts:91](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L91)
 
 Read by a CSV load.
 
@@ -38,7 +38,7 @@ Read by a CSV load.
 
 > `optional` **json?**: [`JSONSourceOptions`](JSONSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:93](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L93)
+Defined in: [data/sourceOptions.ts:93](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L93)
 
 Read by a JSON load.
 
@@ -48,7 +48,7 @@ Read by a JSON load.
 
 > `optional` **parquet?**: [`ParquetSourceOptions`](ParquetSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:95](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L95)
+Defined in: [data/sourceOptions.ts:95](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L95)
 
 Read by a Parquet load.
 
@@ -58,7 +58,7 @@ Read by a Parquet load.
 
 > `optional` **timezone?**: `string`
 
-Defined in: [data/sourceOptions.ts:89](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/data/sourceOptions.ts#L89)
+Defined in: [data/sourceOptions.ts:89](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L89)
 
 The time zone DuckDB works in, as an IANA name such as
 `'America/New_York'`. SQL on TIMESTAMPTZ values uses it: date parts,

@@ -6,9 +6,18 @@
 
 # Interface: DuckDBJsonTypeNode
 
-Defined in: [core/duckdbType.ts:35](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L35)
+Defined in: [core/duckdbType.ts:59](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L59)
 
 DuckDB's `JSON` type: text the json extension knows to be JSON.
+
+## Example
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+parseDuckDBType('JSON').kind; // 'json'
+parseDuckDBType('JSON[]').kind; // 'list', of 'json'
+```
 
 ## Properties
 
@@ -16,7 +25,7 @@ DuckDB's `JSON` type: text the json extension knows to be JSON.
 
 > `readonly` **kind**: `"json"`
 
-Defined in: [core/duckdbType.ts:36](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L36)
+Defined in: [core/duckdbType.ts:60](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L60)
 
 ***
 
@@ -24,4 +33,4 @@ Defined in: [core/duckdbType.ts:36](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:37](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L37)
+Defined in: [core/duckdbType.ts:61](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L61)

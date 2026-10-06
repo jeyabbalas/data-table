@@ -6,7 +6,7 @@
 
 # Interface: VectorValuePoolEntry
 
-Defined in: [persistence/types.ts:124](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/persistence/types.ts#L124)
+Defined in: [persistence/types.ts:124](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/persistence/types.ts#L124)
 
 Entry in the vector value pool.
 
@@ -29,7 +29,7 @@ dedup only when they share array references explicitly.
 
 > **values**: `unknown`[]
 
-Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/persistence/types.ts#L126)
+Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/persistence/types.ts#L126)
 
 ***
 
@@ -37,4 +37,4 @@ Defined in: [persistence/types.ts:126](https://github.com/jeyabbalas/data-table/
 
 > **vectorType**: `string`
 
-Defined in: [persistence/types.ts:125](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/persistence/types.ts#L125)
+Defined in: [persistence/types.ts:125](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/persistence/types.ts#L125)

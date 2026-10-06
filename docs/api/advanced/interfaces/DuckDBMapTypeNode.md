@@ -6,9 +6,21 @@
 
 # Interface: DuckDBMapTypeNode
 
-Defined in: [core/duckdbType.ts:76](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L76)
+Defined in: [core/duckdbType.ts:175](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L175)
 
 A MAP: `MAP(VARCHAR, INTEGER)`.
+
+## Example
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+const node = parseDuckDBType('MAP(DATE, INTEGER[])');
+if (node.kind === 'map') {
+  node.key.sqlType; // 'DATE'
+  node.value.kind; // 'list'
+}
+```
 
 ## Properties
 
@@ -16,7 +28,7 @@ A MAP: `MAP(VARCHAR, INTEGER)`.
 
 > `readonly` **key**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:79](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L79)
+Defined in: [core/duckdbType.ts:178](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L178)
 
 ***
 
@@ -24,7 +36,7 @@ Defined in: [core/duckdbType.ts:79](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **kind**: `"map"`
 
-Defined in: [core/duckdbType.ts:77](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L77)
+Defined in: [core/duckdbType.ts:176](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L176)
 
 ***
 
@@ -32,7 +44,7 @@ Defined in: [core/duckdbType.ts:77](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:78](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L78)
+Defined in: [core/duckdbType.ts:177](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L177)
 
 ***
 
@@ -40,4 +52,4 @@ Defined in: [core/duckdbType.ts:78](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **value**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:80](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L80)
+Defined in: [core/duckdbType.ts:179](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L179)

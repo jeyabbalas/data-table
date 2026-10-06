@@ -6,9 +6,22 @@
 
 # Interface: DuckDBScalarTypeNode
 
-Defined in: [core/duckdbType.ts:18](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L18)
+Defined in: [core/duckdbType.ts:32](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L32)
 
 A scalar type: a number, text, a date, a BLOB, an ENUM, …
+
+## Example
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+const node = parseDuckDBType('DECIMAL(18,4)');
+if (node.kind === 'scalar') {
+  node.name; // 'DECIMAL'
+  node.args; // ['18', '4']
+  node.dataType; // 'decimal'
+}
+```
 
 ## Properties
 
@@ -16,7 +29,7 @@ A scalar type: a number, text, a date, a BLOB, an ENUM, …
 
 > `readonly` **args**: readonly `string`[]
 
-Defined in: [core/duckdbType.ts:29](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L29)
+Defined in: [core/duckdbType.ts:43](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L43)
 
 The arguments as written, outer parentheses removed and split at the
 commas between them: `['18', '4']` for `DECIMAL(18,4)`, `["'it''s'",
@@ -28,7 +41,7 @@ commas between them: `['18', '4']` for `DECIMAL(18,4)`, `["'it''s'",
 
 > `readonly` **dataType**: `"string"` \| `"boolean"` \| `"integer"` \| `"float"` \| `"decimal"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"`
 
-Defined in: [core/duckdbType.ts:31](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L31)
+Defined in: [core/duckdbType.ts:45](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L45)
 
 The library's type for it. Never `'nested'`.
 
@@ -38,7 +51,7 @@ The library's type for it. Never `'nested'`.
 
 > `readonly` **kind**: `"scalar"`
 
-Defined in: [core/duckdbType.ts:19](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L19)
+Defined in: [core/duckdbType.ts:33](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L33)
 
 ***
 
@@ -46,7 +59,7 @@ Defined in: [core/duckdbType.ts:19](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **name**: `string`
 
-Defined in: [core/duckdbType.ts:23](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L23)
+Defined in: [core/duckdbType.ts:37](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L37)
 
 Upper case, without arguments: `DECIMAL`, `TIMESTAMP WITH TIME ZONE`, `ENUM`.
 
@@ -56,6 +69,6 @@ Upper case, without arguments: `DECIMAL`, `TIMESTAMP WITH TIME ZONE`, `ENUM`.
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:21](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L21)
+Defined in: [core/duckdbType.ts:35](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L35)
 
 The type as written, arguments included: `DECIMAL(18,4)`.

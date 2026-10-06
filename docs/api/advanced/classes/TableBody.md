@@ -6,7 +6,7 @@
 
 # Class: TableBody
 
-Defined in: [table/TableBody.ts:242](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L242)
+Defined in: [table/TableBody.ts:243](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L243)
 
 TableBody renders data rows using virtual scrolling.
 
@@ -26,7 +26,7 @@ body.destroy();
 
 > **new TableBody**(`container`, `state`, `bridge`, `actions?`, `options?`): `TableBody`
 
-Defined in: [table/TableBody.ts:393](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L393)
+Defined in: [table/TableBody.ts:394](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L394)
 
 #### Parameters
 
@@ -60,7 +60,7 @@ Defined in: [table/TableBody.ts:393](https://github.com/jeyabbalas/data-table/bl
 
 > **destroy**(): `void`
 
-Defined in: [table/TableBody.ts:2744](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2744)
+Defined in: [table/TableBody.ts:2746](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2746)
 
 Destroy the table body and clean up resources
 
@@ -74,7 +74,7 @@ Destroy the table body and clean up resources
 
 > **getInspectTarget**(`row`, `column`): \{ `cell`: `HTMLElement`; `rowId`: `number` \| `bigint`; \} \| `null`
 
-Defined in: [table/TableBody.ts:2670](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2670)
+Defined in: [table/TableBody.ts:2672](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2672)
 
 What the value inspector needs to open on the cell at `row` (0-based, in
 the table as sorted and filtered) and `column`: the row's `__rowid__`,
@@ -112,7 +112,7 @@ if (target) inspector.open({ rowId: target.rowId, anchor: target.cell, ... });
 
 > **getVirtualScroller**(): [`VirtualScroller`](VirtualScroller.md)
 
-Defined in: [table/TableBody.ts:2628](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2628)
+Defined in: [table/TableBody.ts:2630](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2630)
 
 Get the virtual scroller instance
 
@@ -126,7 +126,7 @@ Get the virtual scroller instance
 
 > **getVisibleRange**(): [`VisibleRange`](../interfaces/VisibleRange.md)
 
-Defined in: [table/TableBody.ts:2635](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2635)
+Defined in: [table/TableBody.ts:2637](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2637)
 
 Get current visible range
 
@@ -140,7 +140,7 @@ Get current visible range
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [table/TableBody.ts:454](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L454)
+Defined in: [table/TableBody.ts:455](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L455)
 
 Initialize the table body
 
@@ -157,7 +157,7 @@ initial render.
 
 > **inspectState**(`row`, `column`): `"ready"` \| `"loading"` \| `"none"`
 
-Defined in: [table/TableBody.ts:2702](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2702)
+Defined in: [table/TableBody.ts:2704](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2704)
 
 Whether the value inspector has a value to open at a body cell:
 `'ready'` when [getInspectTarget](#getinspecttarget) finds one; `'loading'` while the
@@ -191,7 +191,7 @@ if (body.inspectState(12, 'tags') === 'loading') pending = { row: 12, column: 't
 
 > **isDestroyed**(): `boolean`
 
-Defined in: [table/TableBody.ts:2715](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2715)
+Defined in: [table/TableBody.ts:2717](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2717)
 
 Check if the table body has been destroyed
 
@@ -205,7 +205,7 @@ Check if the table body has been destroyed
 
 > **refresh**(): `void`
 
-Defined in: [table/TableBody.ts:2642](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2642)
+Defined in: [table/TableBody.ts:2644](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2644)
 
 Force a refresh of the table body
 
@@ -219,7 +219,7 @@ Force a refresh of the table body
 
 > **scrollToRow**(`index`, `align?`): `void`
 
-Defined in: [table/TableBody.ts:2650](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/TableBody.ts#L2650)
+Defined in: [table/TableBody.ts:2652](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/TableBody.ts#L2652)
 
 Scroll to a specific row
 

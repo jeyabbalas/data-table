@@ -6,9 +6,21 @@
 
 # Interface: DuckDBArrayTypeNode
 
-Defined in: [core/duckdbType.ts:54](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L54)
+Defined in: [core/duckdbType.ts:110](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L110)
 
 A fixed-size ARRAY: `FLOAT[768]`.
+
+## Example
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+const node = parseDuckDBType('FLOAT[768]');
+if (node.kind === 'array') {
+  node.size; // 768
+  node.element.sqlType; // 'FLOAT'
+}
+```
 
 ## Properties
 
@@ -16,7 +28,7 @@ A fixed-size ARRAY: `FLOAT[768]`.
 
 > `readonly` **element**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:58](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L58)
+Defined in: [core/duckdbType.ts:114](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L114)
 
 ***
 
@@ -24,7 +36,7 @@ Defined in: [core/duckdbType.ts:58](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **kind**: `"array"`
 
-Defined in: [core/duckdbType.ts:55](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L55)
+Defined in: [core/duckdbType.ts:111](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L111)
 
 ***
 
@@ -32,7 +44,7 @@ Defined in: [core/duckdbType.ts:55](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **size**: `number`
 
-Defined in: [core/duckdbType.ts:57](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L57)
+Defined in: [core/duckdbType.ts:113](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L113)
 
 ***
 
@@ -40,4 +52,4 @@ Defined in: [core/duckdbType.ts:57](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:56](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L56)
+Defined in: [core/duckdbType.ts:112](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L112)

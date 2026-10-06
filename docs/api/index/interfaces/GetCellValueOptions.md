@@ -6,7 +6,7 @@
 
 # Interface: GetCellValueOptions
 
-Defined in: [core/Actions.ts:105](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L105)
+Defined in: [core/Actions.ts:105](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L105)
 
 Options for [StateActions.getCellValue](../../advanced/classes/StateActions.md#getcellvalue).
 
@@ -23,7 +23,7 @@ const value = await table.actions.getCellValue(0, 'tags', { signal: controller.s
 
 > `optional` **signal?**: `AbortSignal`
 
-Defined in: [core/Actions.ts:110](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L110)
+Defined in: [core/Actions.ts:110](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L110)
 
 Aborts the read: the query is cancelled in the DuckDB worker, and the
 promise rejects with a `QueryError` coded `QUERY_ABORTED`.

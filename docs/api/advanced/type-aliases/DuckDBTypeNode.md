@@ -8,7 +8,7 @@
 
 > **DuckDBTypeNode** = [`DuckDBScalarTypeNode`](../interfaces/DuckDBScalarTypeNode.md) \| [`DuckDBJsonTypeNode`](../interfaces/DuckDBJsonTypeNode.md) \| [`DuckDBVariantTypeNode`](../interfaces/DuckDBVariantTypeNode.md) \| [`DuckDBListTypeNode`](../interfaces/DuckDBListTypeNode.md) \| [`DuckDBArrayTypeNode`](../interfaces/DuckDBArrayTypeNode.md) \| [`DuckDBStructTypeNode`](../interfaces/DuckDBStructTypeNode.md) \| [`DuckDBMapTypeNode`](../interfaces/DuckDBMapTypeNode.md) \| [`DuckDBUnionTypeNode`](../interfaces/DuckDBUnionTypeNode.md) \| [`DuckDBUnknownTypeNode`](../interfaces/DuckDBUnknownTypeNode.md)
 
-Defined in: [core/duckdbType.ts:119](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L119)
+Defined in: [core/duckdbType.ts:247](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L247)
 
 A DuckDB type, as a tree. Every node keeps the text of its own type in
 `sqlType`.

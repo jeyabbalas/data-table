@@ -8,7 +8,7 @@
 
 > **parseDuckDBType**(`text`): [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:336](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L336)
+Defined in: [core/duckdbType.ts:475](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L475)
 
 Parse a DuckDB type name into a tree.
 
@@ -16,8 +16,9 @@ Reads the types `DESCRIBE` and `typeof()` print: scalars with their
 arguments (`DECIMAL(18,4)`, `ENUM('a', 'b')`, `TIMESTAMP WITH TIME ZONE`),
 `JSON`, `VARIANT`, lists and arrays (`INTEGER[]`, `FLOAT[768]`, stacked as
 in `INTEGER[2][]`, a list of 2-integer arrays), `STRUCT(…)` with quoted,
-unquoted or no field names, `MAP(K, V)`, `UNION(tag T, …)` and `LIST(T)`.
-Keywords are matched in any case.
+unquoted or no field names (a field named with the empty string, which
+DuckDB writes as nothing, is named `''`), `MAP(K, V)`, `UNION(tag T, …)`
+and `LIST(T)`. Keywords are matched in any case.
 
 Never throws: text it cannot read, and types nested deeper than
 `MAX_TYPE_DEPTH` (256) levels, come back as an `unknown` node. Results are

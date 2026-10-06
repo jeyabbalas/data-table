@@ -6,9 +6,20 @@
 
 # Interface: DuckDBStructTypeNode
 
-Defined in: [core/duckdbType.ts:69](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L69)
+Defined in: [core/duckdbType.ts:155](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L155)
 
 A STRUCT: `STRUCT(x DOUBLE, y DOUBLE)`.
+
+## Example
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+const node = parseDuckDBType('STRUCT(x DOUBLE, tags VARCHAR[])');
+if (node.kind === 'struct') {
+  node.fields.map((f) => `${f.name}: ${f.type.kind}`); // ['x: scalar', 'tags: list']
+}
+```
 
 ## Properties
 
@@ -16,7 +27,7 @@ A STRUCT: `STRUCT(x DOUBLE, y DOUBLE)`.
 
 > `readonly` **fields**: readonly [`DuckDBStructField`](DuckDBStructField.md)[]
 
-Defined in: [core/duckdbType.ts:72](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L72)
+Defined in: [core/duckdbType.ts:158](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L158)
 
 ***
 
@@ -24,7 +35,7 @@ Defined in: [core/duckdbType.ts:72](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **kind**: `"struct"`
 
-Defined in: [core/duckdbType.ts:70](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L70)
+Defined in: [core/duckdbType.ts:156](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L156)
 
 ***
 
@@ -32,4 +43,4 @@ Defined in: [core/duckdbType.ts:70](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:71](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L71)
+Defined in: [core/duckdbType.ts:157](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L157)

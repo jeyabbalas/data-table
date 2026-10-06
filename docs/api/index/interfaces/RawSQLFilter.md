@@ -6,7 +6,7 @@
 
 # Interface: RawSQLFilter
 
-Defined in: [filters/FilterTypes.ts:147](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/filters/FilterTypes.ts#L147)
+Defined in: [filters/FilterTypes.ts:147](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterTypes.ts#L147)
 
 Raw-SQL `WHERE`-clause fragment filter. Spliced verbatim into the active
 query — see the trust-boundary note on [RawSQLFilter.sql](#sql).
@@ -17,7 +17,7 @@ query — see the trust-boundary note on [RawSQLFilter.sql](#sql).
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:149](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/filters/FilterTypes.ts#L149)
+Defined in: [filters/FilterTypes.ts:149](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterTypes.ts#L149)
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: [filters/FilterTypes.ts:149](https://github.com/jeyabbalas/data-tabl
 
 > **id**: `string`
 
-Defined in: [filters/FilterTypes.ts:167](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/filters/FilterTypes.ts#L167)
+Defined in: [filters/FilterTypes.ts:167](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterTypes.ts#L167)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [filters/FilterTypes.ts:167](https://github.com/jeyabbalas/data-tabl
 
 > `optional` **label?**: `string`
 
-Defined in: [filters/FilterTypes.ts:166](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/filters/FilterTypes.ts#L166)
+Defined in: [filters/FilterTypes.ts:166](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterTypes.ts#L166)
 
 Human-readable label for the filter chip. Widened to allow explicit
 `undefined` so call sites that pass through an optional caller-supplied
@@ -45,7 +45,7 @@ label don't have to conditionally spread.
 
 > **sql**: `string`
 
-Defined in: [filters/FilterTypes.ts:160](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/filters/FilterTypes.ts#L160)
+Defined in: [filters/FilterTypes.ts:160](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterTypes.ts#L160)
 
 SQL WHERE-clause fragment (no `WHERE` keyword).
 
@@ -62,4 +62,4 @@ at the host application layer if end users author the SQL.
 
 > **type**: `"raw-sql"`
 
-Defined in: [filters/FilterTypes.ts:148](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/filters/FilterTypes.ts#L148)
+Defined in: [filters/FilterTypes.ts:148](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterTypes.ts#L148)

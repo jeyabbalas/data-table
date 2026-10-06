@@ -6,7 +6,7 @@
 
 # Interface: JSONExportOptions
 
-Defined in: [export/JSONExport.ts:32](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/export/JSONExport.ts#L32)
+Defined in: [export/JSONExport.ts:33](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/JSONExport.ts#L33)
 
 Options controlling JSON export behavior
 
@@ -16,7 +16,7 @@ Options controlling JSON export behavior
 
 > **columns**: `"all"` \| `string`[]
 
-Defined in: [export/JSONExport.ts:36](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/export/JSONExport.ts#L36)
+Defined in: [export/JSONExport.ts:37](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/JSONExport.ts#L37)
 
 Which columns to include
 
@@ -26,7 +26,7 @@ Which columns to include
 
 > **format**: `"array"` \| `"ndjson"`
 
-Defined in: [export/JSONExport.ts:38](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/export/JSONExport.ts#L38)
+Defined in: [export/JSONExport.ts:39](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/JSONExport.ts#L39)
 
 Output format: JSON array or newline-delimited JSON
 
@@ -36,7 +36,7 @@ Output format: JSON array or newline-delimited JSON
 
 > **pretty**: `boolean`
 
-Defined in: [export/JSONExport.ts:40](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/export/JSONExport.ts#L40)
+Defined in: [export/JSONExport.ts:41](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/JSONExport.ts#L41)
 
 Pretty-print the output (array format only)
 
@@ -46,6 +46,6 @@ Pretty-print the output (array format only)
 
 > **scope**: `"all"` \| `"filtered"` \| `"selected"`
 
-Defined in: [export/JSONExport.ts:34](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/export/JSONExport.ts#L34)
+Defined in: [export/JSONExport.ts:35](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/JSONExport.ts#L35)
 
 Which rows to export

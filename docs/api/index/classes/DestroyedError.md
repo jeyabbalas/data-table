@@ -6,7 +6,7 @@
 
 # Class: DestroyedError
 
-Defined in: [core/errors.ts:274](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L274)
+Defined in: [core/errors.ts:278](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L278)
 
 Thrown by public methods called after [DataTable.destroy](../interfaces/DataTable.md#destroy) has run.
 
@@ -32,7 +32,7 @@ useEffect(() => {
 
 > **new DestroyedError**(`message`, `options?`): `DestroyedError`
 
-Defined in: [core/errors.ts:275](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L275)
+Defined in: [core/errors.ts:279](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L279)
 
 #### Parameters
 
@@ -58,7 +58,7 @@ Defined in: [core/errors.ts:275](https://github.com/jeyabbalas/data-table/blob/1
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -70,7 +70,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/14
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -82,7 +82,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/14
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L66)
 
 #### Returns
 

@@ -8,6 +8,6 @@
 
 > `const` **ROWID\_COLUMN**: `"__rowid__"` = `'__rowid__'`
 
-Defined in: [core/types.ts:59](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/types.ts#L59)
+Defined in: [core/types.ts:64](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L64)
 
 Name of the library-reserved synthetic row-id column.

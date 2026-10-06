@@ -6,7 +6,7 @@
 
 # Interface: NestedColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:110](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L110)
+Defined in: [statistics/ColumnStatsTypes.ts:110](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L110)
 
 Stats for nested columns: LIST, ARRAY, STRUCT, MAP, UNION and VARIANT
 (`DataType` `'nested'`). Their values are not grouped or ranged, so
@@ -38,7 +38,7 @@ const stats: NestedColumnStats = {
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -52,7 +52,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"nested"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:111](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L111)
+Defined in: [statistics/ColumnStatsTypes.ts:111](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L111)
 
 ***
 
@@ -60,7 +60,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:111](https://github.com/jeyabbalas/d
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -74,7 +74,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -88,7 +88,7 @@ Count of null values in the (possibly filtered) column
 
 > **outline**: `string`
 
-Defined in: [statistics/ColumnStatsTypes.ts:118](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L118)
+Defined in: [statistics/ColumnStatsTypes.ts:118](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L118)
 
 The column's type in one line, as the stats line shows it: a struct's
 fields with their types (`x double · y double · tier varchar`), a list's
@@ -101,7 +101,7 @@ come from the data file: escape it before writing it as HTML.
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

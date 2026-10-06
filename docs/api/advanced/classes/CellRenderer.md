@@ -6,7 +6,7 @@
 
 # Class: CellRenderer
 
-Defined in: [table/Cell.ts:96](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L96)
+Defined in: [table/Cell.ts:98](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L98)
 
 CellRenderer handles formatting and rendering of cell values.
 
@@ -29,7 +29,7 @@ const formatted = renderer.formatValue(1234567, 'integer');
 
 > **new CellRenderer**(`options?`): `CellRenderer`
 
-Defined in: [table/Cell.ts:100](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L100)
+Defined in: [table/Cell.ts:102](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L102)
 
 #### Parameters
 
@@ -47,7 +47,7 @@ Defined in: [table/Cell.ts:100](https://github.com/jeyabbalas/data-table/blob/14
 
 > **formatValue**(`value`, `type?`, `originalType?`): `string`
 
-Defined in: [table/Cell.ts:175](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L175)
+Defined in: [table/Cell.ts:177](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L177)
 
 Format a value to string based on its data type.
 
@@ -83,7 +83,7 @@ Formatted string representation
 
 > **render**(`cellEl`, `value`, `schema?`): `void`
 
-Defined in: [table/Cell.ts:112](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L112)
+Defined in: [table/Cell.ts:114](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L114)
 
 Render a value into a cell element with appropriate formatting and styling.
 
@@ -117,7 +117,7 @@ Optional column schema for type-aware formatting
 
 > **setInspectable**(`cellEl`, `inspectable`): `void`
 
-Defined in: [table/Cell.ts:153](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/table/Cell.ts#L153)
+Defined in: [table/Cell.ts:155](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/table/Cell.ts#L155)
 
 Mark a cell as one the value inspector opens, or unmark it: the
 `-cell--inspectable` class, which shows the inspect icon (drawn by the

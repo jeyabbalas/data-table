@@ -6,7 +6,7 @@
 
 # Interface: NestedFieldColumnOptions
 
-Defined in: [core/Actions.ts:120](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L120)
+Defined in: [core/Actions.ts:120](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L120)
 
 Options for [StateActions.addNestedFieldColumn](../../advanced/classes/StateActions.md#addnestedfieldcolumn).
 
@@ -23,7 +23,7 @@ await table.actions.addNestedFieldColumn('tags', [], { extract: 'length', name: 
 
 > `optional` **extract?**: `"value"` \| `"length"` \| `"tag"`
 
-Defined in: [core/Actions.ts:147](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L147)
+Defined in: [core/Actions.ts:147](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L147)
 
 What the column reads at the end of the path:
 
@@ -46,7 +46,7 @@ await table.actions.addNestedFieldColumn('attrs', [], { extract: 'length' }); //
 
 > `optional` **jsonLeaf?**: `"string"` \| `"number"` \| `"boolean"` \| `"json"`
 
-Defined in: [core/Actions.ts:166](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L166)
+Defined in: [core/Actions.ts:166](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L166)
 
 How the column reads a value inside a JSON or VARIANT value, whose type
 differs from row to row. Ignored on a path that does not reach one.
@@ -74,7 +74,7 @@ await table.actions.addNestedFieldColumn('doc', ['score'], { jsonLeaf: 'number' 
 
 > `optional` **name?**: `string`
 
-Defined in: [core/Actions.ts:133](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Actions.ts#L133)
+Defined in: [core/Actions.ts:133](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Actions.ts#L133)
 
 The new column's name. Left out, one made of the column's name and the
 path's steps, which needs no quoting in SQL: `point_x`,

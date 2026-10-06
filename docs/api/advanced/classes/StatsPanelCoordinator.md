@@ -6,7 +6,7 @@
 
 # Class: StatsPanelCoordinator
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:52](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L52)
+Defined in: [visualizations/StatsPanelCoordinator.ts:52](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L52)
 
 Mirrors [CrossfilterCoordinator](CrossfilterCoordinator.md) for `BaseStatsPanel` subclasses:
 stamps a monotonic `filterSequence` on every broadcast so panels can drop
@@ -20,7 +20,7 @@ orchestrating panels manually.
 
 > **new StatsPanelCoordinator**(`state`, `concurrency?`, `actions?`): `StatsPanelCoordinator`
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:78](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L78)
+Defined in: [visualizations/StatsPanelCoordinator.ts:78](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L78)
 
 #### Parameters
 
@@ -57,7 +57,7 @@ The table's actions. When given, a broadcast waits out a
 
 > **destroy**(): `void`
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:199](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L199)
+Defined in: [visualizations/StatsPanelCoordinator.ts:199](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L199)
 
 Clean up the signal subscription and clear registrations.
 
@@ -71,7 +71,7 @@ Clean up the signal subscription and clear registrations.
 
 > **get**(`columnName`): [`BaseStatsPanel`](BaseStatsPanel.md) \| `undefined`
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:99](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L99)
+Defined in: [visualizations/StatsPanelCoordinator.ts:99](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L99)
 
 Get the panel registered for a column, or undefined.
 
@@ -91,7 +91,7 @@ Get the panel registered for a column, or undefined.
 
 > **has**(`columnName`): `boolean`
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:104](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L104)
+Defined in: [visualizations/StatsPanelCoordinator.ts:104](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L104)
 
 True if a panel is registered for the column.
 
@@ -111,7 +111,7 @@ True if a panel is registered for the column.
 
 > **register**(`columnName`, `panel`): `void`
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:88](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L88)
+Defined in: [visualizations/StatsPanelCoordinator.ts:88](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L88)
 
 Register a panel for filter-broadcast updates. Same-column re-register replaces.
 
@@ -135,7 +135,7 @@ Register a panel for filter-broadcast updates. Same-column re-register replaces.
 
 > **syncExistingFilters**(`filters`): `Promise`\<`void`\>
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:119](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L119)
+Defined in: [visualizations/StatsPanelCoordinator.ts:119](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L119)
 
 Re-broadcast the current filter array to every registered panel.
 Returns a promise that resolves once every panel's `updateFilters` call
@@ -163,7 +163,7 @@ coordinator was created or the panel was registered.
 
 > **unregister**(`columnName`): `void`
 
-Defined in: [visualizations/StatsPanelCoordinator.ts:94](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/visualizations/StatsPanelCoordinator.ts#L94)
+Defined in: [visualizations/StatsPanelCoordinator.ts:94](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/StatsPanelCoordinator.ts#L94)
 
 Unregister a panel. Idempotent.
 

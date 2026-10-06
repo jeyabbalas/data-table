@@ -6,9 +6,20 @@
 
 # Interface: DuckDBStructField
 
-Defined in: [core/duckdbType.ts:62](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L62)
+Defined in: [core/duckdbType.ts:130](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L130)
 
 One field of a STRUCT.
+
+## Example
+
+```ts
+import { parseDuckDBType } from '@jeyabbalas/data-table/advanced';
+
+const named = parseDuckDBType('STRUCT(x DOUBLE, "my field" VARCHAR)');
+if (named.kind === 'struct') named.fields.map((f) => f.name); // ['x', 'my field']
+const unnamed = parseDuckDBType('STRUCT(INTEGER, VARCHAR)');
+if (unnamed.kind === 'struct') unnamed.fields.map((f) => f.name); // [null, null]
+```
 
 ## Properties
 
@@ -16,9 +27,13 @@ One field of a STRUCT.
 
 > `readonly` **name**: `string` \| `null`
 
-Defined in: [core/duckdbType.ts:64](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L64)
+Defined in: [core/duckdbType.ts:138](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L138)
 
-The field's name, `null` for an unnamed field (`STRUCT(INTEGER, VARCHAR)`).
+The field's name: `null` for a field of an unnamed struct
+(`STRUCT(INTEGER, VARCHAR)`, what `row(1, 'a')` makes), `''` for a
+field named with the empty string, which DuckDB writes as nothing in a
+struct whose first field has a name: `STRUCT(b BIGINT,  BIGINT)`, from
+the JSON `{"b": 2, "": 1}`.
 
 ***
 
@@ -26,4 +41,4 @@ The field's name, `null` for an unnamed field (`STRUCT(INTEGER, VARCHAR)`).
 
 > `readonly` **type**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:65](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/duckdbType.ts#L65)
+Defined in: [core/duckdbType.ts:139](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/duckdbType.ts#L139)

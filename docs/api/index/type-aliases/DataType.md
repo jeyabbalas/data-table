@@ -8,7 +8,7 @@
 
 > **DataType** = `"integer"` \| `"float"` \| `"decimal"` \| `"string"` \| `"boolean"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"` \| `"nested"`
 
-Defined in: [core/types.ts:14](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/types.ts#L14)
+Defined in: [core/types.ts:19](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L19)
 
 Column data types supported by the library.
 
@@ -17,3 +17,11 @@ ARRAY (`FLOAT[768]`), STRUCT, MAP, UNION and VARIANT. Their values are not
 scalars; the grid shows DuckDB's text for them, and
 `ColumnSchema.originalType` says which container a column is. A `JSON`
 column is `'string'`.
+
+## Example
+
+```ts
+// The columns whose values are lists, structs, maps and the like
+const nested = table.state.schema.get().filter((column) => column.type === 'nested');
+nested.map((column) => column.originalType); // ['VARCHAR[]', 'STRUCT(x DOUBLE, y DOUBLE)']
+```

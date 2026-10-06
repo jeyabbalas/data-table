@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:1106](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/core/Strings.ts#L1106)
+Defined in: [core/Strings.ts:1118](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L1118)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -1139,7 +1139,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `noData?`: `string`; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1198,6 +1198,13 @@ Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 #### statistics.min?
 
 \{ \}
+
+#### statistics.noData?
+
+`string`
+
+What a column-header chart draws for a column with no values and no
+nulls, as an empty table has: "No data".
 
 #### statistics.nonNullCategory?
 
@@ -1268,7 +1275,7 @@ Truncation suffix for a long multi-select value list (total = selected values).
 
 #### values?
 
-\{ `addAsColumn?`: `string`; `addColumn?`: `string`; `adding?`: `string`; `addLengthAsColumn?`: `string`; `addSizeAsColumn?`: `string`; `addTagAsColumn?`: `string`; `bucketLabel?`: \{ \}; `closeLabel?`: `string`; `columnAdded?`: \{ \}; `columnNameLabel?`: `string`; `copied?`: `string`; `copyFailed?`: `string`; `copyJson?`: `string`; `elementNode?`: `string`; `entryCount?`: \{ \}; `expressionLabel?`: `string`; `extractButtonLabel?`: \{ \}; `extractButtonTitle?`: `string`; `extractCloseLabel?`: `string`; `extractFailed?`: \{ \}; `extractTitle?`: \{ \}; `extractTreeLabel?`: \{ \}; `fieldCount?`: \{ \}; `inspectorTitle?`: \{ \}; `itemCount?`: \{ \}; `jsonPathHint?`: `string`; `jsonPathInvalid?`: \{ \}; `jsonPathLabel?`: `string`; `keyCount?`: \{ \}; `keyLabel?`: \{ \}; `keyRequired?`: `string`; `lengthNode?`: `string`; `loadFailed?`: `string`; `loading?`: `string`; `mapValueNode?`: `string`; `moreCharacters?`: \{ \}; `nothingToExtract?`: `string`; `positionInvalid?`: `string`; `positionLabel?`: \{ \}; `readAs?`: \{ `boolean?`: `string`; `json?`: `string`; `length?`: `string`; `number?`: `string`; `string?`: `string`; \}; `readAsLabel?`: `string`; `retry?`: `string`; `rowLabel?`: \{ \}; `sizeNode?`: `string`; `tagNode?`: `string`; `tooLargeToCopy?`: `string`; `treeLabel?`: \{ \}; `truncatedNotice?`: \{ \}; `typeArray?`: \{ \}; `typeJson?`: `string`; `typeList?`: \{ \}; `typeMap?`: \{ \}; `typeStruct?`: \{ \}; `typeUnion?`: \{ \}; `typeVariant?`: `string`; \}
+\{ `addAsColumn?`: `string`; `addColumn?`: `string`; `adding?`: `string`; `addLengthAsColumn?`: `string`; `addSizeAsColumn?`: `string`; `addTagAsColumn?`: `string`; `bucketLabel?`: \{ \}; `closeLabel?`: `string`; `columnAdded?`: \{ \}; `columnNameLabel?`: `string`; `copied?`: `string`; `copyFailed?`: `string`; `copyJson?`: `string`; `elementNode?`: `string`; `entryCount?`: \{ \}; `expressionLabel?`: `string`; `extractButtonLabel?`: \{ \}; `extractButtonTitle?`: `string`; `extractCloseLabel?`: `string`; `extractFailed?`: \{ \}; `extractTitle?`: \{ \}; `extractTreeLabel?`: \{ \}; `fieldCount?`: \{ \}; `inspectorTitle?`: \{ \}; `itemCount?`: \{ \}; `jsonPathHint?`: `string`; `jsonPathInvalid?`: \{ \}; `jsonPathLabel?`: `string`; `keyCount?`: \{ \}; `keyLabel?`: \{ \}; `keyRequired?`: `string`; `lengthNode?`: `string`; `loadFailed?`: `string`; `loading?`: `string`; `mapValueNode?`: `string`; `moreCharacters?`: \{ \}; `nothingToExtract?`: `string`; `panelLoadFailed?`: `string`; `positionInvalid?`: `string`; `positionLabel?`: \{ \}; `readAs?`: \{ `boolean?`: `string`; `json?`: `string`; `length?`: `string`; `number?`: `string`; `string?`: `string`; \}; `readAsLabel?`: `string`; `retry?`: `string`; `rowLabel?`: \{ \}; `sizeNode?`: `string`; `tagNode?`: `string`; `tooLargeToCopy?`: `string`; `treeLabel?`: \{ \}; `truncatedNotice?`: \{ \}; `typeArray?`: \{ \}; `typeJson?`: `string`; `typeList?`: \{ \}; `typeMap?`: \{ \}; `typeStruct?`: \{ \}; `typeUnion?`: \{ \}; `typeVariant?`: `string`; \}
 
 #### values.addAsColumn?
 
@@ -1499,6 +1506,13 @@ After text the tree cut short, by the characters left out: "18,000 more characte
 `string`
 
 The extract panel's text when the column's type could not be read, so has no parts.
+
+#### values.panelLoadFailed?
+
+`string`
+
+Live-region text when the value inspector or the extract panel, which
+load on first use, could not be downloaded.
 
 #### values.positionInvalid?
 

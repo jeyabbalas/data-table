@@ -8,7 +8,7 @@
 
 > **deserializeFilter**(`filter`): [`Filter`](../type-aliases/Filter.md) \| `null`
 
-Defined in: [persistence/SessionStore.ts:102](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/persistence/SessionStore.ts#L102)
+Defined in: [persistence/SessionStore.ts:102](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/persistence/SessionStore.ts#L102)
 
 Convert a serialized filter back to a live Filter with Date objects restored.
  Returns null for unknown filter types (e.g. from a newer library version or

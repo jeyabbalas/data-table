@@ -8,7 +8,7 @@
 
 > **copyRowsToClipboard**(`rows`, `state`, `bridge`): `Promise`\<`void`\>
 
-Defined in: [export/Clipboard.ts:70](https://github.com/jeyabbalas/data-table/blob/142ebbe33bc5756781de7efccf3b3506b1ae3965/src/export/Clipboard.ts#L70)
+Defined in: [export/Clipboard.ts:70](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/export/Clipboard.ts#L70)
 
 Copy specific rows from the table to the clipboard as TSV.
 

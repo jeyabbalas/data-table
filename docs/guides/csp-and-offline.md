@@ -312,4 +312,4 @@ workers.
 - CDN / no-build: [CDN](../integrations/cdn.md)
 - Troubleshooting: [WASM 404 in production](../troubleshooting.md), [CSP blocking](../troubleshooting.md)
 - API reference: [`bridgeOptions`, `WorkerBridgeOptions`](../api-reference.md#createdatatable), [`strictBrowserCheck`](../api-reference.md#createdatatable)
-- Source: `src/data/WorkerBridge.ts:45-146`, `src/worker/duckdb.ts`
+- Source: `src/data/WorkerBridge.ts:80-232`, `src/worker/duckdb.ts`

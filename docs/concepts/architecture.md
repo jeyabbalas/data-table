@@ -140,7 +140,7 @@ is a thin Promise-based RPC wrapper:
   mutation via `attachCacheInvalidation`. Individual queries can opt out
   or jump the queue through a `QueryOptions` third parameter on
   `query(sql, signal?, options?)`
-  ([`src/data/WorkerBridge.ts:51-63`](../../src/data/WorkerBridge.ts)):
+  ([`src/data/WorkerBridge.ts:51-78`](../../src/data/WorkerBridge.ts)):
   `cache: false` bypasses the SQL-text cache — viewport row fetches use
   it, since their rows already live in `TableBody`'s row cache (see
   [Row fetching](#row-fetching)) — and `priority: 'high' | 'normal'`
@@ -148,7 +148,7 @@ is a thin Promise-based RPC wrapper:
 - **Serial priority queue.** The worker runs one query at a time,
   drained from an explicit two-priority FIFO — `'high'` for viewport row
   fetches, `'normal'` for everything else
-  ([`src/worker/dispatcher.ts:46-72`](../../src/worker/dispatcher.ts)).
+  ([`src/worker/dispatcher.ts:48-80`](../../src/worker/dispatcher.ts)).
   Serialization costs nothing real — SQL already executes serially
   inside DuckDB-WASM's single-threaded worker — and buys truthful
   cancel targeting, free cancellation of still-queued work, and
@@ -337,13 +337,13 @@ when its block arrives (a row whose cache entry was evicted or
 invalidated demotes back to a placeholder — stale paint never persists).
 Fetching is reconciliation that happens after the paint, never a
 precondition for it; the full state machine is documented at
-[`src/table/TableBody.ts:226-267`](../../src/table/TableBody.ts).
+[`src/table/TableBody.ts:251-292`](../../src/table/TableBody.ts).
 
 Fetches are quantized to aligned blocks of `fetchBlockSize` rows
 (default 128, clamped to [16, 1024]) so overlapping scroll positions
 dedupe onto the same query and an in-flight block is never re-issued.
 The reconciler
-([`src/table/TableBody.ts:910-1019`](../../src/table/TableBody.ts)) keeps
+([`src/table/TableBody.ts:955-1075`](../../src/table/TableBody.ts)) keeps
 at most 2 block fetches in flight — the worker executes serially, so
 that is one running query and one queued — each with its own
 `AbortController`. Blocks that no longer intersect the viewport padded
@@ -367,7 +367,7 @@ Fetched rows land in a cache of `rowCacheRows` rows (default 2048,
 rounded up to whole blocks with a floor of 4 blocks). Over the cap,
 whole blocks are evicted farthest-from-the-viewport-first, exempting
 blocks that intersect the live viewport and the block just written
-([`src/table/TableBody.ts:1272-1306`](../../src/table/TableBody.ts)).
+([`src/table/TableBody.ts:1316-1368`](../../src/table/TableBody.ts)).
 Scroll SQL bypasses the bridge's SQL-text query cache (`cache: false` —
 see [Worker bridge](#worker-bridge-workerbridge)): the row cache is
 invalidated in lockstep with the epoch, and a second SQL-keyed copy with
@@ -433,7 +433,7 @@ entire (possibly capped) content. The computed visible range then spans
 everything the spacer can hold. At 1M rows and `rowHeight: 32` that
 saturates at the cap — ~468,750 rows fetched block by block
 ([Row fetching](#row-fetching)) and one DOM row rendered per row
-([`src/table/TableBody.ts:1357`](../../src/table/TableBody.ts)) behind a
+([`src/table/TableBody.ts:1461`](../../src/table/TableBody.ts)) behind a
 15,000,000 px element.
 
 Nothing errors and nothing warns. The scroller measured correctly; it was
@@ -442,7 +442,7 @@ zero: `calculateVisibleRange()` returns an empty range when `clientHeight`
 is 0
 ([`src/table/VirtualScroller.ts:356-358`](../../src/table/VirtualScroller.ts)),
 and `TableContainer` logs a one-shot `console.warn` at construction
-([`src/table/TableContainer.ts:422-433`](../../src/table/TableContainer.ts)).
+([`src/table/TableContainer.ts:480-491`](../../src/table/TableContainer.ts)).
 An unbounded container has a perfectly good non-zero height, so it trips
 neither check.
 

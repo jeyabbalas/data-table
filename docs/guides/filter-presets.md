@@ -259,4 +259,4 @@ manager.presets.subscribe((presets) => {
 - Multi-table: [Multi-table dashboards](./multi-table.md) for shared preset patterns
 - Session persistence: [Session persistence guide](./session-persistence.md) for how presets survive reloads
 - API reference: [`FilterPresetManager`](../api-reference.md#filter-presets)
-- Source: `src/filters/FilterPresets.ts:1-243`
+- Source: `src/filters/FilterPresets.ts:1-352`

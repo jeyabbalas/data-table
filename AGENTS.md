@@ -573,7 +573,7 @@ All values source `src/DataTable.ts:133-367`.
    }
    ```
 
-   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:422-433`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
+   `height: 100%` on the container works only if every ancestor up to the viewport has a resolved height — that is the usual reason a container that "has a height" behaves as if it doesn't. The _zero_-height container is the opposite failure: it renders nothing (`src/table/VirtualScroller.ts:356-358`) and logs a one-shot plain `console.warn` at construction (`src/table/TableContainer.ts:480-491`) — a console message, not a `warning` event and not an error code. Full rationale: [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
 2. **Forgot the stylesheet import.** Symptom: `warning` event with `code: 'STYLESHEET_MISSING'`, table renders unstyled. Fix: add `import '@jeyabbalas/data-table/styles';` at app entry.
 
@@ -604,7 +604,7 @@ All values source `src/DataTable.ts:133-367`.
 
 12. **Blocking network for the WASM bundle.** DuckDB fetches from a CDN by default. On a strict CSP, supply `bridgeOptions.duckdbBundles` with self-hosted paths.
 
-13. **Expecting list or struct columns in a `'string'` registration.** LIST, ARRAY, STRUCT, MAP, UNION and VARIANT columns are `type: 'nested'` (src/core/types.ts:14-25), so a custom visualization or stats panel whose `isApplicable` accepts `'string'` never sees them. Accept `'nested'` too, or test with `isNestedType` from `/advanced`; read `originalType` with `parseDuckDBType` to tell the kinds apart. JSON columns are still `'string'`.
+13. **Expecting list or struct columns in a `'string'` registration.** LIST, ARRAY, STRUCT, MAP, UNION and VARIANT columns are `type: 'nested'` (src/core/types.ts:19-30), so a custom visualization or stats panel whose `isApplicable` accepts `'string'` never sees them. Accept `'nested'` too, or test with `isNestedType` from `/advanced`; read `originalType` with `parseDuckDBType` to tell the kinds apart. JSON columns are still `'string'`.
 
 14. **Reading nested values through `bridge.query`.** Arrow corrupts a `DECIMAL` or `HUGEINT` inside a list or struct (`[1.25, 2.50]` arrives as `[6.2e-322, 0]`), reads an `INTERVAL` as an `Int32Array`, and cannot carry a VARIANT (`Unsupported Arrow type VARIANT`). Use `actions.getColumnValues` / `getCellValue`, or select `CAST(to_json(c) AS VARCHAR)`; a VARIANT as `CAST(c AS JSON)`, and a type holding one (`VARIANT[]`, `STRUCT(v VARIANT)`) as `CAST(CAST(c AS VARIANT) AS JSON)`, since `to_json` writes a VARIANT as a string (`"42"`, `["42"]`) and fails on some types holding one (see the `WorkerBridge.query` JSDoc, src/data/WorkerBridge.ts).
 

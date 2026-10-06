@@ -262,6 +262,16 @@ export async function fetchDiscreteValues(
  * Uses manual bin calculation with FLOOR since DuckDB WASM doesn't support WIDTH_BUCKET.
  * Formula: bin_idx = FLOOR((value - min) / binWidth)
  * Values at max are clamped to the last bin (numBins - 1).
+ *
+ * The value is cast to DOUBLE before `min` is subtracted. DuckDB binds an
+ * integer literal to the other operand's type when it fits, so `col - -28775`
+ * on a SMALLINT column is SMALLINT arithmetic, which overflows once a value
+ * is more than 32,767 above the minimum (and likewise for every integer
+ * width, and for a DECIMAL spanning most of its precision). `min`, `max` and
+ * `binWidth` are DOUBLEs from {@link fetchColumnStats}, so the cast also
+ * rounds each value as the minimum was rounded: past 2^53 a value can no
+ * longer fall below a minimum that rounded up, which threw on UBIGINT and
+ * dropped the row on BIGINT.
  */
 function buildHistogramSQL(
   tableName: string,
@@ -289,7 +299,7 @@ function buildHistogramSQL(
   // This handles the edge case where value == max
   const sql = `
     SELECT
-      LEAST(FLOOR((${col} - ${min}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
+      LEAST(FLOOR((CAST(${col} AS DOUBLE) - ${min}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
       COUNT(*) as count
     FROM ${tbl}
     ${whereSQL}

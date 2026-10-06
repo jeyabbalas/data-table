@@ -371,6 +371,7 @@ export const frenchMessages: DeepPartial<Strings> = {
     nonNullCategory: 'non null',
     otherCategory: (count) =>
       `Autres (${count.toLocaleString()} ${count < 2 ? 'valeur' : 'valeurs'})`,
+    otherSegmentLabel: 'Autres',
     allUniqueCategory: (count) => `Toutes uniques (${count.toLocaleString()})`,
     selectionRowCount: (count, pct) =>
       `${count.toLocaleString()} ${count < 2 ? 'ligne' : 'lignes'} (${pct})`,

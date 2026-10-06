@@ -341,6 +341,32 @@ describe('ValueCounts — Other segment detail', () => {
     } as ValueCountsData;
   }
 
+  it('draws the Other segment with the label messages give it', async () => {
+    vi.mocked(fetchValueCountsData).mockImplementation(() =>
+      Promise.resolve(unfilteredWithOther()),
+    );
+    vi.mocked(fetchAlignedValueCountsData).mockImplementation(() =>
+      Promise.resolve(unfilteredWithOther()),
+    );
+    mockContext.fillText.mockClear();
+    // Text narrow enough for every segment to take its label.
+    mockContext.measureText.mockReturnValue({ width: 1 });
+    try {
+      const viz = makeViz([], {
+        messages: {
+          statistics: { otherSegmentLabel: 'Autres' },
+        } as unknown as VisualizationOptions['messages'],
+      });
+      await settled(viz);
+      const drawn = mockContext.fillText.mock.calls.map((call) => call[0] as string);
+      expect(drawn).toContain('Autres');
+      expect(drawn).not.toContain('Other');
+      viz.destroy();
+    } finally {
+      mockContext.measureText.mockReturnValue({ width: 30 });
+    }
+  });
+
   it('not-set from an Other click emits the Other label with folded value count', async () => {
     vi.mocked(fetchValueCountsData).mockImplementation(() =>
       Promise.resolve(unfilteredWithOther()),

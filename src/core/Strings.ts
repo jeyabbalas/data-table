@@ -454,6 +454,11 @@ export interface Strings {
     nonNullCategory: string;
     /** Display value for the folded "Other" segment (count = folded distinct values). */
     otherCategory: (count: number) => string;
+    /**
+     * The label drawn inside the folded "Other" segment of a value-count
+     * bar, where it fits; {@link otherCategory} is its hover text.
+     */
+    otherSegmentLabel: string;
     /** Display value for the all-unique segment (count = distinct values). */
     allUniqueCategory: (count: number) => string;
     /** Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted. */
@@ -1007,6 +1012,7 @@ export const defaultStrings: Strings = {
     nullBinLabel: 'null',
     nonNullCategory: 'non-null',
     otherCategory: (count) => `Other (${count.toLocaleString()} values)`,
+    otherSegmentLabel: 'Other',
     allUniqueCategory: (count) => `All unique (${count.toLocaleString()})`,
     selectionRowCount: (count, pct) =>
       `${count.toLocaleString()} ${count === 1 ? 'row' : 'rows'} (${pct})`,

@@ -2375,13 +2375,18 @@ export class TableContainer {
       return Promise.resolve({ success: false, error: 'TableContainer is destroyed' });
     }
     const { column, path, row, ...options } = request;
-    const key = JSON.stringify([
-      column,
-      path,
-      options.extract ?? 'value',
-      options.jsonLeaf ?? null,
-      options.name ?? null,
-    ]);
+    let key = '';
+    try {
+      key = JSON.stringify([
+        column,
+        path,
+        options.extract ?? 'value',
+        options.jsonLeaf ?? null,
+        options.name ?? null,
+      ]);
+    } catch {
+      // A step no add takes (a bigint): the action says why, as for any other.
+    }
     const running = this.extracts.get(key);
     if (running) {
       // Asked again: whoever asked last is waiting on it now.
@@ -2410,11 +2415,14 @@ export class TableContainer {
       return result;
     };
     const add: RunningExtract = { promise: run(), asker, abandoned: false };
-    this.extracts.set(key, add);
+    if (key) this.extracts.set(key, add);
     return add.promise;
   }
 
-  /** Put the cursor on a column just added, in `row` or on its header, bring it into view, and focus the grid. */
+  /**
+   * Put the cursor on a column just added, in `row` or else on its header,
+   * bring the column into view, and give focus to the grid.
+   */
   private showExtracted(name: string, row: number | undefined): void {
     if (this.state.visibleColumns.get().includes(name)) {
       this.actions?.setFocusedCell({ row: row ?? HEADER_ROW_INDEX, column: name });

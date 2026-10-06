@@ -377,6 +377,18 @@ describe('TableContainer — extract field → column', () => {
     expect(announced()).toBe('Could not add the column: boom');
   });
 
+  it('answers a path no add takes, as a bigint step, with the action’s reason', async () => {
+    await mount();
+    const answer = table.extractColumn({ column: 'tags', path: [1n as unknown as number] });
+    await expect(answer).resolves.toEqual({
+      success: false,
+      error: 'Step 0 must be a string or a finite number',
+    });
+    expect(announced()).toBe(
+      'Could not add the column: Step 0 must be a string or a finite number',
+    );
+  });
+
   it('adds when called directly, the cursor in the row given', async () => {
     await mount();
     fakeAdd();

@@ -26,7 +26,9 @@
  * @see DefaultExpressionEditor
  */
 
+import { collidingColumnName, columnNameKey } from '../core/columnNames';
 import { ConfigurationError, DerivedColumnError } from '../core/errors';
+import { ROWID_COLUMN } from '../core/types';
 import type { ColumnSchema, DataType } from '../core/types';
 import { mapDuckDBType } from '../data/SchemaDetector';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -432,13 +434,36 @@ export class DerivedColumnManager {
   /**
    * Recreate all derived columns from saved definitions (for session restore / undo).
    * Creates helper tables for vectors, then creates VIEW.
-   * Skips columns that fail with a warning.
+   * Skips columns that fail with a warning: one whose expression no longer
+   * binds, and one named as a column of `columnNames` or one restored before
+   * it, ignoring the case of ASCII letters as DuckDB does (`Total` beside
+   * `total`, which the VIEW would rename `Total_1`, so that reads of "Total"
+   * returned `total`'s values), or `__rowid__` in any case.
+   *
+   * @param columnNames - The names of the columns of the table itself, which
+   *   the derived columns are restored beside.
    */
-  async restoreColumns(defs: DerivedColumnDef[]): Promise<ColumnSchema[]> {
+  async restoreColumns(
+    defs: DerivedColumnDef[],
+    columnNames: readonly string[] = [],
+  ): Promise<ColumnSchema[]> {
     const restoredSchemas: ColumnSchema[] = [];
 
     for (const def of defs) {
       try {
+        const taken =
+          columnNameKey(def.name) === ROWID_COLUMN
+            ? ROWID_COLUMN
+            : collidingColumnName(def.name, [
+                ...columnNames,
+                ...this.columns.map((c) => c.def.name),
+              ]);
+        if (taken !== undefined) {
+          throw new DerivedColumnError(
+            `Column name "${def.name}" is taken by the column "${taken}"${taken === def.name ? '' : ' (column names ignore letter case)'}`,
+            { code: 'DUPLICATE_NAME', details: { column: def.name, taken } },
+          );
+        }
         const info = await this.addColumn(def);
         restoredSchemas.push({
           name: def.name,

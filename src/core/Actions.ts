@@ -645,9 +645,9 @@ export class StateActions {
 
       // Reconcile DuckDB state BEFORE applying snapshot signals.
       // This ensures VIEW exists before visibleColumns/columnOrder reference derived cols.
-      if (derivedChanged) {
-        await this.changeRelation(() => this.reconcileDerivedColumns(snapshot, epoch));
-      }
+      const failedNames = derivedChanged
+        ? await this.changeRelation(() => this.reconcileDerivedColumns(snapshot, epoch))
+        : new Set<string>();
       this.throwIfDestroyed(step);
       if (epoch !== this.loadEpoch) return false;
 
@@ -661,6 +661,10 @@ export class StateActions {
               ? this.derivedManager!.getEffectiveTableName()
               : baseTable!,
           );
+          // What the snapshot gave a derived column that did not come back, as
+          // a session restore drops it: a filter on a `LABEL` that is not
+          // rebuilt beside `label` would filter `label`.
+          this.stripDerivedColumnRefs(failedNames);
         }
       });
 
@@ -1064,12 +1068,18 @@ export class StateActions {
         } else {
           try {
             const manager = this.ensureDerivedManager();
+            const baseNames = this.state.schema
+              .get()
+              .filter((c) => !c.isDerived)
+              .map((c) => c.name);
             // One change with the rebuild: the filters, sort and columns the
             // snapshot restores can name its derived columns, and the reads
             // and the filtered count they start wait for the VIEW that brings
             // those back, as for any change that rebuilds it.
             const restoredSchemas = await this.changeRelation(async () =>
-              restoreState() ? manager.restoreColumns(this.state.derivedColumns.get()) : null,
+              restoreState()
+                ? manager.restoreColumns(this.state.derivedColumns.get(), baseNames)
+                : null,
             );
             this.throwIfDestroyed('loadData');
 
@@ -1840,34 +1850,50 @@ export class StateActions {
   /**
    * Reconcile DuckDB VIEW state after undo/redo changes derived columns.
    * Destroys the existing manager and either recreates with the snapshot's
-   * derived columns, or leaves the table in base-table mode.
+   * derived columns, or leaves the table in base-table mode. Resolves with
+   * the names of the snapshot's derived columns that could not be rebuilt
+   * (see `DerivedColumnManager.restoreColumns`), whose filters, sort and
+   * layout the caller drops.
    */
-  private async reconcileDerivedColumns(snapshot: StateSnapshot, epoch: number): Promise<void> {
+  private async reconcileDerivedColumns(
+    snapshot: StateSnapshot,
+    epoch: number,
+  ): Promise<Set<string>> {
     // 1. Destroy existing manager (drops VIEW + helper tables)
     if (this.derivedManager) {
       await this.derivedManager.destroy();
       this.derivedManager = null;
     }
 
-    // 2. Create new manager, restore columns
+    // 2. Create new manager, restore columns beside the base table's
+    const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
     const restoredSchemas =
       snapshot.derivedColumns.length > 0
-        ? await this.ensureDerivedManager().restoreColumns(snapshot.derivedColumns)
+        ? await this.ensureDerivedManager().restoreColumns(
+            snapshot.derivedColumns,
+            baseSchema.map((c) => c.name),
+          )
         : [];
+    const restoredNames = new Set(restoredSchemas.map((s) => s.name));
+    const failedNames = new Set(
+      snapshot.derivedColumns.map((d) => d.name).filter((name) => !restoredNames.has(name)),
+    );
     // New data asked for meanwhile: the load sets the state.
-    if (epoch !== this.loadEpoch) return;
+    if (epoch !== this.loadEpoch) return failedNames;
 
     // 3. Update schema: old derived entries out, restored ones in
-    const baseSchema = this.state.schema.get().filter((c) => !c.isDerived);
-    this.state.schema.set([...baseSchema, ...restoredSchemas]);
+    this.state.schema.set([
+      ...this.state.schema.get().filter((c) => !c.isDerived),
+      ...restoredSchemas,
+    ]);
 
     // 4. Update derivedColumns signal (filtered to only successfully restored)
-    const restoredNames = new Set(restoredSchemas.map((s) => s.name));
     this.state.derivedColumns.set(snapshot.derivedColumns.filter((d) => restoredNames.has(d.name)));
 
     // Bulk reconciliation (undo/redo/session restore): emit a single event
     // with no columnName since multiple columns may have changed at once.
     this.emitDerivedChange('updated');
+    return failedNames;
   }
 
   /**

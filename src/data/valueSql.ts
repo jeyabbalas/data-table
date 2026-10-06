@@ -553,9 +553,11 @@ function shownTextBound(node: DuckDBTypeNode): number {
  *   error that invalidates the database. Through VARIANT, a MAP inside comes
  *   out as a list of `{"key": …, "value": …}` objects, a UNION as its
  *   member's value, without the tag, and a DECIMAL with its scale's zeros
- *   (`1.5000`, where `to_json` writes `1.5`). An unnamed struct cannot be cast to
- *   VARIANT, so one inside is first cast to the same struct with its fields
- *   named by position, `"1"`, `"2"`, …, which become its keys.
+ *   (`1.5000`), which `to_json` writes only for one wider than 15 digits:
+ *   `1.5` for a DECIMAL(15,4), `1.5000` for a DECIMAL(16,4). An unnamed
+ *   struct cannot be cast to VARIANT, so one inside is first cast to the
+ *   same struct with its fields named by position, `"1"`, `"2"`, …, which
+ *   become its keys.
  * - A type the parser could not read goes through VARIANT when its text
  *   names VARIANT, through `to_json` otherwise.
  *

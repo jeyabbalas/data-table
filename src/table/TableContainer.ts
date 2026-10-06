@@ -2353,7 +2353,7 @@ export class TableContainer {
       path: readonly (string | number)[];
       row?: number | undefined;
     },
-  ): Promise<ExtractResult> {
+  ): Promise<{ success: boolean; name?: string; error?: string }> {
     return this.addExtract(request, null);
   }
 

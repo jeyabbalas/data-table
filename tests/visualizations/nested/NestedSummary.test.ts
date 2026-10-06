@@ -375,6 +375,38 @@ describe('NestedSummaryVisualization — label ink', () => {
     expect(drawn('75%')!.fill).toBe('#111827');
     viz.destroy();
   });
+
+  /** A host's translucent primary, on the dark theme's chart slot. */
+  function translucentDarkTheme(): void {
+    root.style.setProperty('--dt-primary', 'rgba(96, 165, 250, 0.55)');
+    // The ghost token as a computed style gives it, its variable substituted.
+    root.style.setProperty(
+      '--dt-primary-alpha-50',
+      'color-mix(in srgb, rgba(96, 165, 250, 0.55) 50%, transparent)',
+    );
+    root.style.setProperty('--dt-bg-secondary', '#1f2937');
+  }
+
+  it('reads a translucent fill as painted over the chart slot', async () => {
+    translucentDarkTheme();
+    const viz = await mount({ total: 1000, non_null: 750 });
+    // It shows as rgb(67, 109, 162): white is 5.3:1 there, #111827 3.3:1.
+    expect(drawn('75%')!.fill).toBe('#ffffff');
+    viz.destroy();
+  });
+
+  it('reads a translucent fill as painted over its ghost when filters are on', async () => {
+    translucentDarkTheme();
+    const viz = await mount(
+      { total: 1000, non_null: 800, filtered_total: 700, filtered_non_null: 600 },
+      { filters: [{ type: 'range', column: 'n', min: 1, max: 5 }] },
+    );
+    // The label sits on the solid share, over the ghost, over the slot. That
+    // shows as rgb(75, 125, 186), where white is 4.3:1, #111827 4.2:1 and
+    // black 4.9:1. On the slot alone, white would look like 5.3:1.
+    expect(drawn('80%')!.fill).toBe('#000000');
+    viz.destroy();
+  });
 });
 
 // =========================================

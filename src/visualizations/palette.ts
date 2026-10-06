@@ -42,9 +42,12 @@ type Rgba = [number, number, number, number];
 export interface InkOptions {
   /**
    * What a translucent fill is painted over, which the label then reads
-   * against too. Default white.
+   * against too: one color, or the layers under the fill from the bottom
+   * up (a chart's slot, then a tint drawn on it). The bottom layer is read
+   * as painted over white, and a layer this cannot read is left out.
+   * Default white.
    */
-  backdrop?: string | undefined;
+  backdrop?: string | readonly string[] | undefined;
   /** The ink for a fill this cannot read (a named color, `oklch()`). Default white. */
   fallback?: string | undefined;
 }
@@ -54,11 +57,13 @@ export interface InkOptions {
  * on a dark fill, near-black (`#111827`) on a light one, and black on a
  * mid-tone fill that neither of those clears 4.5:1 on. A chart's fills come
  * from the theme's CSS variables, so the ink follows a host app's
- * `--dt-primary` and a dark-mode flip on the next render.
+ * `--dt-primary` and a dark-mode flip on the next render. A translucent
+ * fill is read as what shows: the fill painted over `backdrop`.
  *
  * Reads `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` / `rgba()` (comma or
- * space syntax) and `transparent`, the forms the theme's tokens are written
- * in. Other syntaxes (a named color, `hsl()`, `oklch()`) get `fallback`.
+ * space syntax), `transparent`, and a tint of one of those as the theme's
+ * alpha tokens write it, `color-mix(in srgb, <color> 30%, transparent)`.
+ * Other syntaxes (a named color, `hsl()`, `oklch()`) get `fallback`.
  *
  * @param fill - The fill the label is drawn on.
  * @param options - The backdrop under a translucent fill, and the ink for a
@@ -69,14 +74,20 @@ export interface InkOptions {
  * inkFor('#2563eb'); // '#ffffff' — 5.2:1 on the light theme's --dt-primary
  * inkFor('#60a5fa'); // '#111827' — 7.0:1 on the dark theme's
  * inkFor('#f59e0b'); // '#111827' — on --dt-accent
+ * // A host's translucent primary on the dark chart slot: white, 5.3:1.
+ * inkFor('rgba(96, 165, 250, 0.55)', { backdrop: '#1f2937' });
  * ```
  */
 export function inkFor(fill: string, options: InkOptions = {}): string {
   const color = parseRgba(fill);
   if (!color) return options.fallback ?? LIGHT_INK;
-  const backdrop = parseRgba(options.backdrop ?? LIGHT_INK) ?? [255, 255, 255, 1];
-  const shown = flatten(color, flatten(backdrop, [255, 255, 255, 1]));
-  const luminance = relativeLuminance(shown);
+  const layers = typeof options.backdrop === 'string' ? [options.backdrop] : options.backdrop;
+  let backdrop: Rgba = [255, 255, 255, 1];
+  for (const layer of layers ?? []) {
+    const rgba = parseRgba(layer);
+    if (rgba) backdrop = flatten(rgba, backdrop);
+  }
+  const luminance = relativeLuminance(flatten(color, backdrop));
   const onWhite = 1.05 / (luminance + 0.05);
   const onDark = (luminance + 0.05) / (DARK_INK_LUMINANCE + 0.05);
   // Whichever reads better; black when that is still under 4.5:1, which it
@@ -85,10 +96,26 @@ export function inkFor(fill: string, options: InkOptions = {}): string {
   return onDark >= MIN_TEXT_CONTRAST ? DARK_INK : BLACK_INK;
 }
 
-/** `[r, g, b, a]` (0–255, alpha 0–1) of a hex, `rgb()` or `rgba()` color, or `null`. */
+/**
+ * `[r, g, b, a]` (0–255, alpha 0–1) of a hex, `rgb()` or `rgba()` color, or
+ * of a tint of one, or `null`.
+ */
 function parseRgba(value: string): Rgba | null {
   const text = value.trim().toLowerCase();
   if (text === 'transparent') return [0, 0, 0, 0];
+
+  // The theme's tints, as a computed style gives them with the variable
+  // substituted: `color-mix(in srgb, #60a5fa 30%, transparent)`. Mixed with
+  // transparent, a color keeps its channels and scales its alpha.
+  const tint = /^color-mix\(\s*in\s+srgb\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*transparent\s*\)$/.exec(
+    text,
+  );
+  if (tint) {
+    const color = parseRgba(tint[1]!);
+    const share = parseFloat(tint[2]!) / 100;
+    if (!color || !Number.isFinite(share)) return null;
+    return [color[0], color[1], color[2], color[3] * clamp(share, 0, 1)];
+  }
 
   const hex = /^#([0-9a-f]{3,8})$/.exec(text)?.[1];
   if (hex !== undefined) {

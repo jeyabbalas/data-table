@@ -56,6 +56,8 @@ interface NestedSummaryColors {
   nullFaded: string;
   nullGhost: string;
   segmentBorder: string;
+  /** The chart slot's background, which the canvas is drawn over. */
+  slot: string;
   /** Labels on a faded or ghost fill, which are tints of the slot's background. */
   text: string;
   /** The type outline and the empty state. */
@@ -81,6 +83,7 @@ function getNestedSummaryColors(canvas: HTMLCanvasElement): NestedSummaryColors 
     nullFaded: r('--dt-accent-soft', 'rgba(245, 158, 11, 0.3)'),
     nullGhost: r('--dt-accent-soft', 'rgba(245, 158, 11, 0.3)'),
     segmentBorder: r('--dt-border', '#e5e7eb'),
+    slot: r('--dt-bg-secondary', '#f9fafb'),
     text: r('--dt-text', '#111827'),
     secondaryText: r('--dt-text-secondary', '#374151'),
   };
@@ -451,7 +454,9 @@ export class NestedSummaryVisualization extends BaseVisualization {
    * share of the rows ("99%") from 30 px wide, the null one with `∅`. The
    * ink is for the fill under the label's middle: one that clears 4.5:1 on a
    * solid fill ({@link inkFor}), and the theme's text color on a faded or
-   * ghost one, which are tints of the slot's background.
+   * ghost one, which are tints of the slot's background. A host's solid fill
+   * can be translucent too, and then it reads as painted over the slot, and
+   * with filters on over the segment's ghost.
    */
   private drawSegmentLabel(segment: Segment, state: SegmentState, solidTo: number): void {
     const ctx = this.ctx;
@@ -471,9 +476,14 @@ export class NestedSummaryVisualization extends BaseVisualization {
     const onSolid = state !== 'faded' && middle <= solidTo;
     if (onSolid) {
       const fill = this.fillOf(segment.kind, state);
+      // Under the solid fill, bottom up: the slot, and with filters on the
+      // segment's ghost, as drawSegments paints them.
+      const ghost = segment.kind === 'value' ? this.colors.valueGhost : this.colors.nullGhost;
+      const under = this.data!.filtered ? [this.colors.slot, ghost] : [this.colors.slot];
       // A fill inkFor cannot read keeps the value counts' inks: white on
       // the primary, the text color on the accent.
       ctx.fillStyle = inkFor(fill, {
+        backdrop: under,
         fallback: segment.kind === 'value' ? '#ffffff' : this.colors.text,
       });
     } else {

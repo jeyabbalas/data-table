@@ -36,6 +36,64 @@ export const TEXT_CAP = 1000;
 /** The most characters a nested cell holds: {@link TEXT_CAP} and the `…`, for ASCII text. */
 export const MAX_CELL_CHARS = TEXT_CAP + 1;
 
+/**
+ * The wide table of `nested-wide.spec.ts`, which `extract-column.spec.ts`
+ * extracts from too: {@link WIDE_ROWS} rows of `id`, 38 scalars as
+ * `helpers/table.ts` generates them (`s01`…`s38`: text when the index is 1
+ * mod 3, numbers otherwise), the six nested columns of {@link WIDE_NESTED},
+ * and `grp` (`'g' || id % 97`) last.
+ *
+ * - `embedding`: 64 FLOATs, the first of them the row number. DuckDB writes
+ *   a fixed-size ARRAY to Parquet as a LIST, so this is one, of 64 items.
+ * - `long_ints`: 2,000 INTEGERs from the row number in every 50th row, 1–7
+ *   in the others; NULL in every 13th.
+ * - `long_words`: 2,000 words in every 64th row, none in every 11th, 1–5 in
+ *   the others; the first 32 words of each carry 30 more characters, so the
+ *   cap cuts a 2,000-word cell.
+ * - `point`: a struct, `{rid, x, tier, note}`, whose `x` is `(id % 1000) / 4`
+ *   and whose `note` is 1,500 characters in every 97th row.
+ * - `attrs`: a MAP led by `rid`, 50 entries in every 40th row; NULL in every
+ *   17th.
+ * - `people`: a list of 1–4 structs, 40 in every 30th row, which the cap
+ *   cuts too.
+ */
+export const WIDE_SELECT = `${Array.from({ length: 38 }, (_, k) => {
+  const c = k + 1;
+  const name = `s${String(c).padStart(2, '0')}`;
+  return c % 3 === 1
+    ? `'k' || ((i + ${c}) % 7) AS ${name}`
+    : `((i * 31 + ${c * 17}) % 1000) / 10.0 AS ${name}`;
+}).join(',\n')},
+  list_transform(range(64),
+    j -> CAST(CASE WHEN j = 0 THEN i ELSE ((i * 7 + j * 13) % 2001 - 1000) / 1000.0 END AS FLOAT)) AS embedding,
+  CASE WHEN i % 13 = 12 THEN NULL
+       ELSE list_transform(range(CASE WHEN i % 50 = 0 THEN 2000 ELSE i % 7 + 1 END),
+         j -> CAST(i + j AS INTEGER)) END AS long_ints,
+  list_transform(range(CASE WHEN i % 64 = 3 THEN 2000 WHEN i % 11 = 10 THEN 0 ELSE i % 5 + 1 END),
+    j -> 'r' || i || '-' || j || CASE WHEN j < 32 THEN repeat('w', 30) ELSE '' END) AS long_words,
+  {'rid': CAST(i AS INTEGER), 'x': (i % 1000) / 4, 'tier': ['gold', 'silver', 'bronze'][i % 3 + 1],
+   'note': CASE WHEN i % 97 = 5 THEN repeat('n', 1500) ELSE 'n' || i END} AS point,
+  CASE WHEN i % 17 = 16 THEN NULL
+       ELSE map_from_entries(list_transform(range(CASE WHEN i % 40 = 1 THEN 50 ELSE i % 5 + 1 END),
+         j -> {'k': CASE WHEN j = 0 THEN 'rid' ELSE 'k' || j END,
+               'v': CAST(CASE WHEN j = 0 THEN i ELSE (i * j) % 1000 END AS INTEGER)})) END AS attrs,
+  list_transform(range(CASE WHEN i % 30 = 2 THEN 40 ELSE i % 4 + 1 END),
+    j -> {'rid': CAST(i AS INTEGER), 'name': 'p' || j, 'qty': CAST(j AS INTEGER)}) AS people,
+  'g' || (i % 97) AS grp`;
+
+/** Rows of the wide table, {@link WIDE_SELECT}. */
+export const WIDE_ROWS = 200_000;
+
+/** The wide table's nested columns, in display order, just before `grp`. */
+export const WIDE_NESTED = [
+  'embedding',
+  'long_ints',
+  'long_words',
+  'point',
+  'attrs',
+  'people',
+] as const;
+
 /** What one body row fetch read for a column {@link mountSqlTable} records. */
 export interface ColumnPayload {
   /** Characters of text, all rows together. */
@@ -74,6 +132,12 @@ export interface SqlTableOptions {
   /** Header charts. Default `false`. */
   visualizations?: boolean;
   /**
+   * The derived-column UI, "extract field → column" with it (the header's
+   * extract button, the value inspector's add buttons). Default `true`, as
+   * `createDataTable`'s.
+   */
+  derivedColumns?: boolean;
+  /**
    * Record, for each body row fetch, how much text it read for these
    * columns; read back with {@link rowFetchPayloads}.
    */
@@ -110,6 +174,7 @@ export async function mountSqlTable(page: Page, options: SqlTableOptions): Promi
         // No IndexedDB: a restored session would make this a different test.
         persistence: false,
         visualizations: o.visualizations,
+        derivedColumns: o.derivedColumns,
       });
       w.__dt = table;
 
@@ -164,6 +229,7 @@ export async function mountSqlTable(page: Page, options: SqlTableOptions): Promi
       select: options.select,
       rows: options.rows,
       visualizations: options.visualizations ?? false,
+      derivedColumns: options.derivedColumns ?? true,
       recordFetches: options.recordFetches ? [...options.recordFetches] : null,
       hostId: NESTED_HOST_ID,
     },

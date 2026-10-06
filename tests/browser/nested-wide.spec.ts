@@ -15,7 +15,7 @@
  * The table is built in DuckDB and loaded from Parquet, as
  * `helpers/bigTable.ts` builds its own, so `__rowid__ === position === id`.
  * Its 46 columns are `id`, 38 scalars as `helpers/table.ts` generates them,
- * the six nested columns of {@link NESTED}, and `grp` (`'g' || id % 97`)
+ * the six nested columns of `WIDE_NESTED`, and `grp` (`'g' || id % 97`)
  * last, at the far right with them. Mid-storm, a probe holds every rendered
  * row to `data-row-id === data-row-index` and every checked cell to a text
  * only its own row's value can have; once the view settles, every nested
@@ -32,16 +32,15 @@ import {
   mountSqlTable,
   readBody,
   rowFetchPayloads,
+  WIDE_NESTED,
+  WIDE_ROWS,
+  WIDE_SELECT,
   waitForFilledBody,
   watchConsoleErrors,
   wrongCells,
 } from './helpers/nested';
 
-const ROWS = 200_000;
 const BLOCK_ROWS = 128;
-
-/** The nested columns, in display order, just before `grp`. */
-const NESTED = ['embedding', 'long_ints', 'long_words', 'point', 'attrs', 'people'] as const;
 
 /**
  * How soon after the yank each nested column's chart has to have drawn.
@@ -51,46 +50,10 @@ const NESTED = ['embedding', 'long_ints', 'long_words', 'point', 'attrs', 'peopl
  */
 const CHART_PAINT_MS = 1_000;
 
-/** `s01`…`s38`: text when the index is 1 mod 3, numbers otherwise, as `helpers/table.ts` makes them. */
-const SCALARS = Array.from({ length: 38 }, (_, k) => {
-  const c = k + 1;
-  const name = `s${String(c).padStart(2, '0')}`;
-  return c % 3 === 1
-    ? `'k' || ((i + ${c}) % 7) AS ${name}`
-    : `((i * 31 + ${c * 17}) % 1000) / 10.0 AS ${name}`;
-}).join(',\n');
-
-/**
- * - `embedding`: 64 FLOATs, the first of them the row number. DuckDB writes
- *   a fixed-size ARRAY to Parquet as a LIST, so this is one, of 64 items.
- * - `long_ints`: 2,000 INTEGERs from the row number in every 50th row, 1–7
- *   in the others; NULL in every 13th.
- * - `long_words`: 2,000 words in every 64th row, none in every 11th, 1–5 in
- *   the others; the first 32 words of each carry 30 more characters, so the
- *   cap cuts a 2,000-word cell.
- * - `point`: a struct whose `note` is 1,500 characters in every 97th row.
- * - `attrs`: a MAP led by `rid`, 50 entries in every 40th row; NULL in every
- *   17th.
- * - `people`: a list of 1–4 structs, 40 in every 30th row, which the cap
- *   cuts too.
- */
-const SELECT = `${SCALARS},
-  list_transform(range(64),
-    j -> CAST(CASE WHEN j = 0 THEN i ELSE ((i * 7 + j * 13) % 2001 - 1000) / 1000.0 END AS FLOAT)) AS embedding,
-  CASE WHEN i % 13 = 12 THEN NULL
-       ELSE list_transform(range(CASE WHEN i % 50 = 0 THEN 2000 ELSE i % 7 + 1 END),
-         j -> CAST(i + j AS INTEGER)) END AS long_ints,
-  list_transform(range(CASE WHEN i % 64 = 3 THEN 2000 WHEN i % 11 = 10 THEN 0 ELSE i % 5 + 1 END),
-    j -> 'r' || i || '-' || j || CASE WHEN j < 32 THEN repeat('w', 30) ELSE '' END) AS long_words,
-  {'rid': CAST(i AS INTEGER), 'x': (i % 1000) / 4, 'tier': ['gold', 'silver', 'bronze'][i % 3 + 1],
-   'note': CASE WHEN i % 97 = 5 THEN repeat('n', 1500) ELSE 'n' || i END} AS point,
-  CASE WHEN i % 17 = 16 THEN NULL
-       ELSE map_from_entries(list_transform(range(CASE WHEN i % 40 = 1 THEN 50 ELSE i % 5 + 1 END),
-         j -> {'k': CASE WHEN j = 0 THEN 'rid' ELSE 'k' || j END,
-               'v': CAST(CASE WHEN j = 0 THEN i ELSE (i * j) % 1000 END AS INTEGER)})) END AS attrs,
-  list_transform(range(CASE WHEN i % 30 = 2 THEN 40 ELSE i % 4 + 1 END),
-    j -> {'rid': CAST(i AS INTEGER), 'name': 'p' || j, 'qty': CAST(j AS INTEGER)}) AS people,
-  'g' || (i % 97) AS grp`;
+/** The table, as `helpers/nested.ts` builds it. */
+const ROWS = WIDE_ROWS;
+const NESTED = WIDE_NESTED;
+const SELECT = WIDE_SELECT;
 
 /** One breach the probe saw: a row claiming another row's index, or a cell not its row's. */
 interface Breach {

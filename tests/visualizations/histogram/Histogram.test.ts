@@ -153,13 +153,33 @@ describe('Histogram', () => {
       // Wait for async fetchData
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // Default maxBins is 15
+      // Default maxBins is 15. An INTEGER column holds no NaN or ±Infinity,
+      // so it skips the finite test (the last argument).
       expect(fetchHistogramData).toHaveBeenCalledWith(
         'test_table',
         'test_column',
         15,
         [],
         options.bridge,
+        false,
+      );
+    });
+
+    it('asks for the finite test on a FLOAT or DOUBLE column', async () => {
+      histogram = new Histogram(
+        container,
+        { ...column, type: 'float', originalType: 'DOUBLE' },
+        options,
+      );
+      await histogram.waitForData();
+
+      expect(fetchHistogramData).toHaveBeenCalledWith(
+        'test_table',
+        'test_column',
+        15,
+        [],
+        options.bridge,
+        true,
       );
     });
   });
@@ -228,6 +248,13 @@ describe('Histogram', () => {
   });
 
   describe('default stats: the non-finite count', () => {
+    // Only a FLOAT or DOUBLE column holds NaN or ±Infinity.
+    const doubleColumn: ColumnSchema = {
+      name: 'test_column',
+      type: 'float',
+      nullable: true,
+      originalType: 'DOUBLE',
+    };
     // 1,000 rows: 960 finite, 30 NaN or ±Infinity, 10 null.
     const withNonFinite = {
       bins: [
@@ -251,7 +278,7 @@ describe('Histogram', () => {
     it('reports the count the data carries', async () => {
       vi.mocked(fetchHistogramData).mockResolvedValueOnce(withNonFinite);
       const onDefaultStatsChange = vi.fn();
-      histogram = new Histogram(container, column, { ...options, onDefaultStatsChange });
+      histogram = new Histogram(container, doubleColumn, { ...options, onDefaultStatsChange });
       await histogram.waitForData();
 
       expect(lastStats(onDefaultStatsChange)).toEqual({
@@ -270,7 +297,7 @@ describe('Histogram', () => {
 
     it('reports 0 for data that carries none', async () => {
       const onDefaultStatsChange = vi.fn();
-      histogram = new Histogram(container, column, { ...options, onDefaultStatsChange });
+      histogram = new Histogram(container, doubleColumn, { ...options, onDefaultStatsChange });
       await histogram.waitForData();
 
       expect(lastStats(onDefaultStatsChange).nonFiniteCount).toBe(0);
@@ -294,7 +321,7 @@ describe('Histogram', () => {
         distinctCount: 384,
       });
       const onDefaultStatsChange = vi.fn();
-      histogram = new Histogram(container, column, {
+      histogram = new Histogram(container, doubleColumn, {
         ...options,
         filters: [{ type: 'range', column: 'other', min: 0, max: 5 }],
         onDefaultStatsChange,
@@ -306,6 +333,9 @@ describe('Histogram', () => {
         filteredTotalRows: 400,
         nonFiniteCount: 12,
       });
+      // Both foreground fetches leave the non-finite values out.
+      expect(vi.mocked(fetchColumnStats).mock.calls[0]![4]).toBe(true);
+      expect(vi.mocked(fetchHistogramBins).mock.calls[0]![7]).toBe(true);
     });
   });
 

@@ -15,6 +15,12 @@
  * median and maximum, and its distinct count, and counts them in
  * `nonFiniteCount`; `total` still counts every row. Each case asserts that
  * the chart draws and that its bins add up to the column's finite count.
+ *
+ * Finite values can still put a non-finite number into the SQL: from -1e308
+ * to 1e308, `max - min` passes `Number.MAX_VALUE`, so the bin width was
+ * `Infinity` (the same Binder Error), and a range of a few subnormal steps
+ * gave a width of 0, which DuckDB divides into `inf`. Those cases are here
+ * too, with a caller's own non-finite bounds to `fetchHistogramBins`.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -30,6 +36,9 @@ import {
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from '../../helpers/duckdbNode';
 import { makeNodeBridge } from '../../helpers/nodeBridge';
+
+/** 101 values from -1e308 to 1e308: `max - min` passes `Number.MAX_VALUE`. */
+const SPAN_PAST_MAX = 'SELECT (range - 50) * 2e306::DOUBLE AS v FROM range(101)';
 
 /** `[label, SELECT producing one column v]`, each with more than five finite values. */
 const CASES: ReadonlyArray<readonly [string, string]> = [
@@ -65,6 +74,23 @@ const CASES: ReadonlyArray<readonly [string, string]> = [
     'only the minimum is -Infinity',
     `SELECT CASE WHEN range = 0 THEN '-Infinity'::DOUBLE ELSE CAST(range AS DOUBLE) END AS v
      FROM range(1000)`,
+  ],
+  ['finite, from -1e308 to 1e308: a range past Number.MAX_VALUE', SPAN_PAST_MAX],
+  [
+    'finite, ±Number.MAX_VALUE sentinels around a few values',
+    `SELECT v FROM (VALUES (-1.7976931348623157e308), (0.0), (1.0), (2.0), (3.0),
+                           (1.7976931348623157e308)) AS s(v)`,
+  ],
+  [
+    'finite, half at -1e308 and half at 1e308: an interquartile range past Number.MAX_VALUE',
+    `SELECT CASE WHEN range < 50 THEN -1e308 WHEN range < 100 THEN 1e308
+                 ELSE range - 100 END::DOUBLE AS v
+     FROM range(104)`,
+  ],
+  [
+    'finite, a range of seven subnormal steps, too narrow for 15 bins',
+    `SELECT CASE WHEN range < 9993 THEN 0 ELSE (range - 9992) * 5e-324 END::DOUBLE AS v
+     FROM range(10000)`,
   ],
 ];
 
@@ -132,6 +158,13 @@ describe('numeric histogram — NaN and ±Infinity (RT-18)', () => {
     expect(binned(data.bins)).toBe(expected.finite);
     expect(data.nonFiniteCount).toBe(expected.nonFinite);
     expect(data.total).toBe(expected.total);
+    // Finite edges, in order, from the minimum to the maximum.
+    expect(data.bins[0]!.x0).toBe(expected.min);
+    expect(data.bins[data.bins.length - 1]!.x1).toBe(expected.max);
+    for (const bin of data.bins) {
+      expect(Number.isFinite(bin.x0) && Number.isFinite(bin.x1)).toBe(true);
+      expect(bin.x1).toBeGreaterThanOrEqual(bin.x0);
+    }
   });
 
   it('a brush over every bar matches the bars, none of the non-finite rows', async () => {
@@ -243,9 +276,9 @@ describe('numeric histogram — NaN and ±Infinity (RT-18)', () => {
   });
 
   it('an open-ended range filter matches NaN and Infinity, and the stats count them', async () => {
-    // The filter panel's "at least" gives `max: Infinity`, an open bound, so
-    // the filter is `"v" >= 500`. DuckDB sorts NaN above every number, so
-    // that holds for every NaN row, wherever it sits, as for Infinity.
+    // The filter panel's `>=` gives `max: Infinity`, an open bound, so the
+    // filter is `"v" >= 500`. DuckDB sorts NaN above every number, so that
+    // holds for every NaN row, wherever it sits, as for Infinity.
     const t = await create(
       `SELECT CASE WHEN range % 100 = 0 THEN 'NaN'::DOUBLE
                    WHEN range % 100 = 1 THEN 'Infinity'::DOUBLE
@@ -261,5 +294,79 @@ describe('numeric histogram — NaN and ±Infinity (RT-18)', () => {
     expect(stats.nonFiniteCount).toBe(20);
     expect(stats.min).toBe(502);
     expect(stats.max).toBe(999);
+  });
+
+  it('a brush over bars of a range past Number.MAX_VALUE matches their rows', async () => {
+    const t = await create(SPAN_PAST_MAX);
+    const data = await fetchHistogramData(t, 'v', 15, [], bridge);
+    // The filter `Histogram.emitBrushFilter` emits for a brush over bars 3–5.
+    const brush: Filter = {
+      type: 'range',
+      column: 'v',
+      min: data.bins[3]!.x0,
+      max: data.bins[5]!.x1,
+    };
+    const brushed = binned(data.bins.slice(3, 6));
+
+    const [row] = await bridge.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM "${t}" WHERE ${filtersToWhereClause([brush])}`,
+    );
+    const fg = await fetchHistogramBins(
+      t,
+      'v',
+      data.min,
+      data.max,
+      data.bins.length,
+      [brush],
+      bridge,
+    );
+
+    expect(brushed).toBeGreaterThan(0);
+    expect(Number(row!.n)).toBe(brushed);
+    // The crossfilter foreground puts those rows in the same bars.
+    expect(fg.map((bin) => bin.count)).toEqual(
+      data.bins.map((bin, i) => (i >= 3 && i <= 5 ? bin.count : 0)),
+    );
+  });
+
+  it('fetchHistogramBins draws no bars for bounds or a bin count that are not finite', async () => {
+    const t = await create('SELECT CAST(range AS DOUBLE) AS v FROM range(100)');
+
+    // Printed into the SQL, each would read as a column: `Binder Error:
+    // Referenced column "NaN" not found`.
+    expect(await fetchHistogramBins(t, 'v', NaN, 99, 10, [], bridge)).toEqual([]);
+    expect(await fetchHistogramBins(t, 'v', -Infinity, 99, 10, [], bridge)).toEqual([]);
+    expect(await fetchHistogramBins(t, 'v', 0, Infinity, 10, [], bridge)).toEqual([]);
+    expect(await fetchHistogramBins(t, 'v', 0, 99, NaN, [], bridge)).toEqual([]);
+    // Valid bounds still draw.
+    expect(binned(await fetchHistogramBins(t, 'v', 0, 99, 10, [], bridge))).toBe(100);
+  });
+
+  it('a raw-SQL filter naming a column the table lacks fails the stats query too', async () => {
+    const t = await create('SELECT CAST(range AS DOUBLE) AS v FROM range(10)');
+    // DuckDB binds a WHERE name that is not a column to a select alias, so
+    // the stats subquery's names must not be ones a filter would use.
+    const filter: Filter = { type: 'raw-sql', column: '__raw_sql_1__', id: '1', sql: 'f > 0' };
+
+    await expect(fetchColumnStats(t, 'v', [filter], bridge)).rejects.toThrow(
+      /Referenced column "f" not found/,
+    );
+  });
+
+  it.each([
+    ['BIGINT', 'SELECT (range * 7919) % 1000 AS v FROM range(1000)'],
+    [
+      'DECIMAL(10,2)',
+      'SELECT CAST(((range * 7919) % 1000) / 4 AS DECIMAL(10,2)) AS v FROM range(1000)',
+    ],
+  ])('a %s column skips the finite test and draws the same chart', async (_type, select) => {
+    const t = await create(select);
+
+    const checked = await fetchHistogramData(t, 'v', 15, [], bridge);
+    const skipped = await fetchHistogramData(t, 'v', 15, [], bridge, false);
+
+    expect(skipped).toEqual(checked);
+    expect(skipped.nonFiniteCount).toBe(0);
+    expect(binned(skipped.bins)).toBe(1000);
   });
 });

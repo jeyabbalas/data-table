@@ -209,14 +209,16 @@ number, and for `Infinity`, as a date's "after" holds for `infinity`; `<`
 and `<=` hold for `-Infinity`), and a `not-null` filter, drawn over every
 bar. Line 1 then counts those rows, while the committed selection, which
 sums the bars under the brush, does not. To see only them, add a raw-SQL
-filter, `NOT isfinite(v)`.
+filter: `NOT isfinite(v)` on a number, and
+`NOT isfinite(d) OR abs(epoch(d)) > 8.6e12` on a date or timestamp, as a
+far-off date is finite to DuckDB.
 
 **Dates before year 1 and past 9999** chart like any other. Line 2 writes
 their years as the grid's cells do, with a sign and six digits:
 `-000043-03-15 – +012000-01-01` runs from 15 March 44 BC (ISO 8601 counts
-a year 0, which is 1 BC) to the year 12000. The labels under the bars and
-on hover write such a year in full, `Mar 15, -43`, where a year from 1000
-to 9999 shortens to `'24`.
+a year 0, which is 1 BC) to the year 12000. A label that names a bar by
+its day, month or quarter writes such a year in full, `Mar 15 -43`, where
+a year from 1000 to 9999 shortens to `Mar 15 '24`.
 
 All of these strings are localizable via `messages.statistics.*` — see
 the [i18n guide](./i18n.md).

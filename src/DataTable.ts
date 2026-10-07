@@ -699,11 +699,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // emissions for the public TableEvents API: it owns the async
   // `state.filteredRows` recompute and fires `onFilterCycleComplete` only
   // *after* that count has settled, so the event payload is never one cycle
-  // behind. We create one instance per DataTable and reuse it across data
-  // loads — the live `state.tableName` is read at query time, so no per-load
-  // recreation is needed. Visualization instances are registered into it
-  // inside `attachVisualizations`; with `visualizations: false` it simply
-  // serves as the row-count-update + event-emit pipeline.
+  // behind. It does not wait for the charts' refetches, which on a large
+  // table can take seconds longer. We create one instance per DataTable and
+  // reuse it across data loads — the live `state.tableName` is read at query
+  // time, so no per-load recreation is needed. Visualization instances are
+  // registered into it inside `attachVisualizations`; with
+  // `visualizations: false` it simply serves as the row-count-update +
+  // event-emit pipeline.
   const coordinator = new CrossfilterCoordinator(state, actions, bridge, undefined, {
     onFilterCycleComplete: (filters) => {
       if (destroyed) return;
@@ -1350,9 +1352,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // `filteredRowCount` runs asynchronously inside CrossfilterCoordinator,
   // so a synchronous emit here would always carry the previous cycle's
   // count. The coordinator drives the emission via its
-  // `onFilterCycleComplete` hook (wired in `attachVisualizations`) at the
-  // trailing edge of each cycle, when both viz updates and the COUNT(*)
-  // query have settled.
+  // `onFilterCycleComplete` hook (wired where the coordinator is created)
+  // once each cycle's COUNT(*) query has settled, without waiting for the
+  // charts' refetches.
   unsubscribes.push(
     state.sortColumns.subscribe((sortColumns: SortColumn[]) => {
       emitter.emit('sortChange', { sortColumns: [...sortColumns] });

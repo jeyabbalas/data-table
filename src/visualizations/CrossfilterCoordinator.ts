@@ -33,9 +33,11 @@ const DEFAULT_VIZ_CONCURRENCY = 4;
 
 /**
  * Optional hooks the facade can pass into the coordinator. `onFilterCycleComplete`
- * fires at the trailing edge of every filter cycle, *after* the async row-count
- * query has settled — that's the contract the public `filterChange` event
- * relies on so its `filteredRowCount` payload is never stale.
+ * fires for a filter cycle as soon as its async row-count query has settled,
+ * unless a newer cycle has started by then — that's the contract the public
+ * `filterChange` event relies on so its `filteredRowCount` payload is never
+ * stale. It does not wait for the charts' refetches, which run alongside the
+ * count and can take seconds longer on a large table.
  */
 export interface CrossfilterCoordinatorOptions {
   onFilterCycleComplete?: (filters: Filter[]) => void;
@@ -88,11 +90,7 @@ export class CrossfilterCoordinator {
     if (this.destroyed) return Promise.resolve();
     const filters = this.state.filters.get();
     if (filters.length === 0) return Promise.resolve();
-    const seq = ++this.filterSequence;
-    return this.updateFilteredRowCount(filters, seq).then(() => {
-      if (this.destroyed || seq !== this.filterSequence) return;
-      this.options.onFilterCycleComplete?.(filters);
-    });
+    return this.countFilteredRows(filters, ++this.filterSequence);
   }
 
   /** Route a visualization's onFilterChange to StateActions */
@@ -112,16 +110,25 @@ export class CrossfilterCoordinator {
 
     // Run visualization updates and filtered row count in parallel (independent
     // queries), but cap viz fan-out so we don't queue N queries behind DuckDB's
-    // single-threaded worker on wide tables.
+    // single-threaded worker on wide tables. The cycle-complete hook goes with
+    // the count, not with the charts; the returned promise settles once both
+    // have.
     await Promise.all([
       this.updateVisualizations(charts, filters, seq),
-      this.updateFilteredRowCount(filters, seq),
+      this.countFilteredRows(filters, seq),
     ]);
+  }
 
-    // Trailing-edge hook: fires *after* state.filteredRows has settled so the
-    // public `filterChange` event payload carries an up-to-date count. Skip
-    // when a newer filter cycle has already started — the latest cycle will
-    // emit its own event and we don't want a stale snapshot to overwrite it.
+  /**
+   * Count the filtered rows, then fire `onFilterCycleComplete` once
+   * `state.filteredRows` has settled, so the public `filterChange` event
+   * payload carries an up-to-date count without waiting for the charts.
+   * Skip it when a newer filter cycle has already started — the latest cycle
+   * will emit its own event and we don't want a stale snapshot to overwrite
+   * it — or the coordinator was destroyed meanwhile.
+   */
+  private async countFilteredRows(filters: Filter[], seq: number): Promise<void> {
+    await this.updateFilteredRowCount(filters, seq);
     if (this.destroyed || seq !== this.filterSequence) return;
     this.options.onFilterCycleComplete?.(filters);
   }

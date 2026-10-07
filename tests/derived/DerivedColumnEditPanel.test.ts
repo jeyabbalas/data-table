@@ -418,6 +418,72 @@ describe('DerivedColumnEditPanel', () => {
 
       panel.destroy();
     });
+
+    it('is a dialog named by its title, which names the column it is open for', () => {
+      state.derivedColumns.set([
+        ...derivedDefs,
+        { kind: 'expression', name: 'doubled', expression: 'price * 2' },
+      ]);
+      state.schema.set([
+        ...baseSchema,
+        {
+          name: 'doubled',
+          type: 'float',
+          nullable: false,
+          originalType: 'DOUBLE',
+          isDerived: true,
+          expression: 'price * 2',
+        },
+      ]);
+      const panel = createPanel();
+      const el = panel.getElement();
+
+      panel.open('total', anchorEl);
+      expect(el.getAttribute('role')).toBe('dialog');
+      const title = document.getElementById(el.getAttribute('aria-labelledby')!);
+      expect(title).toBe(el.querySelector('.dt-derived-edit-title'));
+      expect(title!.textContent).toBe('Edit: total');
+      // Switched to another column while open: the same title, retitled.
+      panel.open('doubled', anchorEl);
+      expect(document.getElementById(el.getAttribute('aria-labelledby')!)!.textContent).toBe(
+        'Edit: doubled',
+      );
+
+      panel.destroy();
+    });
+
+    it('gives each panel ids of its own, its name field still labelled', () => {
+      const a = createPanel();
+      const b = createPanel();
+      const ids = [a, b].map((p) => p.getElement().querySelector('.dt-derived-edit-title')!.id);
+      expect(ids[0]).toMatch(/^dt-t\d+-[0-9a-f]{4}-derived-edit-title$/);
+      expect(ids[1]).toMatch(/-derived-edit-title$/);
+      expect(ids[1]).not.toBe(ids[0]);
+      for (const p of [a, b]) {
+        const input = p
+          .getElement()
+          .querySelector('.dt-derived-edit-name-input') as HTMLInputElement;
+        expect(input.labels![0]!.textContent).toBe('Column name');
+      }
+
+      a.destroy();
+      b.destroy();
+    });
+
+    it('mints its ids from the table instance id it is given', () => {
+      const panel = new DerivedColumnEditPanel(state, actions, { instanceId: 't7-ab12' });
+      rootEl.appendChild(panel.getElement());
+      panel.open('total', anchorEl);
+      const el = panel.getElement();
+      expect(el.getAttribute('aria-labelledby')).toBe('dt-t7-ab12-derived-edit-title');
+      expect(el.querySelector('.dt-derived-edit-name-input')!.id).toBe(
+        'dt-t7-ab12-derived-edit-name',
+      );
+      expect(el.querySelector('.dt-derived-edit-name-error')!.id).toBe(
+        'dt-t7-ab12-derived-edit-name-error',
+      );
+      panel.destroy();
+    });
   });
 
   describe('Name validation', () => {

@@ -6,6 +6,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -15,6 +16,13 @@ import type { FilterPreset } from './FilterPresetTypes';
 /** Construction options for {@link FilterPresetPanel}. */
 export interface FilterPresetPanelOptions {
   classPrefix?: string | undefined;
+  /**
+   * Unique per-instance identifier mixed into the title's id, which names
+   * the panel, so two tables on the same page don't share it. Normally
+   * supplied by `createDataTable()`; a panel constructed without one
+   * generates its own.
+   */
+  instanceId?: string | undefined;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
   colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
@@ -36,6 +44,8 @@ export class FilterPresetPanel {
   private importStatusEl!: HTMLElement;
   private fileInput!: HTMLInputElement;
   private readonly prefix: string;
+  /** Id of the title, which names the panel. */
+  private readonly titleId: string;
   private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
   private isOpen = false;
@@ -51,6 +61,7 @@ export class FilterPresetPanel {
     options?: FilterPresetPanelOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
+    this.titleId = `${this.prefix}-${options?.instanceId || nextInstanceId()}-filter-preset-title`;
     this.colorSchemeSource = options?.colorSchemeSource;
     this.messages = options?.messages ?? defaultStrings;
     this.element = this.createElement();
@@ -89,6 +100,7 @@ export class FilterPresetPanel {
 
     const title = document.createElement('span');
     title.className = `${p}-filter-preset-title`;
+    title.id = this.titleId;
     title.textContent = this.messages.presets.title;
 
     const closeBtn = document.createElement('button');
@@ -248,6 +260,7 @@ export class FilterPresetPanel {
     this.modalHost.open({
       mode: 'panel',
       element: this.element,
+      labelledBy: this.titleId,
       initialFocus: this.nameInput,
       outsideClickIgnore: [`.${this.prefix}-filter-presets-btn`],
       onClose: () => this.handleHostClose(),

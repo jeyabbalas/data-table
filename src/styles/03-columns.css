@@ -773,7 +773,9 @@
   color: var(--dt-text-secondary);
 }
 
+/* With its own background: a page's `button:hover` outranks the one above. */
 .dt-derived-edit-delete-confirm-no:hover {
+  background: var(--dt-bg);
   border-color: var(--dt-text-secondary);
   color: var(--dt-text);
 }
@@ -793,6 +795,10 @@
   background: var(--dt-bg);
   color: var(--dt-text);
   box-sizing: border-box;
+}
+
+.dt-expr-editor-input::placeholder {
+  color: var(--dt-text-tertiary);
 }
 
 .dt-expr-editor-input:focus {
@@ -854,6 +860,16 @@
 .dt-cm-expr-editor--error .cm-editor.cm-focused {
   border-color: var(--dt-error);
   box-shadow: 0 0 0 2px var(--dt-error-soft);
+}
+
+/* A hint wider than the editor (the derived-column edit panel's is 360 px)
+   ends in an ellipsis, not past the edge in a scroller no key can scroll.
+   Width 0 keeps it from widening the content; min-width spans the line. */
+.dt-cm-expr-editor .cm-editor .cm-placeholder {
+  width: 0;
+  min-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /*

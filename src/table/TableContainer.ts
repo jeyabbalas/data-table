@@ -1930,6 +1930,7 @@ export class TableContainer {
     if (!this.filterPanel) {
       this.filterPanel = new FilterPanel(this.state, this.actions, {
         classPrefix: this.resolvedOptions.classPrefix,
+        instanceId: this.resolvedOptions.instanceId,
         colorSchemeSource: this.element,
         messages: this.messages,
         onOpenChange: this.holdWhileOpen(),
@@ -1960,6 +1961,7 @@ export class TableContainer {
       if (!this.derivedEditPanel) {
         this.derivedEditPanel = new DerivedColumnEditPanel(this.state, this.actions, {
           classPrefix: this.resolvedOptions.classPrefix,
+          instanceId: this.resolvedOptions.instanceId,
           editorFactory: this.resolvedOptions.editorFactory,
           colorSchemeSource: this.element,
           messages: this.messages,
@@ -2077,6 +2079,7 @@ export class TableContainer {
           this.actions,
           {
             classPrefix: this.resolvedOptions.classPrefix,
+            instanceId: this.resolvedOptions.instanceId,
             colorSchemeSource: this.element,
             messages: this.messages,
           },

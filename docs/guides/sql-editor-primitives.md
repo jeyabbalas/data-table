@@ -292,7 +292,10 @@ createSqlExtensions(ctx, { functions: DUCKDB_FUNCTIONS });
 syntax-highlighting (`dataTableHighlighting`) reference the `--dt-*` CSS
 variables defined on `:root` by the imported `styles.css`, so light/dark
 mode changes propagate automatically — even when the host theme variables
-flip mid-session.
+flip mid-session. The theme paints a `placeholder(...)` in
+`--dt-text-tertiary`, which clears WCAG AA's 4.5:1 in both schemes
+(CodeMirror's own `#888` is 3.54:1 on a light panel), or in its light value,
+`#4b5563`, on a page without the library's stylesheet.
 
 Three patterns, in increasing host control:
 

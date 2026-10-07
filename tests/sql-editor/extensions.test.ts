@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { Extension } from '@codemirror/state';
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, placeholder } from '@codemirror/view';
 import {
   autocompletion,
   CompletionContext as CMCompletionContext,
@@ -18,6 +18,7 @@ import {
 import { DUCKDB_FUNCTION_DETAILS } from '@/sql-editor/duckdbFunctionDetails';
 import { dataTableTheme, dataTableHighlighting } from '@/sql-editor/theme';
 import type { CompletionContext } from '@/derived/types';
+import { blocks } from '../styles/cssContrast';
 
 /** A `CompletionResult`-shaped subset that the library's source emits. */
 type AcResult = {
@@ -318,6 +319,63 @@ describe('createSqlExtensions', () => {
     expect(DUCKDB_FUNCTION_DETAILS.length).toBeGreaterThan(0);
     const ext = createSqlExtensions({ columns: [] });
     EditorState.create({ extensions: ext });
+  });
+});
+
+describe('dataTableTheme', () => {
+  /**
+   * Every rule that reaches an empty editor's placeholder, in the order
+   * CodeMirror mounts them: one style sheet, its own base theme first, each
+   * scoped by one class on the editor. They are equally specific, so for
+   * each property the last rule that sets it wins.
+   */
+  function placeholderRules(): CSSStyleRule[] {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [dataTableTheme, placeholder('e.g. price > 10')],
+      }),
+      parent: container,
+    });
+    try {
+      const shown = container.querySelector('.cm-placeholder')!;
+      expect(shown).toBeTruthy();
+      const rules = [...document.styleSheets]
+        .flatMap((sheet) => [...sheet.cssRules])
+        .filter(
+          (rule): rule is CSSStyleRule =>
+            rule instanceof CSSStyleRule && shown.matches(rule.selectorText),
+        );
+      for (const rule of rules) expect(rule.selectorText).toMatch(/^\.[^\s.]+ \.cm-placeholder$/);
+      return rules;
+    } finally {
+      view.destroy();
+      container.remove();
+    }
+  }
+
+  /** The values the rules give `property`, in order: the last one wins. */
+  const declared = (rules: CSSStyleRule[], property: string): string[] =>
+    rules.map((rule) => rule.style.getPropertyValue(property)).filter((value) => value !== '');
+
+  it("paints the placeholder in --dt-text-tertiary, over the base theme's #888", () => {
+    const colours = declared(placeholderRules(), 'color');
+    // #888, 3.54:1 on a white panel.
+    expect(colours[0]).toBe('rgb(136, 136, 136)');
+    // Without the library's stylesheet the token is unset; the fallback is
+    // its light value.
+    expect(colours.at(-1)).toBe(`var(--dt-text-tertiary, ${blocks.light['--dt-text-tertiary']})`);
+  });
+
+  it("leaves the placeholder's size to CodeMirror, so a host editor keeps its whole hint", () => {
+    // The library's own editors end a long hint in an ellipsis, from the
+    // stylesheet, scoped to them.
+    const rules = placeholderRules();
+    for (const property of ['width', 'min-width', 'overflow', 'text-overflow', 'white-space']) {
+      expect(declared(rules, property), property).toEqual([]);
+    }
   });
 });
 

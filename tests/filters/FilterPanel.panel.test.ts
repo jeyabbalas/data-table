@@ -80,6 +80,41 @@ describe('FilterPanel — panel-mode focus/escape', () => {
     expect(el.getAttribute('aria-modal')).toBeNull();
   });
 
+  it('is named by its title, which names the column it is open for', () => {
+    const el = panel.getElement();
+    panel.open('price', anchor);
+    const title = document.getElementById(el.getAttribute('aria-labelledby')!);
+    expect(title).toBe(el.querySelector('.dt-filter-panel-title'));
+    expect(title!.textContent).toBe('Filter: price');
+    // Switched to another column while open: the same title, retitled.
+    panel.open('qty', anchor);
+    expect(document.getElementById(el.getAttribute('aria-labelledby')!)!.textContent).toBe(
+      'Filter: qty',
+    );
+    panel.close();
+  });
+
+  it('gives each panel a title id of its own', () => {
+    const other = new FilterPanel(state, actions);
+    const ids = [panel, other].map(
+      (p) => p.getElement().querySelector('.dt-filter-panel-title')!.id,
+    );
+    expect(ids[0]).toMatch(/^dt-t\d+-[0-9a-f]{4}-filter-panel-title$/);
+    expect(ids[1]).toMatch(/-filter-panel-title$/);
+    expect(ids[1]).not.toBe(ids[0]);
+    other.destroy();
+  });
+
+  it('mints its title id from the table instance id it is given', () => {
+    const named = new FilterPanel(state, actions, { instanceId: 't7-ab12' });
+    document.querySelector('.dt-root')!.appendChild(named.getElement());
+    named.open('price', anchor);
+    expect(named.getElement().getAttribute('aria-labelledby')).toBe(
+      'dt-t7-ab12-filter-panel-title',
+    );
+    named.destroy();
+  });
+
   it('does not apply body scroll lock', () => {
     panel.open('price', anchor);
     expect(document.body.style.paddingRight).toBe('');

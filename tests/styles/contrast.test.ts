@@ -365,6 +365,53 @@ describe('component rules — text on an inherited surface', () => {
       },
     );
 
+    // The No of a preset's delete confirmation is the bare action button:
+    // transparent over the panel, or over its row while the pointer is on
+    // it. It had no colour, and a button inherits none: it showed the host
+    // page's button colour, white on white on the demo.
+    it.each([
+      ['the panel', paintedBy('06-filters.css', '.dt-filter-preset-panel', 'background')],
+      [
+        'a hovered preset',
+        paintedBy('06-filters.css', '.dt-filter-preset-item:hover', 'background'),
+      ],
+    ] as const)(`a preset's No clears ${AA_NORMAL_TEXT}:1 on %s`, (surface, bg) => {
+      expectRatio(
+        paintedBy('06-filters.css', '.dt-filter-preset-action-btn'),
+        bg,
+        AA_NORMAL_TEXT,
+        `.dt-filter-preset-action-btn on ${surface}`,
+        themeName,
+      );
+    });
+
+    // Under the pointer, No stays transparent, over its hovered row.
+    it(`a preset's hovered No clears ${AA_NORMAL_TEXT}:1 on its row`, () => {
+      expectRatio(
+        paintedBy('06-filters.css', '.dt-filter-preset-action-btn:hover'),
+        paintedBy('06-filters.css', '.dt-filter-preset-item:hover', 'background'),
+        AA_NORMAL_TEXT,
+        '.dt-filter-preset-action-btn:hover on a hovered preset',
+        themeName,
+      );
+    });
+
+    // Placeholder text is text (WCAG 1.4.3), and no axe scan sees it: it is
+    // not a text node. Each field that shows one colours it.
+    it.each([
+      ['.dt-filter-input', '06-filters.css'],
+      ['.dt-expr-editor-input', '03-columns.css'],
+      ['.dt-derived-modal-vector-textarea', '04-authoring-modals.css'],
+    ] as const)(`%s's placeholder clears ${AA_NORMAL_TEXT}:1 on the field`, (field, file) => {
+      expectRatio(
+        paintedBy(file, `${field}::placeholder`),
+        paintedBy(file, field, 'background'),
+        AA_NORMAL_TEXT,
+        `${field}::placeholder`,
+        themeName,
+      );
+    });
+
     // Annotation tints darken on hover through a color-mix() of the tint and
     // its own border colour, so the foreground has to clear the darker mix
     // too — the composite no token-level check can see.
@@ -509,6 +556,70 @@ describe('stylesheet antipatterns', () => {
       }
     }
     expect(offenders, 'text tokens used as backgrounds').toEqual([]);
+  });
+
+  it('gives every rule that clears its background a colour of its own', () => {
+    // A button does not inherit `color`: the browser paints its own, black
+    // whatever the theme, and a host page's `button { color: white }` reaches
+    // it too. The preset confirmation's No cleared its background and set no
+    // colour, so it read white on white on the demo, a pair no case above
+    // could see. The exceptions put no text of their own on the surface.
+    const allowed = new Set([
+      '.dt-col-resize-handle', // a 5px strip, filled only while in use
+      '.dt-col-drag-handle', // its dots are filled with a token
+      '.dt-col-sort-btn', // its arrows are filled with tokens, its badge has its own fill
+      '.dt-filter-chips::-webkit-scrollbar-track', // nothing is painted on a track
+    ]);
+    const found: string[] = [];
+    for (const file of componentStyleFiles()) {
+      for (const rule of rulesIn(file)) {
+        if (rule.atRules.some((at) => at.startsWith('@keyframes'))) continue;
+        const clears = ['background', 'background-color'].some((property) =>
+          /^(transparent|none)$/i.test(rule.declarations[property] ?? ''),
+        );
+        if (
+          clears &&
+          rule.declarations['color'] === undefined &&
+          !rule.selectors.every((s) => allowed.has(s))
+        ) {
+          found.push(`${file} ${rule.selectors.join(', ')}`);
+        }
+      }
+    }
+    expect(found, 'rules that clear their background and set no colour').toEqual([]);
+  });
+
+  it('keeps its own background under the pointer', () => {
+    // A host page's `button:hover { background: … }` (0,1,1) outranks a
+    // class's own background (0,1,0) under the pointer, unless a `:hover`
+    // rule of the class's (0,2,0) sets one. The preset confirmation's No had
+    // no hover rule, and two confirmations' Cancel had one that set no
+    // background: on the demo's blue they read 1.5:1 and 2.65:1. So a rule
+    // that clears its background, or styles its hover, sets a hover one.
+    const background = (rule: Rule): string | undefined =>
+      rule.declarations['background'] ?? rule.declarations['background-color'];
+    const rules = componentStyleFiles().flatMap((file) =>
+      rulesIn(file).map((rule) => ({ file, rule })),
+    );
+    const found: string[] = [];
+    for (const { file, rule } of rules) {
+      const value = background(rule);
+      if (value === undefined || rule.atRules.some((at) => at.startsWith('@keyframes'))) continue;
+      for (const selector of rule.selectors) {
+        if (selector.includes('::') || selector.includes(':hover')) continue;
+        const hovers = rules.filter(({ rule: hover }) =>
+          hover.selectors.some((s) => s.startsWith(`${selector}:hover`)),
+        );
+        const cleared = /^(transparent|none)$/i.test(value);
+        if (
+          (cleared || hovers.length > 0) &&
+          !hovers.some(({ rule: hover }) => background(hover) !== undefined)
+        ) {
+          found.push(`${file} ${selector}`);
+        }
+      }
+    }
+    expect(found, "backgrounds a page's `button:hover` would replace").toEqual([]);
   });
 
   it('adds no scrollable region without focusable content', () => {

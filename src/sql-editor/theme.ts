@@ -10,6 +10,9 @@ import { tags } from '@lezer/highlight';
  * `[data-dt-color-scheme="dark"]`. Pair with {@link dataTableHighlighting}
  * for SQL-token coloring; or use {@link createSqlExtensions} (which bundles
  * both by default via `includeTheme`).
+ *
+ * A `placeholder(...)` is painted in `--dt-text-tertiary`, which meets WCAG
+ * AA in both schemes, or in its light value without the library's stylesheet.
  */
 export const dataTableTheme = EditorView.theme({
   '&': {
@@ -25,6 +28,15 @@ export const dataTableTheme = EditorView.theme({
   },
   '.cm-activeLine': {
     backgroundColor: 'var(--dt-bg-secondary)',
+  },
+  // CodeMirror's own placeholder grey, #888, is 3.54:1 on a light panel,
+  // and 4.14:1 in dark on the active line above (an editor that highlights
+  // it): under WCAG AA's 4.5:1. The tertiary text token is 7.56:1 in light
+  // and 9.57:1 in dark on `--dt-bg`, 7.23:1 and 7.92:1 on the active line.
+  // Without the library's stylesheet the token is unset, and the hint would
+  // take the text colour: the fallback is the light theme's value.
+  '.cm-placeholder': {
+    color: 'var(--dt-text-tertiary, #4b5563)',
   },
   '.cm-selectionBackground': {
     backgroundColor: 'var(--dt-primary-lighter) !important',

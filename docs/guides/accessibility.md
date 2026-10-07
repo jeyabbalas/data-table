@@ -356,8 +356,9 @@ tooltip popovers that open on `focusin`, are left alone.
 | Extract button (a nested or JSON column header)       | a button, `aria-haspopup="dialog"`, `aria-expanded`; in the `F2` cycle, `tabindex="-1"`                |
 | Extract panel                                         | `role="dialog"` (a non-modal panel), `aria-labelledby` its title; a `role="tree"` of the column's type |
 | Extract panel failure line                            | `role="alert"`                                                                                         |
-| Filter panel                                          | `role="dialog"` (floating popover)                                                                     |
-| SQL filter modal, export dialog, derived-column modal | `role="dialog"`                                                                                        |
+| Filter panel                                          | `role="dialog"` (floating popover), `aria-labelledby` its title ("Filter: price")                      |
+| Filter preset panel, derived-column editor            | `role="dialog"` (floating panel), `aria-labelledby` its title                                          |
+| SQL filter modal, export dialog, derived-column modal | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` its title                                      |
 | Null filter toggle group                              | `role="radiogroup"`                                                                                    |
 | Filter bar (`.dt-filter-bar`)                         | `role="toolbar"`, `aria-label`, roving tabindex (horizontal)                                           |
 | Hidden-columns gutter (`.dt-hidden-gutter`)           | `role="toolbar"`, `aria-label`, roving tabindex (both axes)                                            |
@@ -583,10 +584,12 @@ messages: {
 ## Manual screen-reader test plan
 
 The automated `tests/a11y/axe.test.ts` suite catches structural ARIA
-issues in jsdom (19 scenarios — empty shell, light and dark, header cursor
+issues in jsdom (22 scenarios — empty shell, light and dark, header cursor
 set, column layout mode in light and dark, filters open, sort active, every
-modal, the value inspector and the extract panel in light and dark, every
-popover, multi-table, RTL). Every rule except `color-contrast` runs, including
+modal and panel (the filter panel, the preset panel and the derived-column
+editor, the last two with their delete confirmations), the value inspector
+and the extract panel in light and dark, every popover, multi-table, RTL).
+Every rule except `color-contrast` runs, including
 `aria-required-children`; contrast is guarded separately by
 `tests/styles/contrast.test.ts`, which computes ratios from the token
 declarations. The matrix below covers the dynamic announcement and
@@ -648,8 +651,10 @@ against `--dt-bg-tertiary` (a hovered column header) and
 `--dt-primary-lighter` (a selected, hovered row) — those are the strictest
 backgrounds in the library, and the ones the shipped defaults were tuned for.
 
-For CI, consider a Playwright-based axe-with-real-layout job (deferred
-to post-1.0).
+CI also runs axe in Chromium, where `color-contrast` sees real paint:
+`tests/browser/axe.spec.ts` (`npm run test:browser`) scans the table in both
+schemes, unloaded, loaded and in column layout mode, and with each panel and
+the SQL editors' modals open over it, their placeholders showing.
 
 ## What's not yet supported
 

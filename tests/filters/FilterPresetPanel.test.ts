@@ -80,6 +80,36 @@ describe('FilterPresetPanel', () => {
       expect(panel.getElement().style.display).not.toBe('none');
     });
 
+    it('is a dialog named by its title', () => {
+      panel.toggle(anchor);
+      const el = panel.getElement();
+      expect(el.getAttribute('role')).toBe('dialog');
+      const title = document.getElementById(el.getAttribute('aria-labelledby')!);
+      expect(title).toBe(el.querySelector('.dt-filter-preset-title'));
+      expect(title!.textContent).toBe('Filter Presets');
+    });
+
+    it('gives each panel a title id of its own', () => {
+      const other = new FilterPresetPanel(manager, state, actions);
+      const ids = [panel, other].map(
+        (p) => p.getElement().querySelector('.dt-filter-preset-title')!.id,
+      );
+      expect(ids[0]).toMatch(/^dt-t\d+-[0-9a-f]{4}-filter-preset-title$/);
+      expect(ids[1]).toMatch(/-filter-preset-title$/);
+      expect(ids[1]).not.toBe(ids[0]);
+      other.destroy();
+    });
+
+    it('mints its title id from the table instance id it is given', () => {
+      const named = new FilterPresetPanel(manager, state, actions, { instanceId: 't7-ab12' });
+      document.body.appendChild(named.getElement());
+      named.open(anchor);
+      expect(named.getElement().getAttribute('aria-labelledby')).toBe(
+        'dt-t7-ab12-filter-preset-title',
+      );
+      named.destroy();
+    });
+
     it('closes the panel', () => {
       panel.toggle(anchor);
       panel.close();

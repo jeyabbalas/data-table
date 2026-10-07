@@ -17,12 +17,22 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      // Vitest 5 matches these against paths relative to the root, so a
-      // directory needs its `/**`: a bare `tests/` matches no file in it.
-      exclude: ['node_modules/**', 'dist/**', '**/*.config.*', 'tests/**'],
+      // Every source file counts, whether a test imports it or not: vitest 4
+      // dropped `coverage.all`, and without `include` the totals left out any
+      // module no test imports. Paths are relative to the root.
+      include: ['src/**/*.ts'],
+      exclude: [
+        // Declarations hold no code.
+        'src/**/*.d.ts',
+        // The worker entry sets `self.onmessage` and posts to `self` when
+        // imported, so it runs only in a Web Worker. Its logic is
+        // `dispatcher.ts`, which the tests cover.
+        'src/worker/worker.ts',
+      ],
       // The thresholds trail the measured figures by about one point: each
       // is the figure rounded down, minus 1. Measured on 2026-10-07 (vitest 5,
-      // coverage-v8 5): statements 91.26, branches 84.17, functions 94.33,
+      // coverage-v8 5) over every file `include` takes, on macOS and on CI's
+      // Ubuntu alike: statements 91.26, branches 84.17, functions 94.33,
       // lines 93.01. Raise them as coverage grows.
       thresholds: {
         statements: 90,

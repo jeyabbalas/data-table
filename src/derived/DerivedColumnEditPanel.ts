@@ -14,7 +14,11 @@ import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import { ROWID_COLUMN } from '../core/types';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
-import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
+import type {
+  ExpressionEditor,
+  ExpressionEditorConfig,
+  ExpressionEditorFactory,
+} from './ExpressionEditorTypes';
 import type { DerivedColumnDef } from './types';
 
 /** Construction options for {@link DerivedColumnEditPanel}. */
@@ -440,17 +444,18 @@ export class DerivedColumnEditPanel {
       // Create expression editor if needed
       if (!this.currentEditor) {
         const context = this.actions.getCompletionContext();
+        const config: ExpressionEditorConfig = {
+          placeholder: this.messages.derived.expressionPlaceholder,
+          ariaLabel: this.messages.derived.expressionLabel,
+        };
         if (this.editorFactory) {
-          this.currentEditor = this.editorFactory(this.editorContainer, context);
+          this.currentEditor = this.editorFactory(this.editorContainer, context, config);
         } else {
           this.currentEditor = new CodeMirrorExpressionEditor(
             this.editorContainer,
             context,
             this.prefix,
-            {
-              placeholder: this.messages.derived.expressionPlaceholder,
-              ariaLabel: this.messages.derived.expressionLabel,
-            },
+            config,
           );
         }
       }

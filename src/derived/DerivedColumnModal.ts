@@ -15,7 +15,11 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import { ROWID_COLUMN } from '../core/types';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import { wireLiveCompletionContext } from '../sql-editor/wireLiveCompletionContext';
-import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
+import type {
+  ExpressionEditor,
+  ExpressionEditorConfig,
+  ExpressionEditorFactory,
+} from './ExpressionEditorTypes';
 import type { DerivedColumnDef, VectorDataType } from './types';
 
 /** Construction options for {@link DerivedColumnModal}. */
@@ -780,17 +784,18 @@ export class DerivedColumnModal {
     if (this.currentEditor) return;
 
     const context = this.actions.getCompletionContext();
+    const config: ExpressionEditorConfig = {
+      placeholder: this.messages.derived.expressionPlaceholder,
+      ariaLabel: this.messages.derived.expressionLabel,
+    };
     if (this.editorFactory) {
-      this.currentEditor = this.editorFactory(this.editorContainer, context);
+      this.currentEditor = this.editorFactory(this.editorContainer, context, config);
     } else {
       this.currentEditor = new CodeMirrorExpressionEditor(
         this.editorContainer,
         context,
         this.prefix,
-        {
-          placeholder: this.messages.derived.expressionPlaceholder,
-          ariaLabel: this.messages.derived.expressionLabel,
-        },
+        config,
       );
     }
 

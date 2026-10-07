@@ -10,7 +10,11 @@ import type { StateActions } from '../core/Actions';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
-import type { ExpressionEditor, ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
+import type {
+  ExpressionEditor,
+  ExpressionEditorConfig,
+  ExpressionEditorFactory,
+} from '../derived/ExpressionEditorTypes';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import { wireLiveCompletionContext } from '../sql-editor/wireLiveCompletionContext';
 import type { RawSQLFilter } from './FilterTypes';
@@ -294,17 +298,18 @@ export class SQLFilterModal {
     if (this.currentEditor) return;
 
     const context = this.actions.getCompletionContext();
+    const config: ExpressionEditorConfig = {
+      placeholder: this.messages.filters.sqlFilter.editorPlaceholder,
+      ariaLabel: this.messages.filters.sqlFilter.conditionLabel,
+    };
     if (this.editorFactory) {
-      this.currentEditor = this.editorFactory(this.editorContainer, context);
+      this.currentEditor = this.editorFactory(this.editorContainer, context, config);
     } else {
       this.currentEditor = new CodeMirrorExpressionEditor(
         this.editorContainer,
         context,
         this.prefix,
-        {
-          placeholder: this.messages.filters.sqlFilter.editorPlaceholder,
-          ariaLabel: this.messages.filters.sqlFilter.conditionLabel,
-        },
+        config,
       );
     }
 

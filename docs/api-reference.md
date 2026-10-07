@@ -198,7 +198,8 @@ Types for the [Stats panels](#stats-panels) extension point. Source: `src/visual
 | `DerivedColumnDef`         | type      | Union of the two.                                                                                                                               |
 | `CompletionContext`        | interface | Schema + function list passed to expression editors.                                                                                            |
 | `ExpressionEditor`         | type      | Editor contract (`getValue`, `setValue`, `focus`, `destroy`, …).                                                                                |
-| `ExpressionEditorFactory`  | type      | `(container, context, classPrefix, config?) => ExpressionEditor`.                                                                               |
+| `ExpressionEditorConfig`   | interface | `{ placeholder?, ariaLabel? }`: the placeholder and accessible name a dialog gives its expression editor, from `messages`.                      |
+| `ExpressionEditorFactory`  | type      | `(container, context, config) => ExpressionEditor`. `config` is the dialog's placeholder and accessible name.                                   |
 | `NestedFieldColumnOptions` | interface | `{ name?, extract?: 'value' \| 'length' \| 'tag', jsonLeaf?: 'string' \| 'number' \| 'boolean' \| 'json' }` for `actions.addNestedFieldColumn`. |
 
 ### Progress
@@ -346,10 +347,10 @@ when assembling a custom container shell.
 | `DerivedColumnModalOptions`                 | interface   | Modal ctor options.                                                                                                                                          |
 | `AddColumnButton`                           | class       | The "+" button that opens `DerivedColumnModal`.                                                                                                              |
 | `AddColumnButtonOptions`                    | interface   | Button ctor options.                                                                                                                                         |
-| `DefaultExpressionEditor`                   | class       | Plain-textarea editor, an alternative to `CodeMirrorExpressionEditor` through `editorFactory`.                                                               |
+| `DefaultExpressionEditor`                   | class       | Plain-textarea editor, an alternative to `CodeMirrorExpressionEditor` through `editorFactory`. Its 5th argument is an `ExpressionEditorConfig`.              |
 | `DerivedColumnManager`                      | class       | DuckDB-side lifecycle (VIEW, vector helper tables, validation); every change is all or nothing. `restoreColumns` is below the table.                         |
 | `DerivedColumnInfo`                         | interface   | Stored def + detected type metadata.                                                                                                                         |
-| `CodeMirrorExpressionEditor`                | class       | CodeMirror 6 editor with DuckDB SQL grammar + autocompletion. Its 4th argument sets `placeholder` and `ariaLabel` (English `derived.*` defaults).            |
+| `CodeMirrorExpressionEditor`                | class       | CodeMirror 6 editor with DuckDB SQL grammar + autocompletion. Its 4th argument is an `ExpressionEditorConfig` (English `derived.*` defaults).                |
 | `DUCKDB_FUNCTIONS`                          | const array | Function names surfaced by autocomplete. Derived from `DUCKDB_FUNCTION_DETAILS`.                                                                             |
 | `DUCKDB_FUNCTION_DETAILS`                   | const array | `{ name, category, description }` for each curated DuckDB function.                                                                                          |
 | `DuckDBFunctionInfo`                        | interface   | Shape of one entry in `DUCKDB_FUNCTION_DETAILS`.                                                                                                             |
@@ -538,7 +539,7 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 | Field                | Type                      | Required? | Default           | Description                                                                                                                                                                                       |
 | -------------------- | ------------------------- | --------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `instanceId`         | `string`                  | no        | auto-generated    | Mixed into element IDs to avoid ambiguous `aria-labelledby` / `aria-activedescendant` IDREFs. A random suffix is always appended — read `DataTable.instanceId` for the value actually in the DOM. |
-| `editorFactory`      | `ExpressionEditorFactory` | no        | CodeMirror editor | Plug a custom expression editor.                                                                                                                                                                  |
+| `editorFactory`      | `ExpressionEditorFactory` | no        | CodeMirror editor | Plug a custom expression editor. It gets each dialog's placeholder and accessible name, from `messages`, as its third argument.                                                                   |
 | `messages`           | `DeepPartial<Strings>`    | no        | `defaultStrings`  | Override user-facing strings. Consumed once at init — rebuild to change.                                                                                                                          |
 | `strictBrowserCheck` | `boolean`                 | no        | `false`           | When true, reject init with `WorkerInitError` (`code: 'WORKER_UNSUPPORTED'`) if any required browser API is missing.                                                                              |
 
@@ -1400,13 +1401,13 @@ UI is the host's responsibility. Without `autocompletion()` from
 `@codemirror/autocomplete` in your extension array, no dropdown ever
 appears (`src/sql-editor/extensions.ts:156-158`). The bundled
 `CodeMirrorExpressionEditor` adds it explicitly
-(`src/sql-editor/CodeMirrorExpressionEditor.ts:75-77`).
+(`src/sql-editor/CodeMirrorExpressionEditor.ts:71-73`).
 
 Wrap the result in a `Compartment` to enable schema swaps via
 `Compartment.reconfigure()` without rebuilding the editor — preserves undo
 history, focus, selection, and scroll position. The bundled
 `CodeMirrorExpressionEditor` uses the same pattern internally
-(`src/sql-editor/CodeMirrorExpressionEditor.ts:146-150`).
+(`src/sql-editor/CodeMirrorExpressionEditor.ts:143-147`).
 
 ### `buildCompletionContext(columns, options?)`
 

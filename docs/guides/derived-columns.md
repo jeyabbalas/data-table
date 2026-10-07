@@ -468,8 +468,9 @@ CodeMirror (or replace it), supply a custom editor factory:
 await createDataTable({
   container,
   source,
-  editorFactory: (mount, ctx) => {
-    // Your implementation of ExpressionEditorFactory
+  editorFactory: (mount, ctx, config) => {
+    // Your implementation of ExpressionEditorFactory. `config` holds the
+    // dialog's placeholder and accessible name, from `messages`.
   },
 });
 ```

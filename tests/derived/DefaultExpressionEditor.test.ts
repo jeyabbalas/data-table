@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { DefaultExpressionEditor } from '@/derived/DefaultExpressionEditor';
 import type { CompletionContext } from '@/derived/types';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 
 describe('DefaultExpressionEditor', () => {
   let container: HTMLElement;
@@ -167,8 +168,7 @@ describe('DefaultExpressionEditor', () => {
     editor.destroy();
   });
 
-  it('uses messages override for placeholder and available-columns label', async () => {
-    const { mergeStrings, defaultStrings } = await import('@/core/Strings');
+  it('uses messages override for placeholder and available-columns label', () => {
     const messages = mergeStrings(defaultStrings, {
       derived: {
         expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
@@ -182,6 +182,51 @@ describe('DefaultExpressionEditor', () => {
 
     const contextDiv = editor.element.querySelector('.dt-expr-editor-context');
     expect(contextDiv?.textContent?.startsWith('Colonnes disponibles : ')).toBe(true);
+
+    editor.destroy();
+  });
+
+  it('names its textarea, in English by default', () => {
+    const editor = new DefaultExpressionEditor(container, context);
+    const textarea = editor.element.querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(textarea.getAttribute('aria-label')).toBe('SQL Expression');
+
+    editor.destroy();
+  });
+
+  it('takes its placeholder and name from config, then from messages', () => {
+    const messages = mergeStrings(defaultStrings, {
+      derived: {
+        expressionLabel: 'Expression SQL',
+        expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+      },
+    });
+
+    const fromMessages = new DefaultExpressionEditor(container, context, 'dt', messages);
+    const a = fromMessages.element.querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(a.getAttribute('aria-label')).toBe('Expression SQL');
+    expect(a.placeholder).toBe('Saisir une expression SQL, ex. prix * quantité');
+    fromMessages.destroy();
+
+    const fromConfig = new DefaultExpressionEditor(container, context, 'dt', messages, {
+      placeholder: "Saisir la condition WHERE, ex. age > 18 AND status = 'actif'",
+      ariaLabel: 'Condition SQL WHERE',
+    });
+    const b = fromConfig.element.querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(b.getAttribute('aria-label')).toBe('Condition SQL WHERE');
+    expect(b.placeholder).toBe("Saisir la condition WHERE, ex. age > 18 AND status = 'actif'");
+    fromConfig.destroy();
+  });
+
+  it('keeps a name when config and messages give an empty one, but not a placeholder', () => {
+    const messages = mergeStrings(defaultStrings, { derived: { expressionLabel: '' } });
+    const editor = new DefaultExpressionEditor(container, context, 'dt', messages, {
+      placeholder: '',
+      ariaLabel: '',
+    });
+    const textarea = editor.element.querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(textarea.getAttribute('aria-label')).toBe('SQL Expression');
+    expect(textarea.placeholder).toBe('');
 
     editor.destroy();
   });

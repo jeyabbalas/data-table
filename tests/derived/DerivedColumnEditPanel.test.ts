@@ -3,6 +3,8 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { DerivedColumnEditPanel } from '@/derived/DerivedColumnEditPanel';
+import { DefaultExpressionEditor } from '@/derived/DefaultExpressionEditor';
+import type { ExpressionEditorFactory } from '@/derived/ExpressionEditorTypes';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
@@ -321,6 +323,37 @@ describe('DerivedColumnEditPanel', () => {
         'Saisir une expression SQL, ex. prix * quantité',
       );
       expect(content.getAttribute('aria-label')).toBe('Expression SQL');
+
+      panel.destroy();
+    });
+
+    it('gives an editorFactory the placeholder and name from messages', () => {
+      let received: unknown;
+      const editorFactory: ExpressionEditorFactory = (container, context, config) => {
+        received = config;
+        return new DefaultExpressionEditor(container, context, 'dt', undefined, config);
+      };
+      const panel = new DerivedColumnEditPanel(state, actions, {
+        editorFactory,
+        messages: mergeStrings(defaultStrings, {
+          derived: {
+            expressionLabel: 'Expression SQL',
+            expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+          },
+        }),
+      });
+      rootEl.appendChild(panel.getElement());
+      panel.open('total', anchorEl);
+
+      expect(received).toEqual({
+        placeholder: 'Saisir une expression SQL, ex. prix * quantité',
+        ariaLabel: 'Expression SQL',
+      });
+      const textarea = panel
+        .getElement()
+        .querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+      expect(textarea.placeholder).toBe('Saisir une expression SQL, ex. prix * quantité');
+      expect(textarea.getAttribute('aria-label')).toBe('Expression SQL');
 
       panel.destroy();
     });

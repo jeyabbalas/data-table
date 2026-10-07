@@ -3,7 +3,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { defaultStrings } from '../core/Strings';
-import type { ExpressionEditor } from '../derived/ExpressionEditorTypes';
+import type { ExpressionEditor, ExpressionEditorConfig } from '../derived/ExpressionEditorTypes';
 import type { CompletionContext } from '../derived/types';
 import { createSqlExtensions } from './extensions';
 import { dataTableTheme, dataTableHighlighting } from './theme';
@@ -17,8 +17,9 @@ import { dataTableTheme, dataTableHighlighting } from './theme';
  * `createDataTable({ editorFactory })`.
  *
  * The fourth argument sets the placeholder and the accessible name. One left
- * out is the English default of `derived.expressionPlaceholder` or
- * `derived.expressionLabel`; the built-in dialogs pass the table's `messages`.
+ * out, or an empty name, is the English default of
+ * `derived.expressionPlaceholder` or `derived.expressionLabel`; the built-in
+ * dialogs pass the table's `messages`.
  *
  * @example
  * import { CodeMirrorExpressionEditor } from '@jeyabbalas/data-table/advanced';
@@ -45,12 +46,7 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
     container: HTMLElement,
     context: CompletionContext,
     classPrefix = 'dt',
-    config?: {
-      /** Shown while the editor is empty. */
-      placeholder?: string;
-      /** The editor's accessible name, set as `aria-label` on `.cm-content`. */
-      ariaLabel?: string;
-    },
+    config?: ExpressionEditorConfig,
   ) {
     this.prefix = classPrefix;
     this.sqlCompartment = new Compartment();
@@ -99,9 +95,10 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
           }
         }),
 
-        // Accessibility
+        // Accessibility. `||`, not `??`: an empty label would leave the
+        // editor unnamed, where an empty placeholder just shows none.
         EditorView.contentAttributes.of({
-          'aria-label': config?.ariaLabel ?? defaultStrings.derived.expressionLabel,
+          'aria-label': config?.ariaLabel || defaultStrings.derived.expressionLabel,
         }),
       ],
     });

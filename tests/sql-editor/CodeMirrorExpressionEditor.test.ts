@@ -171,6 +171,17 @@ describe('CodeMirrorExpressionEditor', () => {
     );
   });
 
+  it('keeps a name when the config gives an empty one, but not a placeholder', () => {
+    editor = new CodeMirrorExpressionEditor(container, context, 'dt', {
+      placeholder: '',
+      ariaLabel: '',
+    });
+
+    const content = editor.element.querySelector('.cm-content')!;
+    expect(content.getAttribute('aria-label')).toBe('SQL Expression');
+    expect(content.getAttribute('aria-placeholder')).toBe('');
+  });
+
   it('should support custom class prefix', () => {
     editor = new CodeMirrorExpressionEditor(container, context, 'my');
 

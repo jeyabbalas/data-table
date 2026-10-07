@@ -171,7 +171,11 @@ export type {
   DerivedColumnDef,
   CompletionContext,
 } from './derived/types';
-export type { ExpressionEditor, ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
+export type {
+  ExpressionEditor,
+  ExpressionEditorConfig,
+  ExpressionEditorFactory,
+} from './derived/ExpressionEditorTypes';
 export type { NestedFieldColumnOptions } from './core/Actions';
 
 // ---- Progress reporting ----

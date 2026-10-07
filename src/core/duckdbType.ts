@@ -318,13 +318,15 @@ const TIMESTAMP_NAMES = new Set([
   'TIMESTAMP_NS',
   'TIMESTAMP_US',
 ]);
-const TIME_NAMES = new Set([
+/** TIME WITH TIME ZONE, by each name DuckDB gives it. */
+const TIMETZ_NAMES: ReadonlySet<string> = new Set(['TIME WITH TIME ZONE', 'TIMETZ']);
+/** The times `CAST(… AS TIME)` keeps whole: all but TIME_NS, which it rounds. */
+const MICROSECOND_TIME_NAMES: ReadonlySet<string> = new Set([
   'TIME',
-  'TIME WITH TIME ZONE',
   'TIME WITHOUT TIME ZONE',
-  'TIMETZ',
-  'TIME_NS',
+  ...TIMETZ_NAMES,
 ]);
+const TIME_NAMES = new Set([...MICROSECOND_TIME_NAMES, 'TIME_NS']);
 
 /**
  * Type names of more than one word. A struct field's type follows its name,
@@ -859,4 +861,41 @@ export function holdsVariant(node: DuckDBTypeNode): boolean {
  */
 export function needsTextMatch(node: DuckDBTypeNode): boolean {
   return containsKind(node, ['union', 'variant', 'unknown']);
+}
+
+/**
+ * Whether `originalType` is TIME WITH TIME ZONE (`TIMETZ`): a time of day
+ * with a UTC offset, `01:30:00+05:30`. Its chart places a value by its time
+ * of day as written, and its range filters compare the same way
+ * (`valueType: 'time'`). A `ColumnSchema` built by hand may leave
+ * `originalType` out, which is not one.
+ *
+ * @example
+ * ```ts
+ * isTimeWithTimeZone('TIME WITH TIME ZONE'); // true
+ * isTimeWithTimeZone('TIME');                // false
+ * ```
+ */
+export function isTimeWithTimeZone(originalType: string | undefined): boolean {
+  const node = parseDuckDBType(originalType ?? '');
+  return node.kind === 'scalar' && TIMETZ_NAMES.has(node.name);
+}
+
+/**
+ * Whether `CAST(col AS TIME)` gives a value of `originalType` its exact time
+ * of day, as a range filter's `valueType: 'time'` compares it: TIME, and
+ * TIME WITH TIME ZONE without its offset. Not TIME_NS, whose cast rounds to
+ * microseconds (`23:59:59.9999999` becomes `24:00:00`), nor any other type,
+ * which the cast fails on or turns into another value.
+ *
+ * @example
+ * ```ts
+ * castsToTimeExactly('TIME WITH TIME ZONE'); // true
+ * castsToTimeExactly('TIME_NS');             // false
+ * castsToTimeExactly('DATE');                // false
+ * ```
+ */
+export function castsToTimeExactly(originalType: string | undefined): boolean {
+  const node = parseDuckDBType(originalType ?? '');
+  return node.kind === 'scalar' && MICROSECOND_TIME_NAMES.has(node.name);
 }

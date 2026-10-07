@@ -153,22 +153,24 @@ export function filterToSQL(filter: Filter): string {
         filter.valueType === 'interval'
           ? (v: unknown) => `INTERVAL ${formatSQLValue(v)}`
           : formatSQLValue;
+      // 'time' compares the time of day, a TIME WITH TIME ZONE's offset dropped
+      const target = filter.valueType === 'time' ? `CAST(${column} AS TIME)` : column;
 
       if (minIsOpen && maxIsOpen) {
         return 'TRUE'; // No bounds — matches everything
       }
       if (minIsOpen) {
         // Open lower bound: only upper bound applies
-        return `${column} ${maxOp} ${formatVal(filter.max)}`;
+        return `${target} ${maxOp} ${formatVal(filter.max)}`;
       }
       if (maxIsOpen) {
         // Open upper bound: only lower bound applies
-        return `${column} ${minOp} ${formatVal(filter.min)}`;
+        return `${target} ${minOp} ${formatVal(filter.min)}`;
       }
       // Both bounds finite
       const minVal = formatVal(filter.min);
       const maxVal = formatVal(filter.max);
-      return `(${column} ${minOp} ${minVal} AND ${column} ${maxOp} ${maxVal})`;
+      return `(${target} ${minOp} ${minVal} AND ${target} ${maxOp} ${maxVal})`;
     }
 
     case 'point': {

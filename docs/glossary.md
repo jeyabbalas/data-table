@@ -344,7 +344,9 @@ See: [Filter presets](./guides/filter-presets.md)
 interval column falls between `min` and `max`: `min` inclusive unless
 `minExclusive`, `max` exclusive unless `maxInclusive`. `±Infinity` on either
 side leaves it open. `valueType: 'interval'` writes the bounds as INTERVAL
-literals.
+literals; `valueType: 'time'` compares the column's time of day,
+`CAST(col AS TIME)`, which is how a `TIME WITH TIME ZONE` column's brush and
+filter panel compare it.
 See: [Filters](./guides/filters.md) · Source: `src/filters/FilterTypes.ts`
 
 ### RawSQLFilter

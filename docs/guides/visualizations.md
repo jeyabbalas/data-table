@@ -38,6 +38,22 @@ filters: brushing a range or clicking a category emits a filter that's
 applied to the underlying data and propagated to every other visualization.
 The nested summary makes none.
 
+### Time columns
+
+`TimeHistogram` places each value at its time of day, the seconds since
+midnight DuckDB's `EXTRACT(EPOCH FROM col)` gives, for its bars and for the
+range in its stats line alike. A `TIME WITH TIME ZONE` value is placed at its
+time as written, its offset ignored: `01:30:00+05:30` is in the 1am bar, and
+a column of such values reads `01:30:00 – 24:00:00`. Its brush emits
+`valueType: 'time'`, which compares the time of day the same way (see
+[Filters → `range`](./filters.md#1-range--numeric-or-date-ranges)); a range
+filter on it without one compares instants, so the chart draws no brush for
+it. `24:00:00`, a valid `TIME`, is counted in the day's last bar. A brush over
+the last bar ends at a bound no value passes, taken in with `<=`:
+`'24:00:00'` at the end of the day, or the column's maximum rounded up to a
+whole second (`'20:00:01'` for `20:00:00.7`). A `TIME_NS` value is placed at
+its microsecond, as `EXTRACT` truncates it.
+
 ### Nested columns
 
 A LIST, ARRAY, STRUCT, MAP, UNION or VARIANT column has `type: 'nested'`,

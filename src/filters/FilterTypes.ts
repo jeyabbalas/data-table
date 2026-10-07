@@ -6,8 +6,8 @@
  */
 
 /**
- * Range (`min` ≤ x ≤ `max` by default) filter on a numeric, date, or interval
- * column. Bounds may be widened to strict comparisons via `maxInclusive` /
+ * Range (`min` ≤ x ≤ `max` by default) filter on a numeric, date, time or
+ * interval column. Bounds may be widened to strict comparisons via `maxInclusive` /
  * `minExclusive`. Constructed by histogram brushing or explicit
  * `actions.addFilter({ type: 'range', … })` calls.
  */
@@ -20,8 +20,33 @@ export interface RangeFilter {
   maxInclusive?: boolean;
   /** When true, lower bound uses > instead of >=. Used for strict greater-than filters. */
   minExclusive?: boolean;
-  /** Value type hint for SQL generation. When 'interval', values are prefixed with INTERVAL keyword. */
-  valueType?: 'interval';
+  /**
+   * How the bounds are compared. Left out, they are compared with the
+   * column's value: `"col" >= '…'`.
+   *
+   * `'interval'` writes them as INTERVAL literals: `"col" >= INTERVAL '1 day'`.
+   *
+   * `'time'` compares the column's time of day, `CAST("col" AS TIME)`, with
+   * the bounds as text (`'01:30:00'`). This is how a TIME WITH TIME ZONE
+   * column is compared by its time as written, `01:30:00+05:30` as 01:30, the
+   * way its chart places it. Compared as TIME WITH TIME ZONE, a bound takes
+   * the offset of DuckDB's session time zone and rows compare by instant, so
+   * a range can miss rows whose time of day lies inside it. The chart's brush
+   * and the filter panel set it on TIME WITH TIME ZONE columns. Do not set it
+   * on a TIME_NS column: the cast rounds to microseconds, so
+   * `23:59:59.9999999` becomes `24:00:00`.
+   *
+   * @example
+   * // A TIME WITH TIME ZONE column, from 01:30 up to 06:00 as written
+   * table.actions.addFilter({
+   *   type: 'range',
+   *   column: 'pickup_time',
+   *   min: '01:30:00',
+   *   max: '06:00:00',
+   *   valueType: 'time',
+   * });
+   */
+  valueType?: 'interval' | 'time';
 }
 
 /**

@@ -10,9 +10,21 @@ import type { ColumnSchema } from '@/core/types';
 import {
   ColumnLayout,
   DEFAULT_COLUMN_WIDTH,
+  NESTED_COLUMN_WIDTH,
+  defaultColumnWidth,
   getColumnLayout,
   resolveColumnWidth,
 } from '@/table/ColumnLayout';
+
+type ColumnType = Pick<ColumnSchema, 'type' | 'originalType'>;
+
+const LIST: ColumnType = { type: 'nested', originalType: 'VARCHAR[]' };
+const JSON_TEXT: ColumnType = { type: 'string', originalType: 'JSON' };
+
+/** A schema entry as the loaders write it: an INTEGER unless `type` says otherwise. */
+function entry(name: string, type: ColumnType = { type: 'integer', originalType: 'INTEGER' }) {
+  return { name, nullable: true, ...type } satisfies ColumnSchema;
+}
 
 function layout(
   opts: {
@@ -21,6 +33,8 @@ function layout(
     widths?: [string, number][];
     order?: string[];
     schema?: string[];
+    /** The type of each column named here; every other column is an INTEGER. */
+    types?: Record<string, ColumnType>;
   } = {},
 ): ColumnLayout {
   const visible = opts.visible ?? ['a', 'b', 'c', 'd'];
@@ -29,13 +43,81 @@ function layout(
     pinnedColumns: opts.pinned ?? [],
     columnWidths: new Map(opts.widths ?? []),
     columnOrder: opts.order ?? visible,
-    schema: (opts.schema ?? visible).map((name) => ({ name })),
+    schema: (opts.schema ?? visible).map((name) => entry(name, opts.types?.[name])),
   });
 }
+
+describe('defaultColumnWidth', () => {
+  it('is 168 px for a nested or JSON column, 150 for every other', () => {
+    expect(NESTED_COLUMN_WIDTH).toBe(168);
+    expect(DEFAULT_COLUMN_WIDTH).toBe(150);
+  });
+
+  it.each([
+    ['VARCHAR[]', 'nested'],
+    ['INTEGER[3]', 'nested'],
+    ['STRUCT(x DOUBLE, y DOUBLE, tier VARCHAR)', 'nested'],
+    ['MAP(VARCHAR, INTEGER)', 'nested'],
+    ['UNION(num INTEGER, str VARCHAR)', 'nested'],
+    ['VARIANT', 'nested'],
+    ['JSON', 'string'],
+  ] as const)('gives a %s column 168 px', (originalType, type) => {
+    expect(defaultColumnWidth(entry('n', { type, originalType }))).toBe(168);
+  });
+
+  it.each([
+    ['VARCHAR', 'string'],
+    ['INTEGER', 'integer'],
+    ['DOUBLE', 'float'],
+    ['TIMESTAMP', 'timestamp'],
+  ] as const)('gives a %s column 150 px', (originalType, type) => {
+    expect(defaultColumnWidth(entry('n', { type, originalType }))).toBe(150);
+  });
+
+  it('gives __rowid__ 150 px', () => {
+    const rowid: ColumnSchema = {
+      name: '__rowid__',
+      type: 'integer',
+      nullable: false,
+      originalType: 'BIGINT',
+      system: true,
+    };
+    expect(defaultColumnWidth(rowid)).toBe(150);
+  });
+
+  it('counts a derived nested or JSON column', () => {
+    const derived = (type: ColumnType, expression: string): ColumnSchema => ({
+      ...entry('d', type),
+      isDerived: true,
+      expression,
+    });
+    expect(defaultColumnWidth(derived(LIST, "['a', 'b']"))).toBe(168);
+    expect(defaultColumnWidth(derived(JSON_TEXT, "'{}'::JSON"))).toBe(168);
+    expect(defaultColumnWidth(derived({ type: 'float', originalType: 'DOUBLE' }, 'x * 2'))).toBe(
+      150,
+    );
+  });
+
+  it('gives a column the schema does not have 150 px', () => {
+    expect(defaultColumnWidth(undefined)).toBe(150);
+  });
+});
 
 describe('resolveColumnWidth', () => {
   it('defaults a missing width', () => {
     expect(resolveColumnWidth(undefined)).toBe(DEFAULT_COLUMN_WIDTH);
+  });
+
+  it('defaults a missing or unusable width to the fallback it is given', () => {
+    expect(resolveColumnWidth(undefined, 168)).toBe(168);
+    expect(resolveColumnWidth(Number.NaN, 168)).toBe(168);
+    expect(resolveColumnWidth(-1, 168)).toBe(168);
+  });
+
+  it('keeps a width that was set whatever the fallback, 150 included', () => {
+    expect(resolveColumnWidth(150, 168)).toBe(150);
+    expect(resolveColumnWidth(220.4, 168)).toBe(220);
+    expect(resolveColumnWidth(10, 168)).toBe(50);
   });
 
   it('rounds to a whole pixel', () => {
@@ -75,6 +157,44 @@ describe('ColumnLayout', () => {
     const l = layout({ visible: ['a'], widths: [['z', 99.6]] });
     expect(l.widthOf('z')).toBe(100);
     expect(l.widthOf('unknown')).toBe(DEFAULT_COLUMN_WIDTH);
+  });
+
+  it('lays a nested or JSON column out at 168 px until it is sized', () => {
+    const l = layout({ types: { b: LIST, c: JSON_TEXT } });
+    expect([0, 1, 2, 3].map((i) => l.widthAt(i))).toEqual([150, 168, 168, 150]);
+    expect([0, 1, 2, 3].map((i) => l.leftAt(i))).toEqual([0, 150, 318, 486]);
+    expect(l.totalWidth).toBe(636);
+  });
+
+  it('keeps a width set on a nested column, even 150', () => {
+    const l = layout({
+      types: { b: LIST, c: LIST },
+      widths: [
+        ['b', 150],
+        ['c', 220],
+      ],
+    });
+    expect(l.widthOf('b')).toBe(150);
+    expect(l.widthOf('c')).toBe(220);
+    expect(l.totalWidth).toBe(670);
+  });
+
+  it('answers widthOf for a hidden nested or JSON column with its own default', () => {
+    const l = layout({
+      visible: ['a'],
+      schema: ['a', 'tags', 'doc'],
+      types: { tags: LIST, doc: JSON_TEXT },
+      widths: [['doc', 90]],
+    });
+    expect(l.widthOf('tags')).toBe(168);
+    expect(l.widthOf('doc')).toBe(90);
+    expect(l.widthOf('unknown')).toBe(150);
+  });
+
+  it('places a pinned column after a nested one by the nested one’s 168 px', () => {
+    const l = layout({ pinned: ['a', 'b'], types: { a: LIST } });
+    expect(l.pinnedPlacement('b')).toEqual({ left: 168, zOffset: 1 });
+    expect(l.pinnedWidth).toBe(318);
   });
 
   it('places pinned columns by the widths of the pinned columns before them', () => {
@@ -145,5 +265,36 @@ describe('getColumnLayout', () => {
     initializeColumnsFromSchema(two, SCHEMA.slice(0, 1));
     expect(getColumnLayout(one).totalWidth).toBe(450);
     expect(getColumnLayout(two).totalWidth).toBe(150);
+  });
+
+  it('rebuilds when a column turns nested', () => {
+    // A derived column edited from a number to a list keeps its name and
+    // gets a new schema entry.
+    const state = createTableState();
+    initializeColumnsFromSchema(state, SCHEMA);
+    expect(getColumnLayout(state).widthOf('b')).toBe(150);
+
+    state.schema.set(
+      SCHEMA.map((c) =>
+        c.name === 'b'
+          ? { ...c, ...LIST, isDerived: true, expression: "['x', CAST(a AS VARCHAR)]" }
+          : c,
+      ),
+    );
+
+    const layout = getColumnLayout(state);
+    expect(layout.widthOf('b')).toBe(168);
+    expect(layout.leftAt(2)).toBe(318);
+    expect(layout.totalWidth).toBe(468);
+  });
+
+  it('gives a hidden nested column its default', () => {
+    const state = createTableState();
+    initializeColumnsFromSchema(state, [...SCHEMA, entry('tags', LIST)]);
+    state.visibleColumns.set(['a', 'b', 'c']);
+    const layout = getColumnLayout(state);
+    expect(layout.indexOf('tags')).toBe(-1);
+    expect(layout.widthOf('tags')).toBe(168);
+    expect(layout.totalWidth).toBe(450);
   });
 });

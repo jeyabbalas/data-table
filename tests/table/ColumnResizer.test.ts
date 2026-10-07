@@ -309,6 +309,39 @@ describe('ColumnResizer', () => {
     });
   });
 
+  describe('double-click reset', () => {
+    function doubleClick(): void {
+      header
+        .querySelector('.dt-col-resize-handle')!
+        .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    }
+
+    it('animates the header back to 150 px and resets the width', () => {
+      header.style.width = '300px';
+      const onReset = vi.fn();
+      const resizer = new ColumnResizer(header, onResize, onReset);
+
+      doubleClick();
+
+      expect(header.style.width).toBe('150px');
+      expect(onReset).toHaveBeenCalledTimes(1);
+      resizer.detach();
+    });
+
+    it('animates the header back to the column’s own default width', () => {
+      // A nested or JSON column's: `ColumnHeader` passes 168.
+      header.style.width = '300px';
+      const resizer = new ColumnResizer(header, onResize, vi.fn(), undefined, {
+        defaultWidth: 168,
+      });
+
+      doubleClick();
+
+      expect(header.style.width).toBe('168px');
+      resizer.detach();
+    });
+  });
+
   describe('accessibility', () => {
     it('has correct ARIA attributes', () => {
       const resizer = new ColumnResizer(header, onResize);

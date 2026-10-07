@@ -19,9 +19,40 @@
  * cached snapshot.
  */
 import type { TableState } from '../core/State';
+import type { ColumnSchema } from '../core/types';
+import { isInspectableColumn } from './Cell';
 
 /** Width of a column that `columnWidths` has no usable entry for. */
 export const DEFAULT_COLUMN_WIDTH = 150;
+
+/**
+ * Width of a nested or JSON column that `columnWidths` has no usable entry
+ * for. Its header has six 22 px controls (pin, hide, filter, extract, sort,
+ * the drag handle), which with 2 px between them take 6 × 22 + 5 × 2 =
+ * 142 px; with the header's 24 px of padding and 1 px border, 167; and 1 px
+ * more for rounding. At 150 px they touched, short of the 2 px WCAG 2.2 asks
+ * between targets under 24 px (SC 2.5.8), and the drag handle lost the last
+ * 4 px of its box.
+ */
+export const NESTED_COLUMN_WIDTH = 168;
+
+/**
+ * The width `column` has until it is sized: {@link NESTED_COLUMN_WIDTH} for
+ * a nested or JSON column, derived ones included (`isInspectableColumn`,
+ * which also decides the header's extract button), and
+ * {@link DEFAULT_COLUMN_WIDTH} for any other, or for a column the schema does
+ * not have. It depends on the column alone: with `extractColumns: false` a
+ * nested column's header has five controls, and the column is still 168 px.
+ *
+ * @example
+ * ```typescript
+ * defaultColumnWidth({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // → 168
+ * defaultColumnWidth({ name: 'n', type: 'integer', nullable: false, originalType: 'INTEGER' }); // → 150
+ * ```
+ */
+export function defaultColumnWidth(column: ColumnSchema | undefined): number {
+  return isInspectableColumn(column) ? NESTED_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH;
+}
 
 /**
  * The narrowest a column is drawn, and the resize handle's minimum. A cell
@@ -37,8 +68,9 @@ export const MAX_COLUMN_WIDTH = 500;
 
 /**
  * The width a declared column width occupies: rounded to a whole pixel and
- * at least {@link MIN_COLUMN_WIDTH}, or {@link DEFAULT_COLUMN_WIDTH} when it
- * is missing, not finite or negative.
+ * at least {@link MIN_COLUMN_WIDTH}, or `fallback`, the column's default
+ * width ({@link defaultColumnWidth}), when it is missing, not finite or
+ * negative.
  *
  * Rounded so the header, the body and any sum of their widths land on the
  * same pixels: the layout engine snaps each box to its own unit, so a
@@ -50,14 +82,18 @@ export const MAX_COLUMN_WIDTH = 500;
  * @example
  * ```typescript
  * resolveColumnWidth(undefined); // → 150
+ * resolveColumnWidth(undefined, NESTED_COLUMN_WIDTH); // → 168
  * resolveColumnWidth(151.6); // → 152
  * resolveColumnWidth(10); // → 50
  * ```
  */
-export function resolveColumnWidth(declared: number | undefined): number {
+export function resolveColumnWidth(
+  declared: number | undefined,
+  fallback: number = DEFAULT_COLUMN_WIDTH,
+): number {
   return declared !== undefined && Number.isFinite(declared) && declared >= 0
     ? Math.max(MIN_COLUMN_WIDTH, Math.round(declared))
-    : DEFAULT_COLUMN_WIDTH;
+    : fallback;
 }
 
 /** Sticky placement of one visible pinned column. */
@@ -93,17 +129,24 @@ export class ColumnLayout {
   private readonly pinned: Map<string, PinnedPlacement>;
   private readonly ariaIndexByName: Map<string, number>;
   private readonly declaredWidths: ReadonlyMap<string, number>;
+  /** The nested and JSON columns, hidden ones included: 168 px until sized. */
+  private readonly nestedNames: Set<string>;
 
   constructor(inputs: {
     visibleColumns: readonly string[];
     pinnedColumns: readonly string[];
     columnWidths: ReadonlyMap<string, number>;
     columnOrder: readonly string[];
-    schema: readonly { name: string }[];
+    schema: readonly ColumnSchema[];
   }) {
     const { visibleColumns, columnWidths } = inputs;
     this.columns = visibleColumns;
     this.declaredWidths = columnWidths;
+
+    this.nestedNames = new Set();
+    for (const column of inputs.schema) {
+      if (isInspectableColumn(column)) this.nestedNames.add(column.name);
+    }
 
     const pinnedSet = new Set(inputs.pinnedColumns);
     this.widths = new Array<number>(visibleColumns.length);
@@ -113,7 +156,7 @@ export class ColumnLayout {
     let pinnedCount = 0;
     for (let i = 0; i < visibleColumns.length; i++) {
       const name = visibleColumns[i]!;
-      const width = resolveColumnWidth(columnWidths.get(name));
+      const width = this.resolveWidth(name);
       this.widths[i] = width;
       this.lefts[i] = left;
       // The first occurrence, as `Array.indexOf` answers: a duplicated name
@@ -176,13 +219,19 @@ export class ColumnLayout {
 
   /**
    * Width of `column`, visible or not: {@link resolveColumnWidth} of its
-   * declared width.
+   * declared width, with its own default (168 px for a nested or JSON
+   * column, 150 for any other).
    */
   widthOf(column: string): number {
     const index = this.indexByName.get(column);
-    return index === undefined
-      ? resolveColumnWidth(this.declaredWidths.get(column))
-      : this.widths[index]!;
+    return index === undefined ? this.resolveWidth(column) : this.widths[index]!;
+  }
+
+  private resolveWidth(column: string): number {
+    return resolveColumnWidth(
+      this.declaredWidths.get(column),
+      this.nestedNames.has(column) ? NESTED_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH,
+    );
   }
 
   /** Sticky placement for a visible pinned column, `undefined` for any other. */
@@ -201,7 +250,7 @@ interface CachedLayout {
   pinnedColumns: readonly string[];
   columnWidths: ReadonlyMap<string, number>;
   columnOrder: readonly string[];
-  schema: readonly { name: string }[];
+  schema: readonly ColumnSchema[];
   layout: ColumnLayout;
 }
 

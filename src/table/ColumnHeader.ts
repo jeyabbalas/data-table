@@ -27,7 +27,12 @@ import { columnTypeLabel, columnTypeSpoken, columnTypeTitle } from '../nested/ty
 import type { AnnotationPopover } from './AnnotationPopover';
 import { isInspectableColumn } from './Cell';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
-import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, resolveColumnWidth } from './ColumnLayout';
+import {
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  defaultColumnWidth,
+  resolveColumnWidth,
+} from './ColumnLayout';
 import { ColumnResizer } from './ColumnResizer';
 
 /**
@@ -415,6 +420,9 @@ export class ColumnHeader {
       () => this.getColumnCells(),
       {
         classPrefix: p,
+        // A header is rebuilt when its column's schema entry changes, so
+        // the default it is built with stays the column's.
+        defaultWidth: defaultColumnWidth(this.column),
         onDragStart: () => {
           this.actions.beginColumnWidthChange();
           this.releaseResizeHold?.();
@@ -1048,12 +1056,21 @@ export class ColumnHeader {
    *
    * Reads `columnWidths` rather than the element, so it reports the state the
    * next resize step will build on even before layout has flushed. Resolved
-   * the way the renderer resolves it: rounded to a whole pixel, and 150px when
-   * the column has never been sized or its stored width is not a finite,
-   * non-negative number.
+   * the way the renderer resolves it: rounded to a whole pixel, and the
+   * column's default width when it has never been sized or its stored width
+   * is not a finite, non-negative number: 168px for a nested or JSON column,
+   * 150px for any other.
+   *
+   * @example
+   * ```typescript
+   * header.getWidth(); // → 168 for an unsized `VARCHAR[]` column
+   * ```
    */
   getWidth(): number {
-    return resolveColumnWidth(this.state.columnWidths.get().get(this.column.name));
+    return resolveColumnWidth(
+      this.state.columnWidths.get().get(this.column.name),
+      defaultColumnWidth(this.column),
+    );
   }
 
   /**

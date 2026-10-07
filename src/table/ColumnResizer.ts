@@ -22,6 +22,12 @@ export interface ColumnResizerOptions {
   minWidth?: number | undefined;
   /** Maximum column width in pixels (default: 500) */
   maxWidth?: number | undefined;
+  /**
+   * The width a double-click on the handle animates the header back to: the
+   * column's own default, which `onReset` restores (default: 150).
+   * `ColumnHeader` passes 168 for a nested or JSON column.
+   */
+  defaultWidth?: number | undefined;
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string | undefined;
   /** Called when a resize drag begins (mousedown on handle) */
@@ -66,6 +72,7 @@ export class ColumnResizer {
 
   private readonly minWidth: number;
   private readonly maxWidth: number;
+  private readonly defaultWidth: number;
   private readonly classPrefix: string;
   private readonly onDragStart?: (() => void) | undefined;
   private readonly onDragEnd?: (() => void) | undefined;
@@ -86,6 +93,7 @@ export class ColumnResizer {
   ) {
     this.minWidth = options.minWidth ?? MIN_COLUMN_WIDTH;
     this.maxWidth = options.maxWidth ?? MAX_COLUMN_WIDTH;
+    this.defaultWidth = options.defaultWidth ?? DEFAULT_COLUMN_WIDTH;
     this.classPrefix = options.classPrefix ?? 'dt';
     this.onDragStart = options.onDragStart;
     this.onDragEnd = options.onDragEnd;
@@ -273,8 +281,8 @@ export class ColumnResizer {
     this.header.classList.add(resettingClass);
     cells.forEach((cell) => cell.classList.add(resettingClass));
 
-    // Animate to default width
-    this.header.style.width = `${DEFAULT_COLUMN_WIDTH}px`;
+    // Animate to the column's default width
+    this.header.style.width = `${this.defaultWidth}px`;
 
     // Call reset callback to update state (cells get new width)
     if (this.onReset) {

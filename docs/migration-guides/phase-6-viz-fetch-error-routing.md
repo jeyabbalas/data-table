@@ -10,7 +10,7 @@ Before Phase 6, the bundled `BaseVisualization` subclasses (`Histogram`,
 caught failures from their `fetchData()` SQL queries and surfaced them
 only via `console.error` in the developer console. The JSDoc contract on
 `VisualizationOptions.onError`
-(`src/visualizations/BaseVisualization.ts:116-126`) explicitly promises
+(`src/visualizations/BaseVisualization.ts:130-142`) explicitly promises
 these errors route to `options.onError`, which the facade re-emits as
 `error` events with `source: 'visualization'`. The implementation did not
 honor that promise.

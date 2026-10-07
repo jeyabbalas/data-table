@@ -105,7 +105,7 @@ view. Replacing the entire `EditorState` works too, but discards undo
 history, focus, selection, and scroll position; `Compartment.reconfigure`
 preserves all four. The bundled `CodeMirrorExpressionEditor` uses the
 same pattern internally
-([`src/sql-editor/CodeMirrorExpressionEditor.ts:142-148`](../../src/sql-editor/CodeMirrorExpressionEditor.ts)).
+([`src/sql-editor/CodeMirrorExpressionEditor.ts:156-162`](../../src/sql-editor/CodeMirrorExpressionEditor.ts)).
 
 ```ts
 import {
@@ -319,7 +319,7 @@ const exts = [createSqlExtensions(ctx, { includeTheme: false }), myTheme];
 
 // (c) Apply the library theme, but outside the Compartment so it survives
 //     schema reconfiguration without flicker. This is what the bundled
-//     CodeMirrorExpressionEditor does (CodeMirrorExpressionEditor.ts:68-70).
+//     CodeMirrorExpressionEditor does (CodeMirrorExpressionEditor.ts:79-81).
 import {
   createSqlExtensions,
   dataTableTheme,
@@ -424,7 +424,7 @@ createSqlExtensions(ctx, { upperCaseKeywords: false });
   `autocompletion()` from `@codemirror/autocomplete` in your extension
   array, no dropdown ever appears — even though the source is wired
   correctly. The bundled `CodeMirrorExpressionEditor` adds it explicitly
-  ([`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`](../../src/sql-editor/CodeMirrorExpressionEditor.ts));
+  ([`src/sql-editor/CodeMirrorExpressionEditor.ts:71-73`](../../src/sql-editor/CodeMirrorExpressionEditor.ts));
   example 14 does the same
   ([`main.ts:55`](../../examples/14-standalone-sql-editor/main.ts)).
 
@@ -448,7 +448,7 @@ createSqlExtensions(ctx, { upperCaseKeywords: false });
   `autocompletion()` and target that class for any styling — the bundled
   editor uses the same trick to avoid colliding with other CodeMirror
   editors on the host page
-  ([`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`](../../src/sql-editor/CodeMirrorExpressionEditor.ts)).
+  ([`src/sql-editor/CodeMirrorExpressionEditor.ts:71-73`](../../src/sql-editor/CodeMirrorExpressionEditor.ts)).
 
 - **`Compartment.reconfigure` preserves view state; full state replacement
   does not.** If you refresh by dispatching a brand-new `EditorState`, you

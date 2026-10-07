@@ -137,7 +137,7 @@ size can help if you have many visualizations and a lot of histogramming.
 
 Viewport row fetches deliberately bypass this cache (`cache: false` on
 `WorkerBridge.query` — see `QueryOptions`,
-`src/data/WorkerBridge.ts:51`). The block-based row cache in `TableBody`
+`src/data/WorkerBridge.ts:54`). The block-based row cache in `TableBody`
 is the authoritative store for scroll data, invalidated in lockstep with
 the fetch epoch; a second SQL-keyed copy would only add a second
 staleness domain. Keeping scroll SQL out of the LRU also means a fast

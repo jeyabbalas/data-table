@@ -94,7 +94,7 @@ undo/redo reconciliation.
 
 ## State: `TableState`
 
-All table state lives on a single `TableState` object ([`src/core/State.ts:22-70`](../../src/core/State.ts)).
+All table state lives on a single `TableState` object ([`src/core/State.ts:22-75`](../../src/core/State.ts)).
 See the [state model](./state-model.md) for the field inventory. Briefly:
 
 - **Data signals** — `tableName`, `schema`, `totalRows`, `derivedColumns`
@@ -140,7 +140,7 @@ is a thin Promise-based RPC wrapper:
   mutation via `attachCacheInvalidation`. Individual queries can opt out
   or jump the queue through a `QueryOptions` third parameter on
   `query(sql, signal?, options?)`
-  ([`src/data/WorkerBridge.ts:51-78`](../../src/data/WorkerBridge.ts)):
+  ([`src/data/WorkerBridge.ts:51-79`](../../src/data/WorkerBridge.ts)):
   `cache: false` bypasses the SQL-text cache — viewport row fetches use
   it, since their rows already live in `TableBody`'s row cache (see
   [Row fetching](#row-fetching)) — and

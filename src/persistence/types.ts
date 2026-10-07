@@ -35,8 +35,11 @@ export interface SerializedRangeFilter {
   max: number | string | DateWrapper;
   maxInclusive?: boolean;
   minExclusive?: boolean;
-  /** As {@link RangeFilter.valueType}: `'interval'` bounds are INTERVAL literals. */
-  valueType?: 'interval';
+  /**
+   * As {@link RangeFilter.valueType}: `'interval'` bounds are INTERVAL
+   * literals, and `'time'` compares the column's time of day.
+   */
+  valueType?: 'interval' | 'time';
 }
 
 /** JSON-safe form of {@link PointFilter}: any `Date` operand becomes a {@link DateWrapper}. */

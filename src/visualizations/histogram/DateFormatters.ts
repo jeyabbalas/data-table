@@ -57,13 +57,15 @@ const MONTHS_SHORT = [
 // =========================================
 
 /**
- * Format hour in 12-hour format: "12am", "10am", "12pm", "3pm"
+ * Format hour in 12-hour format: "12am", "10am", "12pm", "3pm". Hour 24, where
+ * a TIME histogram's last bar ends, is midnight: "12am".
  */
 function formatHour(hour: number): string {
-  if (hour === 0) return '12am';
-  if (hour === 12) return '12pm';
-  if (hour < 12) return `${hour}am`;
-  return `${hour - 12}pm`;
+  const h = hour % 24;
+  if (h === 0) return '12am';
+  if (h === 12) return '12pm';
+  if (h < 12) return `${h}am`;
+  return `${h - 12}pm`;
 }
 
 /**

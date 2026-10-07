@@ -793,14 +793,31 @@ describe('FilterPresetManager', () => {
               { type: 'range', column: 'f', min: '1 day', max: '2 days', valueType: 'interval' },
               // A filter type that reads no valueType ignores one.
               { type: 'pattern', column: 'g', pattern: 'x', mode: 'contains', valueType: 'text' },
+              { type: 'range', column: 'h', min: '01:30', max: '06:00', valueType: 'time' },
+              { type: 'point', column: 'i', value: '01:30', valueType: 'time' },
             ],
           },
         ],
       });
       const result = manager.importFromJSON(json);
       expect(result.imported).toBe(1);
-      expect(result.errors).toEqual(['Preset 0: skipped 4 invalid filter(s)']);
-      expect(manager.getPresets()[0].filters.map((f) => f.column)).toEqual(['e', 'f', 'g']);
+      expect(result.errors).toEqual(['Preset 0: skipped 5 invalid filter(s)']);
+      expect(manager.getPresets()[0].filters.map((f) => f.column)).toEqual(['e', 'f', 'g', 'h']);
+    });
+
+    it("keeps a range filter's valueType 'time' through export and import", () => {
+      const timeFilters: Filter[] = [
+        { type: 'range', column: 'pickup', min: '01:30:00', max: '06:00:00', valueType: 'time' },
+      ];
+      manager.save('Night pickups', timeFilters);
+      const fresh = new FilterPresetManager();
+      expect(fresh.importFromJSON(manager.exportToJSON())).toEqual({ imported: 1, errors: [] });
+
+      const actions = mockActions();
+      fresh.load(fresh.getPresets()[0].id, actions);
+      expect((actions.loadFilterPreset as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual(
+        timeFilters,
+      );
     });
   });
 

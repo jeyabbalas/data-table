@@ -1006,8 +1006,12 @@ export class StateActions {
     // has landed.
     const restoreState = captureTableState(this.state);
     const undoStacks = this.undoManager?.getStacks();
+    // Where a Shift-click range starts: a row of the data this replaces. It
+    // goes with the selection, and comes back with it below.
+    const anchor = this.lastSelectedIndex;
     // Reset state for new data
     resetTableState(this.state);
+    this.lastSelectedIndex = null;
     this.undoManager?.clear();
 
     // Load data - schema is included in the result (no more blocking queries!)
@@ -1020,6 +1024,7 @@ export class StateActions {
         // stranded ones: the next load that lands replaces it again, and a
         // destroy() drops it either way.
         restoreState();
+        this.lastSelectedIndex = anchor;
         if (undoStacks) this.undoManager?.loadStacks(undoStacks.undoStack, undoStacks.redoStack);
       } else if (replacedInPlace) {
         this.onBaseTableReplacedCallback?.(replaced);
@@ -1048,10 +1053,6 @@ export class StateActions {
     this.state.totalRows.set(result.rowCount);
     this.state.filteredRows.set(result.rowCount);
     initializeColumnsFromSchema(this.state, result.schema);
-    // Where a Shift-click range starts, a row of the data this replaced.
-    // Forgotten here, once the load has landed, rather than at the reset
-    // above: a load turned away keeps it with the selection it restores.
-    this.lastSelectedIndex = null;
 
     // Store the base table name for derived column support
     this.state.baseTableName.set(result.tableName);
@@ -2971,7 +2972,8 @@ export class StateActions {
    * @param mode - Selection mode:
    *   - 'replace': Replace selection with this row (default, normal click)
    *   - 'toggle': Toggle this row in selection (Ctrl+click)
-   *   - 'range': Select range from last selected to this row (Shift+click)
+   *   - 'range': Select range from last selected to this row (Shift+click),
+   *     or this row alone when there is none or it is past the end of the view
    */
   selectRow(index: number, mode: 'replace' | 'toggle' | 'range' = 'replace'): void {
     this.throwIfDestroyed('selectRow');
@@ -3002,8 +3004,12 @@ export class StateActions {
       }
 
       case 'range':
-        if (this.lastSelectedIndex === null) {
-          // No previous selection, treat as replace
+        // No previous selection, or one past the end of the view, where a
+        // filter change can leave it: nothing to run from, so this row alone.
+        if (
+          this.lastSelectedIndex === null ||
+          this.lastSelectedIndex >= effectiveRowCount(this.state)
+        ) {
           this.state.selectedRows.set(new Set([index]));
           this.lastSelectedIndex = index;
         } else {

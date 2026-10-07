@@ -598,6 +598,33 @@ describe('StateActions', () => {
       actions.selectRow(5, 'range');
       expect(state.selectedRows.get()).toEqual(new Set([2, 3, 4, 5]));
     });
+
+    it('a load that fails another way forgets where a range starts, with the selection', async () => {
+      mockBridge.loadData.mockRejectedValueOnce(new Error('Parser Error: unterminated quote'));
+      actions.selectRow(2);
+
+      await expect(actions.loadData('n\n1\n2', { format: 'csv' })).rejects.toThrow('Parser Error');
+      expect(state.selectedRows.get().size).toBe(0);
+      // Rows to range over, so that a range from row 2 would show.
+      state.totalRows.set(100);
+      actions.selectRow(5, 'range');
+
+      expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it("a 'range' from a row past the end of the view selects its row alone", () => {
+      // Row 90 of 100 selected, then a filter down to 10 rows.
+      actions.selectRow(90);
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      state.filteredRows.set(10);
+
+      actions.selectRow(3, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([3]));
+
+      // Row 3 is where the next range starts.
+      actions.selectRow(5, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([3, 4, 5]));
+    });
   });
 
   describe('UI State Actions', () => {

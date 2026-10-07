@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ColumnHeader, type ColumnHeaderOptions } from '@/table/ColumnHeader';
-import { createTableState } from '@/core/State';
+import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import { defaultStrings, mergeStrings } from '@/core/Strings';
@@ -477,6 +477,12 @@ describe('ColumnHeader', () => {
     };
     const doc: ColumnSchema = { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' };
 
+    // The width comes from the table's column layout, which knows a column
+    // by its entry in the table's schema.
+    beforeEach(() => {
+      initializeColumnsFromSchema(state, [column, tags, doc]);
+    });
+
     function doubleClickResizeHandle(header: ColumnHeader): void {
       header
         .getElement()
@@ -549,6 +555,22 @@ describe('ColumnHeader', () => {
 
       expect(header.getElement().style.width).toBe('150px');
       expect(state.columnWidths.get().has('test_column')).toBe(false);
+      header.destroy();
+    });
+
+    it('follows its column’s schema entry, without being rebuilt for it', () => {
+      // A derived column edited from a number to a list keeps its name and
+      // gets a new schema entry.
+      const header = new ColumnHeader(column, state, actions);
+      document.body.appendChild(header.getElement());
+      expect(header.getWidth()).toBe(150);
+
+      state.schema.set([{ ...column, type: 'nested', originalType: 'INTEGER[]' }, tags, doc]);
+      expect(header.getWidth()).toBe(168);
+
+      actions.setColumnWidth('test_column', 300);
+      doubleClickResizeHandle(header);
+      expect(header.getElement().style.width).toBe('168px');
       header.destroy();
     });
   });

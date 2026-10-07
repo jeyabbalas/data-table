@@ -801,12 +801,11 @@ export class KeyboardNavigator {
         this.claimGridFocus();
         this.actions.resetColumnWidth(layout.column);
         this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, layout.column);
-        const header = this.findHeader(layout.column);
-        // The column's own default, 168 px for a nested or JSON column.
+        // The column's own default now: 168 px for a nested or JSON column.
         this.announce(
           this.messages.a11y.columnWidthAnnouncement(
             layout.column,
-            header?.getWidth() ?? getColumnLayout(this.state).widthOf(layout.column),
+            getColumnLayout(this.state).widthOf(layout.column),
           ),
         );
         return true;

@@ -3,10 +3,11 @@
  * position, shared by the header, the body, the pinned styles and keyboard
  * navigation.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
+import { isInspectableColumn } from '@/nested/typeOutline';
 import {
   ColumnLayout,
   DEFAULT_COLUMN_WIDTH,
@@ -15,6 +16,13 @@ import {
   getColumnLayout,
   resolveColumnWidth,
 } from '@/table/ColumnLayout';
+
+// Counted, to show the layout decides each column's default once per schema
+// rather than on every rebuild. It answers as it always does.
+vi.mock('@/nested/typeOutline', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/nested/typeOutline')>();
+  return { ...actual, isInspectableColumn: vi.fn(actual.isInspectableColumn) };
+});
 
 type ColumnType = Pick<ColumnSchema, 'type' | 'originalType'>;
 
@@ -191,6 +199,21 @@ describe('ColumnLayout', () => {
     expect(l.widthOf('unknown')).toBe(150);
   });
 
+  it('answers defaultWidthOf for any column, sized or not, visible or not', () => {
+    // What a reset brings the column back to.
+    const l = layout({
+      visible: ['a', 'tags'],
+      schema: ['a', 'tags', 'doc'],
+      types: { tags: LIST, doc: JSON_TEXT },
+      widths: [['tags', 300]],
+    });
+    expect(l.widthOf('tags')).toBe(300);
+    expect(l.defaultWidthOf('tags')).toBe(168);
+    expect(l.defaultWidthOf('doc')).toBe(168);
+    expect(l.defaultWidthOf('a')).toBe(150);
+    expect(l.defaultWidthOf('unknown')).toBe(150);
+  });
+
   it('places a pinned column after a nested one by the nested one’s 168 px', () => {
     const l = layout({ pinned: ['a', 'b'], types: { a: LIST } });
     expect(l.pinnedPlacement('b')).toEqual({ left: 168, zOffset: 1 });
@@ -286,6 +309,31 @@ describe('getColumnLayout', () => {
     expect(layout.widthOf('b')).toBe(168);
     expect(layout.leftAt(2)).toBe(318);
     expect(layout.totalWidth).toBe(468);
+  });
+
+  it('decides each column’s default once per schema, not on every rebuild', () => {
+    // A resize drag writes a new `columnWidths` on every pointer event, and
+    // each one rebuilds the layout. Going over the schema again each time
+    // cost a lookup per column per event on a wide table.
+    const schema = Array.from({ length: 300 }, (_, i) =>
+      entry(`c${i}`, i % 3 === 0 ? LIST : undefined),
+    );
+    const state = createTableState();
+    initializeColumnsFromSchema(state, schema);
+    expect(getColumnLayout(state).widthOf('c0')).toBe(168);
+    const decide = vi.mocked(isInspectableColumn);
+    decide.mockClear();
+
+    for (let width = 100; width < 140; width++) {
+      state.columnWidths.set(new Map([['c1', width]]));
+      expect(getColumnLayout(state).widthOf('c1')).toBe(width);
+    }
+    expect(decide).not.toHaveBeenCalled();
+
+    // A new schema array is decided again, once per column.
+    state.schema.set([...schema]);
+    expect(getColumnLayout(state).widthOf('c3')).toBe(168);
+    expect(decide).toHaveBeenCalledTimes(300);
   });
 
   it('gives a hidden nested column its default', () => {

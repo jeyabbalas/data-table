@@ -706,8 +706,6 @@ describe('KeyboardNavigator', () => {
         (col, i) => new ColumnHeader(col, state, actions, { cellId: `dt-t1-colheader-${i}` }),
       );
       for (const h of headers) grid.appendChild(h.getElement());
-      // What the navigator finds the headers in: a spec can take one away.
-      const live = [...headers];
 
       const announce = vi.fn();
       const nav = new KeyboardNavigator({
@@ -717,7 +715,7 @@ describe('KeyboardNavigator', () => {
         state,
         actions,
         getTableBody: () => makeStubBody(),
-        getColumnHeaders: () => live,
+        getColumnHeaders: () => headers,
         announce,
       });
 
@@ -726,7 +724,7 @@ describe('KeyboardNavigator', () => {
         for (const h of headers) h.destroy();
       };
 
-      return { state, actions, root, grid, headers, live, nav, announce, cleanup };
+      return { state, actions, root, grid, headers, nav, announce, cleanup };
     }
 
     it('ArrowUp from body row 0 lands on the header row', () => {
@@ -1153,18 +1151,6 @@ describe('KeyboardNavigator', () => {
         expect(state.columnWidths.get().has('b')).toBe(false);
         expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 168));
         cleanup();
-      });
-
-      it('Backspace announces the column’s own default when its header has gone', () => {
-        const harness = enterLayout(setupWithHeaders(100, withNestedB()));
-        keydown(harness.root, { key: 'End' });
-        harness.live.length = 0;
-
-        keydown(harness.root, { key: 'Backspace' });
-
-        expect(harness.state.columnWidths.get().has('b')).toBe(false);
-        expect(harness.announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 168));
-        harness.cleanup();
       });
 
       it('Shift+Right moves the column one position and announces where it landed', () => {

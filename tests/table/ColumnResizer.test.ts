@@ -328,12 +328,16 @@ describe('ColumnResizer', () => {
       resizer.detach();
     });
 
-    it('animates the header back to the column’s own default width', () => {
-      // A nested or JSON column's: `ColumnHeader` passes 168.
+    it('animates the header back to the column’s own default width, read at the double-click', () => {
+      // A nested or JSON column's is 168. Read when the handle is pressed,
+      // not when the resizer is built: the column's schema entry, which
+      // decides it, can change in between.
+      let defaultWidth = 150;
       header.style.width = '300px';
       const resizer = new ColumnResizer(header, onResize, vi.fn(), undefined, {
-        defaultWidth: 168,
+        getDefaultWidth: () => defaultWidth,
       });
+      defaultWidth = 168;
 
       doubleClick();
 

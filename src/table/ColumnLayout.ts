@@ -20,7 +20,7 @@
  */
 import type { TableState } from '../core/State';
 import type { ColumnSchema } from '../core/types';
-import { isInspectableColumn } from './Cell';
+import { isInspectableColumn } from '../nested/typeOutline';
 
 /** Width of a column that `columnWidths` has no usable entry for. */
 export const DEFAULT_COLUMN_WIDTH = 150;
@@ -29,10 +29,12 @@ export const DEFAULT_COLUMN_WIDTH = 150;
  * Width of a nested or JSON column that `columnWidths` has no usable entry
  * for. Its header has six 22 px controls (pin, hide, filter, extract, sort,
  * the drag handle), which with 2 px between them take 6 × 22 + 5 × 2 =
- * 142 px; with the header's 24 px of padding and 1 px border, 167; and 1 px
- * more for rounding. At 150 px they touched, short of the 2 px WCAG 2.2 asks
- * between targets under 24 px (SC 2.5.8), and the drag handle lost the last
- * 4 px of its box.
+ * 142 px; with the header's padding (`0.75rem` a side, 24 px at a 16 px
+ * root) and 1 px border, 167; and 1 px more for rounding. At 150 px they
+ * touched, short of the 2 px WCAG 2.2 asks between targets under 24 px
+ * (SC 2.5.8), and the drag handle lost the last 4 px of its box. At a larger
+ * root font the padding grows, and the controls that do not fit clip at rest
+ * until the bar is pointed at or focused, 2 px apart still.
  */
 export const NESTED_COLUMN_WIDTH = 168;
 
@@ -44,6 +46,8 @@ export const NESTED_COLUMN_WIDTH = 168;
  * not have. It depends on the column alone: with `extractColumns: false` a
  * nested column's header has five controls, and the column is still 168 px.
  *
+ * The layout reads it once per schema ({@link ColumnLayout.defaultWidthOf}).
+ *
  * @example
  * ```typescript
  * defaultColumnWidth({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // → 168
@@ -52,6 +56,24 @@ export const NESTED_COLUMN_WIDTH = 168;
  */
 export function defaultColumnWidth(column: ColumnSchema | undefined): number {
   return isInspectableColumn(column) ? NESTED_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH;
+}
+
+/**
+ * {@link defaultColumnWidth} of each column, by name, per schema array. The
+ * state layer replaces the array when any entry changes, and keeps it through
+ * every other change, so a layout rebuilt for a new width, on each pointer
+ * event of a resize drag, finds its defaults here rather than going over the
+ * schema again.
+ */
+const defaultWidthsBySchema = new WeakMap<readonly ColumnSchema[], ReadonlyMap<string, number>>();
+
+function defaultWidthsOf(schema: readonly ColumnSchema[]): ReadonlyMap<string, number> {
+  let widths = defaultWidthsBySchema.get(schema);
+  if (!widths) {
+    widths = new Map(schema.map((column) => [column.name, defaultColumnWidth(column)]));
+    defaultWidthsBySchema.set(schema, widths);
+  }
+  return widths;
 }
 
 /**
@@ -129,8 +151,8 @@ export class ColumnLayout {
   private readonly pinned: Map<string, PinnedPlacement>;
   private readonly ariaIndexByName: Map<string, number>;
   private readonly declaredWidths: ReadonlyMap<string, number>;
-  /** The nested and JSON columns, hidden ones included: 168 px until sized. */
-  private readonly nestedNames: Set<string>;
+  /** Every schema column's default width, hidden ones included. */
+  private readonly defaultWidths: ReadonlyMap<string, number>;
 
   constructor(inputs: {
     visibleColumns: readonly string[];
@@ -142,11 +164,7 @@ export class ColumnLayout {
     const { visibleColumns, columnWidths } = inputs;
     this.columns = visibleColumns;
     this.declaredWidths = columnWidths;
-
-    this.nestedNames = new Set();
-    for (const column of inputs.schema) {
-      if (isInspectableColumn(column)) this.nestedNames.add(column.name);
-    }
+    this.defaultWidths = defaultWidthsOf(inputs.schema);
 
     const pinnedSet = new Set(inputs.pinnedColumns);
     this.widths = new Array<number>(visibleColumns.length);
@@ -219,19 +237,25 @@ export class ColumnLayout {
 
   /**
    * Width of `column`, visible or not: {@link resolveColumnWidth} of its
-   * declared width, with its own default (168 px for a nested or JSON
-   * column, 150 for any other).
+   * declared width, with {@link ColumnLayout.defaultWidthOf} as the default.
    */
   widthOf(column: string): number {
     const index = this.indexByName.get(column);
     return index === undefined ? this.resolveWidth(column) : this.widths[index]!;
   }
 
+  /**
+   * The width `column` has until it is sized, visible or not, and what
+   * resetting its width brings it back to: {@link defaultColumnWidth} of its
+   * schema entry, 168 px for a nested or JSON column and 150 for any other.
+   * 150 for a column the schema does not have.
+   */
+  defaultWidthOf(column: string): number {
+    return this.defaultWidths.get(column) ?? DEFAULT_COLUMN_WIDTH;
+  }
+
   private resolveWidth(column: string): number {
-    return resolveColumnWidth(
-      this.declaredWidths.get(column),
-      this.nestedNames.has(column) ? NESTED_COLUMN_WIDTH : DEFAULT_COLUMN_WIDTH,
-    );
+    return resolveColumnWidth(this.declaredWidths.get(column), this.defaultWidthOf(column));
   }
 
   /** Sticky placement for a visible pinned column, `undefined` for any other. */

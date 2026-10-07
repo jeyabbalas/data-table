@@ -227,9 +227,10 @@ function formatTemporalLine2(
   const minDate = formatDateForStats(stats.min);
   const maxDate = formatDateForStats(stats.max);
 
-  // Beside values the chart leaves out, "all values" would be false.
-  if (minDate === maxDate && !note) {
-    return s.allValues(escapeHtml(minDate));
+  if (minDate === maxDate) {
+    // Beside values the chart leaves out, "all values" would be false: the
+    // date and the note, "2020-01-01 \u00b7 1 non-finite".
+    return note ? [escapeHtml(minDate), note].join(s.separator) : s.allValues(escapeHtml(minDate));
   }
 
   const parts = [`${escapeHtml(minDate)} \u2013 ${escapeHtml(maxDate)}`];

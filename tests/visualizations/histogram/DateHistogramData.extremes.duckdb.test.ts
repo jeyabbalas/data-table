@@ -20,13 +20,16 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Filter } from '@/core/types';
-import { filtersToWhereClause } from '@/filters/FilterSQL';
+import { dateToSQLLiteral, filtersToWhereClause } from '@/filters/FilterSQL';
+import type { RangeFilter } from '@/filters/FilterTypes';
 import {
+  dateBrushFilter,
   fetchDateHistogramBins,
   fetchDateHistogramData,
   fetchDateNumericBins,
   fetchDateStats,
   type DateHistogramBin,
+  type DateHistogramData,
 } from '@/visualizations/histogram/DateHistogramData';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from '../../helpers/duckdbNode';
@@ -304,7 +307,7 @@ describe('date histogram — before year 1, past 9999 and infinity (RT-18)', () 
     expect(binned(data.bins)).toBe(1001);
   });
 
-  describe('a brush over a bar matches the rows of that bar', () => {
+  describe('a brush over bars matches the rows of those bars', () => {
     /** The rows of `t` passing `filter`, counted by DuckDB. */
     const matching = async (t: string, filter: Filter): Promise<number> => {
       const [row] = await bridge.query<{ n: number }>(
@@ -313,70 +316,73 @@ describe('date histogram — before year 1, past 9999 and infinity (RT-18)', () 
       return Number(row!.n);
     };
 
+    /** The foreground bins under `filter`, as `DateHistogram.fetchAlignedForeground` fetches them. */
+    const foreground = (
+      t: string,
+      data: DateHistogramData,
+      filter: Filter,
+    ): Promise<DateHistogramBin[]> =>
+      data.isNumericBinning
+        ? fetchDateNumericBins(
+            t,
+            'v',
+            data.bins.length,
+            data.min!.getTime(),
+            data.max!.getTime(),
+            [filter],
+            bridge,
+            data.nonFiniteCount === 0,
+          )
+        : fetchDateHistogramBins(
+            t,
+            'v',
+            data.interval,
+            [filter],
+            bridge,
+            data.nonFiniteCount === 0,
+          );
+
+    /** Brush bars `start` to `end` as the chart does; the foreground keeps those bars' counts. */
+    const brushAndCheck = async (
+      t: string,
+      originalType: string,
+      start: number,
+      end: number,
+    ): Promise<RangeFilter> => {
+      const data = await fetchDateHistogramData(t, 'v', [], bridge);
+      const filter = dateBrushFilter('v', originalType, data, start, end)!;
+      const counted = data.bins.slice(start, end + 1).reduce((sum, bin) => sum + bin.count, 0);
+
+      const fg = await foreground(t, data, filter);
+
+      expect(counted).toBeGreaterThan(0);
+      expect(binned(fg)).toBe(counted);
+      expect(await matching(t, filter)).toBe(counted);
+      return filter;
+    };
+
     it('a quarter before year 1, on the DATE_TRUNC path', async () => {
       const t = await create(DATE_45_TO_43_BC);
-      const data = await fetchDateHistogramData(t, 'v', [], bridge);
-      const bar = data.bins[5]!;
-      // As the brush filters a DATE_TRUNC bar: its start up to the next one's.
-      const filter: Filter = { type: 'range', column: 'v', min: bar.binStart, max: bar.binEnd };
-
-      const fg = await fetchDateHistogramBins(t, 'v', data.interval, [filter], bridge);
-
-      expect(fg).toEqual([bar]);
-      expect(await matching(t, filter)).toBe(bar.count);
+      const filter = await brushAndCheck(t, 'DATE', 5, 5);
+      expect(filter).toEqual({
+        column: 'v',
+        type: 'range',
+        min: '-000043-04-01T00:00:00.000Z',
+        max: '-000043-07-01T00:00:00.000Z',
+      });
     });
 
     it('the first bar, from 44 BC, on the equal-width path', async () => {
       const t = await create(TIMESTAMP_44_BC_TO_12000);
-      const data = await fetchDateHistogramData(t, 'v', [], bridge);
-      const bar = data.bins[0]!;
-      const filter: Filter = { type: 'range', column: 'v', min: bar.binStart, max: bar.binEnd };
-      expect(filtersToWhereClause([filter])).toContain(`>= '-000043-03-15T12:30:00.000Z'`);
-
-      const fg = await fetchDateNumericBins(
-        t,
-        'v',
-        data.bins.length,
-        data.min!.getTime(),
-        data.max!.getTime(),
-        [filter],
-        bridge,
-      );
-
-      expect(fg[0]!.count).toBe(bar.count);
-      expect(binned(fg)).toBe(bar.count);
-      expect(await matching(t, filter)).toBe(bar.count);
+      const filter = await brushAndCheck(t, 'TIMESTAMP', 0, 0);
+      expect(filter.min).toBe('-000043-03-15T12:30:00.000Z');
     });
 
     it('the last bar, ending in the year 12000, on the equal-width path', async () => {
       const t = await create(DATE_TO_12000);
-      const data = await fetchDateHistogramData(t, 'v', [], bridge);
-      const last = data.bins.length - 1;
-      const bar = data.bins[last]!;
-      // The brush includes the last bar's end, the column's maximum.
-      const filter: Filter = {
-        type: 'range',
-        column: 'v',
-        min: bar.binStart,
-        max: bar.binEnd,
-        maxInclusive: true,
-      };
-
-      const fg = await fetchDateNumericBins(
-        t,
-        'v',
-        data.bins.length,
-        data.min!.getTime(),
-        data.max!.getTime(),
-        [filter],
-        bridge,
-      );
-
-      expect(fg[last]!.count).toBe(bar.count);
-      expect(binned(fg)).toBe(bar.count);
-      expect(await matching(t, filter)).toBe(bar.count);
+      const filter = await brushAndCheck(t, 'DATE', 14, 14);
       // Not the `+012000-…` that `toISOString` writes, which DuckDB rejects.
-      expect(filtersToWhereClause([filter])).toContain(`<= '12000-01-01T00:00:00.000Z'`);
+      expect(filter).toMatchObject({ max: '12000-01-01T00:00:00.000Z', maxInclusive: true });
     });
 
     it('the last bar keeps a maximum with digits past the millisecond', async () => {
@@ -386,18 +392,61 @@ describe('date histogram — before year 1, past 9999 and infinity (RT-18)', () 
         `SELECT TIMESTAMP '1990-01-01' + to_days(CAST(range * 10 AS INTEGER)) AS v FROM range(1000)
          UNION ALL SELECT TIMESTAMP '2030-01-01 00:00:00.123456'`,
       );
+      const filter = await brushAndCheck(t, 'TIMESTAMP', 14, 14);
+      expect(filter.max).toBe('2030-01-01T00:00:00.124Z');
+    });
+
+    /** TIMESTAMP_NS up to its last finite value, 2262-04-11 23:47:16.854775806. */
+    const nsToItsEnd = (from: string, days: number): string =>
+      `SELECT CAST(TIMESTAMP '${from}' + to_days(CAST(range * ${days} AS INTEGER)) AS TIMESTAMP_NS) AS v
+       FROM range(600)
+       UNION ALL SELECT make_timestamp_ns(9223372036854775806)`;
+
+    it('the last bar of a TIMESTAMP_NS column at its maximum, on the equal-width path', async () => {
+      const t = await create(nsToItsEnd('2000-01-01', 30));
       const data = await fetchDateHistogramData(t, 'v', [], bridge);
       expect(data.isNumericBinning).toBe(true);
-      const bar = data.bins[data.bins.length - 1]!;
-      const filter: Filter = {
-        type: 'range',
-        column: 'v',
-        min: bar.binStart,
-        max: bar.binEnd,
-        maxInclusive: true,
-      };
+      // The maximum rounds up to a millisecond the type does not hold.
+      const end = data.bins[data.bins.length - 1]!.binEnd;
+      expect(end.toISOString()).toBe('2262-04-11T23:47:16.855Z');
+      await expect(
+        matching(t, {
+          type: 'range',
+          column: 'v',
+          min: -Infinity,
+          max: dateToSQLLiteral(end),
+          maxInclusive: true,
+        }),
+      ).rejects.toThrow(/Conversion Error/);
 
-      expect(await matching(t, filter)).toBe(bar.count);
+      const filter = await brushAndCheck(t, 'TIMESTAMP_NS', 14, 14);
+      expect(filter).toMatchObject({ max: '2262-04-11T23:47:16.854775806Z', maxInclusive: true });
+    });
+
+    it('the last bar of a TIMESTAMP_NS column at its maximum, by calendar unit', async () => {
+      const t = await create(nsToItsEnd('2260-06-01', 1));
+      const data = await fetchDateHistogramData(t, 'v', [], bridge);
+      expect(data.interval).toBe('quarter');
+      const last = data.bins.length - 1;
+      // The last quarter ends in July 2262, past the type.
+      expect(data.bins[last]!.binEnd.toISOString()).toBe('2262-07-01T00:00:00.000Z');
+
+      const filter = await brushAndCheck(t, 'TIMESTAMP_NS', last - 1, last);
+      expect(filter).toMatchObject({ max: '2262-04-11T23:47:16.854775806Z', maxInclusive: true });
+    });
+
+    it('the first bar of a TIMESTAMP_NS column from 1677-09-22, by calendar unit', async () => {
+      // DuckDB casts no text before 1677-09-22 to TIMESTAMP_NS, and the first
+      // quarter starts in July 1677.
+      const t = await create(
+        `SELECT CAST(TIMESTAMP '1677-09-22' + to_days(CAST(range AS INTEGER)) AS TIMESTAMP_NS) AS v
+         FROM range(600)`,
+      );
+      const data = await fetchDateHistogramData(t, 'v', [], bridge);
+      expect(data.bins[0]!.binStart.toISOString()).toBe('1677-07-01T00:00:00.000Z');
+
+      const filter = await brushAndCheck(t, 'TIMESTAMP_NS', 0, 1);
+      expect(filter.min).toBe('1677-09-22T00:00:00.000Z');
     });
   });
 
@@ -410,10 +459,12 @@ describe('date histogram — before year 1, past 9999 and infinity (RT-18)', () 
     );
     const initial = await fetchDateHistogramData(t, 'v', [], bridge);
     expect(initial.isNumericBinning).toBe(true);
+    expect(initial.nonFiniteCount).toBe(100);
     const filter: Filter = { type: 'range', column: 'g', min: 0, max: 500 };
     const expected = await counts(t, filtersToWhereClause([filter]));
 
-    // `DateHistogram.fetchAlignedForeground` runs these two with the filter.
+    // `DateHistogram.fetchAlignedForeground` runs these two with the filter,
+    // telling them the column holds values the chart leaves out.
     const [bins, stats] = await Promise.all([
       fetchDateNumericBins(
         t,
@@ -423,13 +474,62 @@ describe('date histogram — before year 1, past 9999 and infinity (RT-18)', () 
         initial.max!.getTime(),
         [filter],
         bridge,
+        false,
       ),
-      fetchDateStats(t, 'v', [filter], bridge),
+      fetchDateStats(t, 'v', [filter], bridge, false),
     ]);
 
     expect(binned(bins)).toBe(expected.chartable);
     expect(stats.nonFiniteCount).toBe(expected.nonFinite);
     expect(stats.count + stats.nullCount).toBe(expected.total);
     expect(stats.min?.toISOString()).toBe('-000043-03-15T00:00:00.000Z');
+  });
+
+  describe('what the unfiltered fetch found changes the queries, not the answers', () => {
+    const FILTER: Filter = { type: 'range', column: 'g', min: 100, max: 700 };
+
+    /** The stats and bins under FILTER, given what the column is known to hold. */
+    const fetchAll = async (
+      t: string,
+      initial: DateHistogramData,
+      allChartable: boolean | undefined,
+    ): Promise<unknown> => ({
+      stats: await fetchDateStats(t, 'v', [FILTER], bridge, allChartable),
+      numeric: await fetchDateNumericBins(
+        t,
+        'v',
+        15,
+        initial.min!.getTime(),
+        initial.max!.getTime(),
+        [FILTER],
+        bridge,
+        allChartable,
+      ),
+      byYear: await fetchDateHistogramBins(t, 'v', 'year', [FILTER], bridge, allChartable),
+      data: await fetchDateHistogramData(t, 'v', [FILTER], bridge, 15, allChartable),
+    });
+
+    it('a column whose values can all be drawn', async () => {
+      const t = await create(
+        `SELECT range AS g, DATE '1900-01-01' + CAST(range * 45 AS INTEGER) AS v FROM range(1000)`,
+      );
+      const initial = await fetchDateHistogramData(t, 'v', [], bridge);
+      expect(initial.nonFiniteCount).toBe(0);
+
+      expect(await fetchAll(t, initial, true)).toEqual(await fetchAll(t, initial, undefined));
+    });
+
+    it('a column holding infinity and dates a JavaScript Date cannot hold', async () => {
+      const t = await create(
+        `SELECT range AS g,
+                CASE range % 7 WHEN 0 THEN 'infinity'::DATE WHEN 1 THEN DATE '300000-01-01'
+                               ELSE DATE '1900-01-01' + CAST(range * 45 AS INTEGER) END AS v
+         FROM range(1000)`,
+      );
+      const initial = await fetchDateHistogramData(t, 'v', [], bridge);
+      expect(initial.nonFiniteCount).toBe(286);
+
+      expect(await fetchAll(t, initial, false)).toEqual(await fetchAll(t, initial, undefined));
+    });
   });
 });

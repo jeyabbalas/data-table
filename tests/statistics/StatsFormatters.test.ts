@@ -650,11 +650,11 @@ describe('formatStatsLine2 - temporal extremes', () => {
     expect(formatStatsLine2(stats, 'date')).toBe('3 non-finite');
   });
 
-  it('keeps the range for one date beside non-finite ones', () => {
+  it('shows one date and the note beside non-finite ones', () => {
     const one = { min: '2024-06-15T12:00:00.000Z', max: '2024-06-15T12:00:00.000Z' };
     // "all values: 2024-06-15" would be false.
     expect(formatStatsLine2(makeTemporal({ ...one, nonFiniteCount: 1 }), 'timestamp')).toBe(
-      '2024-06-15 – 2024-06-15 · 1 non-finite',
+      '2024-06-15 · 1 non-finite',
     );
     expect(formatStatsLine2(makeTemporal({ ...one, nonFiniteCount: 0 }), 'timestamp')).toBe(
       'all values: 2024-06-15',

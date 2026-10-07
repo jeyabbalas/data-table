@@ -97,8 +97,34 @@ import type { ColumnSchema, Filter } from '../../../src/core/types';
 import type { TemporalColumnStats } from '../../../src/statistics/ColumnStatsTypes';
 import type { VisualizationOptions } from '../../../src/visualizations/BaseVisualization';
 import { DateHistogram } from '../../../src/visualizations/histogram/DateHistogram';
+import {
+  fetchDateNumericBins,
+  fetchDateStats,
+} from '../../../src/visualizations/histogram/DateHistogramData';
 
 const COLUMN: ColumnSchema = { name: 'd', type: 'date', nullable: true, originalType: 'DATE' };
+const NS_COLUMN: ColumnSchema = {
+  name: 'd',
+  type: 'timestamp',
+  nullable: true,
+  originalType: 'TIMESTAMP_NS',
+};
+
+/** Equal-width bars of a TIMESTAMP_NS column up to its last value, rounded up past it. */
+function nsData() {
+  const edges = [
+    '2000-01-01T00:00:00.000Z',
+    '2100-01-01T00:00:00.000Z',
+    '2262-04-11T23:47:16.855Z',
+  ].map(at);
+  return {
+    ...farData(),
+    bins: [0, 1].map((i) => ({ binStart: edges[i]!, binEnd: edges[i + 1]!, count: 5 })),
+    min: edges[0]!,
+    max: edges[2]!,
+    nonFiniteCount: 0,
+  };
+}
 
 let container: HTMLElement;
 
@@ -134,8 +160,9 @@ interface ChartInternals {
 async function mount(
   filters: Filter[] = [],
   extra: Partial<VisualizationOptions> = {},
+  column: ColumnSchema = COLUMN,
 ): Promise<{ viz: DateHistogram; internals: ChartInternals }> {
-  const viz = new DateHistogram(container, COLUMN, {
+  const viz = new DateHistogram(container, column, {
     tableName: 't',
     bridge: { query: vi.fn() } as unknown as VisualizationOptions['bridge'],
     filters,
@@ -147,9 +174,9 @@ async function mount(
 }
 
 /** The filter the brush emits over bars `start` to `end`. */
-async function brushFilter(start: number, end: number): Promise<Filter> {
+async function brushFilter(start: number, end: number, column = COLUMN): Promise<Filter> {
   const onFilterChange = vi.fn();
-  const { viz, internals } = await mount([], { onFilterChange });
+  const { viz, internals } = await mount([], { onFilterChange }, column);
   internals.brushState.startBinIndex = start;
   internals.brushState.endBinIndex = end;
   internals.emitBrushFilter();
@@ -216,6 +243,72 @@ describe('DateHistogram — bars before year 1 and past 9999', () => {
     ]);
 
     expect(internals.selectedBin).toBe(2);
+    viz.destroy();
+  });
+
+  it('draws the brush back from DuckDB’s text for a date before year 1', async () => {
+    // `new Date()` reads none of these: year 44 BC is year -43.
+    for (const [min, max] of [
+      ['0044-03-15 (BC)', '0001-01-01 (BC)'],
+      ['0044-03-15 (BC) 10:00:00', '0010-06-01 (BC) 23:59:59.5'],
+      ['0044-03-15 (BC) 10:00:00+05:30', '0001-12-31 (BC) 00:00:00+00'],
+    ]) {
+      const { viz, internals } = await mount([{ column: 'd', type: 'range', min, max }]);
+
+      expect(internals.brushState, `${min} to ${max}`).toMatchObject({
+        committed: true,
+        startBinIndex: 0,
+        endBinIndex: 0,
+      });
+      viz.destroy();
+    }
+  });
+
+  it('selects the bar of a point filter in DuckDB’s text before year 1', async () => {
+    const { viz, internals } = await mount([
+      { type: 'point', column: 'd', value: '0044-03-15 (BC) 12:30:00+00' },
+    ]);
+
+    expect(internals.selectedBin).toBe(0);
+    viz.destroy();
+  });
+
+  it('keeps a TIMESTAMP_NS brush inside the type, and draws it back', async () => {
+    // The last bar ends a rounded-up millisecond past the type's last value:
+    // `<= '…16.855Z'` would fail every query with a Conversion Error.
+    canned.data = nsData();
+    const filter = await brushFilter(1, 1, NS_COLUMN);
+    expect(filter).toEqual({
+      column: 'd',
+      type: 'range',
+      min: '2100-01-01T00:00:00.000Z',
+      max: '2262-04-11T23:47:16.854775806Z',
+      maxInclusive: true,
+    });
+
+    const { viz, internals } = await mount([filter], {}, NS_COLUMN);
+    expect(internals.brushState).toMatchObject({
+      committed: true,
+      startBinIndex: 1,
+      endBinIndex: 1,
+    });
+    viz.destroy();
+  });
+});
+
+describe('DateHistogram — the foreground fetches know what the unfiltered fetch found', () => {
+  it.each([
+    ['holds values left out', 2, false],
+    ['holds only values the chart draws', 0, true],
+    ['does not say', undefined, undefined],
+  ] as const)('a column that %s', async (_label, nonFiniteCount, allChartable) => {
+    const { nonFiniteCount: _omitted, ...data } = farData();
+    canned.data = nonFiniteCount === undefined ? data : { ...data, nonFiniteCount };
+    const { viz } = await mount([{ type: 'range', column: 'other', min: 0, max: 5 }]);
+
+    // fetchDateNumericBins(…, filters, bridge, allChartable), fetchDateStats(…, bridge, allChartable)
+    expect(vi.mocked(fetchDateNumericBins).mock.calls[0]![7]).toBe(allChartable);
+    expect(vi.mocked(fetchDateStats).mock.calls[0]![4]).toBe(allChartable);
     viz.destroy();
   });
 });

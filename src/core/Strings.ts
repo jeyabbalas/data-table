@@ -465,7 +465,7 @@ export interface Strings {
     otherCategory: (count: number) => string;
     /**
      * The label drawn inside the folded "Other" segment of a value-count
-     * bar, where it fits; {@link otherCategory} is its hover text.
+     * bar, where it fits; `otherCategory` is its hover text.
      */
     otherSegmentLabel: string;
     /** Display value for the all-unique segment (count = distinct values). */

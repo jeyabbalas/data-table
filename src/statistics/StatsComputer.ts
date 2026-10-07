@@ -18,8 +18,10 @@ import type { IntervalColumnStats } from './ColumnStatsTypes';
  * Fetch stats for an interval column via DuckDB SQL.
  *
  * Runs the interval histogram's stats query, so the minimum, median and
- * maximum are the ones its stats line shows: seconds on the chart's scale (a
- * month is 30.4375 days), formatted like `4d 4h 0.5s`.
+ * maximum are computed on the chart's seconds scale (a month is 30.4375
+ * days), and formatted like `4d 4h 0.5s`. All three are of the rows the
+ * filters pass; under a filter the chart's stats line keeps the unfiltered
+ * minimum and maximum beside the filtered median.
  */
 export async function fetchIntervalStats(
   tableName: string,

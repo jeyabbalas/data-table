@@ -26,6 +26,10 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+          # The newest Node 22, not the runner image's cached one, which can
+          # lag behind: `npm ci` needs 22.22.2 or later under `.npmrc`'s
+          # engine-strict (see DEVELOPMENT.md). Every job here sets it.
+          check-latest: true
 
       # Resolves advisories straight from the lockfile — no `npm ci`, so
       # this gates before any third-party install script would run.
@@ -42,6 +46,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+          check-latest: true
           cache: 'npm'
 
       - name: Install dependencies
@@ -73,6 +78,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
+          check-latest: true
           cache: 'npm'
 
       - name: Install dependencies
@@ -100,6 +106,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+          check-latest: true
           cache: 'npm'
 
       - name: Install dependencies
@@ -133,6 +140,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+          check-latest: true
           cache: 'npm'
 
       - name: Install dependencies

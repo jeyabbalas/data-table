@@ -197,12 +197,13 @@ filters: `min 0.57 · med 71.61 · max 142.71 · 30 non-finite`
 (`messages.statistics.nonFiniteCount`). They are values, not nulls, so
 line 1 and every percentage still count them. A column with no finite
 values draws "No data", or its null bar when it has nulls, and line 2 is
-the count alone. A brush never selects them, as its bounds are finite. The
-filter panel's `>` and `>=` can: `"v" >= 100` holds for `NaN`, which
-DuckDB sorts above every number, and for `Infinity`, as `<` and `<=` hold
-for `-Infinity`. Line 1 then counts those rows, while the committed
-selection, which sums the bars under the brush, does not. To see only
-them, add a raw-SQL filter, `NOT isfinite(v)`.
+the count alone. A brush never selects them, as its bounds are finite.
+Two filters the chart draws as a brush do match them: the filter panel's
+`>` and `>=` (`"v" >= 100` holds for `NaN`, which DuckDB sorts above every
+number, and for `Infinity`; `<` and `<=` hold for `-Infinity`), and a
+`not-null` filter, drawn over every bar. Line 1 then counts those rows,
+while the committed selection, which sums the bars under the brush, does
+not. To see only them, add a raw-SQL filter, `NOT isfinite(v)`.
 
 All of these strings are localizable via `messages.statistics.*` — see
 the [i18n guide](./i18n.md).

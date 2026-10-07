@@ -259,18 +259,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The buttons are 22 px, under WCAG 2.2's 24 px target size. At least 2 px
+     apart, revealed too, their centres are 24 px apart, which SC 2.5.8
+     accepts instead. */
+  column-gap: 2px;
   box-sizing: content-box;
   /* The 3 px each side that the margin takes back keep a focused button's
      outline inside the clip below. */
   padding: 0.25rem 3px;
   margin: 0 -3px;
-  /* The buttons need about 135 px with the header's padding, and a column
-     can be 50 px wide. Past the header's edge they went under the next
-     header, which painted over them, or, from a pinned header, over the
-     first unpinned one, where they took its clicks. Clipped at the header's
-     padding instead. `clip`, not `hidden`: no scroll container to take the
-     wheel, and only sideways, so the multi-sort badge still rises above its
-     button. */
+  /* The buttons need about 143 px with the header's padding (a nested or
+     JSON column's six, 167 px), and a column can be 50 px wide. Past the
+     header's edge they went under the next header, which painted over them,
+     or, from a pinned header, over the first unpinned one, where they took
+     its clicks. Clipped at the header's padding instead. `clip`, not
+     `hidden`: no scroll container to take the wheel, and only sideways, so
+     the multi-sort badge still rises above its button. */
   overflow-x: clip;
 }
 

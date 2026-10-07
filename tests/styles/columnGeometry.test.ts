@@ -52,3 +52,19 @@ describe('grid geometry', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('header action bar', () => {
+  // Its controls are 22 px, under WCAG 2.2's 24 px target size, and pass
+  // SC 2.5.8 on spacing: 2 px between neighbours puts their centres 24 px
+  // apart. `space-between` alone packs them edge to edge once the bar is
+  // too narrow, as a nested column's six were at 150 px, and whenever the
+  // bar is revealed at `max-content`. `tests/browser/header-targets.spec.ts`
+  // measures the centres in a real layout.
+  it('keeps 2 px between its controls', () => {
+    const gaps = rules()
+      .filter((r) => r.selectors.includes('.dt-col-action-panel'))
+      .map((r) => /(?:^|;)\s*column-gap\s*:\s*([^;]+)/.exec(r.body)?.[1]?.trim())
+      .filter(Boolean);
+    expect(gaps).toEqual(['2px']);
+  });
+});

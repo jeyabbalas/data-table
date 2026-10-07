@@ -309,8 +309,8 @@ describe('VisualizationRegistry (Phase 3)', () => {
 
     const container = document.createElement('div');
     const viz = reg.create(container, makeColumn('integer'), makeOptions());
-    // Returning null is the contract; the facade then renders a
-    // PlaceholderVisualization in the column header.
+    // Returning null is the contract; the facade then leaves the column
+    // header without a chart, its stats slot showing the table-wide count.
     expect(viz).toBeNull();
   });
 

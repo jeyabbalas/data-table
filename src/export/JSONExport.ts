@@ -16,6 +16,13 @@
  * string, every digit kept, and NaN and ±Infinity are `null`, as
  * {@link formatValueForJSON} writes a bigint and a number. A JSON column's
  * value is written as its text, a string, as any text.
+ *
+ * Dates and times are ISO 8601 strings, read as DuckDB's text (see
+ * `exportColumnRead` in ExportQuery.ts): `"2024-01-02"`, `"03:04:05.5"`,
+ * and a timestamp with `T` between date and time,
+ * `"2024-01-02T03:04:05.123456"`, a TIMESTAMP WITH TIME ZONE in UTC with
+ * `Z`. `infinity`, `-infinity` and BC dates stay DuckDB's text, as do the
+ * dates and times inside a nested value.
  */
 
 import type { DuckDBTypeNode } from '../core/duckdbType';
@@ -24,7 +31,12 @@ import { setOwnProperty } from '../core/ownProperty';
 import type { TableState } from '../core/State';
 import { readJsonValue } from '../data/cellValue';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { resolveColumns, fetchAllRows, exportJsonColumns } from './ExportQuery';
+import {
+  resolveColumns,
+  fetchAllRows,
+  exportJsonColumns,
+  exportTimestampColumns,
+} from './ExportQuery';
 import type { ExportContext } from './ExportQuery';
 
 export type { ExportContext } from './ExportQuery';
@@ -68,8 +80,14 @@ const DEFAULT_JSON_OPTIONS: JSONExportOptions = {
  * | `bigint` outside safe range | `string` (decimal — preserves precision)   |
  * | `number` (`NaN`/`Infinity`) | `null` (JSON cannot represent these)       |
  * | `number`           | `number` (unchanged)                                |
- * | `Date`             | ISO 8601 UTC string (e.g. `"2024-06-15T12:30:00.000Z"`) |
+ * | `string`           | `string` (unchanged), a date or time's text among them |
+ * | a custom bridge's `Date` | ISO 8601 UTC string (`"2024-06-15T12:30:00.000Z"`) |
  * | other              | `String(value)` (best-effort)                       |
+ *
+ * The library's own bridge returns no `Date`: an export reads date and
+ * time columns as DuckDB's text (see the module comment), and
+ * {@link formatRowForJSON} puts a timestamp's `T` in. A `bridge` of your
+ * own in `ExportContext` may return one.
  *
  * **BigInt round-trip caveat.** A value just over the safe range
  * (e.g. `9007199254740993n`) is emitted as the string `"9007199254740993"`.
@@ -105,6 +123,23 @@ export function formatValueForJSON(value: unknown): unknown {
 }
 
 /**
+ * A timestamp's text from DuckDB as ISO 8601 writes it, with `T` between
+ * date and time: `2024-01-02 03:04:05.5` is `2024-01-02T03:04:05.5`, and
+ * `12345-01-02 03:04:05Z` is `12345-01-02T03:04:05Z`. Only a space before
+ * a digit becomes `T`, so `infinity` and a BC timestamp,
+ * `0044-03-15 (BC) 10:00:00`, are left as DuckDB writes them, the form
+ * DuckDB's casts read.
+ */
+export function isoDateTime(text: string): string {
+  const space = text.indexOf(' ');
+  const next = text.charCodeAt(space + 1);
+  // 0x30 to 0x39: '0' to '9'.
+  return space > 0 && next >= 0x30 && next <= 0x39
+    ? `${text.slice(0, space)}T${text.slice(space + 1)}`
+    : text;
+}
+
+/**
  * Convert a result row to a JSON-safe object containing only the requested
  * columns in the specified order.
  *
@@ -114,20 +149,28 @@ export function formatValueForJSON(value: unknown): unknown {
  *   `materialize` reads it in its `'export'` mode (`readJsonValue`, which
  *   uses `JSON.parse` where that gives the same values): see the module
  *   comment. A NULL is `null`.
+ * @param timestampColumns - Columns whose values are a timestamp's text
+ *   from DuckDB (`exportTimestampColumns` in ExportQuery.ts), written with
+ *   `T` between date and time by {@link isoDateTime}.
  */
 export function formatRowForJSON(
   row: Record<string, unknown>,
   columns: string[],
   jsonColumns?: ReadonlyMap<string, DuckDBTypeNode>,
+  timestampColumns?: ReadonlySet<string>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const col of columns) {
     const value = row[col];
     const type = jsonColumns?.get(col);
-    const formatted =
-      type !== undefined && typeof value === 'string'
-        ? readJsonValue(value, type, 'export')
-        : formatValueForJSON(value);
+    let formatted: unknown;
+    if (typeof value !== 'string') {
+      formatted = formatValueForJSON(value);
+    } else if (type !== undefined) {
+      formatted = readJsonValue(value, type, 'export');
+    } else {
+      formatted = timestampColumns?.has(col) === true ? isoDateTime(value) : value;
+    }
     setOwnProperty(result, col, formatted);
   }
   return result;
@@ -167,19 +210,22 @@ export async function exportToJSON(
     throw new DOMException('Export aborted', 'AbortError');
   }
 
-  // Nested columns arrive as their JSON text (see fetchAllRows).
+  // Nested columns arrive as their JSON text, and timestamps as DuckDB's
+  // text (see fetchAllRows).
   const jsonColumns = exportJsonColumns(columns, context.schema);
+  const timestampColumns = exportTimestampColumns(columns, context.schema);
 
   if (opts.format === 'ndjson') {
-    return exportNDJSON(tableName, columns, jsonColumns, opts, context, signal);
+    return exportNDJSON(tableName, columns, jsonColumns, timestampColumns, opts, context, signal);
   }
-  return exportArray(tableName, columns, jsonColumns, opts, context, signal);
+  return exportArray(tableName, columns, jsonColumns, timestampColumns, opts, context, signal);
 }
 
 async function exportArray(
   tableName: string,
   columns: string[],
   jsonColumns: ReadonlyMap<string, DuckDBTypeNode>,
+  timestampColumns: ReadonlySet<string>,
   opts: JSONExportOptions,
   context: ExportContext,
   signal?: AbortSignal,
@@ -195,7 +241,7 @@ async function exportArray(
     context,
     (rows) => {
       for (const row of rows) {
-        const formatted = formatRowForJSON(row, columns, jsonColumns);
+        const formatted = formatRowForJSON(row, columns, jsonColumns, timestampColumns);
         if (opts.pretty) {
           // Pretty-print each object with indentation, then indent the whole block
           const json = JSON.stringify(formatted, null, 2);
@@ -223,6 +269,7 @@ async function exportNDJSON(
   tableName: string,
   columns: string[],
   jsonColumns: ReadonlyMap<string, DuckDBTypeNode>,
+  timestampColumns: ReadonlySet<string>,
   opts: JSONExportOptions,
   context: ExportContext,
   signal?: AbortSignal,
@@ -236,7 +283,7 @@ async function exportNDJSON(
     context,
     (rows) => {
       for (const row of rows) {
-        const formatted = formatRowForJSON(row, columns, jsonColumns);
+        const formatted = formatRowForJSON(row, columns, jsonColumns, timestampColumns);
         lines.push(JSON.stringify(formatted));
       }
     },

@@ -6,9 +6,10 @@
  *
  * CSV and JSON exports read some columns in another form than the values
  * Arrow returns (see {@link exportColumnRead}): nested values as exact
- * JSON, a few scalars as DuckDB's text, and a DECIMAL as the double nearest
- * its value. Parquet export reads every column as it is, since a Parquet
- * file holds nested values natively.
+ * JSON, dates, times and a few other scalars as DuckDB's text (a TIMESTAMP
+ * WITH TIME ZONE in UTC), and a DECIMAL as the double nearest its value.
+ * Parquet export reads every column as it is, since a Parquet file holds
+ * nested values and dates natively.
  */
 
 import { dataTypeOf, holdsVariant, parseDuckDBType, type DuckDBTypeNode } from '../core/duckdbType';
@@ -87,15 +88,15 @@ export function isContiguousRange(
 // ---------------------------------------------------------------------------
 
 /**
- * Scalar types a CSV or JSON export reads as DuckDB's text, by the
- * upper-case name `parseDuckDBType` gives them. Arrow carries their values
- * in a form no file can use: an INTERVAL as an `Int32Array` that does not
- * hold it (apache-arrow 17), and a BLOB, BIT, GEOMETRY or BIGNUM as bytes,
- * which a CSV cell would print as `170,187`. A TIME WITH TIME ZONE arrives
- * as microseconds since midnight, its offset lost (`12:34:56+05:30` as
- * 45296000000), and a TIME_NS as nanoseconds. An ENUM value read through
- * the worker's cancellable query path (`conn.send`, as every `bridge.query`
- * runs) comes back `null` (duckdb-wasm 1.33), while its text is exact.
+ * Scalar types, other than dates and times, that a CSV or JSON export reads
+ * as DuckDB's text, by the upper-case name `parseDuckDBType` gives them.
+ * Arrow carries their values in a form no file can use: an INTERVAL as an
+ * `Int32Array` that does not hold it (apache-arrow 17), and a BLOB, BIT,
+ * GEOMETRY or BIGNUM as bytes, which a CSV cell would print as `170,187`.
+ * An ENUM value read through the worker's cancellable query path
+ * (`conn.send`, as every `bridge.query` runs) comes back `null`
+ * (duckdb-wasm 1.33), while its text is exact. Dates and times are read as
+ * text by their type: see {@link exportColumnRead}.
  */
 const TEXT_SCALAR_NAMES: ReadonlySet<string> = new Set([
   'INTERVAL',
@@ -110,9 +111,12 @@ const TEXT_SCALAR_NAMES: ReadonlySet<string> = new Set([
   'BIGNUM',
   'VARINT',
   'ENUM',
-  'TIME WITH TIME ZONE',
-  'TIMETZ',
-  'TIME_NS',
+]);
+
+/** The names of a TIMESTAMP WITH TIME ZONE, which an export writes in UTC. */
+const ZONED_TIMESTAMP_NAMES: ReadonlySet<string> = new Set([
+  'TIMESTAMP WITH TIME ZONE',
+  'TIMESTAMPTZ',
 ]);
 
 /**
@@ -126,7 +130,7 @@ const TEXT_SCALAR_NAMES: ReadonlySet<string> = new Set([
 const EXACT_DOUBLE_DIGITS = 15;
 
 /** How a CSV or JSON export reads a column: see {@link exportColumnRead}. */
-export type ExportColumnRead = 'raw' | 'text' | 'json' | 'double';
+export type ExportColumnRead = 'raw' | 'text' | 'timestamp' | 'utc' | 'json' | 'double';
 
 /**
  * How a CSV or JSON export reads `column`:
@@ -135,10 +139,23 @@ export type ExportColumnRead = 'raw' | 'text' | 'json' | 'double';
  *   exact JSON text from `jsonValueSQL`: `[1.25,2.5]`, `{"x":1,"tier":"b"}`,
  *   `{"num":42}` for a UNION. Arrow's own nested values are wrong for
  *   DECIMAL, HUGEINT and INTERVAL inside them, and a VARIANT cannot cross
- *   Arrow at all.
- * - `'text'`: INTERVAL, BLOB, BIT, GEOMETRY, BIGNUM, ENUM, TIME WITH TIME
- *   ZONE and TIME_NS, as DuckDB's text, `CAST(c AS VARCHAR)`; see
- *   {@link TEXT_SCALAR_NAMES}.
+ *   Arrow at all. Dates and times inside stay DuckDB's text.
+ * - `'text'`: a DATE or a TIME of any kind, and an INTERVAL, BLOB, BIT,
+ *   GEOMETRY, BIGNUM or ENUM, as DuckDB's text, `CAST(c AS VARCHAR)`:
+ *   `2024-01-02`, `03:04:05.5`, `12:34:56+05:30`. Arrow gives a DATE as
+ *   epoch milliseconds, a TIME as microseconds since midnight (a TIME WITH
+ *   TIME ZONE's offset lost), a TIME_NS as nanoseconds, and the others as
+ *   {@link TEXT_SCALAR_NAMES} says.
+ * - `'timestamp'`: a TIMESTAMP, TIMESTAMP_S, TIMESTAMP_MS or TIMESTAMP_NS,
+ *   as DuckDB's text, every digit and no zone, as the column has none:
+ *   `2024-01-02 03:04:05.123456789`. Arrow gives any timestamp as epoch
+ *   milliseconds, a TIMESTAMP_NS's nanoseconds rounded, and throws on
+ *   `±infinity` (`9223372036854775 is not safe to convert to a number`),
+ *   which failed the whole export; it reads a TIMESTAMP_NS's `infinity` as
+ *   `9223372036854.775`.
+ * - `'utc'`: a TIMESTAMP WITH TIME ZONE, as its text in UTC ending in `Z`
+ *   (`2024-01-02 03:04:05.5Z`) whatever the session's time zone; see
+ *   {@link utcTimestampText}.
  * - `'double'`: a DECIMAL, as the double nearest its value (see
  *   {@link EXACT_DOUBLE_DIGITS}), so that `0.35` is written `0.35`. Arrow's
  *   DECIMAL numbers, with duckdb-wasm's `castDecimalToDouble`, which
@@ -147,6 +164,13 @@ export type ExportColumnRead = 'raw' | 'text' | 'json' | 'double';
  *   `19.990000000000002`.
  * - `'raw'`: everything else, as the query returns it. A JSON column is
  *   already text, and stays as it is.
+ *
+ * DuckDB's text writes `infinity`, `-infinity` and a date before year 1 as
+ * `0044-03-15 (BC)`, and drops a fraction's trailing zeros. CSV and the
+ * clipboard keep the space between date and time, the form spreadsheets
+ * read for a DATE or TIMESTAMP (some show a TIMESTAMP WITH TIME ZONE's `Z`
+ * as text); a JSON export puts `T` there (see
+ * {@link exportTimestampColumns}).
  *
  * The type is read from `originalType`; a column the library types
  * `'nested'` is read as JSON whatever that says.
@@ -158,7 +182,17 @@ export function exportColumnRead(column: ColumnSchema): ExportColumnRead {
   if (column.type === 'nested' || dataTypeOf(node) === 'nested') return 'json';
   if (node.kind === 'scalar') {
     if (TEXT_SCALAR_NAMES.has(node.name)) return 'text';
-    return node.dataType === 'decimal' ? 'double' : 'raw';
+    switch (node.dataType) {
+      case 'date':
+      case 'time':
+        return 'text';
+      case 'timestamp':
+        return ZONED_TIMESTAMP_NAMES.has(node.name) ? 'utc' : 'timestamp';
+      case 'decimal':
+        return 'double';
+      default:
+        return 'raw';
+    }
   }
   // A type the parser could not read follows the library's type for it.
   return node.kind === 'unknown' && column.type === 'interval' ? 'text' : 'raw';
@@ -172,6 +206,29 @@ function decimalAsDouble(column: ColumnSchema, quoted: string): string {
   return precision <= EXACT_DOUBLE_DIGITS
     ? `CAST(${quoted} AS DOUBLE)`
     : `CAST(CAST(${quoted} AS VARCHAR) AS DOUBLE)`;
+}
+
+/**
+ * SQL for a TIMESTAMP WITH TIME ZONE column's value as text in UTC ending
+ * in `Z`, without an alias: `2024-01-02 03:04:05.5Z`.
+ *
+ * DuckDB's own text of the value follows the session's time zone
+ * (`2024-01-01 22:04:05.5-05` in New York), which a table loaded with
+ * `sourceOptions.timezone` leaves set. `make_timestamp(epoch_us(c))` is the
+ * same instant as a TIMESTAMP in UTC, with no zone lookup and no need for
+ * ICU: 0.93 s per 10 million values, against 3.9 s for
+ * `timezone('UTC', c)`. `epoch_us` of `±infinity` is NULL, so infinity
+ * keeps its own text, `infinity` or `-infinity`. The text ends in `Z`
+ * rather than DuckDB's `+00`: the library's loaders do not read `+00`, nor
+ * does JavaScript's `Date` in the form a JSON export writes,
+ * `2024-01-02T03:04:05.5+00`.
+ */
+function utcTimestampText(quoted: string): string {
+  return (
+    `CASE WHEN isfinite(${quoted}) ` +
+    `THEN CAST(make_timestamp(epoch_us(${quoted})) AS VARCHAR) || 'Z' ` +
+    `ELSE CAST(${quoted} AS VARCHAR) END`
+  );
 }
 
 /**
@@ -192,6 +249,25 @@ export function exportJsonColumns(
     }
   }
   return types;
+}
+
+/**
+ * The columns of `columns` that an export reads as a timestamp's text
+ * (`'timestamp'` or `'utc'`, see {@link exportColumnRead}), in which a JSON
+ * export puts `T` between date and time.
+ */
+export function exportTimestampColumns(
+  columns: readonly string[],
+  schema: readonly ColumnSchema[],
+): Set<string> {
+  const byName = new Map(schema.map((column) => [column.name, column] as const));
+  const names = new Set<string>();
+  for (const name of columns) {
+    const column = byName.get(name);
+    const read = column && exportColumnRead(column);
+    if (read === 'timestamp' || read === 'utc') names.add(name);
+  }
+  return names;
 }
 
 /**
@@ -216,7 +292,10 @@ function selectList(
         case 'json':
           return `${jsonValueSQL(column, quoted)} AS ${quoted}`;
         case 'text':
+        case 'timestamp':
           return `CAST(${quoted} AS VARCHAR) AS ${quoted}`;
+        case 'utc':
+          return `${utcTimestampText(quoted)} AS ${quoted}`;
         case 'double':
           return `${decimalAsDouble(column, quoted)} AS ${quoted}`;
         default:
@@ -276,7 +355,8 @@ function orderByList(
  * "t"."__rowid__" ASC`. A column the select list reads as text keeps its
  * own name as the alias (`CAST(to_json("tags") AS VARCHAR) AS "tags"`), and
  * an unqualified `ORDER BY "tags"` binds to that alias, sorting rows by the
- * JSON text (`[10]` before `[9]`) rather than by the value as the grid does.
+ * text (`[10]` before `[9]`, `12345-01-02` before `1969-07-20`) rather than
+ * by the value as the grid does.
  * The table's name works for a derived-column VIEW as for a table.
  *
  * Mirrors the idiom used in `Actions.getColumnValues` (Actions.ts:1769) and
@@ -447,9 +527,10 @@ const EXPORT_QUERY_OPTIONS = { cache: false } as const;
  * optimization for selected rows, and abort checking.
  *
  * Columns are read as {@link exportColumnRead} says for `context.schema`:
- * a nested column's value arrives as its JSON text; an INTERVAL, BLOB, BIT,
- * GEOMETRY, BIGNUM, ENUM, TIME WITH TIME ZONE or TIME_NS value as DuckDB's
- * text; a DECIMAL as the double nearest its value.
+ * a nested column's value arrives as its JSON text; a date, time or
+ * timestamp, or an INTERVAL, BLOB, BIT, GEOMETRY, BIGNUM or ENUM value, as
+ * DuckDB's text, a TIMESTAMP WITH TIME ZONE in UTC with `Z`; a DECIMAL as
+ * the double nearest its value.
  *
  * The batches skip the bridge's query cache ({@link EXPORT_QUERY_OPTIONS}).
  */

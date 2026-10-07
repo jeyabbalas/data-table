@@ -4,6 +4,7 @@ import {
   formatRowForJSON,
   exportToJSON,
   exportJSONFromState,
+  isoDateTime,
 } from '@/export/JSONExport';
 import type { ExportContext } from '@/export/ExportQuery';
 import { parseDuckDBType } from '@/core/duckdbType';
@@ -57,7 +58,7 @@ describe('formatValueForJSON', () => {
     expect(formatValueForJSON(big)).toBe('9007199254740993');
   });
 
-  it('should convert Date to ISO string', () => {
+  it("should convert a custom bridge's Date to an ISO string", () => {
     const date = new Date('2024-06-15T12:30:00.000Z');
     expect(formatValueForJSON(date)).toBe('2024-06-15T12:30:00.000Z');
   });
@@ -96,7 +97,7 @@ describe('formatRowForJSON', () => {
     expect(result).toEqual({ id: 1, name: null, price: null });
   });
 
-  it('should convert NaN and Date in row', () => {
+  it("should convert NaN and a custom bridge's Date in row", () => {
     const date = new Date('2024-01-01T00:00:00.000Z');
     const row = { val: NaN, dt: date };
     const result = formatRowForJSON(row, ['val', 'dt']);
@@ -111,7 +112,9 @@ describe('formatRowForJSON', () => {
 // Phase 7 cross-verifies that the formatted output deserialises through the
 // standard Web JSON.parse without surprise. The library does NOT emit
 // `{__type:'date',value:...}`-style envelopes; consumers must recompute
-// Dates from the ISO string themselves.
+// Dates from the ISO string themselves. (A `Date` reaches formatValueForJSON
+// only from a custom bridge: an export reads date and time columns as
+// DuckDB's text.)
 
 describe('formatValueForJSON — JSON.parse round-trip', () => {
   it('safe BigInt → number → JSON.parse round-trips losslessly', () => {
@@ -135,7 +138,7 @@ describe('formatValueForJSON — JSON.parse round-trip', () => {
     expect(BigInt(parsed.v as string)).toBe(original);
   });
 
-  it('Date → ISO string → JSON.parse → new Date round-trips losslessly', () => {
+  it("a custom bridge's Date → ISO string → JSON.parse → new Date round-trips losslessly", () => {
     const original = new Date('2024-06-15T12:30:00.123Z');
     const formatted = formatValueForJSON(original);
     const json = JSON.stringify({ ts: formatted });
@@ -599,6 +602,138 @@ describe('exportToJSON — nested columns', () => {
       contextWith(vi.fn().mockResolvedValueOnce(rows)),
     );
     expect(pretty).toContain('\n    "attrs": {\n      "k": "9223372036854775807",');
+    expect(JSON.parse(pretty)).toEqual(expected);
+  });
+});
+
+// =========================================
+// Dates and times as ISO 8601 text
+// =========================================
+//
+// A date, time or timestamp column is read as DuckDB's text (see
+// ExportQuery.exportColumnRead), a TIMESTAMP WITH TIME ZONE in UTC with `Z`,
+// and a JSON export puts `T` between a timestamp's date and time.
+
+describe('isoDateTime', () => {
+  it.each([
+    ['2024-01-02 03:04:05.123456', '2024-01-02T03:04:05.123456'],
+    ['2024-01-02 03:04:05', '2024-01-02T03:04:05'],
+    ['2024-01-02 03:04:05.123456789', '2024-01-02T03:04:05.123456789'],
+    ['2024-01-02 03:04:05.5Z', '2024-01-02T03:04:05.5Z'],
+    ['12345-01-02 03:04:05.25Z', '12345-01-02T03:04:05.25Z'],
+    // DuckDB's own text, which DuckDB reads back.
+    ['infinity', 'infinity'],
+    ['-infinity', '-infinity'],
+    ['0044-03-15 (BC) 10:00:00.5', '0044-03-15 (BC) 10:00:00.5'],
+    ['0044-03-15 (BC) 10:00:00Z', '0044-03-15 (BC) 10:00:00Z'],
+    // No space between a date and a time.
+    ['2024-01-02', '2024-01-02'],
+    [' 03:04:05', ' 03:04:05'],
+    ['', ''],
+  ])('%j is %j', (text, iso) => {
+    expect(isoDateTime(text)).toBe(iso);
+  });
+});
+
+describe('formatRowForJSON — timestamp columns', () => {
+  it("puts T into the timestamp columns' text, and nowhere else", () => {
+    const row = {
+      ts: '2024-01-02 03:04:05.123456',
+      tz: '2024-01-02 03:04:05.5Z',
+      inf: '-infinity',
+      bc: '0044-03-15 (BC) 10:00:00',
+      none: null,
+      custom: new Date('2024-01-02T03:04:05.123Z'),
+      day: '2024-01-02',
+      note: 'from 2024-01-02 03:04:05',
+    };
+    const timestampColumns = new Set(['ts', 'tz', 'inf', 'bc', 'none', 'custom']);
+    expect(formatRowForJSON(row, Object.keys(row), undefined, timestampColumns)).toEqual({
+      ts: '2024-01-02T03:04:05.123456',
+      tz: '2024-01-02T03:04:05.5Z',
+      inf: '-infinity',
+      bc: '0044-03-15 (BC) 10:00:00',
+      none: null,
+      // A custom bridge's Date, as formatValueForJSON writes it.
+      custom: '2024-01-02T03:04:05.123Z',
+      day: '2024-01-02',
+      note: 'from 2024-01-02 03:04:05',
+    });
+  });
+});
+
+describe('exportToJSON — dates and times', () => {
+  const schema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'day', type: 'date', nullable: true, originalType: 'DATE' },
+    { name: 'tm', type: 'time', nullable: true, originalType: 'TIME' },
+    { name: 'ts', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' },
+    { name: 'at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP WITH TIME ZONE' },
+  ];
+  // DuckDB's text for them, as the export's query returns it.
+  const rows = [
+    {
+      id: 1,
+      day: '2024-01-02',
+      tm: '03:04:05.5',
+      ts: '2024-01-02 03:04:05.123456',
+      at: '2024-01-02 03:04:05.5Z',
+    },
+    { id: 2, day: 'infinity', tm: null, ts: '0044-03-15 (BC) 10:00:00', at: '-infinity' },
+  ];
+  const expected = [
+    {
+      id: 1,
+      day: '2024-01-02',
+      tm: '03:04:05.5',
+      ts: '2024-01-02T03:04:05.123456',
+      at: '2024-01-02T03:04:05.5Z',
+    },
+    { id: 2, day: 'infinity', tm: null, ts: '0044-03-15 (BC) 10:00:00', at: '-infinity' },
+  ];
+
+  function contextWith(query: ReturnType<typeof vi.fn>): ExportContext {
+    return {
+      bridge: { query } as unknown as import('@/data/WorkerBridge').WorkerBridge,
+      filters: [],
+      sortColumns: [],
+      selectedRows: new Set(),
+      columnOrder: schema.map((c) => c.name),
+      schema,
+    };
+  }
+
+  it('selects them as text, a TIMESTAMP WITH TIME ZONE in UTC, and writes T', async () => {
+    const query = vi.fn().mockResolvedValueOnce(rows);
+    const json = await exportToJSON('t', { format: 'array' }, contextWith(query));
+    const sql = query.mock.calls[0]![0] as string;
+    expect(sql).toContain(
+      'SELECT "id", CAST("day" AS VARCHAR) AS "day", CAST("tm" AS VARCHAR) AS "tm", ' +
+        'CAST("ts" AS VARCHAR) AS "ts", CASE WHEN isfinite("at") ' +
+        'THEN CAST(make_timestamp(epoch_us("at")) AS VARCHAR) || \'Z\' ' +
+        'ELSE CAST("at" AS VARCHAR) END AS "at" FROM',
+    );
+    const parsed = JSON.parse(json) as typeof expected;
+    expect(parsed).toEqual(expected);
+    // JavaScript reads a timestamp with no zone as local time: with `Z`
+    // appended, it is the instant 0.8 wrote as a number.
+    expect(new Date(`${parsed[0]!.ts}Z`).getTime()).toBe(Date.UTC(2024, 0, 2, 3, 4, 5, 123));
+    expect(new Date(parsed[0]!.at).getTime()).toBe(Date.UTC(2024, 0, 2, 3, 4, 5, 500));
+  });
+
+  it('does the same as NDJSON and pretty-printed', async () => {
+    const ndjson = await exportToJSON(
+      't',
+      { format: 'ndjson' },
+      contextWith(vi.fn().mockResolvedValueOnce(rows)),
+    );
+    expect(ndjson.split('\n').map((line) => JSON.parse(line) as unknown)).toEqual(expected);
+    const pretty = await exportToJSON(
+      't',
+      { format: 'array', pretty: true },
+      contextWith(vi.fn().mockResolvedValueOnce(rows)),
+    );
+    expect(pretty).toContain('\n    "ts": "2024-01-02T03:04:05.123456",');
     expect(JSON.parse(pretty)).toEqual(expected);
   });
 });

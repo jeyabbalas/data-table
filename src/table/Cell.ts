@@ -6,39 +6,12 @@
  */
 
 import type { ColumnSchema, DataType } from '../core/types';
-import { outlinedColumnType } from '../nested/typeOutline';
 import { MONTH_SECONDS, YEAR_SECONDS } from '../visualizations/histogram/IntervalHistogramData';
 
-/** `isInspectableColumn`'s answers, by schema entry: it runs for every cell rendered. */
-const inspectableColumns = new WeakMap<ColumnSchema, boolean>();
-
-/**
- * Whether the value inspector opens a column's values: a nested column
- * (`type: 'nested'`: LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) or a JSON one
- * (`type: 'string'` with `originalType` `JSON`). A cell shows only part of
- * such a value: a nested one's text is bounded, and any text runs on past
- * the column's edge. The inspector shows all of it, as a tree.
- *
- * The columns whose header shows a type outline (`outlinedColumnType`): the
- * header's extract button, the cells' inspect icon and the outline go
- * together.
- *
- * @example
- * ```ts
- * isInspectableColumn({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // true
- * isInspectableColumn({ name: 'doc', type: 'string', nullable: true, originalType: 'JSON' });       // true
- * isInspectableColumn({ name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' });   // false
- * ```
- */
-export function isInspectableColumn(column: ColumnSchema | undefined): boolean {
-  if (!column) return false;
-  let inspectable = inspectableColumns.get(column);
-  if (inspectable === undefined) {
-    inspectable = outlinedColumnType(column) !== null;
-    inspectableColumns.set(column, inspectable);
-  }
-  return inspectable;
-}
+// Defined beside the type outline that decides it, so the column layout can
+// use it without importing the renderer. Still exported here, where
+// `ColumnHeader`, `TableBody` and `Cell.test.ts` import it from.
+export { isInspectableColumn } from '../nested/typeOutline';
 
 /**
  * Format a number with scientific notation for extreme values.

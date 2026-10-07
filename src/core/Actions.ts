@@ -35,6 +35,7 @@ import { batch } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import {
   captureTableState,
+  effectiveRowCount,
   resetTableState,
   initializeColumnsFromSchema,
   mergeMissingColumns,
@@ -86,7 +87,8 @@ export interface GetColumnValuesOptions {
    * - `'filtered'` — only rows matching the currently active filters.
    * - `'selected'` — only rows in the current selection (positional indices
    *   resolved against the current filter/sort view, same semantics as the
-   *   export "selected rows" scope).
+   *   export "selected rows" scope). A position past the end of the view,
+   *   which a filter change can leave in the selection, selects nothing.
    */
   scope?: 'all' | 'filtered' | 'selected';
   /** Optional cap on the number of returned values. Non-negative integer. */
@@ -914,6 +916,7 @@ export class StateActions {
       if (baseTableName) this.onBaseTableReplacedCallback?.(baseTableName);
       const hadDerived = this.state.derivedColumns.get().length > 0;
       resetTableState(this.state);
+      this.lastSelectedIndex = null;
       this.undoManager?.clear();
       this.initialSnapshot = null;
       const manager = this.derivedManager;
@@ -1045,6 +1048,10 @@ export class StateActions {
     this.state.totalRows.set(result.rowCount);
     this.state.filteredRows.set(result.rowCount);
     initializeColumnsFromSchema(this.state, result.schema);
+    // Where a Shift-click range starts, a row of the data this replaced.
+    // Forgotten here, once the load has landed, rather than at the reset
+    // above: a load turned away keeps it with the selection it restores.
+    this.lastSelectedIndex = null;
 
     // Store the base table name for derived column support
     this.state.baseTableName.set(result.tableName);
@@ -2960,7 +2967,7 @@ export class StateActions {
   /**
    * Select a row
    *
-   * @param index - Row index to select
+   * @param index - 0-based position of the row in the filtered, sorted view
    * @param mode - Selection mode:
    *   - 'replace': Replace selection with this row (default, normal click)
    *   - 'toggle': Toggle this row in selection (Ctrl+click)
@@ -3014,7 +3021,8 @@ export class StateActions {
   }
 
   /**
-   * Clear all row selection
+   * Clear all row selection, and forget the row a `'range'` selection runs
+   * from.
    */
   clearSelection(): void {
     this.throwIfDestroyed('clearSelection');
@@ -3023,13 +3031,30 @@ export class StateActions {
   }
 
   /**
-   * Select all rows
+   * Select the rows of the current view: positions `0 … n−1`, where `n` is
+   * `state.filteredRows` while a filter is active and `state.totalRows`
+   * otherwise.
+   *
+   * `filteredRows` is a `COUNT(*)` that DuckDB runs after each filter
+   * change, so call this once `filterChange` has fired for the latest one:
+   * called in the same tick as `addFilter`, it selects as many rows as the
+   * filters before matched. Outside `createDataTable()`, `filteredRows`
+   * follows the filters only while a `CrossfilterCoordinator` watches the
+   * state. The selection holds positions, which a later filter or sort
+   * change does not adjust. The row a `'range'` selection runs from is kept.
+   *
+   * @example
+   * const off = table.on('filterChange', () => {
+   *   off();
+   *   table.actions.selectAll();
+   * });
+   * table.actions.addFilter({ type: 'set', column: 'country', values: ['US', 'CA'] });
    */
   selectAll(): void {
     this.throwIfDestroyed('selectAll');
-    const total = this.state.totalRows.get();
+    const count = effectiveRowCount(this.state);
     const allRows = new Set<number>();
-    for (let i = 0; i < total; i++) {
+    for (let i = 0; i < count; i++) {
       allRows.add(i);
     }
     this.state.selectedRows.set(allRows);

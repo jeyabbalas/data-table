@@ -522,12 +522,81 @@ describe('StateActions', () => {
       expect(state.selectedRows.get()).toEqual(new Set([0, 1, 2, 3, 4]));
     });
 
+    it('selectAll() selects the rows of the filtered view while a filter is active', () => {
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      // The count the crossfilter coordinator writes once the filter's
+      // COUNT(*) has settled, before `filterChange` fires.
+      state.filteredRows.set(3);
+
+      actions.selectAll();
+
+      expect(state.selectedRows.get()).toEqual(new Set([0, 1, 2]));
+    });
+
+    it('selectAll() ignores a stale filteredRows when no filter is active', () => {
+      state.totalRows.set(5);
+      state.filteredRows.set(2);
+
+      actions.selectAll();
+
+      expect(state.selectedRows.get()).toEqual(new Set([0, 1, 2, 3, 4]));
+    });
+
     it('default mode should be replace', () => {
       state.selectedRows.set(new Set([1, 2, 3]));
 
       actions.selectRow(5);
 
       expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it('a filter or sort change keeps the selection and where a range starts', () => {
+      actions.selectRow(2);
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      actions.toggleSort('name');
+
+      expect(state.selectedRows.get()).toEqual(new Set([2]));
+      actions.selectRow(5, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([2, 3, 4, 5]));
+    });
+
+    it('clearData() forgets where a range starts', async () => {
+      actions.selectRow(2);
+
+      await actions.clearData();
+      actions.selectRow(5, 'range');
+
+      expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it('a load that lands forgets where a range starts', async () => {
+      mockBridge.loadData.mockResolvedValueOnce({
+        tableName: 't2',
+        rowCount: 10,
+        columns: ['n'],
+        schema: [{ name: 'n', type: 'integer', nullable: true, originalType: 'INTEGER' }],
+      });
+      actions.selectRow(2);
+
+      await actions.loadData('n\n1\n2', { format: 'csv' });
+      actions.selectRow(5, 'range');
+
+      expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it('a load turned away for its source options keeps the selection and where a range starts', async () => {
+      actions.selectRow(2);
+
+      await expect(
+        actions.loadData('n\n1\n2', {
+          format: 'csv',
+          sourceOptions: { timezone: 'Not a zone!' },
+        }),
+      ).rejects.toMatchObject({ code: 'LOAD_INVALID_TIMEZONE' });
+
+      expect(state.selectedRows.get()).toEqual(new Set([2]));
+      actions.selectRow(5, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([2, 3, 4, 5]));
     });
   });
 

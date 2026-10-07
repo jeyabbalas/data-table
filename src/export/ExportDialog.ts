@@ -20,7 +20,7 @@
 
 import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
-import type { TableState } from '../core/State';
+import { effectiveRowCount, type TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyToClipboard } from './Clipboard';
@@ -502,7 +502,14 @@ export class ExportDialog {
   private updateScopeCounts(): void {
     const total = this.state.totalRows.get();
     const filtered = this.state.filteredRows.get();
-    const selected = this.state.selectedRows.get().size;
+    // The selected rows a Selected export writes. A selection holds
+    // positions in the view, and a filter change keeps them: those past the
+    // view's last row name no row.
+    const viewRows = effectiveRowCount(this.state);
+    let selected = 0;
+    for (const position of this.state.selectedRows.get()) {
+      if (position < viewRows) selected++;
+    }
 
     this.allCountEl.textContent = `(${total.toLocaleString()})`;
     this.filteredCountEl.textContent = `(${filtered.toLocaleString()})`;
@@ -537,6 +544,13 @@ export class ExportDialog {
     );
     this.unsubscribes.push(
       this.state.filteredRows.subscribe(() => {
+        if (this.isOpen) this.updateScopeCounts();
+      }),
+    );
+    // The view's row count, which the Selected count is clamped to, also
+    // depends on whether a filter is active.
+    this.unsubscribes.push(
+      this.state.filters.subscribe(() => {
         if (this.isOpen) this.updateScopeCounts();
       }),
     );

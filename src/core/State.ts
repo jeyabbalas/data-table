@@ -59,7 +59,10 @@ export interface TableState {
   columnHeaderTooltips: Signal<Map<string, ColumnHeaderTooltipContent>>;
 
   // Selection
-  /** Set of selected row indices */
+  /**
+   * Selected rows, as 0-based positions in the filtered, sorted view, not row
+   * ids. Not adjusted when the filters or the sort change.
+   */
   selectedRows: Signal<Set<number>>;
 
   // UI
@@ -215,6 +218,22 @@ export function captureTableState(state: TableState): () => void {
       state.selectedRows.set(selectedRows);
       state.focusedCell.set(focusedCell);
     });
+}
+
+/**
+ * The number of rows in the view the grid shows: `filteredRows` while a
+ * filter is active, `totalRows` otherwise. The selection and the cursor hold
+ * positions in that view.
+ *
+ * `filteredRows` lags a filter change: it is a `COUNT(*)` that DuckDB runs
+ * for each change, written just before `filterChange` fires. Until then,
+ * under a filter, this is the row count of the filters before.
+ *
+ * @param state - The TableState to read
+ * @returns The row count of the filtered view
+ */
+export function effectiveRowCount(state: TableState): number {
+  return state.filters.get().length > 0 ? state.filteredRows.get() : state.totalRows.get();
 }
 
 /**

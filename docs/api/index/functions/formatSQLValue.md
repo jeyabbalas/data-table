@@ -8,7 +8,7 @@
 
 > **formatSQLValue**(`value`): `string`
 
-Defined in: [filters/FilterSQL.ts:61](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterSQL.ts#L61)
+Defined in: [filters/FilterSQL.ts:74](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterSQL.ts#L74)
 
 Format a JS value as a SQL literal for splicing into a query string.
 
@@ -21,7 +21,8 @@ Type handling:
                          quoting would force an implicit cast that is
                          fragile near the BIGINT range bounds.
  - `boolean`           → `TRUE` / `FALSE`
- - `Date`              → `'<ISO-8601>'`, single-quoted ISO string
+ - `Date`              → `'<ISO-8601>'`, single-quoted ISO string, a year
+                         past 9999 without its `+` (`dateToSQLLiteral`)
  - everything else     → `'<String(value)>'` with single quotes doubled
 
 Identifier-quoting (column/table names) lives in `quoteIdentifier`; this

@@ -6,7 +6,7 @@
 
 # Interface: SerializedRangeFilter
 
-Defined in: [persistence/types.ts:31](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L31)
+Defined in: [persistence/types.ts:31](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L31)
 
 JSON-safe form of [RangeFilter](RangeFilter.md): any `Date` operand becomes a [DateWrapper](DateWrapper.md).
 
@@ -16,7 +16,7 @@ JSON-safe form of [RangeFilter](RangeFilter.md): any `Date` operand becomes a [D
 
 > **column**: `string`
 
-Defined in: [persistence/types.ts:33](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L33)
+Defined in: [persistence/types.ts:33](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L33)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [persistence/types.ts:33](https://github.com/jeyabbalas/data-table/b
 
 > **max**: `string` \| `number` \| [`DateWrapper`](DateWrapper.md)
 
-Defined in: [persistence/types.ts:35](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L35)
+Defined in: [persistence/types.ts:35](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L35)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [persistence/types.ts:35](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **maxInclusive?**: `boolean`
 
-Defined in: [persistence/types.ts:36](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L36)
+Defined in: [persistence/types.ts:36](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L36)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [persistence/types.ts:36](https://github.com/jeyabbalas/data-table/b
 
 > **min**: `string` \| `number` \| [`DateWrapper`](DateWrapper.md)
 
-Defined in: [persistence/types.ts:34](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L34)
+Defined in: [persistence/types.ts:34](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L34)
 
 ***
 
@@ -48,7 +48,7 @@ Defined in: [persistence/types.ts:34](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **minExclusive?**: `boolean`
 
-Defined in: [persistence/types.ts:37](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L37)
+Defined in: [persistence/types.ts:37](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L37)
 
 ***
 
@@ -56,14 +56,15 @@ Defined in: [persistence/types.ts:37](https://github.com/jeyabbalas/data-table/b
 
 > **type**: `"range"`
 
-Defined in: [persistence/types.ts:32](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L32)
+Defined in: [persistence/types.ts:32](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L32)
 
 ***
 
 ### valueType?
 
-> `optional` **valueType?**: `"interval"`
+> `optional` **valueType?**: `"time"` \| `"interval"`
 
-Defined in: [persistence/types.ts:39](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L39)
+Defined in: [persistence/types.ts:42](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L42)
 
-As [RangeFilter.valueType](RangeFilter.md#valuetype): `'interval'` bounds are INTERVAL literals.
+As [RangeFilter.valueType](RangeFilter.md#valuetype): `'interval'` bounds are INTERVAL
+literals, and `'time'` compares the column's time of day.

@@ -6,7 +6,7 @@
 
 # Interface: JSONSourceOptions
 
-Defined in: [data/sourceOptions.ts:35](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/sourceOptions.ts#L35)
+Defined in: [data/sourceOptions.ts:35](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/sourceOptions.ts#L35)
 
 How a JSON source is read. DuckDB detects whatever is left out.
 
@@ -16,7 +16,7 @@ How a JSON source is read. DuckDB detects whatever is left out.
 
 > `optional` **format?**: `"array"` \| `"ndjson"`
 
-Defined in: [data/sourceOptions.ts:40](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/sourceOptions.ts#L40)
+Defined in: [data/sourceOptions.ts:40](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/sourceOptions.ts#L40)
 
 `'array'` for one JSON array of objects, `'ndjson'` for one object per
 line. Default: detected.
@@ -27,7 +27,7 @@ line. Default: detected.
 
 > `optional` **maxDepth?**: `number`
 
-Defined in: [data/sourceOptions.ts:50](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/sourceOptions.ts#L50)
+Defined in: [data/sourceOptions.ts:50](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/sourceOptions.ts#L50)
 
 How many levels of nested objects get types of their own. Values nested
 deeper load as JSON text. Default: no limit.
@@ -38,7 +38,7 @@ deeper load as JSON text. Default: no limit.
 
 > `optional` **sampleSize?**: `number`
 
-Defined in: [data/sourceOptions.ts:45](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/sourceOptions.ts#L45)
+Defined in: [data/sourceOptions.ts:45](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/sourceOptions.ts#L45)
 
 Objects DuckDB reads to detect the column types, or `-1` for every one.
 Default: DuckDB's, 20,480.

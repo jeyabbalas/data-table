@@ -8,12 +8,15 @@
 
 > **fetchIntervalStats**(`tableName`, `column`, `filters`, `bridge`, `unfilteredTotal?`): `Promise`\<[`IntervalColumnStats`](../interfaces/IntervalColumnStats.md)\>
 
-Defined in: [statistics/StatsComputer.ts:36](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/StatsComputer.ts#L36)
+Defined in: [statistics/StatsComputer.ts:26](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/statistics/StatsComputer.ts#L26)
 
 Fetch stats for an interval column via DuckDB SQL.
 
-DuckDB supports MIN, MAX, and APPROX_QUANTILE on INTERVAL types.
-Results are cast to VARCHAR for display.
+Runs the interval histogram's stats query, so the minimum, median and
+maximum are computed on the chart's seconds scale (a month is 30.4375
+days), and formatted like `4d 4h 0.5s`. All three are of the rows the
+filters pass; under a filter the chart's stats line keeps the unfiltered
+minimum and maximum beside the filtered median.
 
 ## Parameters
 

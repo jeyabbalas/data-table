@@ -8,15 +8,22 @@
 
 > **copyRowsToClipboard**(`rows`, `state`, `bridge`): `Promise`\<`void`\>
 
-Defined in: [export/Clipboard.ts:70](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/Clipboard.ts#L70)
+Defined in: [export/Clipboard.ts:78](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/export/Clipboard.ts#L78)
 
 Copy specific rows from the table to the clipboard as TSV.
 
 TSV (tab-separated values) is the standard clipboard format understood
 by Excel, Google Sheets, and other spreadsheet applications. The output
-includes a header row and uses visible columns in their display order.
+includes a header row and the visible columns (`state.visibleColumns`)
+in the order the grid shows them: a hidden column is left out, and
+`__rowid__` is copied when the app has shown it. With nothing to copy (no
+visible column the schema has, or no row of the view among `rows`), it
+writes nothing, and the clipboard keeps what it holds.
 Cells are written as [exportToCSV](exportToCSV.md) writes them, so a nested value
 (LIST, STRUCT, MAP, …) is standard JSON: `["a","b"]`, `{"x":1.25}`.
+A DATE or TIMESTAMP is written in the form spreadsheets read, a space
+between date and time (`2024-01-02 03:04:05`); a TIMESTAMP WITH TIME
+ZONE keeps its `Z`, which some spreadsheets show as text.
 
 ## Parameters
 
@@ -24,7 +31,8 @@ Cells are written as [exportToCSV](exportToCSV.md) writes them, so a nested valu
 
 `number`[]
 
-0-based row indices (into the sorted/filtered view) to copy
+0-based row indices (into the sorted/filtered view) to
+  copy; an index past the view's last row copies nothing
 
 ### state
 

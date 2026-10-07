@@ -8,6 +8,6 @@
 
 > **ScrollAlign** = `"start"` \| `"center"` \| `"end"`
 
-Defined in: [table/VirtualScroller.ts:62](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/VirtualScroller.ts#L62)
+Defined in: [table/VirtualScroller.ts:62](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/table/VirtualScroller.ts#L62)
 
 Scroll alignment options for scrollToRow

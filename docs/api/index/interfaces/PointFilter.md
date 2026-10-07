@@ -6,7 +6,7 @@
 
 # Interface: PointFilter
 
-Defined in: [filters/FilterTypes.ts:31](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L31)
+Defined in: [filters/FilterTypes.ts:56](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterTypes.ts#L56)
 
 Equality filter (`column = value`). NULL is allowed as a literal value;
 it generates `column IS NULL`.
@@ -17,7 +17,7 @@ it generates `column IS NULL`.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L33)
+Defined in: [filters/FilterTypes.ts:58](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterTypes.ts#L58)
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: [filters/FilterTypes.ts:33](https://github.com/jeyabbalas/data-table
 
 > **type**: `"point"`
 
-Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L32)
+Defined in: [filters/FilterTypes.ts:57](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterTypes.ts#L57)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [filters/FilterTypes.ts:32](https://github.com/jeyabbalas/data-table
 
 > **value**: `string` \| `number` \| `boolean` \| `Date` \| `null`
 
-Defined in: [filters/FilterTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L34)
+Defined in: [filters/FilterTypes.ts:59](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterTypes.ts#L59)
 
 ***
 
@@ -41,7 +41,7 @@ Defined in: [filters/FilterTypes.ts:34](https://github.com/jeyabbalas/data-table
 
 > `optional` **valueType?**: `"text"`
 
-Defined in: [filters/FilterTypes.ts:62](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L62)
+Defined in: [filters/FilterTypes.ts:87](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterTypes.ts#L87)
 
 What the value is compared with. Left out, it is the column's value:
 `"col" = 'x'`, where DuckDB reads the literal as the column's type.

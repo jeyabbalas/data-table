@@ -8,8 +8,8 @@
 
 > `const` **defaultVisualizationRegistry**: [`VisualizationRegistry`](../classes/VisualizationRegistry.md)
 
-Defined in: [visualizations/VisualizationRegistry.ts:269](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/VisualizationRegistry.ts#L269)
+Defined in: [visualizations/VisualizationRegistry.ts:253](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L253)
 
-Shared module-scoped registry. Used by the deprecated
-`VisualizationFactory` static wrapper and as the fallback when
-`createDataTable()` is called without a `visualizationRegistry` option.
+Shared module-scoped registry: the one a table uses when
+`createDataTable()` gets no `visualizationRegistry`. A registration on it
+reaches every such table on the page.

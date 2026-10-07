@@ -44,6 +44,7 @@
 - [DateWrapper](interfaces/DateWrapper.md)
 - [ExpressionColumnDef](interfaces/ExpressionColumnDef.md)
 - [ExpressionEditor](interfaces/ExpressionEditor.md)
+- [ExpressionEditorConfig](interfaces/ExpressionEditorConfig.md)
 - [FilterPreset](interfaces/FilterPreset.md)
 - [FilterPresetCollection](interfaces/FilterPresetCollection.md)
 - [GetCellValueOptions](interfaces/GetCellValueOptions.md)

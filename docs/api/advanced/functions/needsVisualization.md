@@ -8,7 +8,7 @@
 
 > **needsVisualization**(`type`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:275](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/VisualizationRegistry.ts#L275)
+Defined in: [visualizations/VisualizationRegistry.ts:259](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L259)
 
 Check if a column type has a registered visualization in the default
 registry.

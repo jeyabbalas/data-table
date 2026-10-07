@@ -6,7 +6,7 @@
 
 # Class: WorkerBridge
 
-Defined in: [data/WorkerBridge.ts:166](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L166)
+Defined in: [data/WorkerBridge.ts:166](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L166)
 
 Promise-based RPC layer between the main thread and the DuckDB Web Worker.
 
@@ -44,7 +44,7 @@ bridge.terminate();
 
 > **new WorkerBridge**(`options?`): `WorkerBridge`
 
-Defined in: [data/WorkerBridge.ts:183](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L183)
+Defined in: [data/WorkerBridge.ts:183](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L183)
 
 #### Parameters
 
@@ -62,7 +62,7 @@ Defined in: [data/WorkerBridge.ts:183](https://github.com/jeyabbalas/data-table/
 
 > **clearQueryCache**(): `void`
 
-Defined in: [data/WorkerBridge.ts:532](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L532)
+Defined in: [data/WorkerBridge.ts:541](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L541)
 
 Clear all cached query results
 
@@ -76,7 +76,7 @@ Clear all cached query results
 
 > **dropTable**(`tableName`): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:547](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L547)
+Defined in: [data/WorkerBridge.ts:556](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L556)
 
 Drop a table from DuckDB if it exists. The identifier is double-quoted
 (matching the worker-side loaders), so any tableName the bridge issued
@@ -104,7 +104,7 @@ without re-implementing identifier quoting.
 
 > **exportToBuffer**(`sql`, `format`, `signal?`): `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [data/WorkerBridge.ts:491](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L491)
+Defined in: [data/WorkerBridge.ts:500](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L500)
 
 Export data to a binary file format via DuckDB COPY TO.
 
@@ -135,7 +135,7 @@ Returns the file contents as a Uint8Array.
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:246](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L246)
+Defined in: [data/WorkerBridge.ts:246](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L246)
 
 Create the worker and wait for it to be ready.
 
@@ -157,7 +157,7 @@ called again: it starts a new worker, with an empty database.
 
 > **isInitialized**(): `boolean`
 
-Defined in: [data/WorkerBridge.ts:556](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L556)
+Defined in: [data/WorkerBridge.ts:565](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L565)
 
 Check if the bridge is initialized
 
@@ -171,7 +171,7 @@ Check if the bridge is initialized
 
 > **loadData**(`source`, `options`, `onProgress?`, `signal?`): `Promise`\<[`LoadDataResult`](../interfaces/LoadDataResult.md)\>
 
-Defined in: [data/WorkerBridge.ts:457](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L457)
+Defined in: [data/WorkerBridge.ts:466](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L466)
 
 Load data into DuckDB
 
@@ -217,7 +217,7 @@ any other key here, such as a `delimiter` next to `format`, is ignored.
 
 > **query**\<`T`\>(`sql`, `signal?`, `options?`): `Promise`\<`T`[]\>
 
-Defined in: [data/WorkerBridge.ts:407](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L407)
+Defined in: [data/WorkerBridge.ts:416](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L416)
 
 Execute a SQL query.
 
@@ -234,7 +234,11 @@ wrong sign: the HUGEINT minimum positive, a UHUGEINT past 2^127
 negative (the maximum as `-1`). A LIST or ARRAY value arrives as an
 array, a STRUCT or MAP value as an object (a MAP's keys as strings; an
 unnamed STRUCT, as `row(1, 'a')` builds, as an array), a UNION value as
-its member's, and a BLOB as a `Uint8Array`.
+its member's, and a BLOB as a `Uint8Array`. A DATE or TIMESTAMP, of any
+precision and with or without a zone, arrives as epoch milliseconds, a
+timestamp's digits past the millisecond as a fraction; DuckDB's
+`infinity` and `-infinity` as `Infinity` and `-Infinity`; one past
+±2^53 ms (after year 287396 or before 283458 BC) as the nearest number.
 
 DECIMAL, HUGEINT and UHUGEINT values inside a nested value do not
 arrive intact. In a LIST, ARRAY or STRUCT each reads as a meaningless
@@ -245,10 +249,15 @@ first (`MAP {'a': 1.25}` as `{ a: Uint32Array [125, 0, 0, 0] }`), and a
 MAP key as that integer's digits (`MAP {1.25: 'a'}` as
 `{ '125': 'a' }`). An INTERVAL, nested or a column's own value, reads
 as an `Int32Array` that does not hold it, and a MAP key as that array's
-text (`'0,0'`). Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
-nested value as JSON text, which is exact: `CAST(to_json(c) AS VARCHAR)`
-keeps every digit, a MAP's DECIMAL keys included, and writes an
-INTERVAL as DuckDB does (`"1 year 2 months 3 days"`). `JSON.parse`
+text (`'0,0'`). Inside a STRUCT, MAP or UNION, Arrow reads a date or
+timestamp itself and gets DuckDB's `infinity` wrong: a TIMESTAMP's
+fails the read (`9223372036854775 is not safe to convert to a
+number`), as does a TIMESTAMP past ±2^53 ms, and a DATE's reads as
+185542587100800000. Select an INTERVAL column as
+`CAST(c AS VARCHAR)`, and a nested value as JSON text, which is exact:
+`CAST(to_json(c) AS VARCHAR)` keeps every digit, a MAP's DECIMAL keys
+included, and writes an INTERVAL as DuckDB does
+(`"1 year 2 months 3 days"`) and `infinity` as `"infinity"`. `JSON.parse`
 rounds integers past 2^53 and rejects the bare `NaN` and `Infinity`
 DuckDB writes for non-finite DOUBLEs.
 
@@ -319,7 +328,7 @@ const rows = await bridge.query(sql, controller.signal, {
 
 > **terminate**(): `void`
 
-Defined in: [data/WorkerBridge.ts:502](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L502)
+Defined in: [data/WorkerBridge.ts:511](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/WorkerBridge.ts#L511)
 
 Terminate the worker
 

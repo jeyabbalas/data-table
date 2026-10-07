@@ -6,7 +6,7 @@
 
 # Interface: SerializedPointFilter
 
-Defined in: [persistence/types.ts:43](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L43)
+Defined in: [persistence/types.ts:46](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L46)
 
 JSON-safe form of [PointFilter](PointFilter.md): any `Date` operand becomes a [DateWrapper](DateWrapper.md).
 
@@ -16,7 +16,7 @@ JSON-safe form of [PointFilter](PointFilter.md): any `Date` operand becomes a [D
 
 > **column**: `string`
 
-Defined in: [persistence/types.ts:45](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L45)
+Defined in: [persistence/types.ts:48](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L48)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [persistence/types.ts:45](https://github.com/jeyabbalas/data-table/b
 
 > **type**: `"point"`
 
-Defined in: [persistence/types.ts:44](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L44)
+Defined in: [persistence/types.ts:47](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L47)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [persistence/types.ts:44](https://github.com/jeyabbalas/data-table/b
 
 > **value**: `string` \| `number` \| `boolean` \| [`DateWrapper`](DateWrapper.md) \| `null`
 
-Defined in: [persistence/types.ts:46](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L46)
+Defined in: [persistence/types.ts:49](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L49)
 
 ***
 
@@ -40,6 +40,6 @@ Defined in: [persistence/types.ts:46](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **valueType?**: `"text"`
 
-Defined in: [persistence/types.ts:48](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/persistence/types.ts#L48)
+Defined in: [persistence/types.ts:51](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/persistence/types.ts#L51)
 
 As [PointFilter.valueType](PointFilter.md#valuetype): `'text'` compares the column's DuckDB text.

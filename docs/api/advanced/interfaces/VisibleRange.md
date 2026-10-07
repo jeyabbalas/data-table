@@ -6,7 +6,7 @@
 
 # Interface: VisibleRange
 
-Defined in: [table/VirtualScroller.ts:41](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/VirtualScroller.ts#L41)
+Defined in: [table/VirtualScroller.ts:41](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/table/VirtualScroller.ts#L41)
 
 Represents the currently visible range of rows
 
@@ -16,7 +16,7 @@ Represents the currently visible range of rows
 
 > **end**: `number`
 
-Defined in: [table/VirtualScroller.ts:45](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/VirtualScroller.ts#L45)
+Defined in: [table/VirtualScroller.ts:45](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/table/VirtualScroller.ts#L45)
 
 Last visible row index (exclusive)
 
@@ -26,7 +26,7 @@ Last visible row index (exclusive)
 
 > **offsetY**: `number`
 
-Defined in: [table/VirtualScroller.ts:51](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/VirtualScroller.ts#L51)
+Defined in: [table/VirtualScroller.ts:51](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/table/VirtualScroller.ts#L51)
 
 Physical Y offset in px at which the viewport container is positioned
 inside the (possibly height-capped) content element. Equals
@@ -38,6 +38,6 @@ inside the (possibly height-capped) content element. Equals
 
 > **start**: `number`
 
-Defined in: [table/VirtualScroller.ts:43](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/VirtualScroller.ts#L43)
+Defined in: [table/VirtualScroller.ts:43](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/table/VirtualScroller.ts#L43)
 
 First visible row index (inclusive)

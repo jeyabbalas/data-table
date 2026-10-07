@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:1130](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L1130)
+Defined in: [core/Strings.ts:1147](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/core/Strings.ts#L1147)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -349,6 +349,9 @@ Panel header with column name — "Edit: my_col".
 
 `string`
 
+Label above the SQL editor in the add-column dialog and the column
+edit panel, and the editor's accessible name.
+
 #### derived.expressionModeLabel?
 
 `string`
@@ -357,7 +360,8 @@ Panel header with column name — "Edit: my_col".
 
 `string`
 
-Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor).
+Placeholder of the SQL editor in the add-column dialog and the column
+edit panel, and of `DefaultExpressionEditor`'s textarea.
 
 #### derived.expressionRequired?
 
@@ -978,6 +982,8 @@ SQL (raw WHERE) filter modal.
 
 `string`
 
+Label above the expression filter's SQL editor, and the editor's accessible name.
+
 #### filters.sqlFilter.createTitle?
 
 `string`
@@ -985,6 +991,8 @@ SQL (raw WHERE) filter modal.
 #### filters.sqlFilter.editorPlaceholder?
 
 `string`
+
+Placeholder of the expression filter's SQL editor.
 
 #### filters.sqlFilter.editTitle?
 
@@ -1146,7 +1154,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `noData?`: `string`; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `otherSegmentLabel?`: `string`; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `noData?`: `string`; `nonFiniteCount?`: \{ \}; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `otherSegmentLabel?`: `string`; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1213,6 +1221,15 @@ Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 What a column-header chart draws for a column with no values and no
 nulls, as an empty table has: "No data".
 
+#### statistics.nonFiniteCount?
+
+\{ \}
+
+The end of line 2 for a column holding values its chart leaves out,
+having no place on its axis: a numeric column's `NaN`, `Infinity` and
+`-Infinity`, and a date column's `infinity`, `-infinity` and dates a
+JavaScript `Date` cannot hold. "30 non-finite".
+
 #### statistics.nonNullCategory?
 
 `string`
@@ -1241,7 +1258,7 @@ Display value for the folded "Other" segment (count = folded distinct values).
 `string`
 
 The label drawn inside the folded "Other" segment of a value-count
-bar, where it fits; [otherCategory](#mergestrings) is its hover text.
+bar, where it fits; `otherCategory` is its hover text.
 
 #### statistics.percentTrue?
 

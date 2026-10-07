@@ -8,7 +8,7 @@
 
 > `const` **dataTableTheme**: `Extension`
 
-Defined in: [sql-editor/theme.ts:14](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/sql-editor/theme.ts#L14)
+Defined in: [sql-editor/theme.ts:17](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/sql-editor/theme.ts#L17)
 
 CodeMirror editor theme that resolves every color, font, and spacing through
 the library's `--dt-*` CSS custom properties so the editor inherits the
@@ -17,3 +17,6 @@ host page's palette automatically. Adapts to light/dark mode because the
 `[data-dt-color-scheme="dark"]`. Pair with [dataTableHighlighting](dataTableHighlighting.md)
 for SQL-token coloring; or use [createSqlExtensions](../functions/createSqlExtensions.md) (which bundles
 both by default via `includeTheme`).
+
+A `placeholder(...)` is painted in `--dt-text-tertiary`, which meets WCAG
+AA in both schemes, or in its light value without the library's stylesheet.

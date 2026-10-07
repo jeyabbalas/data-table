@@ -6,9 +6,14 @@
 
 # Interface: HistogramData
 
-Defined in: [visualizations/histogram/HistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L40)
+Defined in: [visualizations/histogram/HistogramData.ts:45](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L45)
 
-Complete histogram data including bins and metadata
+Complete histogram data including bins and metadata.
+
+The bins, `min`, `max`, `median` and `distinctCount` are of the column's
+finite values: `NaN`, `Infinity` and `-Infinity`, which a FLOAT or DOUBLE
+column can hold, have no place on the axis, and are counted in
+`nonFiniteCount` instead. `total` counts every row.
 
 ## Properties
 
@@ -16,7 +21,7 @@ Complete histogram data including bins and metadata
 
 > **bins**: [`HistogramBin`](HistogramBin.md)[]
 
-Defined in: [visualizations/histogram/HistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L42)
+Defined in: [visualizations/histogram/HistogramData.ts:47](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L47)
 
 Array of histogram bins sorted by x0
 
@@ -26,9 +31,9 @@ Array of histogram bins sorted by x0
 
 > **distinctCount**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:58](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L58)
+Defined in: [visualizations/histogram/HistogramData.ts:63](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L63)
 
-Count of distinct non-null values
+Count of distinct finite values
 
 ***
 
@@ -36,7 +41,7 @@ Count of distinct non-null values
 
 > **isDiscrete**: `boolean`
 
-Defined in: [visualizations/histogram/HistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L54)
+Defined in: [visualizations/histogram/HistogramData.ts:59](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L59)
 
 True when using discrete binning (one bin per unique value, ≤ threshold)
 
@@ -46,9 +51,9 @@ True when using discrete binning (one bin per unique value, ≤ threshold)
 
 > **isSingleValue**: `boolean`
 
-Defined in: [visualizations/histogram/HistogramData.ts:52](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L52)
+Defined in: [visualizations/histogram/HistogramData.ts:57](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L57)
 
-True when all non-null values are identical (single value column)
+True when all finite values are identical (single value column)
 
 ***
 
@@ -56,9 +61,9 @@ True when all non-null values are identical (single value column)
 
 > **max**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L48)
+Defined in: [visualizations/histogram/HistogramData.ts:53](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L53)
 
-Maximum non-null value
+Maximum finite value; `NaN` when there is none
 
 ***
 
@@ -66,9 +71,9 @@ Maximum non-null value
 
 > **median**: `number` \| `null`
 
-Defined in: [visualizations/histogram/HistogramData.ts:56](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L56)
+Defined in: [visualizations/histogram/HistogramData.ts:61](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L61)
 
-Approximate median of non-null values
+Approximate median of the finite values
 
 ***
 
@@ -76,9 +81,21 @@ Approximate median of non-null values
 
 > **min**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L46)
+Defined in: [visualizations/histogram/HistogramData.ts:51](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L51)
 
-Minimum non-null value
+Minimum finite value; `NaN` when there is none
+
+***
+
+### nonFiniteCount?
+
+> `optional` **nonFiniteCount?**: `number`
+
+Defined in: [visualizations/histogram/HistogramData.ts:69](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L69)
+
+Count of `NaN`, `Infinity` and `-Infinity` values, which the bins leave
+out. Always set by the built-in fetch; optional so that data built
+elsewhere still type-checks.
 
 ***
 
@@ -86,7 +103,7 @@ Minimum non-null value
 
 > **nullCount**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L44)
+Defined in: [visualizations/histogram/HistogramData.ts:49](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L49)
 
 Count of null values in the column
 
@@ -96,6 +113,6 @@ Count of null values in the column
 
 > **total**: `number`
 
-Defined in: [visualizations/histogram/HistogramData.ts:50](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/HistogramData.ts#L50)
+Defined in: [visualizations/histogram/HistogramData.ts:55](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/HistogramData.ts#L55)
 
-Total count of all values (including nulls)
+Total count of all values (including nulls and non-finite values)

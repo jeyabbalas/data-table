@@ -6,7 +6,7 @@
 
 # Interface: TimeHistogramBin
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:30](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/TimeHistogramData.ts#L30)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:34](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/TimeHistogramData.ts#L34)
 
 A single time histogram bin with second ranges and count
 
@@ -16,9 +16,10 @@ A single time histogram bin with second ranges and count
 
 > **binEndSeconds**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:34](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/TimeHistogramData.ts#L34)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:41](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/TimeHistogramData.ts#L41)
 
-End of the bin in seconds from midnight (exclusive)
+End of the bin in seconds from midnight (exclusive). A bar ending at
+86400 holds `24:00:00` too.
 
 ***
 
@@ -26,7 +27,7 @@ End of the bin in seconds from midnight (exclusive)
 
 > **binStartSeconds**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:32](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/TimeHistogramData.ts#L32)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/TimeHistogramData.ts#L36)
 
 Start of the bin in seconds from midnight
 
@@ -36,6 +37,6 @@ Start of the bin in seconds from midnight
 
 > **count**: `number`
 
-Defined in: [visualizations/histogram/TimeHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/TimeHistogramData.ts#L36)
+Defined in: [visualizations/histogram/TimeHistogramData.ts:43](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/TimeHistogramData.ts#L43)
 
 Number of values in this bin

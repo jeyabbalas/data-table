@@ -939,6 +939,10 @@ async function evictFirstBlock(page: Page): Promise<void> {
       },
       { scroller, top: k * 25_000 },
     );
+    // The scroll event, and the scroller's update with it, come at the next
+    // frame. Until then the old rows still show and waitForRows passes at
+    // once, so the next jump would replace this one before it fetched.
+    await frames(page);
     await waitForRows(page);
   }
 }

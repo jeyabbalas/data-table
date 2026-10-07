@@ -58,7 +58,7 @@
     "check:css-vars": "node scripts/check-css-vars.mjs",
     "check:dts": "node scripts/check-dts.mjs",
     "docs:api": "typedoc",
-    "docs:api:check": "typedoc --emit none",
+    "docs:api:check": "typedoc --emit none --treatWarningsAsErrors",
     "size": "size-limit",
     "changeset": "changeset",
     "version": "changeset version && npm install --package-lock-only",

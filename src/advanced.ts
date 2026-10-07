@@ -204,6 +204,7 @@ export { NestedSummaryVisualization } from './visualizations/nested';
 export type { NestedSummaryData } from './visualizations/nested';
 
 export { CrossfilterCoordinator } from './visualizations/CrossfilterCoordinator';
+export type { CrossfilterCoordinatorOptions } from './visualizations/CrossfilterCoordinator';
 export { InteractionManager } from './visualizations/InteractionManager';
 export type {
   InteractiveVisualization,

@@ -76,13 +76,19 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
+        id: install
         run: npm ci
 
-      - name: Test with coverage gate
-        run: npm run test:coverage
-
+      # Build first: tests/api-surface.private-paths.test.ts and
+      # api-surface.cjs-routing.test.ts read `dist/`, and fail in CI
+      # without it. The tests run even when the build failed, but not
+      # when installing did.
       - name: Build library
         run: npm run build
+
+      - name: Test with coverage gate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:coverage
 
   browser:
     name: Browser accessibility suite

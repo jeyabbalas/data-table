@@ -8,7 +8,7 @@
 
 > **ProgressCallback** = (`info`) => `void`
 
-Defined in: [core/Progress.ts:31](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Progress.ts#L31)
+Defined in: [core/Progress.ts:31](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Progress.ts#L31)
 
 Callback for receiving progress updates
 

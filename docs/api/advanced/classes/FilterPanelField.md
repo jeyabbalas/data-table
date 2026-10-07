@@ -6,7 +6,7 @@
 
 # Class: FilterPanelField
 
-Defined in: [filters/FilterPanelField.ts:31](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L31)
+Defined in: [filters/FilterPanelField.ts:31](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L31)
 
 FilterPanelField renders filter controls for a single column.
 
@@ -16,7 +16,7 @@ FilterPanelField renders filter controls for a single column.
 
 > **new FilterPanelField**(`column`, `state`, `actions`, `options?`): `FilterPanelField`
 
-Defined in: [filters/FilterPanelField.ts:46](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L46)
+Defined in: [filters/FilterPanelField.ts:46](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L46)
 
 #### Parameters
 
@@ -46,7 +46,7 @@ Defined in: [filters/FilterPanelField.ts:46](https://github.com/jeyabbalas/data-
 
 > **isSelfUpdate**: `boolean` = `false`
 
-Defined in: [filters/FilterPanelField.ts:44](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L44)
+Defined in: [filters/FilterPanelField.ts:44](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L44)
 
 ## Methods
 
@@ -54,7 +54,7 @@ Defined in: [filters/FilterPanelField.ts:44](https://github.com/jeyabbalas/data-
 
 > **applyFilter**(): `void`
 
-Defined in: [filters/FilterPanelField.ts:417](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L417)
+Defined in: [filters/FilterPanelField.ts:417](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L417)
 
 #### Returns
 
@@ -66,7 +66,7 @@ Defined in: [filters/FilterPanelField.ts:417](https://github.com/jeyabbalas/data
 
 > **clear**(): `void`
 
-Defined in: [filters/FilterPanelField.ts:1034](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L1034)
+Defined in: [filters/FilterPanelField.ts:1034](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L1034)
 
 Clear the filter: reset controls and remove from state.
 
@@ -80,7 +80,7 @@ Clear the filter: reset controls and remove from state.
 
 > **clearControls**(): `void`
 
-Defined in: [filters/FilterPanelField.ts:981](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L981)
+Defined in: [filters/FilterPanelField.ts:981](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L981)
 
 #### Returns
 
@@ -92,7 +92,7 @@ Defined in: [filters/FilterPanelField.ts:981](https://github.com/jeyabbalas/data
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterPanelField.ts:1066](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L1066)
+Defined in: [filters/FilterPanelField.ts:1066](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L1066)
 
 Destroy and clean up
 
@@ -106,7 +106,7 @@ Destroy and clean up
 
 > **getColumnName**(): `string`
 
-Defined in: [filters/FilterPanelField.ts:1052](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L1052)
+Defined in: [filters/FilterPanelField.ts:1052](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L1052)
 
 Get the column name
 
@@ -120,7 +120,7 @@ Get the column name
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterPanelField.ts:1059](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L1059)
+Defined in: [filters/FilterPanelField.ts:1059](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L1059)
 
 Get the DOM element
 
@@ -134,7 +134,7 @@ Get the DOM element
 
 > **highlight**(): `void`
 
-Defined in: [filters/FilterPanelField.ts:1042](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L1042)
+Defined in: [filters/FilterPanelField.ts:1042](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L1042)
 
 Highlight this field (scroll into view + flash)
 
@@ -148,7 +148,7 @@ Highlight this field (scroll into view + flash)
 
 > **syncFromState**(): `void`
 
-Defined in: [filters/FilterPanelField.ts:734](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterPanelField.ts#L734)
+Defined in: [filters/FilterPanelField.ts:734](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/filters/FilterPanelField.ts#L734)
 
 Sync control values from current filter state.
 Called on construction and when filters change externally.

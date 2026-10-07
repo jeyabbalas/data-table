@@ -8,7 +8,7 @@
 
 > **DeepPartial**\<`T`\> = `T` *extends* (...`args`) => `unknown` ? `T` : `T` *extends* `object` ? `{ [K in keyof T]?: DeepPartial<T[K]> }` : `T`
 
-Defined in: [core/Strings.ts:19](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L19)
+Defined in: [core/Strings.ts:19](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L19)
 
 Deep-partial helper for `messages` overrides. Every nested object becomes
 optional; function-typed leaves are replaced wholesale (no partial

@@ -6,7 +6,7 @@
 
 # Interface: SourceOptions
 
-Defined in: [data/sourceOptions.ts:75](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L75)
+Defined in: [data/sourceOptions.ts:78](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/sourceOptions.ts#L78)
 
 How a source is read: passed as `sourceOptions` to `createDataTable()`,
 `table.loadData()` and `actions.loadData()`, and spread into
@@ -16,7 +16,8 @@ of any format. Every entry is checked before the load starts: a value of
 the wrong type or out of range, or an unknown key, rejects the load with a
 `LoadError` whose code is `LOAD_INVALID_OPTIONS` (or
 `LOAD_INVALID_TIMEZONE`), and `details.option` names it. The table keeps
-the data it had.
+the data it had, as it does when DuckDB does not know the time zone or
+the Parquet file lacks one of the `columns`.
 
 ## Extended by
 
@@ -28,7 +29,7 @@ the data it had.
 
 > `optional` **csv?**: [`CSVSourceOptions`](CSVSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:91](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L91)
+Defined in: [data/sourceOptions.ts:95](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/sourceOptions.ts#L95)
 
 Read by a CSV load.
 
@@ -38,7 +39,7 @@ Read by a CSV load.
 
 > `optional` **json?**: [`JSONSourceOptions`](JSONSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:93](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L93)
+Defined in: [data/sourceOptions.ts:97](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/sourceOptions.ts#L97)
 
 Read by a JSON load.
 
@@ -48,7 +49,7 @@ Read by a JSON load.
 
 > `optional` **parquet?**: [`ParquetSourceOptions`](ParquetSourceOptions.md)
 
-Defined in: [data/sourceOptions.ts:95](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L95)
+Defined in: [data/sourceOptions.ts:99](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/sourceOptions.ts#L99)
 
 Read by a Parquet load.
 
@@ -58,7 +59,7 @@ Read by a Parquet load.
 
 > `optional` **timezone?**: `string`
 
-Defined in: [data/sourceOptions.ts:89](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L89)
+Defined in: [data/sourceOptions.ts:93](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/sourceOptions.ts#L93)
 
 The time zone DuckDB works in, as an IANA name such as
 `'America/New_York'`. SQL on TIMESTAMPTZ values uses it: date parts,
@@ -70,4 +71,5 @@ offsets make the column TIMESTAMPTZ. Cells show TIMESTAMPTZ values in
 UTC either way. It is a setting of the worker's DuckDB connection, so it
 holds for every table on one `WorkerBridge`, and every load sets it: to
 UTC unless given. Default: `'UTC'`. A name DuckDB does not know rejects
-the load with `LOAD_INVALID_TIMEZONE`.
+the load with `LOAD_INVALID_TIMEZONE`, and the table keeps the data it
+had.

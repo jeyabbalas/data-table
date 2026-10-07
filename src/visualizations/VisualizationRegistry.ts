@@ -5,23 +5,10 @@
  * rather than leaking them across every table on the page. Consumers
  * typically pass a `VisualizationRegistry` via
  * `createDataTable({ visualizationRegistry })`; when omitted the
- * module-scoped `defaultVisualizationRegistry` is used.
+ * module-scoped `defaultVisualizationRegistry` is used. The
+ * `VisualizationRegistry` class below has an example registration.
  *
- * @example
- * import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
- * import { BoxPlot } from './viz/BoxPlot'; // extends BaseVisualization
- *
- * const visualizationRegistry = new VisualizationRegistry();
- * visualizationRegistry.register({
- *   name: 'box-plot',
- *   // Called with the column's `DataType`, not the column itself.
- *   isApplicable: (type) => type === 'integer' || type === 'float',
- *   constructor: BoxPlot,
- *   priority: 10, // built-ins use 0
- * });
- *
- * await createDataTable({ container, source: '/data.csv', visualizationRegistry });
- *
+ * @see VisualizationRegistry
  * @see VisualizationRegistration
  * @see VisualizationConstructor
  * @see BaseVisualization

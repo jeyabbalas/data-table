@@ -66,14 +66,28 @@ export interface CategoricalColumnStats extends BaseColumnStats {
 
 /**
  * Stats for date and timestamp columns.
- * Line 2: "2020-01-01 – 2024-12-31"
+ * Line 2: "2020-01-01 – 2024-12-31", then "· 2 non-finite" when the column
+ * holds `infinity`, `-infinity` or a date a JavaScript `Date` cannot hold.
+ *
+ * `min` and `max` are of the values the chart draws, as `toISOString`
+ * writes them: a year before 1 or past 9999 with its sign and six digits,
+ * `-000043-03-15T00:00:00.000Z` (44 BC) or `+012000-01-01T00:00:00.000Z`.
+ * `nonNullCount` counts the values left out too.
  */
 export interface TemporalColumnStats extends BaseColumnStats {
   kind: 'temporal';
-  /** Minimum date/timestamp as ISO string, or null if all null */
+  /** Minimum date/timestamp the chart draws, as ISO string, or null if there is none */
   min: string | null;
-  /** Maximum date/timestamp as ISO string, or null if all null */
+  /** Maximum date/timestamp the chart draws, as ISO string, or null if there is none */
   max: string | null;
+  /**
+   * Count of `infinity`, `-infinity` and dates more than about 270,000 years
+   * from 1970, which a JavaScript `Date` cannot hold, in the (possibly
+   * filtered) column. The chart leaves them out of its bars and of `min`
+   * and `max`. Line 2 ends with it when above 0. Optional so that stats
+   * built by a custom chart still type-check.
+   */
+  nonFiniteCount?: number | undefined;
 }
 
 /**

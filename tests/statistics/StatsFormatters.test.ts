@@ -606,6 +606,72 @@ describe('formatDefaultStats - Temporal Line 2', () => {
 });
 
 // =========================================
+// Line 2: Temporal, years before 1 or past 9999, and non-finite values
+// =========================================
+
+describe('formatStatsLine2 - temporal extremes', () => {
+  // 1,000 rows: 988 dates from 44 BC to the year 12000, 2 infinity, 10 null.
+  const makeTemporal = (overrides: Partial<TemporalColumnStats> = {}): TemporalColumnStats => ({
+    kind: 'temporal',
+    totalRows: 1000,
+    nonNullCount: 990,
+    nullCount: 10,
+    filteredTotalRows: null,
+    min: '-000043-03-15T00:00:00.000Z',
+    max: '+012000-01-01T00:00:00.000Z',
+    nonFiniteCount: 2,
+    ...overrides,
+  });
+
+  it('writes a year before 1 or past 9999 as the grid does, and ends with the note', () => {
+    expect(formatStatsLine2(makeTemporal(), 'date')).toBe(
+      '-000043-03-15 – +012000-01-01 · 2 non-finite',
+    );
+    expect(formatStatsLine2(makeTemporal({ nonFiniteCount: 0 }), 'timestamp')).toBe(
+      '-000043-03-15 – +012000-01-01',
+    );
+    expect(
+      formatStatsLine2(
+        makeTemporal({ min: '0050-06-15T00:00:00.000Z', max: '2024-12-31T23:59:59.000Z' }),
+        'timestamp',
+      ),
+    ).toBe('0050-06-15 – 2024-12-31 · 2 non-finite');
+  });
+
+  it('adds nothing for a count of 0, or none', () => {
+    const plain = '-000043-03-15 – +012000-01-01';
+    expect(formatStatsLine2(makeTemporal({ nonFiniteCount: undefined }), 'date')).toBe(plain);
+    const { nonFiniteCount: _omitted, ...withoutField } = makeTemporal();
+    expect(formatStatsLine2(withoutField, 'date')).toBe(plain);
+  });
+
+  it('shows the note alone when no date can be drawn', () => {
+    const stats = makeTemporal({ min: null, max: null, nonNullCount: 3, nonFiniteCount: 3 });
+    expect(formatStatsLine2(stats, 'date')).toBe('3 non-finite');
+  });
+
+  it('keeps the range for one date beside non-finite ones', () => {
+    const one = { min: '2024-06-15T12:00:00.000Z', max: '2024-06-15T12:00:00.000Z' };
+    // "all values: 2024-06-15" would be false.
+    expect(formatStatsLine2(makeTemporal({ ...one, nonFiniteCount: 1 }), 'timestamp')).toBe(
+      '2024-06-15 – 2024-06-15 · 1 non-finite',
+    );
+    expect(formatStatsLine2(makeTemporal({ ...one, nonFiniteCount: 0 }), 'timestamp')).toBe(
+      'all values: 2024-06-15',
+    );
+  });
+
+  it('takes the note from messages', () => {
+    const messages = mergeStrings(defaultStrings, {
+      statistics: { nonFiniteCount: (count) => `${count} non finies`, separator: ' | ' },
+    });
+    expect(formatStatsLine2(makeTemporal(), 'date', messages)).toBe(
+      '-000043-03-15 – +012000-01-01 | 2 non finies',
+    );
+  });
+});
+
+// =========================================
 // formatDefaultStats - Line 2: Time
 // =========================================
 

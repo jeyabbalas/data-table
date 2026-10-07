@@ -80,10 +80,12 @@ function formatTime(hour: number, minute: number, second?: number): string {
 }
 
 /**
- * Get short year suffix: "'24" from 2024
+ * Get short year suffix: "'24" from 2024. A year outside 1000–9999 is
+ * written in full, as its last two digits would name another: "-43" (44 BC,
+ * as `getUTCFullYear` numbers it), "50", "12000".
  */
 function getYearSuffix(year: number): string {
-  return `'${String(year).slice(-2)}`;
+  return year >= 1000 && year <= 9999 ? `'${String(year).slice(-2)}` : String(year);
 }
 
 /**

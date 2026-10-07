@@ -132,8 +132,9 @@ export function formatStatsLine1(
 
 /**
  * The end of line 2 for a column holding values its chart leaves out, having
- * no place on its axis (`NaN`, `Infinity`, `-Infinity`): "30 non-finite".
- * Null when the count is 0 or missing.
+ * no place on its axis (a number's `NaN`, `Infinity` and `-Infinity`, a
+ * date's `infinity`, `-infinity` and dates a JavaScript `Date` cannot hold):
+ * "30 non-finite". Null when the count is 0 or missing.
  */
 function nonFiniteNote(count: number | undefined, messages: Strings): string | null {
   return count ? messages.statistics.nonFiniteCount(count) : null;
@@ -210,23 +211,30 @@ function formatCategoricalLine2(
 
 /**
  * Format Line 2 for temporal types (date, timestamp).
- * "2020-01-01 – 2024-12-31"
+ * "2020-01-01 – 2024-12-31", then "· 2 non-finite" for the `infinity`,
+ * `-infinity` and far-off dates that the range leaves out. A column with
+ * none the chart can draw shows the note alone.
  */
 function formatTemporalLine2(
   stats: Extract<ColumnStatsData, { kind: 'temporal' }>,
   messages: Strings,
 ): string {
+  const s = messages.statistics;
+  const note = nonFiniteNote(stats.nonFiniteCount, messages);
   // Loose equality (==) catches both null and undefined as defense-in-depth
-  if (stats.min == null || stats.max == null) return '';
+  if (stats.min == null || stats.max == null) return note ?? '';
 
   const minDate = formatDateForStats(stats.min);
   const maxDate = formatDateForStats(stats.max);
 
-  if (minDate === maxDate) {
-    return messages.statistics.allValues(escapeHtml(minDate));
+  // Beside values the chart leaves out, "all values" would be false.
+  if (minDate === maxDate && !note) {
+    return s.allValues(escapeHtml(minDate));
   }
 
-  return `${escapeHtml(minDate)} \u2013 ${escapeHtml(maxDate)}`;
+  const parts = [`${escapeHtml(minDate)} \u2013 ${escapeHtml(maxDate)}`];
+  if (note) parts.push(note);
+  return parts.join(s.separator);
 }
 
 /**
@@ -235,9 +243,11 @@ function formatTemporalLine2(
  * otherwise shows the full relevant portion.
  */
 function formatDateForStats(isoString: string): string {
-  // DuckDB returns dates as "YYYY-MM-DD" and timestamps as "YYYY-MM-DD HH:MM:SS..."
-  // Extract just the date part for compact display
-  const dateMatch = isoString.match(/^(\d{4}-\d{2}-\d{2})/);
+  // ISO text, "YYYY-MM-DD…" as `toISOString` writes it: extract just the
+  // date part for compact display. A year before 1 or past 9999 keeps its
+  // sign and six digits, "-000043-03-15" (44 BC) and "+012000-01-01", as
+  // the grid's cells show it.
+  const dateMatch = isoString.match(/^((?:[+-]\d{6}|\d{4})-\d{2}-\d{2})/);
   if (dateMatch) {
     return dateMatch[1]!;
   }

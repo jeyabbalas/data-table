@@ -56,12 +56,43 @@ vi.mock('../../../src/visualizations/histogram/IntervalHistogramData', async (im
     typeof import('../../../src/visualizations/histogram/IntervalHistogramData')
   >()),
   fetchIntervalHistogramData: vi.fn().mockResolvedValue({
+    // Each bar with its smallest and largest value, as the unfiltered fetch sets them.
     bins: [
-      { binStartSeconds: 0, binEndSeconds: 720, count: 10 },
-      { binStartSeconds: 720, binEndSeconds: 1440, count: 20 },
-      { binStartSeconds: 1440, binEndSeconds: 2160, count: 15 },
-      { binStartSeconds: 2160, binEndSeconds: 2880, count: 8 },
-      { binStartSeconds: 2880, binEndSeconds: 3600, count: 5 },
+      {
+        binStartSeconds: 0,
+        binEndSeconds: 720,
+        count: 10,
+        minValue: '00:00:30',
+        maxValue: '00:11:30',
+      },
+      {
+        binStartSeconds: 720,
+        binEndSeconds: 1440,
+        count: 20,
+        minValue: '00:12:30',
+        maxValue: '00:23:30',
+      },
+      {
+        binStartSeconds: 1440,
+        binEndSeconds: 2160,
+        count: 15,
+        minValue: '00:24:30',
+        maxValue: '00:35:30',
+      },
+      {
+        binStartSeconds: 2160,
+        binEndSeconds: 2880,
+        count: 8,
+        minValue: '00:36:30',
+        maxValue: '00:47:30',
+      },
+      {
+        binStartSeconds: 2880,
+        binEndSeconds: 3600,
+        count: 5,
+        minValue: '00:48:30',
+        maxValue: '01:00:00',
+      },
     ],
     nullCount: 3,
     minSeconds: 0,
@@ -257,18 +288,16 @@ describe('IntervalHistogram', () => {
       emitBrushFilter(): void;
     };
 
-    /** Bars as fetchIntervalNumericBins makes them. */
-    const barsOf = (min: number, max: number, n: number, count: number) => {
-      const width = (max - min) / n;
-      return Array.from({ length: n }, (_, i) => ({
-        binStartSeconds: min + i * width,
-        binEndSeconds: i === n - 1 ? max : min + (i + 1) * width,
-        count,
-      }));
-    };
+    /** A bar, with its smallest and largest value when it holds any. */
+    const bar = (start: number, end: number, count: number, values?: [string, string]) => ({
+      binStartSeconds: start,
+      binEndSeconds: end,
+      count,
+      ...(values && { minValue: values[0], maxValue: values[1] }),
+    });
 
-    /** Brush bars `start`–`end`, as a drag would, and return the filter it emits. */
-    const brush = (h: IntervalHistogram, start: number, end: number): Filter => {
+    /** Brush bars `start`–`end`, as a drag would, and return what it emits. */
+    const brush = (h: IntervalHistogram, start: number, end: number): Filter | null => {
       const onFilterChange = vi.fn();
       options.onFilterChange = onFilterChange;
       const state = h as unknown as Brushable;
@@ -276,14 +305,26 @@ describe('IntervalHistogram', () => {
       state.brushState.endBinIndex = end;
       state.brushState.committed = true;
       state.emitBrushFilter();
-      return onFilterChange.mock.calls[0]![0] as Filter;
+      return onFilterChange.mock.calls[0]![0] as Filter | null;
     };
 
     const brushStateOf = (h: IntervalHistogram) => (h as unknown as Brushable).brushState;
 
-    it('restores bars 1–2 from bounds a hair off their edges, and no neighbour', async () => {
-      // The bars run 0, 12, 24, 36, 48, 60 minutes. Within half a microsecond
-      // of an edge is the edge.
+    const mockData = (bins: ReturnType<typeof bar>[], isSingleValue = false) => {
+      vi.mocked(fetchIntervalHistogramData).mockResolvedValueOnce({
+        bins,
+        nullCount: 0,
+        minSeconds: bins[0]!.binStartSeconds,
+        maxSeconds: bins[bins.length - 1]!.binEndSeconds,
+        medianSeconds: null,
+        total: bins.reduce((sum, b) => sum + b.count, 0),
+        isSingleValue,
+      });
+      vi.mocked(fetchIntervalNumericBins).mockResolvedValueOnce(bins);
+    };
+
+    it('restores bars 1–2 from a filter between their values, and no neighbour', async () => {
+      // Bar 0's largest value is 00:11:30 and bar 3's smallest 00:36:30.
       options.filters = [
         {
           column: 'duration',
@@ -325,31 +366,27 @@ describe('IntervalHistogram', () => {
       });
     });
 
-    it('restores a brush on 0.3 ms bars after the refetch', async () => {
+    it('filters a brush from its bars’ values and restores it after the refetch', async () => {
       // Five 0.3 ms bars from 0.1 ms.
-      const bins = barsOf(0.0001, 0.0016, 5, 10);
-      vi.mocked(fetchIntervalHistogramData).mockResolvedValueOnce({
-        bins,
-        nullCount: 0,
-        minSeconds: 0.0001,
-        maxSeconds: 0.0016,
-        medianSeconds: 0.00085,
-        total: 50,
-        isSingleValue: false,
-      });
-      vi.mocked(fetchIntervalNumericBins).mockResolvedValueOnce(bins);
+      mockData([
+        bar(0.0001, 0.0004, 3, ['00:00:00.0001', '00:00:00.0003']),
+        bar(0.0004, 0.0007, 3, ['00:00:00.0004', '00:00:00.0006']),
+        bar(0.0007, 0.001, 3, ['00:00:00.0007', '00:00:00.0009']),
+        bar(0.001, 0.0013, 3, ['00:00:00.001', '00:00:00.0012']),
+        bar(0.0013, 0.0016, 4, ['00:00:00.0013', '00:00:00.0016']),
+      ]);
 
       histogram = new IntervalHistogram(container, column, options);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // 1 ms itself is bar 2's: the bin query's FLOOR((0.001 - 0.0001) / w)
-      // is FLOOR(2.9999999999999996). So the brush runs to 1,001 µs.
-      const filter = brush(histogram, 1, 2);
-      expect(filter).toMatchObject({
+      const filter = brush(histogram, 1, 2)!;
+      expect(filter).toEqual({
+        column: 'duration',
         type: 'range',
         min: '00:00:00.0004',
-        max: '00:00:00.001001',
+        max: '00:00:00.0009',
         valueType: 'interval',
+        maxInclusive: true,
       });
 
       // The crossfilter refetch under that filter keeps the brush on bars 1–2.
@@ -361,51 +398,39 @@ describe('IntervalHistogram', () => {
       });
     });
 
-    it('starts a brush on bars under 2 µs at their first whole microsecond', async () => {
-      // 1 to 20 µs in 15 bars: bar 5 runs from 7.33 to 8.6 µs and holds only
-      // 8 µs. Rounded to the nearest, its start would take bar 4's 7 µs.
-      const bins = barsOf(0.000001, 0.00002, 15, 1);
-      vi.mocked(fetchIntervalHistogramData).mockResolvedValueOnce({
-        bins,
-        nullCount: 0,
-        minSeconds: 0.000001,
-        maxSeconds: 0.00002,
-        medianSeconds: 0.0000105,
-        total: 20,
-        isSingleValue: false,
-      });
-      vi.mocked(fetchIntervalNumericBins).mockResolvedValueOnce(bins);
+    it('takes the values from the unfiltered bars under another column’s filter', async () => {
+      // The foreground bars, from the filtered fetch, carry no values.
+      options.filters = [{ type: 'null', column: 'other' }];
 
       histogram = new IntervalHistogram(container, column, options);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const filter = brush(histogram, 5, 5);
-      expect(filter).toMatchObject({ min: '00:00:00.000008', max: '00:00:00.000009' });
-      await histogram.updateFilters([filter]);
-      expect(brushStateOf(histogram)).toMatchObject({
-        committed: true,
-        startBinIndex: 5,
-        endBinIndex: 5,
-      });
+      expect(brush(histogram, 1, 2)).toMatchObject({ min: '00:12:30', max: '00:35:30' });
+    });
+
+    it('writes no filter for a brush over bars holding no value, and drops the brush', async () => {
+      mockData([
+        bar(0, 1, 1, ['00:00:00', '00:00:00']),
+        bar(1, 2, 0),
+        bar(2, 3, 0),
+        bar(3, 4, 1, ['00:00:04', '00:00:04']),
+      ]);
+
+      histogram = new IntervalHistogram(container, column, options);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // The brush and any filter it had go: a filter removal, not one that matches nothing.
+      expect(brush(histogram, 1, 2)).toBeNull();
+      expect(brushStateOf(histogram).committed).toBe(false);
     });
 
     it('restores a click on a single-value chart after the refetch', async () => {
-      const bins = [{ binStartSeconds: 0.25, binEndSeconds: 0.25, count: 4 }];
-      vi.mocked(fetchIntervalHistogramData).mockResolvedValueOnce({
-        bins,
-        nullCount: 0,
-        minSeconds: 0.25,
-        maxSeconds: 0.25,
-        medianSeconds: 0.25,
-        total: 4,
-        isSingleValue: true,
-      });
-      vi.mocked(fetchIntervalNumericBins).mockResolvedValueOnce(bins);
+      mockData([bar(0.25, 0.25, 4, ['00:00:00.25', '00:00:00.25'])], true);
 
       histogram = new IntervalHistogram(container, column, options);
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      const filter = brush(histogram, 0, 0);
+      const filter = brush(histogram, 0, 0)!;
       expect(filter).toMatchObject({
         min: '00:00:00.25',
         max: '00:00:00.25',

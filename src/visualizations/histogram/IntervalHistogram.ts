@@ -296,20 +296,24 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
   /**
    * Emit a range filter based on current brush bin indices: the filter
-   * `intervalBrushFilter` writes, which matches exactly the brushed bars'
-   * rows. Its INTERVAL literals compare with 30-day months, a limitation it
-   * documents and keeps on purpose.
+   * `intervalBrushFilter` writes from the unfiltered bars' values, which
+   * matches exactly the brushed bars' rows (for a column mixing months with
+   * days, as near as DuckDB's 30-day months allow). A brush over bars holding
+   * no value writes none: the brush, and any filter it had, go.
    */
   protected emitBrushFilter(): void {
-    if (!this.data) return;
+    const data = this.backgroundData ?? this.data;
+    if (!data) return;
 
     const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
+    if (!data.bins[startIdx] || !data.bins[endIdx]) return;
 
-    if (this.data.bins[startIdx] && this.data.bins[endIdx]) {
-      this.options.onFilterChange?.(
-        intervalBrushFilter(this.column.name, this.data.bins, startIdx, endIdx),
-      );
+    const filter = intervalBrushFilter(this.column.name, data.bins, startIdx, endIdx);
+    if (filter) {
+      this.options.onFilterChange?.(filter);
+    } else {
+      this.clearBrush();
     }
   }
 
@@ -333,8 +337,8 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
     switch (ownFilter.type) {
       case 'range': {
-        // In whole microseconds, as the brush writes its bounds: the bars it
-        // brushed, however narrow, and no neighbour.
+        // The bars holding values the filter's range meets: a brush's own
+        // filter restores exactly its bars.
         const bars = intervalFilterBars(ownFilter, data.bins);
         if (bars) {
           this.setBrushFromBinRange(bars[0], bars[1]);

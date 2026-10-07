@@ -19,10 +19,13 @@
  * most the maximum, that the median lies between them, and that the bin
  * counts add up to the column's non-null count.
  *
- * A brush writes its bounds in whole microseconds, as DuckDB holds an
- * INTERVAL. They must match the rows its bars count: the nearest microsecond
- * to an edge can belong to the bar beside it, and a value exactly on an edge
- * goes wherever the bin query's FLOOR sends it.
+ * A brush filters from its first bar's smallest value to its last bar's
+ * largest, as DuckDB writes them, which the unfiltered bin query returns. The
+ * bars split the sorted values, so that matches exactly the rows they count:
+ * every brush over eight columns is checked against DuckDB's count. Bounds
+ * computed from the bar edges missed rows wherever DuckDB's arithmetic or its
+ * reading of the text differed: a value on an edge, an edge between two
+ * microseconds, a DECIMAL literal one ulp off, a year read as 360 days.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -66,6 +69,31 @@ const CASES: ReadonlyArray<readonly [string, string]> = [
     '100 hours and more',
     'SELECT to_microseconds(range * 36000000000 + 500000) AS d FROM range(30)',
   ],
+];
+
+/**
+ * `[label, SELECT]` for the brush checks: bars under 2 µs wide, edges on values
+ * that FLOOR puts in the bar before, a value on every edge, mixed scales, and
+ * the cases a review found.
+ */
+const BRUSH_CASES: ReadonlyArray<readonly [string, string]> = [
+  ['1 to 20 µs', 'SELECT to_microseconds(1 + range) AS d FROM range(20)'],
+  // Bars 5 and 10 start on 334 µs and 667 µs, which FLOOR puts in the bar before.
+  ['1 to 1,000 µs', CASES[3]![1]],
+  ['0.6 to 9.6 s by 0.6 s', 'SELECT to_milliseconds(600 + range * 600) AS d FROM range(16)'],
+  // Days and time of one sign within each value: DuckDB compares parts of
+  // opposite signs part by part (see intervalBrushFilter).
+  [
+    'days and microseconds of both signs',
+    `SELECT to_days(range - 150) + to_microseconds((range - 150) * 1234567891) AS d
+     FROM range(300)`,
+  ],
+  ['days only, 0 to 1,000', 'SELECT to_days(range) AS d FROM range(1001)'],
+  // The bin query's DECIMAL literals put 70 µs in bar 6, where JavaScript's doubles say 7.
+  ['0 to 150 µs by 10', 'SELECT to_microseconds(range * 10) AS d FROM range(16)'],
+  ['1 µs and 3 µs', 'SELECT to_microseconds(v) AS d FROM (VALUES (1), (3)) AS s(v)'],
+  // A month is 30 days to DuckDB and 30.4375 to the bars: whole months alone are exact.
+  ['whole months, 1 to 5 years', 'SELECT to_months(12 * (1 + range % 5)) AS d FROM range(100)'],
 ];
 
 describe('interval histogram — fractions of a second (RT-18 E)', () => {
@@ -140,13 +168,15 @@ describe('interval histogram — fractions of a second (RT-18 E)', () => {
     await harness.conn.query(`CREATE TABLE "${t}" AS ${CASES[0]![1]}`);
     const initial = await fetchIntervalHistogramData(t, 'd', [], bridge);
 
-    const filter = intervalBrushFilter('d', initial.bins, 3, 5);
+    // From bar 3's smallest value to bar 5's largest.
+    const filter = intervalBrushFilter('d', initial.bins, 3, 5)!;
     expect(filter).toEqual({
       column: 'd',
       type: 'range',
-      min: '00:00:00.199',
-      max: '00:00:00.397',
+      min: '00:00:00.201',
+      max: '00:00:00.391',
       valueType: 'interval',
+      maxInclusive: true,
     });
     const bins = await fetchIntervalNumericBins(
       t,
@@ -174,16 +204,14 @@ describe('interval histogram — fractions of a second (RT-18 E)', () => {
 
   it('a brush on a middle bar of 1 to 20 µs matches only that bar', async () => {
     const t = tableName();
-    await harness.conn.query(
-      `CREATE TABLE "${t}" AS SELECT to_microseconds(1 + range) AS d FROM range(20)`,
-    );
+    await harness.conn.query(`CREATE TABLE "${t}" AS ${BRUSH_CASES[0]![1]}`);
     const initial = await fetchIntervalHistogramData(t, 'd', [], bridge);
 
     // Bars of 19/15 µs: bar 5 runs from 7.33 µs to 8.6 µs and holds 8 µs
     // alone. The nearest microsecond to its start, 7, is bar 4's.
     expect(initial.bins[5]!.count).toBe(1);
-    const filter = intervalBrushFilter('d', initial.bins, 5, 5);
-    expect(filter).toMatchObject({ min: '00:00:00.000008', max: '00:00:00.000009' });
+    const filter = intervalBrushFilter('d', initial.bins, 5, 5)!;
+    expect(filter).toMatchObject({ min: '00:00:00.000008', max: '00:00:00.000008' });
 
     const [row] = await bridge.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM "${t}" WHERE ${filtersToWhereClause([filter])}`,
@@ -192,19 +220,71 @@ describe('interval histogram — fractions of a second (RT-18 E)', () => {
     expect(intervalFilterBars(filter, initial.bins)).toEqual([5, 5]);
   });
 
-  /** `[label, SELECT]`: bars narrower than 2 µs, edges on values, values on every edge. */
-  const BRUSH_CASES: ReadonlyArray<readonly [string, string]> = [
-    ['1 to 20 µs', 'SELECT to_microseconds(1 + range) AS d FROM range(20)'],
-    // Bars 5 and 10 start on 334 µs and 667 µs, which FLOOR puts in the bar before.
-    ['1 to 1,000 µs', CASES[3]![1]],
-    ['0.6 to 9.6 s by 0.6 s', 'SELECT to_milliseconds(600 + range * 600) AS d FROM range(16)'],
-    // No months: DuckDB compares those at 30 days, which the bars do not (see intervalBrushFilter).
-    [
-      'days and microseconds of both signs',
-      `SELECT to_days((range % 11) - 5) + to_microseconds((range - 150) * 3333333) AS d
-       FROM range(300)`,
-    ],
-  ];
+  it('a brush on days writes days, not years and months DuckDB reads as 360 and 30 days', async () => {
+    const t = tableName();
+    await harness.conn.query(`CREATE TABLE "${t}" AS ${BRUSH_CASES[4]![1]}`);
+    const { bins } = await fetchIntervalHistogramData(t, 'd', [], bridge);
+
+    // Bars of 66.7 days: 6 and 7 hold 400 to 533 days. Written in years and
+    // months on the chart's scale, `1 year 1 month 4 days 07:30:00` for 400
+    // days, DuckDB read the bounds about six days low.
+    const filter = intervalBrushFilter('d', bins, 6, 7)!;
+    expect(filter).toMatchObject({ min: '400 days', max: '533 days' });
+    const [row] = await bridge.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM "${t}" WHERE ${filtersToWhereClause([filter])}`,
+    );
+    expect(Number(row!.n)).toBe(134);
+    expect(binned(bins.slice(6, 8))).toBe(134);
+  });
+
+  it('a brush on whole months writes months: 2 years, not 730 days 12:00:00', async () => {
+    const t = tableName();
+    await harness.conn.query(`CREATE TABLE "${t}" AS ${BRUSH_CASES[7]![1]}`);
+    const { bins } = await fetchIntervalHistogramData(t, 'd', [], bridge);
+
+    // 24 months is 730.5 days on the chart's scale, but 720 to DuckDB, so a
+    // bound written in days missed every value of its own bar.
+    const bar = bins.findIndex((bin) => bin.minValue === '2 years');
+    const filter = intervalBrushFilter('d', bins, bar, bar)!;
+    expect(filter).toMatchObject({ min: '2 years', max: '2 years' });
+    const [row] = await bridge.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM "${t}" WHERE ${filtersToWhereClause([filter])}`,
+    );
+    expect(Number(row!.n)).toBe(20);
+  });
+
+  it('1 µs and 3 µs make two bars, each a microsecond wide', async () => {
+    const t = tableName();
+    await harness.conn.query(`CREATE TABLE "${t}" AS ${BRUSH_CASES[6]![1]}`);
+    const { bins } = await fetchIntervalHistogramData(t, 'd', [], bridge);
+
+    // Fifteen bars of 0.13 µs shared their starts, and a brush over some of
+    // them wrote a range that matched nothing.
+    expect(bins.map((bin) => [bin.count, bin.minValue, bin.maxValue])).toEqual([
+      [1, '00:00:00.000001', '00:00:00.000001'],
+      [1, '00:00:00.000003', '00:00:00.000003'],
+    ]);
+  });
+
+  it('a filter an older version wrote from rounded bar edges restores the bars it brushed', async () => {
+    const t = tableName();
+    await harness.conn.query(
+      `CREATE TABLE "${t}" AS SELECT to_microseconds(range * 10) AS d FROM range(101)`,
+    );
+    const { bins } = await fetchIntervalHistogramData(t, 'd', [], bridge);
+
+    // 0 to 1,000 µs in bars of 66.7 µs. Bars 2–3, from 133.3 to 266.7 µs, were
+    // written as the nearest microseconds, the end excluded. Bar 1 holds 70 to
+    // 130 µs, below the filter's 133: the bars it brushed are 2 and 3.
+    const old = {
+      type: 'range' as const,
+      column: 'd',
+      min: '00:00:00.000133',
+      max: '00:00:00.000267',
+      valueType: 'interval' as const,
+    };
+    expect(intervalFilterBars(old, bins)).toEqual([2, 3]);
+  });
 
   it.each(BRUSH_CASES)(
     '%s: every brush matches its bars’ rows and restores them',
@@ -216,9 +296,19 @@ describe('interval histogram — fractions of a second (RT-18 E)', () => {
       const brushes: Array<{ start: number; end: number; where: string }> = [];
       for (let start = 0; start < bins.length; start++) {
         for (let end = start; end < bins.length; end++) {
+          const holding = bins
+            .map((bin, i) => (i >= start && i <= end && bin.minValue !== undefined ? i : -1))
+            .filter((i) => i >= 0);
           const filter = intervalBrushFilter('d', bins, start, end);
-          expect(intervalFilterBars(filter, bins), `bars ${start}–${end}`).toEqual([start, end]);
-          brushes.push({ start, end, where: filtersToWhereClause([filter]) });
+          if (holding.length === 0) {
+            expect(filter, `bars ${start}–${end}`).toBeNull();
+            continue;
+          }
+          expect(intervalFilterBars(filter!, bins), `bars ${start}–${end}`).toEqual([
+            holding[0],
+            holding[holding.length - 1],
+          ]);
+          brushes.push({ start, end, where: filtersToWhereClause([filter!]) });
         }
       }
       // Every brush's row count, in one query.
@@ -313,13 +403,22 @@ describe('interval histogram — fractions of a second (RT-18 E)', () => {
       '10:00',
       '1:02:03',
       '-1 year -2 months 3 days -04:05:06.789',
+      // Finer than a microsecond: dropped, as DuckDB drops it (us rounds).
+      '01:02:03.1234567',
+      '0.0000015 seconds',
+      '1.9999999 seconds',
+      '0.123456789 minutes',
+      '0.0025 ms',
+      '2.5 us',
+      '-2.5 us',
+      '1.0000000001 days',
     ];
     const [row] = await bridge.query<Record<string, number>>(
       `SELECT ${texts.map((text, i) => `${intervalToSecondsSQL(`INTERVAL '${text}'`)} AS s${i}`).join(', ')}`,
     );
 
     for (const [i, text] of texts.entries()) {
-      expect(parseIntervalToSeconds(text), text).toBeCloseTo(row![`s${i}`]!, 6);
+      expect(parseIntervalToSeconds(text), text).toBeCloseTo(row![`s${i}`]!, 7);
     }
   });
 });

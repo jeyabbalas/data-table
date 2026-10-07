@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   parseIntervalToSeconds,
+  parseIntervalFields,
   secondsToIntervalString,
-  secondsToIntervalSQL,
+  intervalFieldsToString,
   intervalToSecondsSQL,
   intervalBrushFilter,
   intervalFilterBars,
@@ -260,105 +261,76 @@ describe('secondsToIntervalString', () => {
 });
 
 // =========================================
-// secondsToIntervalSQL Tests
+// parseIntervalFields Tests
 // =========================================
 
-describe('secondsToIntervalSQL', () => {
-  it('should return "00:00:00" for zero', () => {
-    expect(secondsToIntervalSQL(0)).toBe('00:00:00');
+describe('parseIntervalFields', () => {
+  it('reads the fields DuckDB stores', () => {
+    expect(parseIntervalFields('1 year 2 months 3 days 04:05:06.789')).toEqual({
+      months: 14,
+      days: 3,
+      micros: 14_706_789_000,
+    });
+    expect(parseIntervalFields('-1 day -01:00:00')).toEqual({
+      months: 0,
+      days: -1,
+      micros: -3_600_000_000,
+    });
+    expect(parseIntervalFields('1.5 months')).toEqual({ months: 1, days: 15, micros: 0 });
+    expect(parseIntervalFields('1.7 weeks')).toEqual({
+      months: 0,
+      days: 11,
+      micros: 77_760_000_000,
+    });
+    expect(parseIntervalFields('2 hours ago')).toEqual({
+      months: 0,
+      days: 0,
+      micros: -7_200_000_000,
+    });
+    expect(parseIntervalFields('  ')).toBeNull();
   });
 
-  it('should format time-only values', () => {
-    expect(secondsToIntervalSQL(3661)).toBe('01:01:01');
-    expect(secondsToIntervalSQL(7200)).toBe('02:00:00');
+  it('drops what is finer than a microsecond, as DuckDB does', () => {
+    expect(parseIntervalFields('01:02:03.1234567')!.micros).toBe(3_723_123_456);
+    expect(parseIntervalFields('01:02:03.9999999')!.micros).toBe(3_723_999_999);
+    expect(parseIntervalFields('00:00:00.0000009')!.micros).toBe(0);
+    expect(parseIntervalFields('0.0000015 seconds')!.micros).toBe(1);
+    expect(parseIntervalFields('1.0000015 seconds')!.micros).toBe(1_000_001);
+    expect(parseIntervalFields('-0.0000015 seconds')!.micros).toBe(-1);
+    expect(parseIntervalFields('0.0015 ms')!.micros).toBe(1);
+    // A number keeps six digits of its fraction: 0.123456 minutes.
+    expect(parseIntervalFields('0.123456789 minutes')!.micros).toBe(7_407_360);
+    expect(parseIntervalFields('1.0000000001 days')).toEqual({ months: 0, days: 1, micros: 0 });
+    // Microseconds round, half away from zero.
+    expect(parseIntervalFields('2.5 us')!.micros).toBe(3);
+    expect(parseIntervalFields('2.4 us')!.micros).toBe(2);
+    expect(parseIntervalFields('-2.5 us')!.micros).toBe(-3);
+  });
+});
+
+// =========================================
+// intervalFieldsToString Tests
+// =========================================
+
+describe('intervalFieldsToString', () => {
+  it('shows each field as DuckDB stores it', () => {
+    expect(intervalFieldsToString({ months: 14, days: 3, micros: 14_706_000_000 })).toBe(
+      '1y 2mo 3d 4h 5m 6s',
+    );
+    // Not split on the chart's 30.4375-day month.
+    expect(intervalFieldsToString({ months: 0, days: 45, micros: 0 })).toBe('45d');
+    expect(intervalFieldsToString({ months: 0, days: 0, micros: 360_000_500_000 })).toBe(
+      '100h 0.5s',
+    );
+    expect(intervalFieldsToString({ months: 0, days: 0, micros: 1 })).toBe('0.000001s');
+    expect(intervalFieldsToString({ months: 0, days: 0, micros: 0 })).toBe('0s');
   });
 
-  it('should format days with time', () => {
-    expect(secondsToIntervalSQL(86400)).toBe('1 day');
-    expect(secondsToIntervalSQL(90061)).toBe('1 day 01:01:01');
-    expect(secondsToIntervalSQL(2 * 86400)).toBe('2 days');
-  });
-
-  it('should format months', () => {
-    expect(secondsToIntervalSQL(MONTH_SECONDS)).toBe('1 month');
-    expect(secondsToIntervalSQL(3 * MONTH_SECONDS)).toBe('3 months');
-  });
-
-  it('should format years', () => {
-    expect(secondsToIntervalSQL(YEAR_SECONDS)).toBe('1 year');
-    expect(secondsToIntervalSQL(2 * YEAR_SECONDS)).toBe('2 years');
-  });
-
-  it('should format combined values', () => {
-    const secs = YEAR_SECONDS + 2 * MONTH_SECONDS + 3 * 86400 + 4 * 3600 + 5 * 60 + 6;
-    expect(secondsToIntervalSQL(secs)).toBe('1 year 2 months 3 days 04:05:06');
-  });
-
-  it('should round-trip through parseIntervalToSeconds', () => {
-    const values = [0, 30, 3600, 86400, MONTH_SECONDS, YEAR_SECONDS, YEAR_SECONDS + 86400 + 3600];
-    for (const v of values) {
-      const sql = secondsToIntervalSQL(v);
-      const parsed = parseIntervalToSeconds(sql);
-      expect(parsed).toBe(v);
-    }
-  });
-
-  it('should handle negative time-only values', () => {
-    expect(secondsToIntervalSQL(-3600)).toBe('-01:00:00');
-  });
-
-  it('should handle negative day-only values', () => {
-    expect(secondsToIntervalSQL(-86400)).toBe('-1 day');
-  });
-
-  it('should negate each component for negative combined values', () => {
-    // -90061 = -(1 day + 1h + 1m + 1s)
-    expect(secondsToIntervalSQL(-90061)).toBe('-1 day -01:01:01');
-    // Negative with fractional seconds
-    expect(secondsToIntervalSQL(-3661.5)).toBe('-01:01:01.5');
-  });
-
-  it('should preserve fractional seconds', () => {
-    expect(secondsToIntervalSQL(720.2)).toBe('00:12:00.2');
-    expect(secondsToIntervalSQL(3661.5)).toBe('01:01:01.5');
-    expect(secondsToIntervalSQL(0.123456)).toBe('00:00:00.123456');
-  });
-
-  it('should round-trip fractional seconds through parseIntervalToSeconds', () => {
-    const values = [720.2, 3661.5, 86400 + 0.5];
-    for (const v of values) {
-      const sql = secondsToIntervalSQL(v);
-      const parsed = parseIntervalToSeconds(sql);
-      expect(parsed).toBeCloseTo(v, 5);
-    }
-  });
-
-  it('should round-trip negative combined values through parseIntervalToSeconds', () => {
-    const values = [-3600, -86400, -90061, -(YEAR_SECONDS + 86400 + 3600)];
-    for (const v of values) {
-      const sql = secondsToIntervalSQL(v);
-      const parsed = parseIntervalToSeconds(sql);
-      expect(parsed).toBe(v);
-    }
-  });
-
-  it('carries a fraction that rounds up to a whole second', () => {
-    // Bar 9's start on data from 0.6 to 9.6 s in 15 bars of 0.6 s.
-    const start = 0.6 + 9 * ((9.6 - 0.6) / 15);
-    expect(start).toBe(5.999999999999999);
-    expect(secondsToIntervalSQL(start)).toBe('00:00:06'); // not 00:00:05.1
-    expect(secondsToIntervalSQL(-start)).toBe('-00:00:06');
-    expect(secondsToIntervalSQL(59.9999999)).toBe('00:01:00');
-    expect(secondsToIntervalSQL(86399.9999999)).toBe('1 day');
-  });
-
-  it('keeps a single microsecond', () => {
-    expect(secondsToIntervalSQL(0.000001)).toBe('00:00:00.000001'); // not 00:00:00
-    expect(secondsToIntervalSQL(-0.000001)).toBe('-00:00:00.000001');
-    expect(secondsToIntervalSQL(1.000001)).toBe('00:00:01.000001');
-    // Under half a microsecond is nothing.
-    expect(secondsToIntervalSQL(0.0000004)).toBe('00:00:00');
-    expect(secondsToIntervalSQL(-0.0000004)).toBe('00:00:00');
+  it('leads with one sign when every field is negative, and keeps each one otherwise', () => {
+    expect(intervalFieldsToString({ months: -14, days: -3, micros: -14_706_000_000 })).toBe(
+      '-1y 2mo 3d 4h 5m 6s',
+    );
+    expect(intervalFieldsToString({ months: 0, days: 1, micros: -3_600_000_000 })).toBe('1d -1h');
   });
 });
 
@@ -367,77 +339,75 @@ describe('secondsToIntervalSQL', () => {
 // =========================================
 
 describe('intervalBrushFilter and intervalFilterBars', () => {
-  /** Bars as fetchIntervalNumericBins makes them. */
-  const barsOf = (min: number, max: number, numBins = 15) =>
-    fetchIntervalNumericBins('t', 'd', numBins, min, max, [], {
-      query: async () => [],
-    } as unknown as WorkerBridge);
+  const bar = (start: number, end: number, count: number, values?: [string, string]) => ({
+    binStartSeconds: start,
+    binEndSeconds: end,
+    count,
+    ...(values && { minValue: values[0], maxValue: values[1] }),
+  });
+  // 0 to 60 minutes in five bars, as the unfiltered fetch fills them; bar 2 holds no value.
+  const bins = [
+    bar(0, 720, 3, ['00:01:00', '00:11:00']),
+    bar(720, 1440, 2, ['00:12:00', '00:23:59.999999']),
+    bar(1440, 2160, 0),
+    bar(2160, 2880, 4, ['00:36:00.5', '00:47:00']),
+    bar(2880, 3600, 1, ['01:00:00', '01:00:00']),
+  ];
+  const range = (min: string | number, max: string | number, maxInclusive = false) => ({
+    type: 'range' as const,
+    column: 'd',
+    min,
+    max,
+    valueType: 'interval' as const,
+    ...(maxInclusive && { maxInclusive }),
+  });
 
-  it('writes edges on whole seconds as they are', async () => {
-    const bins = await barsOf(0, 3600, 5); // bars of 12 minutes
-    const filter = intervalBrushFilter('d', bins, 1, 2);
-    expect(filter).toEqual({
+  it("filters from the first bar's smallest value to the last one's largest, inclusive", () => {
+    expect(intervalBrushFilter('d', bins, 0, 1)).toEqual({
       column: 'd',
       type: 'range',
-      min: '00:12:00',
-      max: '00:36:00',
+      min: '00:01:00',
+      max: '00:23:59.999999',
       valueType: 'interval',
+      maxInclusive: true,
     });
-    expect(intervalFilterBars(filter, bins)).toEqual([1, 2]);
   });
 
-  it('includes the maximum when the brush reaches the last bar', async () => {
-    const bins = await barsOf(0, 3600, 5);
-    const filter = intervalBrushFilter('d', bins, 3, 4);
-    expect(filter).toMatchObject({ min: '00:36:00', max: '01:00:00', maxInclusive: true });
-    expect(intervalFilterBars(filter, bins)).toEqual([3, 4]);
+  it('skips bars holding no value, and writes nothing for those alone', () => {
+    expect(intervalBrushFilter('d', bins, 1, 3)).toMatchObject({
+      min: '00:12:00',
+      max: '00:47:00',
+    });
+    expect(intervalBrushFilter('d', bins, 2, 2)).toBeNull();
   });
 
-  it('starts a bar at its first whole microsecond, not the nearest', async () => {
-    // 1 to 20 µs in bars of 19/15 µs: bar 5 runs from 7.33 to 8.6 µs.
-    const bins = await barsOf(0.000001, 0.00002);
-    const filter = intervalBrushFilter('d', bins, 5, 5);
-    expect(filter).toMatchObject({ min: '00:00:00.000008', max: '00:00:00.000009' });
-    expect(intervalFilterBars(filter, bins)).toEqual([5, 5]);
-  });
-
-  it('restores every brush on bars under 2 µs wide', async () => {
-    const bins = await barsOf(0.000001, 0.00002);
+  it('restores every brush onto the bars holding its values', () => {
     for (let start = 0; start < bins.length; start++) {
       for (let end = start; end < bins.length; end++) {
+        const holding = [0, 1, 3, 4].filter((i) => i >= start && i <= end);
         const filter = intervalBrushFilter('d', bins, start, end);
-        expect(intervalFilterBars(filter, bins), `bars ${start}–${end}`).toEqual([start, end]);
+        if (holding.length === 0) {
+          expect(filter).toBeNull();
+          continue;
+        }
+        expect(intervalFilterBars(filter!, bins), `bars ${start}–${end}`).toEqual([
+          holding[0],
+          holding[holding.length - 1],
+        ]);
       }
     }
   });
 
-  it('writes a single value as itself, inclusive', async () => {
-    const bins = [{ binStartSeconds: 0.25, binEndSeconds: 0.25, count: 4 }];
-    const filter = intervalBrushFilter('d', bins, 0, 0);
-    expect(filter).toMatchObject({
-      min: '00:00:00.25',
-      max: '00:00:00.25',
-      maxInclusive: true,
-    });
-    expect(intervalFilterBars(filter, bins)).toEqual([0, 0]);
-  });
-
-  it('reads a filter added in code: unit text, a bound a hair off an edge, open ends', async () => {
-    const bins = await barsOf(0, 3600, 5); // edges at 0, 12, 24, 36, 48, 60 minutes
-    const range = (min: string | number, max: string | number) => ({
-      type: 'range' as const,
-      column: 'd',
-      min,
-      max,
-      valueType: 'interval' as const,
-    });
-    expect(intervalFilterBars(range('12 minutes', '0.6 hours'), bins)).toEqual([1, 2]);
-    // Within half a microsecond of an edge is the edge.
-    expect(intervalFilterBars(range('00:11:59.9999996', '00:36:00.0000004'), bins)).toEqual([1, 2]);
-    // A bound inside a bar takes that bar in.
-    expect(intervalFilterBars(range('00:11:59', '00:36:01'), bins)).toEqual([0, 3]);
-    expect(intervalFilterBars(range(-Infinity, '00:24:00'), bins)).toEqual([0, 1]);
-    expect(intervalFilterBars(range('00:48:00', Infinity), bins)).toEqual([4, 4]);
+  it('reads a filter added in code, or written by an older version from bar edges', () => {
+    // Unit text: from 12 minutes up to, not including, 36.
+    expect(intervalFilterBars(range('12 minutes', '0.6 hours'), bins)).toEqual([1, 1]);
+    // Bars 1–3 as an older version wrote them: edges, the last one excluded.
+    expect(intervalFilterBars(range('00:12:00', '00:48:00'), bins)).toEqual([1, 3]);
+    // A bound inside a bar's values takes the bar in.
+    expect(intervalFilterBars(range('00:11:00', '00:30:00'), bins)).toEqual([0, 1]);
+    expect(intervalFilterBars(range(-Infinity, '00:20:00'), bins)).toEqual([0, 1]);
+    expect(intervalFilterBars(range('00:40:00', Infinity), bins)).toEqual([3, 4]);
+    expect(intervalFilterBars(range('01:00:00', '01:00:00', true), bins)).toEqual([4, 4]);
     expect(intervalFilterBars(range('2 hours', '3 hours'), bins)).toBeNull();
   });
 });
@@ -550,6 +520,23 @@ describe('fetchIntervalNumericBins', () => {
     expect(bins[1].binEndSeconds).toBe(200);
     expect(bins[3].binEndSeconds).toBe(400); // Last bin ends at max
   });
+
+  it('gives each bin its smallest and largest value when asked', async () => {
+    const query = vi.fn(async () => [
+      { bin_idx: 0, count: 2, min_value: '00:00:01', max_value: '00:00:02' },
+      { bin_idx: 2, count: 1, min_value: '00:00:09', max_value: '00:00:09' },
+    ]);
+    const bridge = { query } as unknown as WorkerBridge;
+
+    const bins = await fetchIntervalNumericBins('t', 'dur', 3, 1, 9, [], bridge, true);
+
+    expect(query.mock.calls[0]![0]).toContain('arg_min("dur", ');
+    expect(bins.map((bin) => [bin.minValue, bin.maxValue])).toEqual([
+      ['00:00:01', '00:00:02'],
+      [undefined, undefined],
+      ['00:00:09', '00:00:09'],
+    ]);
+  });
 });
 
 // =========================================
@@ -579,24 +566,45 @@ describe('fetchIntervalHistogramData', () => {
   });
 
   it('should handle single value', async () => {
-    const bridge = {
-      query: async () => [
-        {
-          min_sec: 3600,
-          max_sec: 3600,
-          median_sec: 3600,
-          count: 50,
-          null_count: 0,
-        },
-      ],
-    } as unknown as WorkerBridge;
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([
+        { min_sec: 3600, max_sec: 3600, median_sec: 3600, count: 50, null_count: 0 },
+      ])
+      // One bin takes every value, with the value for a brush.
+      .mockResolvedValueOnce([
+        { bin_idx: 0, count: 50, min_value: '01:00:00', max_value: '01:00:00' },
+      ]);
+    const bridge = { query } as unknown as WorkerBridge;
 
     const data = await fetchIntervalHistogramData('t', 'dur', [], bridge, 10);
     expect(data.isSingleValue).toBe(true);
-    expect(data.bins).toHaveLength(1);
-    expect(data.bins[0].count).toBe(50);
+    expect(data.bins).toEqual([
+      {
+        binStartSeconds: 3600,
+        binEndSeconds: 3600,
+        count: 50,
+        minValue: '01:00:00',
+        maxValue: '01:00:00',
+      },
+    ]);
+    expect(query.mock.calls[1]![0]).toContain('0 as bin_idx');
     expect(data.minSeconds).toBe(3600);
     expect(data.maxSeconds).toBe(3600);
+  });
+
+  it('makes no bin narrower than a microsecond', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([
+        { min_sec: 0.000001, max_sec: 0.000003, median_sec: 0.000002, count: 2, null_count: 0 },
+      ])
+      .mockResolvedValueOnce([]);
+    const bridge = { query } as unknown as WorkerBridge;
+
+    // 1 µs and 3 µs: two bins of a microsecond, not fifteen of 0.13 µs.
+    const data = await fetchIntervalHistogramData('t', 'dur', [], bridge);
+    expect(data.bins).toHaveLength(2);
   });
 
   it('should fetch bins for normal data', async () => {

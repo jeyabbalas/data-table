@@ -60,28 +60,6 @@ updates:
       - dependency-name: 'typescript'
         update-types:
           - version-update:semver-major
-      # `size-limit` 13 requires Node `^22.18 || ^24 || >=26`. With
-      # `engine-strict=true` in `.npmrc`, installing it would raise the
-      # development floor from Node 22.13 (set by `@changesets/cli` 3; see
-      # DEVELOPMENT.md) to 22.18. v13 adds no features we need (it only drops
-      # Node 20, sheds two deps, and adds provenance). Hold back until that
-      # floor is raised; minor/patch bumps still flow through the size-limit
-      # group.
-      - dependency-name: 'size-limit'
-        update-types:
-          - version-update:semver-major
-      - dependency-name: '@size-limit/*'
-        update-types:
-          - version-update:semver-major
-      # Same story as `size-limit` above: `jsdom` 30 requires Node
-      # `^22.22.2 || ^24.15.0 || >=26`, so `engine-strict` would raise the
-      # development floor from Node 22.13 to 22.22.2. jsdom only backs the
-      # test DOM, so there is nothing to gain by forcing the runtime bump.
-      # Hold back until that floor is raised; minor/patch still flow via the
-      # vitest group.
-      - dependency-name: 'jsdom'
-        update-types:
-          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /

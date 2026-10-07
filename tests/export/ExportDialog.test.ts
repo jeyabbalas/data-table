@@ -552,7 +552,9 @@ describe('ExportDialog', () => {
       await vi.waitFor(() => {
         const errorEl = dialog.getElement().querySelector('.dt-export-error') as HTMLElement;
         expect(errorEl.textContent).toBe('Query failed');
-        expect(errorEl.style.display).toBe('');
+        // Not '': the stylesheet hides it, and clearing the inline display
+        // would leave it hidden.
+        expect(errorEl.style.display).toBe('block');
       });
     });
 

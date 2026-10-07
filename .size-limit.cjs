@@ -26,14 +26,20 @@
  *   stylesheet                     22.57 kB   →  23.7 kB cap (5.0 %)
  *   lazy ExportDialog chunk        97.67 kB   → 100 kB   cap (2.4 %)
  *   lazy SQLFilterModal chunk       2.53 kB   →   2.6 kB cap (2.8 %)
- *   lazy DerivedColumnModal         3.61 kB   →   3.8 kB cap (5.3 %)
- *   lazy DerivedColumnEditPanel     3.02 kB   →   3.1 kB cap (2.6 %)
+ *   lazy DerivedColumnModal         3.77 kB   →   3.95 kB cap (4.8 %)
+ *   lazy DerivedColumnEditPanel     3.15 kB   →   3.3 kB cap (4.8 %)
  *   lazy FilterPresetPanel          2.62 kB   →   2.7 kB cap (3.1 %)
  *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
  *   lazy extractExpression chunk    2.81 kB   →   2.95 kB cap (5.0 %)
  *   lazy ValueInspector chunk       8.45 kB   →   8.9 kB cap (5.3 %)
  *   lazy ExtractColumnPanel chunk   4.95 kB   →   5.3 kB cap (7.1 %)
  *   lazy TreeView chunk             2.79 kB   →   2.85 kB cap (2.2 %)
+ *
+ * The two derived-column chunks were last measured once their panels
+ * showed the errors the stylesheet had hidden, with the name and values
+ * fields labelled and described by them: DerivedColumnModal went from
+ * 3.63 to 3.77 kB and DerivedColumnEditPanel from 3.04 to 3.15 kB, and
+ * their caps from 3.8 and 3.1 kB.
  *
  * Root entry history. It measured 7.68 kB until the column charts became
  * lazy; `LazyVizController` took it to 8.80 kB. The controller is only
@@ -173,12 +179,12 @@ module.exports = [
   {
     name: 'lazy DerivedColumnModal chunk · ESM',
     path: 'dist/DerivedColumnModal-*.js',
-    limit: '3.8 kB',
+    limit: '3.95 kB',
   },
   {
     name: 'lazy DerivedColumnEditPanel chunk · ESM',
     path: 'dist/DerivedColumnEditPanel-*.js',
-    limit: '3.1 kB',
+    limit: '3.3 kB',
   },
   {
     name: 'lazy FilterPresetPanel chunk · ESM',

@@ -6,7 +6,7 @@
 
 # Class: SQLFilterModal
 
-Defined in: [filters/SQLFilterModal.ts:46](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L46)
+Defined in: [filters/SQLFilterModal.ts:50](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L50)
 
 Modal dialog that hosts the raw-SQL `WHERE`-clause filter editor backed
 by a CodeMirror editor (DuckDB grammar + autocompletion). On Apply, emits
@@ -19,7 +19,7 @@ a [RawSQLFilter](../../index/interfaces/RawSQLFilter.md). Treat user-authored SQ
 
 > **new SQLFilterModal**(`state`, `actions`, `options?`): `SQLFilterModal`
 
-Defined in: [filters/SQLFilterModal.ts:80](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L80)
+Defined in: [filters/SQLFilterModal.ts:84](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L84)
 
 #### Parameters
 
@@ -45,7 +45,7 @@ Defined in: [filters/SQLFilterModal.ts:80](https://github.com/jeyabbalas/data-ta
 
 > **close**(): `void`
 
-Defined in: [filters/SQLFilterModal.ts:543](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L543)
+Defined in: [filters/SQLFilterModal.ts:551](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L551)
 
 #### Returns
 
@@ -57,7 +57,7 @@ Defined in: [filters/SQLFilterModal.ts:543](https://github.com/jeyabbalas/data-t
 
 > **destroy**(): `void`
 
-Defined in: [filters/SQLFilterModal.ts:586](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L586)
+Defined in: [filters/SQLFilterModal.ts:594](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L594)
 
 #### Returns
 
@@ -69,7 +69,7 @@ Defined in: [filters/SQLFilterModal.ts:586](https://github.com/jeyabbalas/data-t
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/SQLFilterModal.ts:578](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L578)
+Defined in: [filters/SQLFilterModal.ts:586](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L586)
 
 #### Returns
 
@@ -81,7 +81,7 @@ Defined in: [filters/SQLFilterModal.ts:578](https://github.com/jeyabbalas/data-t
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [filters/SQLFilterModal.ts:582](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L582)
+Defined in: [filters/SQLFilterModal.ts:590](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L590)
 
 #### Returns
 
@@ -93,7 +93,7 @@ Defined in: [filters/SQLFilterModal.ts:582](https://github.com/jeyabbalas/data-t
 
 > **open**(): `void`
 
-Defined in: [filters/SQLFilterModal.ts:456](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L456)
+Defined in: [filters/SQLFilterModal.ts:464](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L464)
 
 Open the modal in create mode (empty fields)
 
@@ -107,7 +107,7 @@ Open the modal in create mode (empty fields)
 
 > **openForEdit**(`filterId`, `returnFocus?`): `void`
 
-Defined in: [filters/SQLFilterModal.ts:476](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/SQLFilterModal.ts#L476)
+Defined in: [filters/SQLFilterModal.ts:484](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/SQLFilterModal.ts#L484)
 
 Open the modal in edit mode (pre-populated from existing SQL filter)
 

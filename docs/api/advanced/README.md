@@ -47,7 +47,6 @@
 - [UndoManager](classes/UndoManager.md)
 - [ValueCounts](classes/ValueCounts.md)
 - [VirtualScroller](classes/VirtualScroller.md)
-- [~~VisualizationFactory~~](classes/VisualizationFactory.md)
 
 ## Interfaces
 
@@ -63,6 +62,7 @@
 - [ColumnHeaderOptions](interfaces/ColumnHeaderOptions.md)
 - [ColumnHeaderTooltipPopoverOptions](interfaces/ColumnHeaderTooltipPopoverOptions.md)
 - [ColumnReorderOptions](interfaces/ColumnReorderOptions.md)
+- [CrossfilterCoordinatorOptions](interfaces/CrossfilterCoordinatorOptions.md)
 - [DateHistogramBin](interfaces/DateHistogramBin.md)
 - [DateHistogramData](interfaces/DateHistogramData.md)
 - [DerivedColumnEditPanelOptions](interfaces/DerivedColumnEditPanelOptions.md)

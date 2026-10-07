@@ -8,6 +8,6 @@
 
 > **DerivedColumnDef** = [`ExpressionColumnDef`](../interfaces/ExpressionColumnDef.md) \| [`VectorColumnDef`](../interfaces/VectorColumnDef.md)
 
-Defined in: [derived/types.ts:42](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/types.ts#L42)
+Defined in: [derived/types.ts:42](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/types.ts#L42)
 
 Union of both derived column kinds

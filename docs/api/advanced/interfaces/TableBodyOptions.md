@@ -6,7 +6,7 @@
 
 # Interface: TableBodyOptions
 
-Defined in: [table/TableBody.ts:28](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L28)
+Defined in: [table/TableBody.ts:28](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L28)
 
 Options for configuring the TableBody
 
@@ -16,7 +16,7 @@ Options for configuring the TableBody
 
 > `optional` **annotationPopover?**: [`AnnotationPopover`](../classes/AnnotationPopover.md)
 
-Defined in: [table/TableBody.ts:80](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L80)
+Defined in: [table/TableBody.ts:80](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L80)
 
 Shared popover singleton used to display cell-scope annotations on
 hover / focus of an annotated cell.
@@ -27,7 +27,7 @@ hover / focus of an annotated cell.
 
 > `optional` **annotations?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [table/TableBody.ts:75](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L75)
+Defined in: [table/TableBody.ts:75](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L75)
 
 Shared annotation store. When provided, the body applies
 `dt-row--annotated` / `dt-cell--annotated` classes at render time and
@@ -39,7 +39,7 @@ subscribes to `change` events to keep visible rows in sync.
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [table/TableBody.ts:32](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L32)
+Defined in: [table/TableBody.ts:32](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L32)
 
 CSS class prefix (default: 'dt')
 
@@ -49,7 +49,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **fetchBlockSize?**: `number`
 
-Defined in: [table/TableBody.ts:93](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L93)
+Defined in: [table/TableBody.ts:93](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L93)
 
 Rows fetched per block. Default: 128. Clamped to [16, 1024].
 
@@ -66,7 +66,7 @@ dedupe keys stable.
 
 > `optional` **gridElement?**: `HTMLElement`
 
-Defined in: [table/TableBody.ts:53](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L53)
+Defined in: [table/TableBody.ts:53](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L53)
 
 The owning `.dt-grid` element. Used as the rescue landing spot for real
 DOM focus when a row that holds it is about to be detached: virtualization
@@ -80,7 +80,7 @@ rescue is simply skipped.
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [table/TableBody.ts:38](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L38)
+Defined in: [table/TableBody.ts:38](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L38)
 
 Per-instance identifier mixed into cell DOM ids so two tables on the same
 page don't collide. Required for `aria-activedescendant` to resolve;
@@ -92,7 +92,7 @@ without it cells are rendered without ids.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [table/TableBody.ts:82](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L82)
+Defined in: [table/TableBody.ts:82](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L82)
 
 Resolved i18n strings (used for the placeholder-row label). Defaults to English.
 
@@ -102,7 +102,7 @@ Resolved i18n strings (used for the placeholder-row label). Defaults to English.
 
 > `optional` **onRowsRendered?**: () => `void`
 
-Defined in: [table/TableBody.ts:45](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L45)
+Defined in: [table/TableBody.ts:45](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L45)
 
 Called after every pass that materializes or recycles row elements.
 `TableContainer` uses it to re-point `aria-activedescendant`, whose target
@@ -119,7 +119,7 @@ without the cursor itself changing.
 
 > `optional` **prefetch?**: `boolean`
 
-Defined in: [table/TableBody.ts:111](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L111)
+Defined in: [table/TableBody.ts:111](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L111)
 
 Speculatively fetch one block beyond the viewport in the current scroll
 direction while the pipeline is otherwise idle. Default: true.
@@ -133,7 +133,7 @@ Prefetches run at 'normal' worker priority, so visible-block fetches
 
 > `optional` **rowCacheRows?**: `number`
 
-Defined in: [table/TableBody.ts:103](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L103)
+Defined in: [table/TableBody.ts:103](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L103)
 
 Maximum rows kept in the in-memory row cache. Default: 2048. Rounded up
 to whole blocks, with a floor of 4 blocks.
@@ -149,7 +149,7 @@ scroll traffic.
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [table/TableBody.ts:30](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L30)
+Defined in: [table/TableBody.ts:30](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L30)
 
 Fixed height per row in pixels (default: 32)
 
@@ -159,7 +159,7 @@ Fixed height per row in pixels (default: 32)
 
 > `optional` **scrollContainer?**: `HTMLElement`
 
-Defined in: [table/TableBody.ts:59](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/TableBody.ts#L59)
+Defined in: [table/TableBody.ts:59](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/table/TableBody.ts#L59)
 
 External scroll container for unified scrolling.
 When provided, VirtualScroller will use this container for scroll events

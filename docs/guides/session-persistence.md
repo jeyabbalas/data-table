@@ -342,4 +342,4 @@ useEffect(() => {
 - Multi-table: [Multi-table dashboards](./multi-table.md) for shared-store patterns
 - Troubleshooting: [IndexedDB persistence failing](../troubleshooting.md)
 - API reference: [`persistence` option](../api-reference.md#createdatatable), [`SessionStore`](../api-reference.md#sessionstore)
-- Source: `src/persistence/SessionStore.ts:1-283`, `src/persistence/types.ts`, `src/persistence/AutoSave.ts`
+- Source: `src/persistence/SessionStore.ts:1-443`, `src/persistence/types.ts`, `src/persistence/AutoSave.ts`

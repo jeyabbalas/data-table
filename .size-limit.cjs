@@ -17,23 +17,23 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, re-measured after the review fixes to the
- * nested-type work under Vite 8.2.0 / rolldown 1.2.1, which, like rolldown
- * 1.0.1 before it, inlines the shared ModalHost code into each modal
- * consumer):
- *   root entry · ESM               10.93 kB   →  11.4 kB cap (4.3 %)
- *   advanced entry · ESM            2.32 kB   →   2.45 kB cap (5.6 %)
- *   stylesheet                     22.57 kB   →  23.7 kB cap (5.0 %)
- *   lazy ExportDialog chunk        97.67 kB   → 100 kB   cap (2.4 %)
- *   lazy SQLFilterModal chunk       2.53 kB   →   2.6 kB cap (2.8 %)
- *   lazy DerivedColumnModal         3.77 kB   →   3.95 kB cap (4.8 %)
- *   lazy DerivedColumnEditPanel     3.15 kB   →   3.3 kB cap (4.8 %)
- *   lazy FilterPresetPanel          2.62 kB   →   2.7 kB cap (3.1 %)
- *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
- *   lazy extractExpression chunk    2.81 kB   →   2.95 kB cap (5.0 %)
- *   lazy ValueInspector chunk       8.45 kB   →   8.9 kB cap (5.3 %)
- *   lazy ExtractColumnPanel chunk   4.95 kB   →   5.3 kB cap (7.1 %)
- *   lazy TreeView chunk             2.79 kB   →   2.85 kB cap (2.2 %)
+ * Current baseline (brotli, re-measured after the 0.9.0 "nice to have"
+ * fixes, RT-16 – RT-21, under Vite 8.3.0 / rolldown 1.2.10, which, like
+ * rolldown 1.0.1 before it, inlines the shared ModalHost code into each
+ * modal consumer):
+ *   root entry · ESM               11.05 kB   →  11.4 kB cap (3.2 %)
+ *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
+ *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
+ *   lazy ExportDialog chunk       100.88 kB   → 104 kB   cap (3.1 %)
+ *   lazy SQLFilterModal chunk       2.56 kB   →   2.6 kB cap (1.6 %)
+ *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
+ *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
+ *   lazy FilterPresetPanel          2.69 kB   →   2.7 kB cap (0.4 %)
+ *   lazy CodeMirror editor          5.19 kB   →   5.5 kB cap (6.0 %)
+ *   lazy extractExpression chunk    2.78 kB   →   2.95 kB cap (6.1 %)
+ *   lazy ValueInspector chunk       8.44 kB   →   8.9 kB cap (5.5 %)
+ *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
+ *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -59,10 +59,14 @@
  * worker and `loadProgress` emitted, derived-column changes run one at a
  * time, a failed initial load torn down, loads that report the tables they
  * replace), it measured 10.85 kB, and the cap moved to 11.4 kB. The
- * nested-type work left it at 10.93 kB.
+ * nested-type work left it at 10.93 kB, and the 0.9.0 "nice to have" fixes
+ * at 11.05 kB.
  *
  * Advanced entry history. Removing the deprecated `VisualizationFactory`
- * took it from 2.50 to 2.32 kB, and the cap from 2.6 to 2.45 kB.
+ * took it from 2.50 to 2.32 kB, and the cap from 2.6 to 2.45 kB. The rest of
+ * the 0.9.0 "nice to have" fixes took it to 2.15 kB, mostly #189's interval
+ * stats reusing the interval chart's query (2.37 to 2.12 kB), and the cap to
+ * 2.25 kB.
  *
  * ExportDialog chunk history. Despite its name, the glob matches the shared
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
@@ -94,7 +98,7 @@
  * exact reads' paging and the panels' waiting opens, at 97.67 kB. The 0.9.0
  * "nice to have" fixes (RT-16 – RT-21: dates and times exported as ISO text,
  * NaN and infinity left out of charts, sub-second intervals, TIME WITH TIME
- * ZONE charts, extreme dates and more) took it to 100.12 kB, and the cap to
+ * ZONE charts, extreme dates and more) took it to 100.88 kB, and the cap to
  * 104 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
@@ -150,7 +154,7 @@
  * Nested columns took it from 20.51 to 20.54 kB (the header's type label),
  * and the value inspector's panel and tree to 21.81 kB, and the cap from
  * 21.5 to 22.9 kB. The extract panel took it to 22.57 kB, and the cap to
- * 23.7 kB.
+ * 23.7 kB. The 0.9.0 "nice to have" fixes took it to 22.87 kB.
  *
  * Phase-9 baseline pre-refactor (kept for diff context):
  *   root entry · ESM        7.33 kB   →   7.7 kB cap
@@ -166,7 +170,7 @@ module.exports = [
   {
     name: 'advanced entry · ESM (dist/advanced.js)',
     path: 'dist/advanced.js',
-    limit: '2.45 kB',
+    limit: '2.25 kB',
   },
   {
     name: 'stylesheet (dist/data-table.css)',

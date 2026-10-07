@@ -522,7 +522,7 @@ The facade re-emits these on the `error` event with `source: 'stats-panel'` (the
 
 Symptom: the host-built CodeMirror editor mounts, the SQL grammar highlights correctly, but pressing Ctrl/Cmd+Space (or typing a partial identifier) shows no dropdown.
 
-Cause: `createSqlExtensions` ships only the autocomplete _source_ (a `PostgreSQL.language.data.of({ autocomplete: ... })` extension), not the autocomplete _UI_ extension. The bundled `CodeMirrorExpressionEditor` adds the UI explicitly (`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`) and the inline comment at `src/sql-editor/extensions.ts:156-158` flags this; host-assembled editors must do the same.
+Cause: `createSqlExtensions` ships only the autocomplete _source_ (a `PostgreSQL.language.data.of({ autocomplete: ... })` extension), not the autocomplete _UI_ extension. The bundled `CodeMirrorExpressionEditor` adds the UI explicitly (`src/sql-editor/CodeMirrorExpressionEditor.ts:71-73`) and the inline comment at `src/sql-editor/extensions.ts:156-158` flags this; host-assembled editors must do the same.
 
 Fix: add `autocompletion()` from `@codemirror/autocomplete` to your extension array:
 
@@ -556,7 +556,7 @@ Common causes and fixes:
 
 - **No subscription to `derivedChange` / `loadComplete`.** Without `table.on('derivedChange', refresh)` and `table.on('loadComplete', refresh)`, schema changes never trigger a re-pull. The `loadComplete` subscription is the one most often missed — without it, the very first `loadData` resolves with the editor still bound to an empty schema.
 
-- **The refresh dispatched a brand-new `EditorState` instead of `Compartment.reconfigure`.** Replacing the entire state works, but loses undo history, focus, selection, and scroll position. Use a `Compartment` and call `view.dispatch({ effects: compartment.reconfigure(createSqlExtensions(getContext())) })` — preserving view state survives schema swaps cleanly. (See `src/sql-editor/CodeMirrorExpressionEditor.ts:142-148` for the rationale and example 14's `refreshContext()` at [`main.ts:101-107`](../examples/14-standalone-sql-editor/main.ts) for the canonical implementation.)
+- **The refresh dispatched a brand-new `EditorState` instead of `Compartment.reconfigure`.** Replacing the entire state works, but loses undo history, focus, selection, and scroll position. Use a `Compartment` and call `view.dispatch({ effects: compartment.reconfigure(createSqlExtensions(getContext())) })` — preserving view state survives schema swaps cleanly. (See `src/sql-editor/CodeMirrorExpressionEditor.ts:156-162` for the rationale and example 14's `refreshContext()` at [`main.ts:101-107`](../examples/14-standalone-sql-editor/main.ts) for the canonical implementation.)
 
 The combined pattern:
 

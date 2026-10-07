@@ -103,7 +103,9 @@ class StateChoropleth extends BaseVisualization {
     super(container, column, options);
     // Hide the forced canvas; we render into an SVG sibling.
     this.canvas.style.display = 'none';
-    void this.fetchData();
+    // The base class does not fetch on construction. The table waits on this
+    // first fetch through `waitForData()`.
+    this.dataPromise = this.fetchData();
   }
 
   async fetchData(): Promise<void> {

@@ -6,13 +6,18 @@
 
 # Type Alias: ExpressionEditorFactory
 
-> **ExpressionEditorFactory** = (`container`, `context`) => [`ExpressionEditor`](../interfaces/ExpressionEditor.md)
+> **ExpressionEditorFactory** = (`container`, `context`, `config`) => [`ExpressionEditor`](../interfaces/ExpressionEditor.md)
 
-Defined in: [derived/ExpressionEditorTypes.ts:39](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/ExpressionEditorTypes.ts#L39)
+Defined in: [derived/ExpressionEditorTypes.ts:67](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L67)
 
 Factory function for creating expression editors.
-Downstream apps provide this to use CodeMirror or similar.
-If not provided, DefaultExpressionEditor is used.
+Downstream apps provide this to use DefaultExpressionEditor, Monaco or
+similar. If not provided, CodeMirrorExpressionEditor is used.
+
+`config` is the dialog's placeholder and accessible name, in the table's
+language. Pass it on, as
+`(c, ctx, config) => new DefaultExpressionEditor(c, ctx, 'dt', undefined, config)`
+does. A factory written for two arguments still fits this type.
 
 ## Parameters
 
@@ -23,6 +28,10 @@ If not provided, DefaultExpressionEditor is used.
 ### context
 
 [`CompletionContext`](../interfaces/CompletionContext.md)
+
+### config
+
+[`ExpressionEditorConfig`](../interfaces/ExpressionEditorConfig.md)
 
 ## Returns
 

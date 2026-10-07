@@ -75,5 +75,5 @@ If you have a TypeScript consumer, run `tsc` against your code after upgrading. 
 
 - Phase 8 — `phase-8-event-payload-immutability.md` (the runtime clone that paired with this contract).
 - `src/core/TableEvents.ts` — type definitions.
-- `src/DataTable.ts:865-908` — emit-site clones (Phase 8).
+- `src/DataTable.ts:1343-1390` — emit-site clones (Phase 8).
 - `src/core/Actions.ts:emitDerivedChange` — emit-site clone for derived columns (Phase 8).

@@ -6,7 +6,7 @@
 
 # Interface: FilterPanelOptions
 
-Defined in: [filters/FilterPanel.ts:44](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterPanel.ts#L44)
+Defined in: [filters/FilterPanel.ts:45](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPanel.ts#L45)
 
 Options for FilterPanel
 
@@ -16,7 +16,7 @@ Options for FilterPanel
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterPanel.ts:46](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterPanel.ts#L46)
+Defined in: [filters/FilterPanel.ts:47](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPanel.ts#L47)
 
 CSS class prefix (default: 'dt')
 
@@ -26,7 +26,7 @@ CSS class prefix (default: 'dt')
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [filters/FilterPanel.ts:53](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterPanel.ts#L53)
+Defined in: [filters/FilterPanel.ts:61](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPanel.ts#L61)
 
 Element to mirror `data-dt-color-scheme` from (typically the owning
 table's `.dt-root`). Keeps the panel's theming in sync when the table's
@@ -35,10 +35,23 @@ facade).
 
 ***
 
+### instanceId?
+
+> `optional` **instanceId?**: `string`
+
+Defined in: [filters/FilterPanel.ts:54](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPanel.ts#L54)
+
+Unique per-instance identifier mixed into the title's id, which names
+the panel, so two tables on the same page don't share it. Normally
+supplied by `createDataTable()`; a panel constructed without one
+generates its own.
+
+***
+
 ### messages?
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterPanel.ts:55](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterPanel.ts#L55)
+Defined in: [filters/FilterPanel.ts:63](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPanel.ts#L63)
 
 Resolved i18n strings. Defaults to English.

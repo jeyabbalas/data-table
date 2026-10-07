@@ -321,4 +321,4 @@ table.on('error', ({ error, source }) => {
 - Loading data: [Loading data guide](./loading-data.md) for `loadStart` / `loadProgress` / `loadComplete` / `loadError` details
 - Troubleshooting: [Warnings reference](../troubleshooting.md)
 - API reference: [Event catalog](../api-reference.md#event-catalog)
-- Source: `src/core/TableEvents.ts:1-126`, `src/core/EventEmitter.ts`
+- Source: `src/core/TableEvents.ts:1-163`, `src/core/EventEmitter.ts`

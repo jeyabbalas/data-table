@@ -6,7 +6,7 @@
 
 # Interface: DuckDBUnionMember
 
-Defined in: [core/duckdbType.ts:193](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L193)
+Defined in: [core/duckdbType.ts:193](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L193)
 
 One member of a UNION.
 
@@ -25,7 +25,7 @@ if (node.kind === 'union') node.members.map((m) => m.tag); // ['num', 'my tag']
 
 > `readonly` **tag**: `string`
 
-Defined in: [core/duckdbType.ts:194](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L194)
+Defined in: [core/duckdbType.ts:194](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L194)
 
 ***
 
@@ -33,4 +33,4 @@ Defined in: [core/duckdbType.ts:194](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **type**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:195](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L195)
+Defined in: [core/duckdbType.ts:195](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L195)

@@ -6,7 +6,7 @@
 
 # Class: DerivedColumnError
 
-Defined in: [core/errors.ts:186](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L186)
+Defined in: [core/errors.ts:186](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L186)
 
 Derived-column expression / vector / lifecycle error.
 
@@ -35,7 +35,7 @@ if (!result.success && result.error.code === 'DEPENDENTS_INCOMPATIBLE') {
 
 > **new DerivedColumnError**(`message`, `options?`): `DerivedColumnError`
 
-Defined in: [core/errors.ts:187](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L187)
+Defined in: [core/errors.ts:187](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L187)
 
 #### Parameters
 
@@ -61,7 +61,7 @@ Defined in: [core/errors.ts:187](https://github.com/jeyabbalas/data-table/blob/1
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -73,7 +73,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/16
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -85,7 +85,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/16
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L66)
 
 #### Returns
 

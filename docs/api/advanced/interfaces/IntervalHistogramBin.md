@@ -6,7 +6,7 @@
 
 # Interface: IntervalHistogramBin
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:36](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/IntervalHistogramData.ts#L36)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L42)
 
 A single interval histogram bin with seconds-based ranges
 
@@ -16,7 +16,7 @@ A single interval histogram bin with seconds-based ranges
 
 > **binEndSeconds**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:40](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/IntervalHistogramData.ts#L40)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:46](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L46)
 
 End of the bin in total seconds (exclusive)
 
@@ -26,7 +26,7 @@ End of the bin in total seconds (exclusive)
 
 > **binStartSeconds**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:38](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/IntervalHistogramData.ts#L38)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:44](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L44)
 
 Start of the bin in total seconds (inclusive)
 
@@ -36,6 +36,28 @@ Start of the bin in total seconds (inclusive)
 
 > **count**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:42](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/histogram/IntervalHistogramData.ts#L42)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:48](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L48)
 
 Number of values in this bin
+
+***
+
+### maxValue?
+
+> `optional` **maxValue?**: `string`
+
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:56](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L56)
+
+The bin's largest value as DuckDB writes it; set with [minValue](#minvalue).
+
+***
+
+### minValue?
+
+> `optional` **minValue?**: `string`
+
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:54](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L54)
+
+The bin's smallest value as DuckDB writes it (`400 days 07:30:00.000001`).
+Set by the unfiltered fetch for a bin holding values: a brush filters from
+the first such bin's smallest value to the last one's largest.

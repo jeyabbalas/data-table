@@ -6,7 +6,7 @@
 
 # Interface: DataTableErrorOptions
 
-Defined in: [core/errors.ts:37](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L37)
+Defined in: [core/errors.ts:37](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L37)
 
 Constructor options for [DataTableError](../classes/DataTableError.md) and its subclasses. All
 fields are optional; `code` defaults to `'UNKNOWN'` (subclasses pass a
@@ -20,7 +20,7 @@ read off `err.details` after narrowing on `err.code`.
 
 > `optional` **cause?**: `unknown`
 
-Defined in: [core/errors.ts:39](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L39)
+Defined in: [core/errors.ts:39](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L39)
 
 ***
 
@@ -28,7 +28,7 @@ Defined in: [core/errors.ts:39](https://github.com/jeyabbalas/data-table/blob/16
 
 > `optional` **code?**: `string`
 
-Defined in: [core/errors.ts:38](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L38)
+Defined in: [core/errors.ts:38](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L38)
 
 ***
 
@@ -36,4 +36,4 @@ Defined in: [core/errors.ts:38](https://github.com/jeyabbalas/data-table/blob/16
 
 > `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:40](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L40)
+Defined in: [core/errors.ts:40](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/errors.ts#L40)

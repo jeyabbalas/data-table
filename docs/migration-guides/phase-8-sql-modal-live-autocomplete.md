@@ -88,7 +88,7 @@ bundled editor — provided their custom editor implements
   in a way that does NOT remount the editor element (which would lose
   focus / cursor / undo history). The bundled
   `CodeMirrorExpressionEditor.updateCompletionContext` (
-  `src/sql-editor/CodeMirrorExpressionEditor.ts:134-138`) shows the
+  `src/sql-editor/CodeMirrorExpressionEditor.ts:143-147`) shows the
   intended pattern: dispatch a `Compartment.reconfigure` effect.
 - **Telemetry**: the debounced reconfigure runs in the microtask
   queue, not on a `requestAnimationFrame`. If you instrument editor

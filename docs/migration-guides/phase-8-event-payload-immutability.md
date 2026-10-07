@@ -8,7 +8,7 @@ no `tests/api-surface.*.test.ts` snapshot drift.
 Before Phase 8, every `TableEvents` payload field that carried a mutable
 collection — `Filter[]`, `SortColumn[]`, `Set<number>`, `string[]`,
 `DerivedColumnDef[]` — was the **same reference** the underlying signal
-stored. The dispatch sites at `src/DataTable.ts:865-908` and
+stored. The dispatch sites at `src/DataTable.ts:1343-1390` and
 `src/core/Actions.ts:emitDerivedChange` handed back
 `state.<signal>.get()` directly. A handler doing
 `handler({ filters }) { filters.push(newFilter) }` would mutate the live

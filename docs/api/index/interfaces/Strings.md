@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:342](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L342)
+Defined in: [core/Strings.ts:351](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L351)
 
 #### ascending
 
@@ -486,7 +486,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -550,7 +550,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/1
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:278](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L278)
 
 #### addButtonLabel
 
@@ -622,6 +622,9 @@ Panel header with column name — "Edit: my_col".
 
 > **expressionLabel**: `string`
 
+Label above the SQL editor in the add-column dialog and the column
+edit panel, and the editor's accessible name.
+
 #### expressionModeLabel
 
 > **expressionModeLabel**: `string`
@@ -630,7 +633,8 @@ Panel header with column name — "Edit: my_col".
 
 > **expressionPlaceholder**: `string`
 
-Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor).
+Placeholder of the SQL editor in the add-column dialog and the column
+edit panel, and of `DefaultExpressionEditor`'s textarea.
 
 #### expressionRequired
 
@@ -961,7 +965,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:644](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L644)
+Defined in: [core/Strings.ts:660](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L660)
 
 #### stylesheetMissing
 
@@ -973,7 +977,7 @@ Defined in: [core/Strings.ts:644](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:225](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L225)
 
 #### cancelButton
 
@@ -1123,7 +1127,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1649,6 +1653,8 @@ SQL (raw WHERE) filter modal.
 
 > **conditionLabel**: `string`
 
+Label above the expression filter's SQL editor, and the editor's accessible name.
+
 ##### sqlFilter.createTitle
 
 > **createTitle**: `string`
@@ -1656,6 +1662,8 @@ SQL (raw WHERE) filter modal.
 ##### sqlFilter.editorPlaceholder
 
 > **editorPlaceholder**: `string`
+
+Placeholder of the expression filter's SQL editor.
 
 ##### sqlFilter.editTitle
 
@@ -1763,7 +1771,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:203](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L203)
 
 #### closeLabel
 
@@ -1873,7 +1881,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:426](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L426)
+Defined in: [core/Strings.ts:435](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L435)
 
 #### allNull
 
@@ -2014,6 +2022,25 @@ Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 What a column-header chart draws for a column with no values and no
 nulls, as an empty table has: "No data".
 
+#### nonFiniteCount
+
+> **nonFiniteCount**: (`count`) => `string`
+
+The end of line 2 for a column holding values its chart leaves out,
+having no place on its axis: a numeric column's `NaN`, `Infinity` and
+`-Infinity`, and a date column's `infinity`, `-infinity` and dates a
+JavaScript `Date` cannot hold. "30 non-finite".
+
+##### Parameters
+
+###### count
+
+`number`
+
+##### Returns
+
+`string`
+
 #### nonNullCategory
 
 > **nonNullCategory**: `string`
@@ -2062,7 +2089,7 @@ Display value for the folded "Other" segment (count = folded distinct values).
 > **otherSegmentLabel**: `string`
 
 The label drawn inside the folded "Other" segment of a value-count
-bar, where it fits; [otherCategory](#statistics) is its hover text.
+bar, where it fits; `otherCategory` is its hover text.
 
 #### percentTrue
 
@@ -2192,7 +2219,7 @@ Truncation suffix for a long multi-select value list (total = selected values).
 
 > **values**: `object`
 
-Defined in: [core/Strings.ts:482](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L482)
+Defined in: [core/Strings.ts:498](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L498)
 
 #### addAsColumn
 

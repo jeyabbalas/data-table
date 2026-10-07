@@ -731,4 +731,4 @@ for a runnable demo.
 - Events: [Events guide](./events.md) — lifecycle ordering for `loadStart` / `loadProgress` / `loadComplete` / `loadError`
 - Errors: [Troubleshooting — `FETCH_FAILED`](../troubleshooting.md) for URL load failures
 - API reference: [`createDataTable` options](../api-reference.md#createdatatable), [`DataTable.loadData`](../api-reference.md#datatable-interface)
-- Source: `src/data/DataLoader.ts`, `src/data/WorkerBridge.ts:439-482`; nested columns: `src/core/duckdbType.ts`, `src/data/valueSql.ts`, `src/core/jsonTree.ts`
+- Source: `src/data/DataLoader.ts`, `src/data/WorkerBridge.ts:449-492`; nested columns: `src/core/duckdbType.ts`, `src/data/valueSql.ts`, `src/core/jsonTree.ts`

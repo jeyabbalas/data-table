@@ -6,7 +6,7 @@
 
 # Interface: SetFilter
 
-Defined in: [filters/FilterTypes.ts:69](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L69)
+Defined in: [filters/FilterTypes.ts:94](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L94)
 
 Set-membership filter (`column IN (values)`). The [includeNull](#includenull) flag
 widens the predicate to include NULL rows.
@@ -17,7 +17,7 @@ widens the predicate to include NULL rows.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:71](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L71)
+Defined in: [filters/FilterTypes.ts:96](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L96)
 
 ***
 
@@ -25,7 +25,7 @@ Defined in: [filters/FilterTypes.ts:71](https://github.com/jeyabbalas/data-table
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:74](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L74)
+Defined in: [filters/FilterTypes.ts:99](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L99)
 
 When true, NULL rows are included (generates `col IN (...) OR col IS NULL`).
 
@@ -35,7 +35,7 @@ When true, NULL rows are included (generates `col IN (...) OR col IS NULL`).
 
 > **type**: `"set"`
 
-Defined in: [filters/FilterTypes.ts:70](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L70)
+Defined in: [filters/FilterTypes.ts:95](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L95)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [filters/FilterTypes.ts:70](https://github.com/jeyabbalas/data-table
 
 > **values**: `unknown`[]
 
-Defined in: [filters/FilterTypes.ts:72](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L72)
+Defined in: [filters/FilterTypes.ts:97](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L97)
 
 ***
 
@@ -51,7 +51,7 @@ Defined in: [filters/FilterTypes.ts:72](https://github.com/jeyabbalas/data-table
 
 > `optional` **valueType?**: `"text"`
 
-Defined in: [filters/FilterTypes.ts:89](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterTypes.ts#L89)
+Defined in: [filters/FilterTypes.ts:114](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L114)
 
 `'text'` compares the column's DuckDB text with the values, taken as
 text: `CAST("col" AS VARCHAR) IN (…)`. The `IS NULL` that

@@ -6,10 +6,14 @@
 
 # Interface: NumericColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L30)
+Defined in: [statistics/ColumnStatsTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L34)
 
 Stats for numeric columns (integer, float, decimal).
-Line 2: "min 0 · med 42 · max 1.2K"
+Line 2: "min 0 · med 42 · max 1.2K", then "· 30 non-finite" when the
+column holds `NaN`, `Infinity` or `-Infinity`.
+
+`min`, `max`, `median` and `distinctCount` are of the finite values, as
+the histogram's bars are. `nonNullCount` counts the non-finite values too.
 
 ## Extends
 
@@ -21,7 +25,9 @@ Line 2: "min 0 · med 42 · max 1.2K"
 
 > **distinctCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L35)
+Defined in: [statistics/ColumnStatsTypes.ts:43](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L43)
+
+Count of distinct finite values
 
 ***
 
@@ -29,7 +35,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:35](https://github.com/jeyabbalas/da
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -43,7 +49,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"numeric"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:31](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L31)
+Defined in: [statistics/ColumnStatsTypes.ts:35](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L35)
 
 ***
 
@@ -51,7 +57,9 @@ Defined in: [statistics/ColumnStatsTypes.ts:31](https://github.com/jeyabbalas/da
 
 > **max**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:33](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L33)
+Defined in: [statistics/ColumnStatsTypes.ts:39](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L39)
+
+Maximum finite value, or null if there is none
 
 ***
 
@@ -59,7 +67,9 @@ Defined in: [statistics/ColumnStatsTypes.ts:33](https://github.com/jeyabbalas/da
 
 > **median**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:34](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L34)
+Defined in: [statistics/ColumnStatsTypes.ts:41](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L41)
+
+Approximate median of the finite values
 
 ***
 
@@ -67,7 +77,22 @@ Defined in: [statistics/ColumnStatsTypes.ts:34](https://github.com/jeyabbalas/da
 
 > **min**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L32)
+Defined in: [statistics/ColumnStatsTypes.ts:37](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L37)
+
+Minimum finite value, or null if there is none
+
+***
+
+### nonFiniteCount?
+
+> `optional` **nonFiniteCount?**: `number`
+
+Defined in: [statistics/ColumnStatsTypes.ts:50](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L50)
+
+Count of `NaN`, `Infinity` and `-Infinity` values in the (possibly
+filtered) column, which the chart leaves out of its bars and of `min`,
+`median` and `max`. Line 2 ends with it when above 0. Optional so that
+stats built by a custom chart still type-check.
 
 ***
 
@@ -75,7 +100,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:32](https://github.com/jeyabbalas/da
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -89,7 +114,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -103,7 +128,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

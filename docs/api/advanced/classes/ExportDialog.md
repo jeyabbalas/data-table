@@ -6,7 +6,7 @@
 
 # Class: ExportDialog
 
-Defined in: [export/ExportDialog.ts:94](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L94)
+Defined in: [export/ExportDialog.ts:94](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L94)
 
 Modal dialog for exporting data — CSV / JSON / Parquet, with row-scope
 (filtered / all / selected) and column inclusion toggles. Composed by the
@@ -18,7 +18,7 @@ facade; reach for it directly when assembling a custom export pipeline.
 
 > **new ExportDialog**(`state`, `bridge`, `options?`): `ExportDialog`
 
-Defined in: [export/ExportDialog.ts:144](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L144)
+Defined in: [export/ExportDialog.ts:151](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L151)
 
 #### Parameters
 
@@ -44,7 +44,7 @@ Defined in: [export/ExportDialog.ts:144](https://github.com/jeyabbalas/data-tabl
 
 > **close**(): `void`
 
-Defined in: [export/ExportDialog.ts:575](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L575)
+Defined in: [export/ExportDialog.ts:606](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L606)
 
 #### Returns
 
@@ -56,7 +56,7 @@ Defined in: [export/ExportDialog.ts:575](https://github.com/jeyabbalas/data-tabl
 
 > **destroy**(): `void`
 
-Defined in: [export/ExportDialog.ts:853](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L853)
+Defined in: [export/ExportDialog.ts:885](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L885)
 
 #### Returns
 
@@ -68,7 +68,7 @@ Defined in: [export/ExportDialog.ts:853](https://github.com/jeyabbalas/data-tabl
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [export/ExportDialog.ts:845](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L845)
+Defined in: [export/ExportDialog.ts:877](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L877)
 
 #### Returns
 
@@ -80,7 +80,7 @@ Defined in: [export/ExportDialog.ts:845](https://github.com/jeyabbalas/data-tabl
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [export/ExportDialog.ts:849](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L849)
+Defined in: [export/ExportDialog.ts:881](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L881)
 
 #### Returns
 
@@ -92,7 +92,7 @@ Defined in: [export/ExportDialog.ts:849](https://github.com/jeyabbalas/data-tabl
 
 > **open**(): `void`
 
-Defined in: [export/ExportDialog.ts:526](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L526)
+Defined in: [export/ExportDialog.ts:550](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L550)
 
 #### Returns
 
@@ -104,7 +104,7 @@ Defined in: [export/ExportDialog.ts:526](https://github.com/jeyabbalas/data-tabl
 
 > **setSourceName**(`name`): `void`
 
-Defined in: [export/ExportDialog.ts:838](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ExportDialog.ts#L838)
+Defined in: [export/ExportDialog.ts:870](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/export/ExportDialog.ts#L870)
 
 Set the source file name used as the base for exported file names.
 Pass the original filename (e.g. "sales_data.csv") — the extension

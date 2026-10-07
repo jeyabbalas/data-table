@@ -175,7 +175,7 @@ describe('formatCellValue', () => {
     expect(formatCellValue('', '')).toBe('');
   });
 
-  it('should format Date as ISO string', () => {
+  it("should format a custom bridge's Date as an ISO string", () => {
     const date = new Date('2024-06-15T12:30:00.000Z');
     expect(formatCellValue(date, '')).toBe('2024-06-15T12:30:00.000Z');
   });
@@ -981,5 +981,58 @@ describe('exportToCSV — nested columns', () => {
     );
     expect(sql).toContain('SELECT "id", CAST(to_json("tags") AS VARCHAR) AS "tags" FROM numbered');
     expect(csv).toBe('id,tags\n1,"[""x""]"');
+  });
+});
+
+describe('exportToCSV — dates and times', () => {
+  // A date, time or timestamp column is read as DuckDB's text (see
+  // ExportQuery.exportColumnRead), a TIMESTAMP WITH TIME ZONE in UTC with
+  // `Z`, and written as it is: a space between date and time.
+  const schema: ColumnSchema[] = [
+    { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+    { name: 'day', type: 'date', nullable: true, originalType: 'DATE' },
+    { name: 'tm', type: 'time', nullable: true, originalType: 'TIME' },
+    { name: 'ts', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP_MS' },
+    { name: 'at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP WITH TIME ZONE' },
+  ];
+
+  it('selects them as text and keeps the space, the Z and the formula guard', async () => {
+    const query = vi.fn().mockResolvedValueOnce([
+      {
+        id: 1,
+        day: '2024-01-02',
+        tm: '03:04:05.5',
+        ts: '2024-01-02 03:04:05.123',
+        at: '2024-01-02 03:04:05.5Z',
+      },
+      { id: 2, day: '0044-03-15 (BC)', tm: null, ts: 'infinity', at: '-infinity' },
+    ]);
+    const csv = await exportToCSV(
+      't',
+      { scope: 'all' },
+      {
+        bridge: { query } as unknown as import('@/data/WorkerBridge').WorkerBridge,
+        filters: [],
+        sortColumns: [{ column: 'day', direction: 'asc' }],
+        selectedRows: new Set(),
+        columnOrder: schema.map((c) => c.name),
+        schema,
+      },
+    );
+
+    const sql = query.mock.calls[0]![0] as string;
+    expect(sql).toContain(
+      'SELECT "id", CAST("day" AS VARCHAR) AS "day", CAST("tm" AS VARCHAR) AS "tm", ' +
+        'CAST("ts" AS VARCHAR) AS "ts", CASE WHEN isfinite("at") ' +
+        'THEN CAST(make_timestamp(epoch_us("at")) AS VARCHAR) || \'Z\' ' +
+        'ELSE CAST("at" AS VARCHAR) END AS "at" FROM',
+    );
+    // Sorted by the value: unqualified, `ORDER BY "day"` would bind to the text.
+    expect(sql).toContain('ORDER BY "t"."day" ASC, "t"."__rowid__" ASC');
+    expect(csv.split('\n')).toEqual([
+      'id,day,tm,ts,at',
+      '1,2024-01-02,03:04:05.5,2024-01-02 03:04:05.123,2024-01-02 03:04:05.5Z',
+      "2,0044-03-15 (BC),,infinity,'-infinity",
+    ]);
   });
 });

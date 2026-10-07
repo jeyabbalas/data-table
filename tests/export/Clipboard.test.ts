@@ -303,4 +303,36 @@ describe('copyRowsToClipboard', () => {
       '4\t\t"{""x"":null,""tier"":null}"\t[]',
     ]);
   });
+
+  it('copies dates and times as a spreadsheet reads them', async () => {
+    // Read as DuckDB's text, a TIMESTAMP WITH TIME ZONE in UTC with `Z`, as
+    // in a CSV export: a space between date and time, and `-infinity` behind
+    // the formula guard's `'`.
+    const temporalSchema: ColumnSchema[] = [
+      { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      { name: 'day', type: 'date', nullable: true, originalType: 'DATE' },
+      { name: 'ts', type: 'timestamp', nullable: true, originalType: 'TIMESTAMP' },
+      { name: 'at', type: 'timestamp', nullable: true, originalType: 'TIMESTAMPTZ' },
+    ];
+    initializeColumnsFromSchema(state, temporalSchema);
+    mockBridge.query.mockResolvedValueOnce([
+      { id: 1, day: '2024-01-02', ts: '2024-01-02 03:04:05.123456', at: '2024-07-01 06:30:00Z' },
+      { id: 4, day: 'infinity', ts: null, at: '-infinity' },
+    ]);
+
+    await copyRowsToClipboard([0, 3], state, mockBridge);
+
+    const sql = mockBridge.query.mock.calls[0][0] as string;
+    expect(sql).toContain(
+      'SELECT "id", CAST("day" AS VARCHAR) AS "day", CAST("ts" AS VARCHAR) AS "ts", ' +
+        'CASE WHEN isfinite("at") THEN CAST(make_timestamp(epoch_us("at")) AS VARCHAR) || \'Z\' ' +
+        'ELSE CAST("at" AS VARCHAR) END AS "at" FROM numbered',
+    );
+    const tsv = mockWriteText.mock.calls[0][0] as string;
+    expect(tsv.split('\n')).toEqual([
+      'id\tday\tts\tat',
+      '1\t2024-01-02\t2024-01-02 03:04:05.123456\t2024-07-01 06:30:00Z',
+      "4\tinfinity\t\t'-infinity",
+    ]);
+  });
 });

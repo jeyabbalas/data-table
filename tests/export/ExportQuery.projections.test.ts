@@ -3,10 +3,11 @@
  * every column as it is.
  *
  * A nested column (LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) is read as its
- * exact JSON text (`jsonValueSQL`), and INTERVAL, BLOB, BIT, GEOMETRY,
- * BIGNUM and ENUM columns as DuckDB's text, each under its own name. The
- * values Arrow returns for them are wrong or unusable in a file. Every
- * other column, a JSON one included, is read as it is.
+ * exact JSON text (`jsonValueSQL`), and dates, times, INTERVAL, BLOB, BIT,
+ * GEOMETRY, BIGNUM and ENUM columns as DuckDB's text, a TIMESTAMP WITH TIME
+ * ZONE in UTC, each under its own name. The values Arrow returns for them
+ * are wrong or unusable in a file. Every other column, a JSON one included,
+ * is read as it is.
  */
 import { describe, it, expect } from 'vitest';
 
@@ -18,6 +19,7 @@ import {
   buildSelectedRowsQuery,
   exportColumnRead,
   exportJsonColumns,
+  exportTimestampColumns,
   type ExportContext,
 } from '@/export/ExportQuery';
 import { buildParquetQuery } from '@/export/ParquetExport';
@@ -59,18 +61,21 @@ const SCHEMA: ColumnSchema[] = [
   column('wide', 'DECIMAL(18,17)'),
   column('dec', 'DECIMAL'),
   column('tm', 'TIME'),
+  column('ts', 'TIMESTAMP'),
+  column('tsns', 'TIMESTAMP_NS'),
+  column('tstz', 'TIMESTAMPTZ'),
 ];
 
 describe('exportColumnRead', () => {
-  it('reads nested columns as JSON, a few scalars as text, everything else as it is', () => {
+  it('reads nested columns as JSON, dates and a few scalars as text, everything else as it is', () => {
     expect(Object.fromEntries(SCHEMA.map((c) => [c.name, exportColumnRead(c)]))).toEqual({
       __rowid__: 'raw',
       id: 'raw',
       name: 'raw',
       price: 'raw',
       amount: 'double',
-      day: 'raw',
-      at: 'raw',
+      day: 'text',
+      at: 'utc',
       flag: 'raw',
       uid: 'raw',
       doc: 'raw',
@@ -95,7 +100,10 @@ describe('exportColumnRead', () => {
       tns: 'text',
       wide: 'double',
       dec: 'double',
-      tm: 'raw',
+      tm: 'text',
+      ts: 'timestamp',
+      tsns: 'timestamp',
+      tstz: 'utc',
     });
   });
 
@@ -116,6 +124,17 @@ describe('exportJsonColumns', () => {
     expect([...types.keys()]).toEqual(['tags', 'choice']);
     expect(types.get('tags')).toMatchObject({ kind: 'list', element: { name: 'VARCHAR' } });
     expect(types.get('choice')).toMatchObject({ kind: 'union' });
+  });
+});
+
+describe('exportTimestampColumns', () => {
+  it('names the exported columns read as a timestamp’s text, zoned or not', () => {
+    const columns = ['id', 'day', 'tm', 'ts', 'tz', 'at', 'tsns', 'missing', 'tstz', 'name'];
+    expect([...exportTimestampColumns(columns, SCHEMA)]).toEqual(['ts', 'at', 'tsns', 'tstz']);
+    // A schema built by hand without a DuckDB type reads the value as it is.
+    const bare: ColumnSchema = { name: 'when', type: 'timestamp', nullable: true } as ColumnSchema;
+    expect(exportColumnRead(bare)).toBe('raw');
+    expect(exportTimestampColumns(['when'], [bare]).size).toBe(0);
   });
 });
 
@@ -157,10 +176,38 @@ describe('projections in the export query builders', () => {
   });
 
   it('reads plain scalars as they are', () => {
-    const scalars = ['id', 'name', 'price', 'day', 'at', 'flag', 'uid', 'doc', 'x,y', 'tm'];
+    const scalars = ['id', 'name', 'price', 'flag', 'uid', 'doc', 'x,y'];
     expect(buildSelectQuery('t', scalars, [], [], SCHEMA)).toBe(
-      'SELECT "id", "name", "price", "day", "at", "flag", "uid", "doc", "x,y", "tm" ' +
+      'SELECT "id", "name", "price", "flag", "uid", "doc", "x,y" ' +
         'FROM "t" ORDER BY "t"."__rowid__" ASC',
+    );
+  });
+
+  it('reads dates and times as text, a TIMESTAMP WITH TIME ZONE in UTC with Z', () => {
+    expect(buildSelectQuery('t', ['day', 'tm', 'ts', 'tsns', 'at', 'tstz'], [], [], SCHEMA)).toBe(
+      'SELECT CAST("day" AS VARCHAR) AS "day", CAST("tm" AS VARCHAR) AS "tm", ' +
+        'CAST("ts" AS VARCHAR) AS "ts", CAST("tsns" AS VARCHAR) AS "tsns", ' +
+        'CASE WHEN isfinite("at") THEN CAST(make_timestamp(epoch_us("at")) AS VARCHAR) || \'Z\' ' +
+        'ELSE CAST("at" AS VARCHAR) END AS "at", ' +
+        'CASE WHEN isfinite("tstz") THEN CAST(make_timestamp(epoch_us("tstz")) AS VARCHAR) || \'Z\' ' +
+        'ELSE CAST("tstz" AS VARCHAR) END AS "tstz" ' +
+        'FROM "t" ORDER BY "t"."__rowid__" ASC',
+    );
+  });
+
+  it('sorts a date read as text by its value, in the batch and in a selection', () => {
+    // Unqualified, `ORDER BY "day"` would bind to the text alias.
+    const sort: SortColumn[] = [{ column: 'day', direction: 'asc' }];
+    const orderBy = 'ORDER BY "t"."day" ASC, "t"."__rowid__" ASC';
+    expect(buildBaseQuery('t', ['day'], [], sort, 10, 0, SCHEMA)).toBe(
+      'SELECT CAST("day" AS VARCHAR) AS "day" FROM "t" WHERE "t"."__rowid__" IN ' +
+        `(SELECT "t"."__rowid__" FROM "t" ${orderBy} LIMIT 10 OFFSET 0) ${orderBy}`,
+    );
+    expect(buildSelectedRowsQuery('t', ['day'], [], sort, [0, 2], SCHEMA)).toBe(
+      'WITH numbered AS (SELECT "day", ROW_NUMBER() OVER(ORDER BY "t"."day" ASC, ' +
+        '"t"."__rowid__" ASC) - 1 AS __row_idx__ FROM "t") ' +
+        'SELECT CAST("day" AS VARCHAR) AS "day" FROM numbered WHERE __row_idx__ IN (0, 2) ' +
+        'ORDER BY __row_idx__ ASC',
     );
   });
 
@@ -278,8 +325,8 @@ describe('projections in the export query builders', () => {
   });
 });
 
-describe('buildParquetQuery reads nested columns natively', () => {
-  const columns = ['id', 'tags', 'point', 'v', 'span', 'bytes'];
+describe('buildParquetQuery reads nested columns and dates natively', () => {
+  const columns = ['id', 'tags', 'point', 'v', 'span', 'bytes', 'day', 'at'];
 
   function context(overrides: Partial<ExportContext> = {}): ExportContext {
     return {
@@ -306,9 +353,10 @@ describe('buildParquetQuery reads nested columns natively', () => {
       { scope, columns: 'all' },
       context({ selectedRows: new Set(selectedRows) }),
     );
-    expect(sql).toContain('SELECT "id", "tags", "point", "v", "span", "bytes"');
+    expect(sql).toContain('SELECT "id", "tags", "point", "v", "span", "bytes", "day", "at"');
     expect(sql).not.toContain('to_json');
     expect(sql).not.toContain('AS VARCHAR');
+    expect(sql).not.toContain('make_timestamp');
     expect(sql).not.toContain('create_sort_key');
   });
 
@@ -322,7 +370,9 @@ describe('buildParquetQuery reads nested columns natively', () => {
     expect(sql).toContain(
       'ROW_NUMBER() OVER(ORDER BY create_sort_key("t"."v", \'DESC NULLS LAST\'), "t"."__rowid__" ASC)',
     );
-    expect(sql).toContain('SELECT "id", "tags", "point", "v", "span", "bytes" FROM numbered');
+    expect(sql).toContain(
+      'SELECT "id", "tags", "point", "v", "span", "bytes", "day", "at" FROM numbered',
+    );
     expect(sql).not.toContain('to_json');
   });
 });

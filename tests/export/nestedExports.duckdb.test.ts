@@ -8,7 +8,9 @@
  * VARIANT not at all. A CSV cell is that text made standard JSON, a JSON
  * export holds the value as a real structure, and a Parquet export writes
  * every column as it is. INTERVAL, BLOB, BIT, GEOMETRY, BIGNUM and ENUM
- * columns are read as DuckDB's text.
+ * columns are read as DuckDB's text, and so are dates and times, a
+ * TIMESTAMP WITH TIME ZONE in UTC: JSON writes a timestamp with `T` between
+ * date and time, CSV and the TSV with a space.
  *
  * Rows are read with the worker's own query function,
  * `executeQueryCancellable`, which every `bridge.query` runs: the path on
@@ -17,7 +19,8 @@
  * Tables: the two nested fixtures, loaded by the library's loaders, and a
  * view over the SQL-only companions (UNION, ARRAY, INTERVAL[], VARIANT, MAP
  * with nested keys, an unnamed STRUCT). A table with derived columns is
- * exported from a view too.
+ * exported from a view too, and a table of every date and time type with
+ * infinity, BC and five-digit years from one of its own.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -1012,5 +1015,364 @@ describe('sorted by a nested column', () => {
         expectedIds.map((id) => exported(texts[id]!, column)),
       );
     });
+  });
+});
+
+describe('dates and times', () => {
+  // One case per row in every column: a fraction, a time before 1970,
+  // ±infinity, BC, a five-digit year, NULL. A TIME has no infinity or BC
+  // (row 2 is 24:00:00), and a TIMESTAMP_NS holds 1677-09-21 to 2262-04-11
+  // only, so its rows 3 and 4 are near those ends. Row 1's TIMESTAMP WITH
+  // TIME ZONE is given at +05:30.
+  const TEMPORAL = `CREATE OR REPLACE TABLE temporal AS SELECT
+       CAST(r AS BIGINT) AS "__rowid__", CAST(r AS BIGINT) AS id,
+       CAST(v.d AS DATE) AS d, CAST(v.tm AS TIME) AS tm, CAST(v.ts AS TIMESTAMP) AS ts,
+       CAST(v.ts_s AS TIMESTAMP_S) AS ts_s, CAST(v.ts_ms AS TIMESTAMP_MS) AS ts_ms,
+       CAST(v.ts_ns AS TIMESTAMP_NS) AS ts_ns, CAST(v.tz AS TIMESTAMPTZ) AS tz,
+       CASE WHEN v.ts IS NOT NULL THEN [CAST(v.ts AS TIMESTAMP)] END AS ts_list,
+       CASE WHEN v.tz IS NOT NULL THEN {'at': CAST(v.tz AS TIMESTAMPTZ)} END AS tz_struct
+     FROM (VALUES
+       (0, '2024-01-02', '03:04:05.5', '2024-01-02 03:04:05.123456', '2024-01-02 03:04:05',
+        '2024-01-02 03:04:05.123', '2024-01-02 03:04:05.123456789', '2024-01-02 03:04:05.5+00'),
+       (1, '1969-07-20', '00:00:00', '1969-07-20 20:17:40', '1969-07-20 20:17:40',
+        '1969-07-20 20:17:40.5', '1969-07-20 20:17:40', '2024-07-01 12:00:00+05:30'),
+       (2, 'infinity', '24:00:00', 'infinity', 'infinity', '-infinity', 'infinity', '-infinity'),
+       (3, '0044-03-15 (BC)', '23:59:59.999999', '0044-03-15 (BC) 10:00:00.5',
+        '0044-03-15 (BC) 10:00:00', '0044-03-15 (BC) 10:00:00.5', '1677-09-22 00:00:00.000000001',
+        '0044-03-15 (BC) 10:00:00+00'),
+       (4, '12345-01-02', '12:00:00.000001', '12345-01-02 03:04:05.25', '12345-01-02 03:04:05',
+        '12345-01-02 03:04:05.25', '2262-04-11 23:47:16.854775806', '12345-01-02 03:04:05.25+00'),
+       (5, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+     ) AS v(r, d, tm, ts, ts_s, ts_ms, ts_ns, tz)`;
+
+  /**
+   * Each column's values in a JSON export, by row: ISO 8601 text, `T`
+   * between date and time, a zoned timestamp in UTC with `Z`. Infinity and
+   * BC are DuckDB's text, and so is every date inside a nested value.
+   */
+  const JSON_VALUES: Record<string, unknown[]> = {
+    id: [0, 1, 2, 3, 4, 5],
+    d: ['2024-01-02', '1969-07-20', 'infinity', '0044-03-15 (BC)', '12345-01-02', null],
+    tm: ['03:04:05.5', '00:00:00', '24:00:00', '23:59:59.999999', '12:00:00.000001', null],
+    ts: [
+      '2024-01-02T03:04:05.123456',
+      '1969-07-20T20:17:40',
+      'infinity',
+      '0044-03-15 (BC) 10:00:00.5',
+      '12345-01-02T03:04:05.25',
+      null,
+    ],
+    ts_s: [
+      '2024-01-02T03:04:05',
+      '1969-07-20T20:17:40',
+      'infinity',
+      '0044-03-15 (BC) 10:00:00',
+      '12345-01-02T03:04:05',
+      null,
+    ],
+    ts_ms: [
+      '2024-01-02T03:04:05.123',
+      '1969-07-20T20:17:40.5',
+      '-infinity',
+      '0044-03-15 (BC) 10:00:00.5',
+      '12345-01-02T03:04:05.25',
+      null,
+    ],
+    ts_ns: [
+      '2024-01-02T03:04:05.123456789',
+      '1969-07-20T20:17:40',
+      'infinity',
+      '1677-09-22T00:00:00.000000001',
+      '2262-04-11T23:47:16.854775806',
+      null,
+    ],
+    tz: [
+      '2024-01-02T03:04:05.5Z',
+      '2024-07-01T06:30:00Z',
+      '-infinity',
+      '0044-03-15 (BC) 10:00:00Z',
+      '12345-01-02T03:04:05.25Z',
+      null,
+    ],
+    ts_list: [
+      ['2024-01-02 03:04:05.123456'],
+      ['1969-07-20 20:17:40'],
+      ['infinity'],
+      ['0044-03-15 (BC) 10:00:00.5'],
+      ['12345-01-02 03:04:05.25'],
+      null,
+    ],
+    tz_struct: [
+      { at: '2024-01-02 03:04:05.5+00' },
+      { at: '2024-07-01 06:30:00+00' },
+      { at: '-infinity' },
+      { at: '0044-03-15 (BC) 10:00:00+00' },
+      { at: '12345-01-02 03:04:05.25+00' },
+      null,
+    ],
+  };
+
+  /**
+   * Each column's fields in a CSV or TSV, by row: a space between date and
+   * time, and the formula guard's `'` before `-infinity`. A nested value is
+   * standard JSON of DuckDB's text, as in any nested column.
+   */
+  const CSV_FIELDS: Record<string, string[]> = {
+    id: ['0', '1', '2', '3', '4', '5'],
+    d: ['2024-01-02', '1969-07-20', 'infinity', '0044-03-15 (BC)', '12345-01-02', ''],
+    tm: ['03:04:05.5', '00:00:00', '24:00:00', '23:59:59.999999', '12:00:00.000001', ''],
+    ts: [
+      '2024-01-02 03:04:05.123456',
+      '1969-07-20 20:17:40',
+      'infinity',
+      '0044-03-15 (BC) 10:00:00.5',
+      '12345-01-02 03:04:05.25',
+      '',
+    ],
+    ts_s: [
+      '2024-01-02 03:04:05',
+      '1969-07-20 20:17:40',
+      'infinity',
+      '0044-03-15 (BC) 10:00:00',
+      '12345-01-02 03:04:05',
+      '',
+    ],
+    ts_ms: [
+      '2024-01-02 03:04:05.123',
+      '1969-07-20 20:17:40.5',
+      "'-infinity",
+      '0044-03-15 (BC) 10:00:00.5',
+      '12345-01-02 03:04:05.25',
+      '',
+    ],
+    ts_ns: [
+      '2024-01-02 03:04:05.123456789',
+      '1969-07-20 20:17:40',
+      'infinity',
+      '1677-09-22 00:00:00.000000001',
+      '2262-04-11 23:47:16.854775806',
+      '',
+    ],
+    tz: [
+      '2024-01-02 03:04:05.5Z',
+      '2024-07-01 06:30:00Z',
+      "'-infinity",
+      '0044-03-15 (BC) 10:00:00Z',
+      '12345-01-02 03:04:05.25Z',
+      '',
+    ],
+    ts_list: [
+      '["2024-01-02 03:04:05.123456"]',
+      '["1969-07-20 20:17:40"]',
+      '["infinity"]',
+      '["0044-03-15 (BC) 10:00:00.5"]',
+      '["12345-01-02 03:04:05.25"]',
+      '',
+    ],
+    tz_struct: [
+      '{"at":"2024-01-02 03:04:05.5+00"}',
+      '{"at":"2024-07-01 06:30:00+00"}',
+      '{"at":"-infinity"}',
+      '{"at":"0044-03-15 (BC) 10:00:00+00"}',
+      '{"at":"12345-01-02 03:04:05.25+00"}',
+      '',
+    ],
+  };
+
+  let t: ExportTable;
+  /** The session's time zone before this block, restored after it. */
+  let sessionZone: string;
+
+  async function ndjsonRows(context: ExportContext): Promise<Record<string, unknown>[]> {
+    const ndjson = await exportToJSON(t.name, { scope: 'all', format: 'ndjson' }, context);
+    return ndjson.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  beforeAll(async () => {
+    const [setting] = await select<{ zone: string }>(`SELECT current_setting('TimeZone') AS zone`);
+    sessionZone = setting!.zone;
+    await harness.conn.query(`SET TimeZone = 'UTC'`);
+    await harness.conn.query(TEMPORAL);
+    t = { name: 'temporal', schema: await describeSchema('temporal') };
+  });
+
+  afterAll(async () => {
+    await harness.conn.query(`SET TimeZone = '${sessionZone}'`);
+  });
+
+  it('reads them as text, a TIMESTAMP WITH TIME ZONE in UTC, nested values as JSON', () => {
+    expect(Object.fromEntries(t.schema.map((c) => [c.name, exportColumnRead(c)]))).toEqual({
+      __rowid__: 'raw',
+      id: 'raw',
+      d: 'text',
+      tm: 'text',
+      ts: 'timestamp',
+      ts_s: 'timestamp',
+      ts_ms: 'timestamp',
+      ts_ns: 'timestamp',
+      tz: 'utc',
+      ts_list: 'json',
+      tz_struct: 'json',
+    });
+  });
+
+  it('writes them to JSON as ISO 8601 text, every digit kept', async () => {
+    const rows = await ndjsonRows(contextFor(t));
+    expect(Object.keys(rows[0]!)).toEqual(Object.keys(JSON_VALUES));
+    for (const [name, values] of Object.entries(JSON_VALUES)) {
+      expect(
+        rows.map((row) => row[name]),
+        name,
+      ).toEqual(values);
+    }
+    // An array, pretty-printed or not, holds the same values.
+    for (const pretty of [false, true]) {
+      const json = await exportToJSON(t.name, { scope: 'all', pretty }, contextFor(t));
+      expect(JSON.parse(json)).toEqual(rows);
+    }
+  });
+
+  it('writes them to CSV with a space between date and time', async () => {
+    const csv = await exportToCSV(t.name, { scope: 'all' }, contextFor(t));
+    const rows = parseDelimited(csv, ',');
+    expect(rows[0]).toEqual(Object.keys(CSV_FIELDS));
+    for (const [name, fields] of Object.entries(CSV_FIELDS)) {
+      expect(columnOf(rows, name), name).toEqual(fields);
+    }
+    // A space needs no quotes; a nested value's JSON does, for its `"`.
+    expect(csv.split('\n')[1]).toBe(
+      '0,2024-01-02,03:04:05.5,2024-01-02 03:04:05.123456,2024-01-02 03:04:05,' +
+        '2024-01-02 03:04:05.123,2024-01-02 03:04:05.123456789,2024-01-02 03:04:05.5Z,' +
+        '"[""2024-01-02 03:04:05.123456""]","{""at"":""2024-01-02 03:04:05.5+00""}"',
+    );
+  });
+
+  it.each([
+    ['in one run', [0, 1]],
+    ['not in one run', [0, 2, 3]],
+  ])('copies selected rows %s as TSV, as the clipboard does', async (_, positions) => {
+    // One run is read with LIMIT and OFFSET (buildBaseQuery), any other
+    // selection numbered by ROW_NUMBER() (buildSelectedRowsQuery).
+    const tsv = await exportToCSV(
+      t.name,
+      { scope: 'selected', columns: 'all', includeHeaders: true, delimiter: '\t', nullValue: '' },
+      contextFor(t, { selectedRows: new Set(positions) }),
+    );
+    const rows = parseDelimited(tsv, '\t');
+    expect(rows[0]).toEqual(Object.keys(CSV_FIELDS));
+    for (const [name, fields] of Object.entries(CSV_FIELDS)) {
+      expect(columnOf(rows, name), name).toEqual(positions.map((p) => fields[p]));
+    }
+  });
+
+  it.each(['America/New_York', 'Asia/Kolkata'])(
+    'writes the same text when the session time zone is %s',
+    async (zone) => {
+      const json = await exportToJSON(t.name, { scope: 'all', format: 'ndjson' }, contextFor(t));
+      const csv = await exportToCSV(t.name, { scope: 'all' }, contextFor(t));
+      try {
+        await harness.conn.query(`SET TimeZone = '${zone}'`);
+        // The zone is in effect: DuckDB's own text of a zoned value follows it.
+        const [row] = await select<{ v: string }>(
+          `SELECT CAST(tz AS VARCHAR) AS v FROM temporal WHERE id = 0`,
+        );
+        expect(row!.v).not.toBe('2024-01-02 03:04:05.5+00');
+        expect(await exportToJSON(t.name, { scope: 'all', format: 'ndjson' }, contextFor(t))).toBe(
+          json,
+        );
+        expect(await exportToCSV(t.name, { scope: 'all' }, contextFor(t))).toBe(csv);
+      } finally {
+        await harness.conn.query(`SET TimeZone = 'UTC'`);
+      }
+    },
+  );
+
+  /** Row ids in `ORDER BY <order>, "__rowid__"`. */
+  async function idsBy(order: string): Promise<number[]> {
+    const rows = await select<{ id: number }>(
+      `SELECT "id" FROM "temporal" ORDER BY ${order}, "__rowid__" ASC`,
+    );
+    return rows.map((row) => Number(row.id));
+  }
+
+  it.each([
+    { column: 'd', direction: 'asc', positions: null },
+    { column: 'ts', direction: 'desc', positions: [0, 2, 4] },
+    { column: 'tz', direction: 'asc', positions: [1, 2, 3] },
+  ] as const)(
+    'sorts by $column $direction by the value, not by the text it reads',
+    async ({ column, direction, positions }) => {
+      const quoted = quoteIdentifier(column);
+      const order = direction.toUpperCase();
+      const byValue = await idsBy(`${quoted} ${order}`);
+      // Otherwise the check could not tell a sort by the text alias.
+      expect(await idsBy(`CAST(${quoted} AS VARCHAR) ${order}`)).not.toEqual(byValue);
+      const expected = positions ? positions.map((p) => byValue[p]) : byValue;
+      const scope = positions ? 'selected' : 'all';
+      const context = contextFor(t, {
+        sortColumns: [{ column, direction }],
+        selectedRows: new Set(positions ?? []),
+      });
+
+      const csv = await exportToCSV(t.name, { scope, columns: ['id', column] }, context);
+      expect(columnOf(parseDelimited(csv, ','), 'id').map(Number)).toEqual(expected);
+      const ndjson = await exportToJSON(
+        t.name,
+        { scope, columns: ['id', column], format: 'ndjson' },
+        context,
+      );
+      expect(ndjson.split('\n').map((line) => (JSON.parse(line) as { id: number }).id)).toEqual(
+        expected,
+      );
+    },
+  );
+
+  it('loads back through the library’s loaders as dates and times', async () => {
+    // Rows 0 and 1, which a file of every format can hold. read_csv reads a
+    // TIMESTAMP_NS's text as a TIMESTAMP, to the microsecond; read_json
+    // leaves it text, and reads one ending in `Z` as a TIMESTAMP in UTC.
+    const columns = ['id', 'd', 'tm', 'ts', 'ts_ns', 'tz'];
+    const context = contextFor(t, { selectedRows: new Set([0, 1]) });
+    const files = {
+      csv: await exportToCSV(t.name, { scope: 'selected', columns }, context),
+      json: await exportToJSON(t.name, { scope: 'selected', columns }, context),
+    };
+    const types = {
+      csv: {
+        d: 'DATE',
+        tm: 'TIME',
+        ts: 'TIMESTAMP',
+        ts_ns: 'TIMESTAMP',
+        tz: 'TIMESTAMP WITH TIME ZONE',
+      },
+      json: { d: 'DATE', tm: 'TIME', ts: 'TIMESTAMP', ts_ns: 'VARCHAR', tz: 'TIMESTAMP' },
+    };
+    /** Each row's microseconds since 1970 for `column`, in `__rowid__` order. */
+    const epochs = async (table: string, column: string): Promise<unknown[]> =>
+      (
+        await select<{ v: unknown }>(
+          `SELECT epoch_us(${quoteIdentifier(column)}) AS v FROM ${quoteIdentifier(table)} ` +
+            `ORDER BY ${quoteIdentifier(ROWID_COLUMN)}`,
+        )
+      ).map((row) => row.v);
+
+    for (const format of ['csv', 'json'] as const) {
+      const back = await bridge.loadData(files[format], {
+        format,
+        tableName: `temporal_reload_${format}`,
+      });
+      expect(
+        Object.fromEntries(back.schema.map((c) => [c.name, c.originalType])),
+        format,
+      ).toMatchObject(types[format]);
+      for (const name of ['d', 'tm', 'ts']) {
+        expect(await castTexts(back.tableName, name), `${format} ${name}`).toEqual(
+          (await castTexts(t.name, name)).slice(0, 2),
+        );
+      }
+      expect(await epochs(back.tableName, 'tz'), format).toEqual(
+        (await epochs(t.name, 'tz')).slice(0, 2),
+      );
+    }
   });
 });

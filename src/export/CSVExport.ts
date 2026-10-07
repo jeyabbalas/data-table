@@ -11,6 +11,14 @@
  * NaN and ±Infinity, which JSON cannot hold, are `null`. A JSON column is
  * written as its text, as any text.
  *
+ * Dates and times are DuckDB's text (see `exportColumnRead` in
+ * ExportQuery.ts), ISO 8601 with a space between date and time, the form
+ * spreadsheets read as a date and time: `2024-01-02`, `03:04:05.5`,
+ * `2024-01-02 03:04:05.123456`, and a TIMESTAMP WITH TIME ZONE in UTC with
+ * `Z`, `2024-01-02 03:04:05.5Z`. `infinity` and BC dates
+ * (`0044-03-15 (BC)`) are as DuckDB writes them, and the formula guard
+ * writes `-infinity` as `'-infinity` (see {@link neutralizeFormulaPrefix}).
+ *
  * @example
  * import { exportFromState } from '@jeyabbalas/data-table/advanced';
  *
@@ -150,7 +158,20 @@ function jsonCSVField(json: string, delimiter: string): string {
 /**
  * Convert a DuckDB result cell to its string representation for CSV.
  *
- * Produces raw, machine-readable values (no locale formatting).
+ * Produces raw, machine-readable values (no locale formatting):
+ *
+ * | Input                    | Output                                        |
+ * | ------------------------ | --------------------------------------------- |
+ * | `null`/`undefined`       | `nullValue`                                   |
+ * | `boolean`                | `'true'` / `'false'`                          |
+ * | `bigint`, `number`       | `String(value)`: `9007199254740993`, `NaN`    |
+ * | `string`                 | unchanged, a date or time's text among them   |
+ * | a custom bridge's `Date` | ISO 8601 UTC string, `2024-06-15T12:30:00.000Z` |
+ * | other                    | `String(value)`                               |
+ *
+ * The library's own bridge returns no `Date`: an export reads date and
+ * time columns as DuckDB's text (see the module comment). A `bridge` of
+ * your own in `ExportContext` may return one.
  */
 export function formatCellValue(value: unknown, nullValue: string): string {
   if (value === null || value === undefined) {

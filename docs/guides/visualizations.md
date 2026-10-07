@@ -265,43 +265,68 @@ multi-table dashboards where different tables need different chart types.
 ## Registering a custom visualization
 
 ```ts
-import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
-import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+import {
+  createDataTable,
+  filtersToWhereClause,
+  quoteIdentifier,
+  VisualizationRegistry,
+  type ColumnSchema,
+} from '@jeyabbalas/data-table';
+import { BaseVisualization, type VisualizationOptions } from '@jeyabbalas/data-table/advanced';
+
+interface BoxStats {
+  q1: number;
+  median: number;
+  q3: number;
+  min: number;
+  max: number;
+}
 
 class BoxPlot extends BaseVisualization {
-  protected async fetchData() {
-    const [{ q1, median, q3, min, max }] = await this.bridge.query<{
-      q1: number;
-      median: number;
-      q3: number;
-      min: number;
-      max: number;
-    }>(`
+  private stats: BoxStats | null = null;
+
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
+    super(container, column, options);
+    this.dataPromise = this.fetchData(); // the base class does not fetch on construction
+  }
+
+  async fetchData() {
+    const col = quoteIdentifier(this.column.name);
+    const where = filtersToWhereClause(this.options.filters);
+    const rows = await this.options.bridge.query<BoxStats>(`
       SELECT
-        quantile(${this.columnName}, 0.25) AS q1,
-        median(${this.columnName})         AS median,
-        quantile(${this.columnName}, 0.75) AS q3,
-        min(${this.columnName})            AS min,
-        max(${this.columnName})            AS max
-      FROM ${this.tableName}
-      ${this.whereClause()}
+        quantile(${col}, 0.25) AS q1,
+        median(${col})         AS median,
+        quantile(${col}, 0.75) AS q3,
+        min(${col})            AS min,
+        max(${col})            AS max
+      FROM ${quoteIdentifier(this.options.tableName)}
+      ${where ? `WHERE ${where}` : ''}
     `);
-    return { q1, median, q3, min, max };
+    if (this.destroyed) return;
+    this.stats = rows[0] ?? null;
+    this.render();
   }
 
-  protected render({ q1, median, q3, min, max }) {
-    // Draw on this.ctx using this.width, this.height
+  render() {
+    this.clear();
+    if (!this.stats) return;
+    // Draw this.stats on this.ctx using this.width, this.height
   }
 
-  protected handleMouseMove(_event: MouseEvent) {
+  protected handleMouseMove(_x: number, _y: number) {
     /* hover tooltip */
   }
-  protected handleClick(_event: MouseEvent) {
+  protected handleClick(_x: number, _y: number) {
     /* optional: set a filter */
   }
   protected handleMouseLeave() {
     /* clear hover state */
   }
+  // Brush and key input: empty for a chart that takes none.
+  protected handleMouseDown() {}
+  protected handleMouseUp() {}
+  protected handleKeyDown() {}
 }
 
 const registry = new VisualizationRegistry();
@@ -345,15 +370,21 @@ registry.unregister('histogram');
 
 ## `BaseVisualization` contract
 
-Subclasses implement five methods:
+Subclasses implement eight methods:
 
-| Method                   | Purpose                                                                                                              |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `async fetchData()`      | Query DuckDB via `this.bridge.query(...)`. Return arbitrary data the renderer consumes                               |
-| `render(data)`           | Draw on `this.ctx` (the 2D context). Use `this.width` and `this.height` — canvas high-DPI scaling is already handled |
-| `handleMouseMove(event)` | Called on hover. Typically updates a tooltip                                                                         |
-| `handleClick(event)`     | Called on click. Typically emits a filter via `this.emitFilter(filter)`                                              |
-| `handleMouseLeave()`     | Clear hover state                                                                                                    |
+| Method                      | Purpose                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `async fetchData()`         | Query DuckDB via `this.options.bridge.query(...)`, keep the result, and call `render()`. Runs again on each filter change |
+| `render()`                  | Draw on `this.ctx` (the 2D context). Use `this.width` and `this.height` — canvas high-DPI scaling is already handled      |
+| `handleMouseMove(x, y)`     | Called on hover, with canvas coordinates. Typically updates a tooltip                                                     |
+| `handleClick(x, y, event?)` | Called on click. Typically emits a filter via `this.options.onFilterChange?.(filter)`                                     |
+| `handleMouseLeave()`        | Clear hover state                                                                                                         |
+| `handleMouseDown(x, y)`     | Called on mouse down. Typically starts a brush or drag                                                                    |
+| `handleMouseUp(x, y)`       | Called on every mouse up in the window. Typically ends a brush or drag                                                    |
+| `handleKeyDown(key)`        | Called on every key down in the window, with its `KeyboardEvent.key`                                                      |
+
+The base class does not fetch on construction: start the first fetch in your
+constructor, as the built-in charts do (`this.dataPromise = this.fetchData()`).
 
 ### Hit-testing rule
 
@@ -376,11 +407,11 @@ of `{ x, width }` slots.
 Call the `onFilterChange` callback the registry wires up for you:
 
 ```ts
-protected handleClick(e: MouseEvent) {
-  const value = this.valueAtX(e.offsetX);
-  this.emitFilter({
+protected handleClick(x: number, _y: number) {
+  const value = this.valueAtX(x); // your own hit test
+  this.options.onFilterChange?.({
     type: 'point',
-    column: this.columnName,
+    column: this.column.name,
     value,
   });
 }
@@ -389,7 +420,7 @@ protected handleClick(e: MouseEvent) {
 Pass `null` to clear the filter this visualization owns:
 
 ```ts
-this.emitFilter(null);
+this.options.onFilterChange?.(null);
 ```
 
 The library dedupes filter changes so the UI doesn't thrash, and the viz's
@@ -501,7 +532,7 @@ registry.unregister('date-histogram');
 - **Shared `defaultVisualizationRegistry` is global.** A registration done without a per-instance registry affects every subsequent table on the page. Use a dedicated `VisualizationRegistry` if you need scoped behavior.
 - **Priority ties pick the first-registered.** Two registrations with the same priority are iterated in registration order. Be explicit about priority.
 - **`updateFilters` is called on _every_ filter change.** Including filters on other columns, on every chart in or near view. Subclasses that do expensive `fetchData()` should compare the incoming filters against a cached signature before re-querying.
-- **Don't call `this.bridge.query()` outside `fetchData()`.** The canvas is only mounted during normal rendering; calls during teardown will be ignored or rejected.
+- **Don't call `this.options.bridge.query()` outside `fetchData()`.** The canvas is only mounted during normal rendering; calls during teardown will be ignored or rejected.
 - **`BaseVisualization.destroy()` is called by the library whenever a chart goes away:** when its column scrolls out of reach, when the header row is rebuilt, and on table destroy. Override it to clean up your own resources, but always call `super.destroy()`.
 - **Canvas size can't be set directly.** Use `this.width` / `this.height`; the library recomputes them on resize. If you must override, do it inside `render()` and respect the DPR scaling.
 

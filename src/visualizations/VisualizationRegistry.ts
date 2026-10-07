@@ -113,7 +113,9 @@ export function isNestedType(type: DataType): boolean {
  * import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
  *
  * class MyBoxPlot extends BaseVisualization {
- *   // ...fetchData(), render(), handleMouseMove(), handleClick(), handleMouseLeave()
+ *   // ...a constructor that starts the first fetch, fetchData(), render(), and the six
+ *   // handlers: handleMouseMove(), handleClick(), handleMouseLeave(), handleMouseDown(),
+ *   // handleMouseUp(), handleKeyDown(). See BaseVisualization.
  * }
  *
  * const registry = new VisualizationRegistry();

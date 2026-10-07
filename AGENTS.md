@@ -199,26 +199,35 @@ offFilter(); // returned function
 ### (f) Custom visualization class registration
 
 ```ts
-import { VisualizationRegistry } from '@jeyabbalas/data-table';
-import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+import { VisualizationRegistry, type ColumnSchema } from '@jeyabbalas/data-table';
+import { BaseVisualization, type VisualizationOptions } from '@jeyabbalas/data-table/advanced';
 
 class BoxPlot extends BaseVisualization {
-  protected async fetchData() {
-    /* query this.bridge */ return {/* ... */};
+  constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
+    super(container, column, options);
+    this.dataPromise = this.fetchData(); // the base class does not fetch on construction
   }
-  protected render(_data: unknown) {
+  async fetchData() {
+    /* query this.options.bridge with this.options.filters, keep the result */
+    this.render();
+  }
+  render() {
     /* draw on this.ctx */
   }
+  // The six input handlers are abstract too: empty for a chart that takes no input.
   protected handleMouseMove() {}
   protected handleClick() {}
   protected handleMouseLeave() {}
+  protected handleMouseDown() {}
+  protected handleMouseUp() {}
+  protected handleKeyDown() {}
 }
 
 const registry = new VisualizationRegistry();
 registry.register({
   name: 'boxplot',
   isApplicable: (type) => type === 'float' || type === 'integer',
-  constructor: BoxPlot as any,
+  constructor: BoxPlot,
   priority: 10, // beats built-in Histogram (priority 0)
 });
 const table = await createDataTable({ container, source, visualizationRegistry: registry });

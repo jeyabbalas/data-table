@@ -13,21 +13,32 @@
  * - handleMouseMove(): Handle hover interactions
  * - handleClick(): Handle click interactions
  * - handleMouseLeave(): Handle mouse leave
+ * - handleMouseDown(): Handle brush/drag start
+ * - handleMouseUp(): Handle brush/drag end
+ * - handleKeyDown(): Handle keyboard events
  *
  * @example
- * import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+ * import type { ColumnSchema } from '@jeyabbalas/data-table';
+ * import { BaseVisualization, type VisualizationOptions } from '@jeyabbalas/data-table/advanced';
  *
  * class SparkLine extends BaseVisualization {
- *   protected async fetchData() {
- *     // query this.bridge for the column's ordered values
- *     return { points: [] as number[] };
+ *   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
+ *     super(container, column, options);
+ *     this.dataPromise = this.fetchData(); // the base class does not fetch on construction
  *   }
- *   protected render(_data: { points: number[] }) {
+ *   async fetchData() {
+ *     // query this.options.bridge for the column's ordered values, keep them
+ *     this.render();
+ *   }
+ *   render() {
  *     // draw on this.ctx using this.width, this.height
  *   }
- *   protected handleMouseMove(_event: MouseEvent) {}
- *   protected handleClick(_event: MouseEvent) {}
+ *   protected handleMouseMove() {}
+ *   protected handleClick() {}
  *   protected handleMouseLeave() {}
+ *   protected handleMouseDown() {}
+ *   protected handleMouseUp() {}
+ *   protected handleKeyDown() {}
  * }
  *
  * @see VisualizationRegistry for registering custom subclasses.
@@ -136,13 +147,23 @@ export interface VisualizationOptions {
  * @example
  * ```typescript
  * class Histogram extends BaseVisualization {
+ *   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
+ *     super(container, column, options);
+ *     this.dataPromise = this.fetchData(); // the base class does not fetch on construction
+ *   }
  *   async fetchData() {
- *     // Fetch histogram bins from DuckDB
+ *     // Fetch histogram bins from DuckDB, keep them, then render()
  *   }
  *   render() {
  *     // Draw histogram bars
  *   }
- *   // ... implement mouse handlers
+ *   // The six input handlers: empty for a chart that takes no input
+ *   protected handleMouseMove() {}
+ *   protected handleClick() {}
+ *   protected handleMouseLeave() {}
+ *   protected handleMouseDown() {}
+ *   protected handleMouseUp() {}
+ *   protected handleKeyDown() {}
  * }
  * ```
  */

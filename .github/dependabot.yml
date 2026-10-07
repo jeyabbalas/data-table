@@ -39,6 +39,13 @@ updates:
         patterns:
           - size-limit
           - '@size-limit/*'
+      # `@playwright/test` pins an exact `playwright`, so a PR that bumps one
+      # nests a second copy of the other, and the runner and the CLI disagree
+      # about browser builds. They must always be bumped together.
+      playwright:
+        patterns:
+          - playwright
+          - '@playwright/test'
     ignore:
       # `@duckdb/duckdb-wasm` is a pre-release peer (`^1.33.1-dev42.0`).
       # Major bumps need to be reviewed manually against the worker bridge

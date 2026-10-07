@@ -17,7 +17,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'dist/', '**/*.config.*', 'tests/'],
+      // Vitest 5 matches these against paths relative to the root, so a
+      // directory needs its `/**`: a bare `tests/` matches no file in it.
+      exclude: ['node_modules/**', 'dist/**', '**/*.config.*', 'tests/**'],
       // Phase 9 tightening — actuals minus ~1 percentage point.
       // Phase 8 actuals: statements 77.11, branches 64.14, functions 82.33,
       // lines 78.96. Each subsystem phase added 1.5–2 pp; reaching the

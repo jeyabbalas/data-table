@@ -187,7 +187,9 @@ When a filter changes:
    `updateFilters(filters)` method and re-renders itself, also once any
    such change has settled: a chart that saw several filter changes during
    one refetches once, with the filters then in force
-5. The `filterChange` event fires on the event bus
+5. The `filterChange` event fires on the event bus as soon as the count
+   of step 3 has settled, without waiting for the refetches of step 4,
+   which run alongside it
 
 The coordinator batches rapid-fire filter changes (histogram brushes can
 fire continuously during a drag) so the expensive count query runs only
@@ -662,7 +664,7 @@ User drags a histogram brush:
    - `CrossfilterCoordinator` itself → runs a `SELECT COUNT(*)` with the new WHERE clause, after any derived-column change that can break reads has settled → sets `filteredRows`
    - Every visualization's `updateFilters(newFilters)` → re-runs its fetch query with the new WHERE, after any such change has settled → re-renders
    - `AutoSave` → debounce → save snapshot to IDB
-   - `filterChange` event → notifies the facade → runs host-app handlers
+   - `filterChange` event, once that count has set `filteredRows` (not waiting for the charts) → notifies the facade → runs host-app handlers
    - `UndoManager` (via `captureForUndo()` _before_ the set) → records undoable snapshot
 
 Every step is either a signal notification (main thread, synchronous) or a

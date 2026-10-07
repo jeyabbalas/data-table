@@ -40,7 +40,7 @@ import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
-import type { ColumnSchema } from '../core/types';
+import { ROWID_COLUMN, type ColumnSchema } from '../core/types';
 import {
   type JsonLeafKind,
   type NestedExtractKind,
@@ -961,7 +961,11 @@ export class ExtractColumnPanel {
     const name = this.nameEdited && typed !== '' ? typed : defaultName;
     const taken = takenColumnName(name, names);
     if (taken !== undefined) {
-      this.fail(this.messages.derived.nameDuplicate(taken), this.nameInput, true);
+      const message =
+        taken === ROWID_COLUMN
+          ? this.messages.derived.nameReserved(name)
+          : this.messages.derived.nameDuplicate(taken);
+      this.fail(message, this.nameInput, true);
       return;
     }
 

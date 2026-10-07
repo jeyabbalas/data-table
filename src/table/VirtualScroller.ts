@@ -497,10 +497,9 @@ export class VirtualScroller {
    * Scroll to a specific row
    *
    * The target is computed in virtual space, so any index lands exactly even
-   * above the height cap. In compressed mode, targets within about one
-   * compression ratio of an exact edge get snapped by the top/bottom
-   * reconciliation branches on the follow-up scroll event — the target row
-   * stays fully visible (same class of clamp this method already performs).
+   * above the height cap, a target just short of the top or bottom edge
+   * included: its physical position keeps off the pixels the scroll mapping
+   * snaps to the edge.
    *
    * @param index - Row index to scroll to
    * @param align - Where to position the row in the viewport (default: 'start')
@@ -539,6 +538,17 @@ export class VirtualScroller {
       const maxScroll = Math.max(0, physicalExtent - viewportHeight);
       physicalTarget =
         maxVirtualScrollTop > 0 ? Math.round((virtualTarget / maxVirtualScrollTop) * maxScroll) : 0;
+      // A target less than about one compression ratio short of an edge
+      // rounds onto the pixels resolveCompressedScrollTop snaps to that
+      // edge, scrollTop 0 or within 1 px of maxScroll, and the scroll event
+      // that follows would move the anchor written below to the edge,
+      // leaving the row up to a row height out of view. Keep it off them:
+      // the physical position is only the scrollbar's, and the next scroll
+      // towards the edge still reaches it.
+      if (virtualTarget > 0) physicalTarget = Math.max(physicalTarget, 1);
+      if (virtualTarget < maxVirtualScrollTop) {
+        physicalTarget = Math.max(0, Math.min(physicalTarget, maxScroll - 2));
+      }
       // Write the anchor DIRECTLY — exactness must not depend on inverting
       // the lossy proportional map (rounding physicalTarget costs up to
       // ~half a compression ratio in virtual px if re-derived).

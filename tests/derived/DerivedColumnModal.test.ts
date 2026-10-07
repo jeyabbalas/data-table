@@ -272,6 +272,21 @@ describe('DerivedColumnModal', () => {
     expect(errorEl.style.display).not.toBe('none');
   });
 
+  it('says the row id name is reserved, in any letter case', () => {
+    modal.open();
+    const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;
+    const errorEl = modal.getElement().querySelector('.dt-derived-modal-name-error') as HTMLElement;
+
+    // As addDerivedColumn says it, whether or not the schema lists __rowid__.
+    input.value = '__ROWID__';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(errorEl.textContent).toBe(
+      'Column name "__ROWID__" is reserved for the synthetic row id',
+    );
+    expect(errorEl.style.display).not.toBe('none');
+  });
+
   it('clears error for unique name', () => {
     modal.open();
     const input = modal.getElement().querySelector('.dt-filter-input') as HTMLInputElement;

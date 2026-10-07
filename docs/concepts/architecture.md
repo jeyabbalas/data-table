@@ -149,7 +149,8 @@ is a thin Promise-based RPC wrapper:
 - **Serial priority queue.** The worker runs one query at a time,
   drained from an explicit FIFO of three priorities — `'high'` for
   viewport row fetches, `'elevated'` for a read a user is waiting on
-  (`getCellValue`, the value inspector), which goes ahead of every queued
+  (`getCellValue`, the value inspector, a filter change's row count), which
+  goes ahead of every queued
   `'normal'` query but never of a row fetch, and `'normal'` for everything
   else
   ([`src/worker/dispatcher.ts:48-80`](../../src/worker/dispatcher.ts)).
@@ -315,6 +316,10 @@ Two operations touch the anchor directly. `scrollToRow()` computes its
 target in virtual space and writes the anchor rather than inverting the
 lossy proportional map, so any index lands exactly even above the cap
 ([`src/table/VirtualScroller.ts:508-564`](../../src/table/VirtualScroller.ts)).
+A target just short of an edge keeps its physical position off the
+pixels the edge branches snap from, `scrollTop` 0 and the last pixel,
+which would otherwise move the anchor to the edge and leave the row
+partly out of view.
 `setTotalRows()` writes the newly capped height, then re-anchors
 preserving the current position — never proportionally re-deriving it,
 which would teleport a linearly-scrolled user

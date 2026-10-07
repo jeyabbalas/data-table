@@ -1062,7 +1062,7 @@ export class ValueCounts extends BaseVisualization {
     } else if (segment.isAllUnique) {
       labelText = this.statsMessages.allUniqueCategory(segment.count);
     } else if (segment.isOther) {
-      labelText = 'Other';
+      labelText = this.statsMessages.otherSegmentLabel;
     } else {
       labelText = segment.value;
     }

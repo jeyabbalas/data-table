@@ -7,10 +7,11 @@
  */
 
 import type { StateActions } from '../core/Actions';
-import { collidingColumnName } from '../core/columnNames';
+import { takenColumnName } from '../core/columnNames';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { ROWID_COLUMN } from '../core/types';
 import { CodeMirrorExpressionEditor } from '../sql-editor/CodeMirrorExpressionEditor';
 import type { ExpressionEditor, ExpressionEditorFactory } from './ExpressionEditorTypes';
 import type { DerivedColumnDef } from './types';
@@ -533,12 +534,16 @@ export class DerivedColumnEditPanel {
     }
 
     // Check uniqueness against the other columns, ignoring letter case as
-    // DuckDB does (`updateDerivedColumn` refuses the same names); the column
-    // may change the case of its own name
-    const duplicate = collidingColumnName(name, this.otherColumnNames());
+    // DuckDB does, and the row id's reserved name (`updateDerivedColumn`
+    // refuses the same names); the column may change the case of its own
+    // name
+    const taken = takenColumnName(name, this.otherColumnNames());
 
-    if (duplicate !== undefined) {
-      this.nameErrorEl.textContent = this.messages.derived.nameDuplicate(duplicate);
+    if (taken !== undefined) {
+      this.nameErrorEl.textContent =
+        taken === ROWID_COLUMN
+          ? this.messages.derived.nameReserved(name)
+          : this.messages.derived.nameDuplicate(taken);
       this.nameErrorEl.style.display = '';
     } else {
       this.nameErrorEl.textContent = '';
@@ -550,7 +555,7 @@ export class DerivedColumnEditPanel {
     const name = this.nameInput.value.trim();
     if (!name) return false;
 
-    return collidingColumnName(name, this.otherColumnNames()) === undefined;
+    return takenColumnName(name, this.otherColumnNames()) === undefined;
   }
 
   /** The names of the columns other than the one being edited. */

@@ -468,6 +468,27 @@ describe('ExportDialog', () => {
       expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
     });
 
+    it('names the file after the loaded table, not the VIEW of its derived columns', async () => {
+      state.baseTableName.set('trips');
+      state.tableName.set('__dt_view_trips__');
+      const names: string[] = [];
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+        this: HTMLAnchorElement,
+      ) {
+        names.push(this.download);
+      });
+      try {
+        dialog.open();
+        const downloadBtn = dialog
+          .getElement()
+          .querySelector('.dt-export-btn') as HTMLButtonElement;
+        downloadBtn.click();
+        await vi.waitFor(() => expect(names).toEqual(['trips_export.csv']));
+      } finally {
+        click.mockRestore();
+      }
+    });
+
     it('should pass scope option correctly', async () => {
       dialog.open();
 

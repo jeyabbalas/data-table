@@ -250,6 +250,56 @@ describe('VirtualScroller scroll-space compression', () => {
     scroller.destroy();
   });
 
+  // A target short of an edge by less than about one compression ratio
+  // rounds onto the edge's last physical pixel, which the mapping snaps to
+  // the edge: the row stayed clipped.
+  it('scrollToRow lands exactly just short of the bottom edge', () => {
+    const scroller = createCompressedScroller();
+    const scrollContainer = scroller.getScrollContainer();
+    // 340 px: at max scroll (maxVTop 31,660) row 989 is 12 px clipped.
+    Object.defineProperty(scrollContainer, 'clientHeight', { value: 340, configurable: true });
+    scrollContainer.scrollTop = 3_200 - 340;
+    scroller.refresh();
+    expect(scroller.getVirtualScrollTop()).toBe(31_660);
+
+    scroller.scrollToRow(989, 'start');
+    expect(scroller.getVirtualScrollTop()).toBe(989 * ROW_HEIGHT);
+    expect(scrollContainer.scrollTop).toBeLessThan(3_200 - 340 - 1);
+    // The scroll event that follows keeps it.
+    scroller.refresh();
+    expect(scroller.getVirtualScrollTop()).toBe(989 * ROW_HEIGHT);
+
+    // A wheel tick down still reaches the bottom.
+    scrollContainer.scrollTop = 3_200 - 340;
+    scroller.refresh();
+    expect(scroller.getVirtualScrollTop()).toBe(31_660);
+
+    scroller.destroy();
+  });
+
+  it('scrollToRow lands exactly just short of the top edge', () => {
+    const scroller = createCompressedScroller();
+    const scrollContainer = scroller.getScrollContainer();
+    // 347 px: row 10 end-aligned is 5 virtual px down, under half a
+    // physical px.
+    Object.defineProperty(scrollContainer, 'clientHeight', { value: 347, configurable: true });
+    scroller.refresh();
+
+    scroller.scrollToRow(10, 'end');
+    expect(scroller.getVirtualScrollTop()).toBe(5);
+    expect(scrollContainer.scrollTop).toBeGreaterThan(0);
+    scroller.refresh();
+    expect(scroller.getVirtualScrollTop()).toBe(5);
+    expect(scroller.getVisibleRange().end).toBeGreaterThanOrEqual(11);
+
+    // A wheel tick up still reaches the top.
+    scrollContainer.scrollTop = 0;
+    scroller.refresh();
+    expect(scroller.getVirtualScrollTop()).toBe(0);
+
+    scroller.destroy();
+  });
+
   it('keeps wheel continuity after a scrollToRow jump', () => {
     const scroller = createCompressedScroller();
     const scrollContainer = scroller.getScrollContainer();

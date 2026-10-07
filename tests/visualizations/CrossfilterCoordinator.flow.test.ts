@@ -143,9 +143,14 @@ describe('CrossfilterCoordinator — filter flow', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(state.filteredRows.get()).toBe(42);
     expect(bridge.query).toHaveBeenCalled();
-    const sql = (bridge.query as unknown as { mock: { calls: [string][] } }).mock.calls[0]![0];
+    const [sql, , options] = (
+      bridge.query as unknown as { mock: { calls: [string, unknown, unknown][] } }
+    ).mock.calls[0]!;
     expect(sql).toContain('COUNT(*)');
     expect(sql).toContain('"t"');
+    // Ahead of the chart and stats queries of the same change: the grid
+    // sizes its scroll range by the count.
+    expect(options).toEqual({ priority: 'elevated' });
   });
 
   it('clearing filters resets filteredRows to totalRows without issuing a query', async () => {

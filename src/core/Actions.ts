@@ -782,9 +782,12 @@ export class StateActions {
   }
 
   /**
-   * Reset to the original state captured at data-load time.
-   * Clears all filters, sorts, column customizations, derived columns,
-   * and the undo/redo stacks. Returns true if state was restored.
+   * Reset to the state the table had once its data loaded. Without a saved
+   * session that is no filters, no sort, and the columns as loaded; after a
+   * session restore, it is the restored session's filters, sort and column
+   * layout. Either way it removes every derived column, the restored ones
+   * too, with the filters, sort and layout entries that name them, and
+   * clears the undo/redo stacks. Returns true if state was restored.
    *
    * Runs in its turn, after the derived-column changes asked for before it
    * (see {@link undo}). Resolves `false`, restoring nothing, while a load is

@@ -229,6 +229,34 @@ function computeBinEnd(binStartSeconds: number, interval: TimeInterval): number 
   return binStartSeconds + binSize;
 }
 
+/**
+ * Bins from the rows of {@link buildTimeHistogramSQL}, in its order.
+ *
+ * `24:00:00` (86400) comes back in a bin of its own, past the day's end,
+ * whose brush would end at `'25:00:00'`, which is not a TIME. It is counted
+ * in the day's last bar instead. The merge is done here because `LEAST(…)`
+ * in the query's GROUP BY made it 3.5 times slower.
+ */
+function binsFromResults(results: TimeBinResult[], interval: TimeInterval): TimeHistogramBin[] {
+  const lastStart = SECONDS_PER_DAY - getIntervalBinSizeSeconds(interval);
+  const bins: TimeHistogramBin[] = [];
+  for (const result of results) {
+    const binStartSeconds = Math.min(Number(result.bin_start), lastStart);
+    const count = Number(result.count);
+    const previous = bins[bins.length - 1];
+    if (previous?.binStartSeconds === binStartSeconds) {
+      previous.count += count;
+    } else {
+      bins.push({
+        binStartSeconds,
+        binEndSeconds: computeBinEnd(binStartSeconds, interval),
+        count,
+      });
+    }
+  }
+  return bins;
+}
+
 // =========================================
 // Data Fetching
 // =========================================
@@ -236,11 +264,15 @@ function computeBinEnd(binStartSeconds: number, interval: TimeInterval): number 
 /**
  * Fetch time column statistics (min, max, count, nulls)
  *
- * The minimum and maximum are `MIN/MAX(EXTRACT(EPOCH FROM col))`, on the
- * scale the bins use. DuckDB's text for them would not do: it carries an
- * offset for a TIME WITH TIME ZONE (`23:00:00+05:30`), and nanoseconds for a
- * TIME_NS, whose epoch is truncated to microseconds, so a minimum read from
- * text could lie above the smallest value's bin position.
+ * The minimum and maximum are `EXTRACT(EPOCH FROM MIN(col))` and the same of
+ * `MAX`, on the scale the bins use. `EXTRACT` keeps the order of TIME and
+ * TIME_NS values, and DuckDB's MIN and MAX order a TIME WITH TIME ZONE by its
+ * time of day, as the bins place it, so this equals
+ * `MIN(EXTRACT(EPOCH FROM col))`, which reads every row's epoch: 11 ms
+ * against 2 ms on a million rows. DuckDB's text for them would not do: it
+ * carries an offset for a TIME WITH TIME ZONE (`23:00:00+05:30`), and
+ * nanoseconds for a TIME_NS, whose epoch is truncated to microseconds, so a
+ * minimum read from text could lie above the smallest value's bin position.
  */
 export async function fetchTimeStats(
   tableName: string,
@@ -260,8 +292,8 @@ export async function fetchTimeStats(
 
   const sql = `
     SELECT
-      MIN(EXTRACT(EPOCH FROM ${col})) as min_sec,
-      MAX(EXTRACT(EPOCH FROM ${col})) as max_sec,
+      EXTRACT(EPOCH FROM MIN(${col})) as min_sec,
+      EXTRACT(EPOCH FROM MAX(${col})) as max_sec,
       COUNT(${col}) as count,
       COUNT(*) - COUNT(${col}) as null_count
     FROM ${tbl}
@@ -304,11 +336,11 @@ function buildTimeHistogramSQL(
 
   // Use EPOCH to convert TIME to seconds, then bin
   // EXTRACT(EPOCH FROM time_column) returns seconds from midnight for TIME type.
-  // 24:00:00 (86400) would start a bar of its own past the day's end, which
-  // a brush would bound with '25:00:00', not a TIME: it joins the last bar.
+  // 24:00:00 gets a bin of its own at 86400, which binsFromResults merges
+  // into the day's last bar.
   return `
     SELECT
-      LEAST(FLOOR(EXTRACT(EPOCH FROM ${col}) / ${binSizeSeconds}) * ${binSizeSeconds}, ${SECONDS_PER_DAY - binSizeSeconds}) as bin_start,
+      FLOOR(EXTRACT(EPOCH FROM ${col}) / ${binSizeSeconds}) * ${binSizeSeconds} as bin_start,
       COUNT(*) as count
     FROM ${tbl}
     ${whereSQL}
@@ -442,19 +474,7 @@ export async function fetchTimeHistogramBins(
 ): Promise<TimeHistogramBin[]> {
   const sql = buildTimeHistogramSQL(tableName, column, interval, filters);
   const binResults = await bridge.query<TimeBinResult>(sql);
-
-  const bins: TimeHistogramBin[] = [];
-  for (const result of binResults) {
-    const binStartSeconds = Number(result.bin_start);
-    const binEndSeconds = computeBinEnd(binStartSeconds, interval);
-    bins.push({
-      binStartSeconds,
-      binEndSeconds,
-      count: Number(result.count),
-    });
-  }
-
-  return bins;
+  return binsFromResults(binResults, interval);
 }
 
 /**
@@ -603,17 +623,7 @@ export async function fetchTimeHistogramData(
     const binResults = await bridge.query<TimeBinResult>(sql);
 
     // Step 4: Convert results to TimeHistogramBin format
-    const bins: TimeHistogramBin[] = [];
-
-    for (const result of binResults) {
-      const binStartSeconds = Number(result.bin_start);
-      const binEndSeconds = computeBinEnd(binStartSeconds, interval);
-      bins.push({
-        binStartSeconds,
-        binEndSeconds,
-        count: Number(result.count),
-      });
-    }
+    const bins = binsFromResults(binResults, interval);
 
     return {
       bins,

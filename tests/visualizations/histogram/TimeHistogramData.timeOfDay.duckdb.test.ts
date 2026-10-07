@@ -9,13 +9,14 @@
  * TIME ZONE column, and a TIME column holding `24:00:00`, drew no bars. A
  * TIME_NS minimum kept its nanoseconds while the bins, from
  * `EXTRACT(EPOCH …)`, truncate to microseconds, so the smallest value fell
- * below the first bin and was dropped. Now the range comes from
- * `MIN/MAX(EXTRACT(EPOCH …))`, the time of day as written with the offset
+ * below the first bin and was dropped. Now the range comes from DuckDB as
+ * `EXTRACT(EPOCH …)` seconds, the time of day as written with the offset
  * ignored, and `24:00:00` is counted in the day's last bar.
  *
  * Every case asserts that the chart draws, that its bins add up to the
- * column's non-null count, and that its range is DuckDB's. TIME WITH TIME
- * ZONE values are built in SQL: Parquet drops their offsets.
+ * column's non-null count, and that its range is
+ * `MIN/MAX(EXTRACT(EPOCH FROM t))`. TIME WITH TIME ZONE values are built in
+ * SQL: Parquet drops their offsets.
  *
  * jsdom, for the brush cases, which drag across a real `TimeHistogram`.
  */
@@ -92,6 +93,14 @@ const MIDNIGHT_ROWS = `SELECT CAST(t AS TIME) AS t FROM (VALUES
 /** `[label, SELECT producing one column t]`. */
 const CASES: ReadonlyArray<readonly [string, string]> = [
   ['TIME WITH TIME ZONE, offsets of every kind, with a NULL', TIMETZ_ROWS],
+  [
+    // Its earliest instant is 05:00:00+09 (20:00 UTC the day before), and its
+    // latest 20:00:00-08 (04:00 UTC the day after): the range must still be
+    // 01:00 to 23:00, which DuckDB's MIN and MAX give by time of day.
+    'TIME WITH TIME ZONE whose earliest and latest instants are not its earliest and latest times',
+    `SELECT CAST(t AS TIMETZ) AS t FROM (VALUES
+       ('01:00:00-08'), ('05:00:00+09'), ('20:00:00-08'), ('23:00:00+09')) AS s(t)`,
+  ],
   [
     'TIME WITH TIME ZONE within five hours, in hour bins',
     `SELECT CAST(t AS TIMETZ) AS t FROM (VALUES

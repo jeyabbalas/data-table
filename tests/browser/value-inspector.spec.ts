@@ -926,9 +926,30 @@ async function waitForRows(page: Page): Promise<void> {
 }
 
 /**
+ * Wait until the body shows the rows at the scroller's position, each with
+ * its data: the row `scrollTop` falls in is rendered, and no row is a
+ * placeholder. {@link waitForRows} alone can pass on the rows from before a
+ * jump, which stay until the scroller's update at the next frame.
+ */
+async function waitForRowsAtScroll(page: Page): Promise<void> {
+  await page.waitForFunction((hostId) => {
+    const host = document.querySelector(`#${hostId}`)!;
+    const root = host.querySelector<HTMLElement>('.dt-root')!;
+    const rowHeight = parseFloat(getComputedStyle(root).getPropertyValue('--dt-row-height'));
+    const top = Math.floor(host.querySelector('.dt-body-scroll')!.scrollTop / rowHeight);
+    return (
+      host.querySelector(`.dt-body .dt-row[data-row-index="${top}"]`) !== null &&
+      host.querySelector('.dt-body [data-placeholder]') === null
+    );
+  }, NESTED_HOST_ID);
+}
+
+/**
  * Scroll far down in jumps, through more blocks than the row cache holds
- * (2,048 rows, 16 blocks of 128), each jump waited out: the first block, the
- * furthest from the view, goes first. The grid keeps focus and the cursor.
+ * (2,048 rows, 16 blocks of 128), each jump waited out until its rows show:
+ * the first block, the furthest from the view, goes first. The grid keeps
+ * focus and the cursor. The cache has no public view, so the test checks the
+ * eviction as it goes back, with {@link expectRefetchHeld}.
  */
 async function evictFirstBlock(page: Page): Promise<void> {
   const scroller = `#${NESTED_HOST_ID} .dt-body-scroll`;
@@ -939,12 +960,23 @@ async function evictFirstBlock(page: Page): Promise<void> {
       },
       { scroller, top: k * 25_000 },
     );
-    // The scroll event, and the scroller's update with it, come at the next
-    // frame. Until then the old rows still show and waitForRows passes at
-    // once, so the next jump would replace this one before it fetched.
-    await frames(page);
-    await waitForRows(page);
+    await waitForRowsAtScroll(page);
   }
+}
+
+/**
+ * Setup check for {@link evictFirstBlock}: wait for the fetch {@link holdRows}
+ * holds. A block that has left the row cache is fetched again when the test
+ * goes back to it; a block still cached never is, and this fails as setup,
+ * before any assertion on the inspector.
+ */
+async function expectRefetchHeld(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as HoldWindow).__dtHold!.held), {
+      message:
+        'setup: the first block was not fetched again; evictFirstBlock left it in the row cache',
+    })
+    .toBeGreaterThan(0);
 }
 
 test('F2 on a cell whose row is still loading opens the inspector once the row is there', async ({
@@ -986,9 +1018,10 @@ test('F2 on a cell whose row is still loading opens the inspector once the row i
     await holdRows(page, 0, 128);
     // F2 brings the cursor's row back into view, to load.
     await page.keyboard.press('F2');
+    await expectRefetchHeld(page);
     await frames(page);
     await expect(anyDialog(page), 'open before the row loaded').toHaveCount(0);
-    expect(await releaseRows(page), 'fetches held for the first block').toBeGreaterThan(0);
+    await releaseRows(page);
     await expect(inspectorOn(page, fifth)).toBeVisible();
     await waitForTreeFocus(page);
     await escapeInspector(page);
@@ -998,8 +1031,9 @@ test('F2 on a cell whose row is still loading opens the inspector once the row i
     await evictFirstBlock(page);
     await holdRows(page, 0, 128);
     await page.keyboard.press('F2');
+    await expectRefetchHeld(page);
     await page.keyboard.press('ArrowDown');
-    expect(await releaseRows(page), 'fetches held for the first block').toBeGreaterThan(0);
+    await releaseRows(page);
     await waitForRows(page);
     await frames(page);
     await expect(anyDialog(page)).toHaveCount(0);

@@ -659,22 +659,32 @@ and 100 create/destroy cycles. The deeper 1000-cycle stress lives at
 
 ### Bundle-size budgets
 
-`npm run size` enforces brotli-compressed caps with ~5 % headroom. Phase-9
-post-build actuals (2026-04-26):
+`npm run size` enforces brotli-compressed caps with ~5 % headroom
+(`.size-limit.cjs`). Unlike the rest of this snapshot, these sizes are
+current: measured after the 0.9.0 "nice to have" fixes.
 
-| Entry                           | Actual   | Cap    |
-| ------------------------------- | -------- | ------ |
-| Root entry · ESM                | 7.33 kB  | 7.7 kB |
-| Root entry · CJS                | 6.46 kB  | 6.8 kB |
-| `/advanced` entry · ESM         | 2.36 kB  | 2.5 kB |
-| `/advanced` entry · CJS         | 2.01 kB  | 2.2 kB |
-| Stylesheet                      | 16.14 kB | 17 kB  |
-| Lazy `ExportDialog` chunk · ESM | 77.43 kB | 81 kB  |
-| Lazy `ExportDialog` chunk · CJS | 71.85 kB | 76 kB  |
+| Budget                                                             | Size      | Cap     |
+| ------------------------------------------------------------------ | --------- | ------- |
+| Root entry · ESM                                                   | 11.05 kB  | 11.4 kB |
+| `/advanced` entry · ESM                                            | 2.15 kB   | 2.25 kB |
+| Stylesheet                                                         | 22.87 kB  | 23.7 kB |
+| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 100.88 kB | 104 kB  |
+| Lazy `SQLFilterModal` chunk                                        | 2.56 kB   | 2.6 kB  |
+| Lazy `DerivedColumnModal` chunk                                    | 3.80 kB   | 3.95 kB |
+| Lazy `DerivedColumnEditPanel` chunk                                | 3.22 kB   | 3.3 kB  |
+| Lazy `FilterPresetPanel` chunk                                     | 2.69 kB   | 2.7 kB  |
+| Lazy CodeMirror editor chunk                                       | 5.19 kB   | 5.5 kB  |
+| Lazy `extractExpression` chunk                                     | 2.78 kB   | 2.95 kB |
+| Lazy `ValueInspector` chunk                                        | 8.44 kB   | 8.9 kB  |
+| Lazy `ExtractColumnPanel` chunk                                    | 4.98 kB   | 5.3 kB  |
+| Lazy `TreeView` chunk                                              | 2.80 kB   | 2.85 kB |
 
-The lazy `ExportDialog` chunk dominates because it pulls in the Parquet
-encoder; the root entry stays tiny (under 8 kB) so consumers paying first
-paint don't pay for export.
+The budget still named "lazy ExportDialog chunk" measures the shared
+`VisualizationRegistry-*` chunk, which holds most of the table: header,
+body, keyboard navigation. The root entry imports it, so every table loads
+it up front; the dialogs and panels below it load the first time one opens.
+Parquet export runs in DuckDB's worker (`COPY TO`), not in a chunk of its
+own. ESM only: the CJS bundles were dropped in 0.4.0.
 
 ### Tarball composition
 

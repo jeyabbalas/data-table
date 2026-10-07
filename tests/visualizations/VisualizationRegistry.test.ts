@@ -8,7 +8,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // BaseVisualization allocates a canvas + 2D context eagerly; JSDOM
 // doesn't implement getContext, so stub it for the create-path test.
@@ -336,6 +336,11 @@ describe('VisualizationRegistry (Phase 3)', () => {
 });
 
 describe('defaultVisualizationRegistry', () => {
+  // The default registry is shared by every test in the file: start from the
+  // built-ins whatever an earlier test registered, and leave them for the next.
+  beforeEach(() => {
+    defaultVisualizationRegistry.resetToDefaults();
+  });
   afterEach(() => {
     defaultVisualizationRegistry.resetToDefaults();
   });

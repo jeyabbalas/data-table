@@ -122,6 +122,7 @@ vi.mock('../../src/visualizations/valuecounts/ValueCountsData', () => ({
 
 import {
   VisualizationRegistry,
+  defaultVisualizationRegistry,
   isNumericType,
   isDateType,
   isTimeType,
@@ -470,6 +471,11 @@ describe('VisualizationRegistry built-ins', () => {
     });
 
     describe('needsVisualization', () => {
+      // It reads the shared default registry, not the `registry` above.
+      beforeEach(() => {
+        defaultVisualizationRegistry.resetToDefaults();
+      });
+
       it('returns true for all 9 supported types', () => {
         const supported: DataType[] = [
           'integer',

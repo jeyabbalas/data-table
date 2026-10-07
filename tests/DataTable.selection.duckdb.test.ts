@@ -7,11 +7,14 @@
  * a filter it also selected positions past the view's last row, and the
  * export dialog counted them: "(40)" for a view of 10 rows. And `Ctrl/Cmd+C`
  * copied every column but `__rowid__`, hidden ones included, in the column
- * order rather than the visible columns the grid shows.
+ * order rather than the visible columns the grid shows, and with no selected
+ * row left in the view it took the browser's copy over and wrote the column
+ * names alone.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { copyRowsToClipboard } from '@/export/Clipboard';
 import { createDataTable, quoteIdentifier, type DataTable, type TableEvents } from '@/index';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from './helpers/duckdbNode';
@@ -179,5 +182,30 @@ describe('selection under a filter, through createDataTable (real DuckDB)', () =
       '1\t5',
       '2\t6',
     ]);
+  }, 30_000);
+
+  it('Ctrl+C leaves the browser its copy once a filter leaves no selected row in the view', async () => {
+    const { table, container } = await mount('selection_copy_none');
+    // Rows 30–35, then a filter down to the 10 rows of grp = 1.
+    table.actions.selectRow(30);
+    table.actions.selectRow(35, 'range');
+    const counted = nextEvent(table, 'filterChange');
+    table.actions.addFilter({ type: 'point', column: 'grp', value: 1 });
+    await counted;
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const event = new KeyboardEvent('keydown', {
+      key: 'c',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    container.querySelector<HTMLElement>('.dt-grid')!.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+
+    // Nor does a copy of those rows from code write the column names alone.
+    await copyRowsToClipboard([...table.state.selectedRows.get()], table.state, facadeBridge());
+    expect(writeText).not.toHaveBeenCalled();
   }, 30_000);
 });

@@ -178,6 +178,31 @@ describe('copyRowsToClipboard', () => {
     expect(mockWriteText).not.toHaveBeenCalled();
   });
 
+  it('copies nothing when no visible name is one the schema has', async () => {
+    // Between a schema write and the visibleColumns write after it.
+    state.visibleColumns.set(['renamed_away']);
+
+    await copyRowsToClipboard([0], state, mockBridge);
+
+    expect(mockBridge.query).not.toHaveBeenCalled();
+    expect(mockWriteText).not.toHaveBeenCalled();
+  });
+
+  it('copies nothing, not the header alone, when no row named is in the view', async () => {
+    // A filter change has left the selection past the view's last row. The
+    // header, a name with a tab quoted, is all exportToCSV writes.
+    initializeColumnsFromSchema(state, [
+      ...testSchema,
+      { name: 'tab\there', type: 'string', nullable: true, originalType: 'VARCHAR' },
+    ]);
+    mockBridge.query.mockResolvedValueOnce([]);
+
+    await copyRowsToClipboard([50, 51], state, mockBridge);
+
+    expect(mockBridge.query).toHaveBeenCalledTimes(1);
+    expect(mockWriteText).not.toHaveBeenCalled();
+  });
+
   it('copies __rowid__ when it is shown, and only then', async () => {
     const withRowId: ColumnSchema[] = [
       { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },

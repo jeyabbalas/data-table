@@ -55,7 +55,7 @@ export class FakeIntersectionWorld {
 
   /** `target`'s horizontal extent in viewport coordinates, if placed. */
   rectOf(target: Element): { left: number; right: number } | null {
-    const name = target.closest('[data-column]')?.getAttribute('data-column');
+    const name = columnOf(target);
     const span = name ? this.spans.get(name) : undefined;
     if (!span) return null;
     return { left: span[0] - this.scrollLeft, right: span[1] - this.scrollLeft };
@@ -66,6 +66,22 @@ export class FakeIntersectionWorld {
     const rect = this.rectOf(target);
     return !!rect && rect.right > -margin && rect.left < this.viewportWidth + margin;
   }
+}
+
+/**
+ * The `data-column` of `target` or of its nearest ancestor that has one: what
+ * `target.closest('[data-column]')` finds, without the selector engine.
+ * `rectOf` runs for every observation on every flush, about 350,000 times in
+ * a 300-column sweep, and jsdom 30's `closest()` costs five times jsdom 29's
+ * (3.2 µs a call against 0.6), which took that sweep past its timeout in CI.
+ * Not cached: a test may move a column's elements between flushes.
+ */
+function columnOf(target: Element): string | null {
+  for (let el: Element | null = target; el; el = el.parentElement) {
+    const name = el.getAttribute('data-column');
+    if (name !== null) return name;
+  }
+  return null;
 }
 
 /** A `DOMRectReadOnly`-shaped box, one pixel tall. */

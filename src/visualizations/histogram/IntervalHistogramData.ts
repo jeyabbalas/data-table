@@ -338,7 +338,7 @@ function partsText(p: IntervalParts): string {
 /**
  * Convert total seconds to compact human-readable interval string, the
  * chart's labels and stats: "1y 2mo 3d 4h 5m 6s", split on the chart's
- * scale (a month is 30.4375 days, so 45 days is `1mo 14d 13h 50m`). Only
+ * scale (a month is 30.4375 days, so 45 days is `1mo 14d 13h 30m`). Only
  * non-zero components are shown. Returns "0s" for zero. Under a second the
  * seconds keep every microsecond (`0.0005s`), above it the milliseconds, and
  * rounding carries: 119.9999999 is `2m`, not `1m 60s`. The grid's cells use

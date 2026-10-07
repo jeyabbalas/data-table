@@ -324,7 +324,7 @@ describe('CellRenderer', () => {
       });
 
       it('shows the parts as DuckDB stores them', () => {
-        // Not split on the chart's 30.4375-day month (1mo 14d 13h 50m).
+        // Not split on the chart's 30.4375-day month (1mo 14d 13h 30m).
         expect(renderer.formatValue('45 days', 'interval')).toBe('45d');
         expect(renderer.formatValue('1 day 25:00:00', 'interval')).toBe('1d 25h');
       });

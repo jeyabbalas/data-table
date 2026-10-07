@@ -240,6 +240,11 @@ describe('secondsToIntervalString', () => {
     expect(secondsToIntervalString(YEAR_SECONDS + 86400)).toBe('1y 1d');
   });
 
+  it("splits a total on the chart's scale, a month 30.4375 days", () => {
+    // A grid cell shows `45 days` as stored, `45d` (intervalFieldsToString).
+    expect(secondsToIntervalString(45 * 86400)).toBe('1mo 14d 13h 30m');
+  });
+
   it('keeps the microseconds of a value under a second', () => {
     // Rounded to milliseconds, these read 0s and 0.001s.
     expect(secondsToIntervalString(1e-6)).toBe('0.000001s');

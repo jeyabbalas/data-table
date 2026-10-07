@@ -2,13 +2,13 @@
  * VisualizationRegistry — per-instance isolation tests (Phase 3)
  *
  * Proves that two registries do not leak custom registrations into each
- * other and that the deprecated static `VisualizationFactory` wrapper
- * forwards to the shared `defaultVisualizationRegistry`.
+ * other, and that the shared `defaultVisualizationRegistry` is a registry
+ * like any other.
  *
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // BaseVisualization allocates a canvas + 2D context eagerly; JSDOM
 // doesn't implement getContext, so stub it for the create-path test.
@@ -53,8 +53,8 @@ import {
   defaultVisualizationRegistry,
   isCategoricalType,
   isNestedType,
+  needsVisualization,
 } from '../../src/visualizations/VisualizationRegistry';
-import { VisualizationFactory } from '../../src/visualizations/VisualizationFactory';
 import { BaseVisualization } from '../../src/visualizations/BaseVisualization';
 import { NestedSummaryVisualization } from '../../src/visualizations/nested';
 import type { ColumnSchema, DataType } from '../../src/core/types';
@@ -88,12 +88,6 @@ class FakeViz extends BaseVisualization {
 }
 
 describe('VisualizationRegistry (Phase 3)', () => {
-  beforeEach(() => {
-    // Suppress deprecation warn from static wrapper calls.
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    defaultVisualizationRegistry.resetToDefaults();
-  });
-
   it('seeds the 6 built-in registrations on construction', () => {
     const reg = new VisualizationRegistry();
     const types = reg.getRegisteredTypes();
@@ -315,8 +309,8 @@ describe('VisualizationRegistry (Phase 3)', () => {
 
     const container = document.createElement('div');
     const viz = reg.create(container, makeColumn('integer'), makeOptions());
-    // Returning null is the contract; the facade then renders a
-    // PlaceholderVisualization in the column header.
+    // Returning null is the contract; the facade then leaves the column
+    // header without a chart, its stats slot showing the table-wide count.
     expect(viz).toBeNull();
   });
 
@@ -341,36 +335,22 @@ describe('VisualizationRegistry (Phase 3)', () => {
   });
 });
 
-describe('VisualizationFactory — deprecated static wrapper (Phase 3)', () => {
+describe('defaultVisualizationRegistry', () => {
+  // The default registry is shared by every test in the file: start from the
+  // built-ins whatever an earlier test registered, and leave them for the next.
   beforeEach(() => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    defaultVisualizationRegistry.resetToDefaults();
+  });
+  afterEach(() => {
     defaultVisualizationRegistry.resetToDefaults();
   });
 
-  it('forwards register/unregister/isApplicable to defaultVisualizationRegistry', () => {
-    VisualizationFactory.register({
-      name: 'wrapper-custom',
-      isApplicable: (t) => t === 'integer',
-      constructor: FakeViz,
-      priority: 5,
-    });
+  it('is a seeded VisualizationRegistry, the one needsVisualization reads', () => {
+    expect(defaultVisualizationRegistry).toBeInstanceOf(VisualizationRegistry);
+    expect(defaultVisualizationRegistry.getRegisteredTypes()).toHaveLength(6);
 
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).toContain('wrapper-custom');
-
-    VisualizationFactory.unregister('wrapper-custom');
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).not.toContain('wrapper-custom');
-  });
-
-  it('forwards resetToDefaults to defaultVisualizationRegistry', () => {
-    defaultVisualizationRegistry.register({
-      name: 'temp',
-      isApplicable: () => true,
-      constructor: FakeViz,
-      priority: 0,
-    });
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).toContain('temp');
-
-    VisualizationFactory.resetToDefaults();
-    expect(defaultVisualizationRegistry.getRegisteredTypes()).not.toContain('temp');
+    expect(needsVisualization('integer')).toBe(true);
+    defaultVisualizationRegistry.unregister('histogram');
+    expect(needsVisualization('integer')).toBe(false);
   });
 });

@@ -64,9 +64,9 @@ The reserved synthetic [`__rowid__`](../glossary.md#__rowid__-synthetic-row-id) 
 
 ### Selection
 
-| Field          | Type                  | Meaning                                                                       |
-| -------------- | --------------------- | ----------------------------------------------------------------------------- |
-| `selectedRows` | `Signal<Set<number>>` | 0-based row indices selected by the user; indices map to the filtered row set |
+| Field          | Type                  | Meaning                                                                                                                             |
+| -------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `selectedRows` | `Signal<Set<number>>` | 0-based positions in the filtered, sorted view (`i` is the `i`-th row the grid shows); kept as they are when filters or sort change |
 
 ### Transient UI
 
@@ -277,7 +277,7 @@ calls this after every successful data load.
 - **Subscription cleanup is your responsibility.** Every `subscribe()` returns an `unsubscribe` function — call it when your consumer unmounts so the library can drop the reference. `table.destroy()` cleans up the library's own subscribers, not yours.
 - **Transient UI signals aren't persisted.** Page reloads don't restore `focusedCell` or `hoveredRow`. Good — those would be confusing to restore.
 - **`filtersByColumn` recomputes on every `filters` change.** Don't subscribe to it in hot code; subscribe to `filters` directly and compute your own grouping if needed.
-- **`selectedRows` indexes the filtered set, not the base table.** When filters change, the set of "selected row indices" may now point to different actual rows. The built-in selection UI handles this; custom code should keep track.
+- **`selectedRows` holds positions in the filtered, sorted view, not row ids.** Nothing adjusts it when the filters or the sort change, neither the grid nor the actions: the same positions then name other rows, and those past the new row count name none (exports, `Ctrl/Cmd+C` and `getColumnValues({ scope: 'selected' })` skip them, and the export dialog does not count them). To keep naming the same rows across such changes, keep their `__rowid__`s yourself, or clear the selection on `filterChange` / `sortChange`.
 - **Write through actions.** Bypassing actions to write a signal skips undo, cache invalidation, and cross-coordinated writes. Fine for transient UI signals, dangerous for persistable state.
 
 ## Related

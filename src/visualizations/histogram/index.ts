@@ -50,7 +50,6 @@ export {
   type TimeHistogramData,
   // Functions
   fetchTimeHistogramData,
-  parseTimeToSeconds,
   secondsToTimeString,
   detectTimeIntervalForTime,
   formatTimeForSQL,

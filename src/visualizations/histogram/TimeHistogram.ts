@@ -8,6 +8,7 @@
  * - Bin range formatting
  */
 
+import { isTimeWithTimeZone } from '../../core/duckdbType';
 import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema, Filter } from '../../core/types';
 import type { RangeFilter } from '../../filters/FilterTypes';
@@ -26,6 +27,7 @@ import {
   fetchTimeStats,
   fetchTimeHistogramBins,
   fetchTimeNumericBins,
+  SECONDS_PER_DAY,
 } from './TimeHistogramData';
 import type { TimeHistogramData } from './TimeHistogramData';
 
@@ -268,9 +270,11 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = this.colors.axisText;
       ctx.textAlign = 'center';
+      // The value itself: a bar for 24:00:00 starts a little before it.
+      const value = this.data.minSeconds ?? this.data.bins[0]!.binStartSeconds;
       const label = this.data.isNumericBinning
-        ? formatTimeOnlyLabelNumeric(this.data.bins[0]!.binStartSeconds)
-        : formatTimeOnlyLabel(this.data.bins[0]!.binStartSeconds, this.data.interval);
+        ? formatTimeOnlyLabelNumeric(value)
+        : formatTimeOnlyLabel(value, this.data.interval);
       const centerX = this.chartArea.x + this.chartArea.width / 2;
       ctx.fillText(label, centerX, labelY);
     } else if (this.data.bins.length > 0) {
@@ -334,7 +338,13 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
   // =========================================
 
   /**
-   * Emit a range filter based on current brush bin indices
+   * Emit a range filter based on current brush bin indices.
+   *
+   * A brush ending at 24:00:00 takes it in with `<=`: the day's last bar
+   * holds it, and no time of day lies past it. On a TIME WITH TIME ZONE
+   * column the filter compares the time of day (`valueType: 'time'`), as
+   * the bars place values; compared as TIME WITH TIME ZONE, the bounds would
+   * take the session time zone's offset and rows would compare by instant.
    */
   protected emitBrushFilter(): void {
     if (!this.data) return;
@@ -346,12 +356,15 @@ export class TimeHistogram extends SharedHistogramBase<TimeHistogramData> {
 
     if (startBin && endBin) {
       const isLastBin = endIdx === this.data.bins.length - 1;
+      const maxInclusive =
+        isLastBin && (this.data.isNumericBinning || endBin.binEndSeconds >= SECONDS_PER_DAY);
       this.options.onFilterChange?.({
         column: this.column.name,
         type: 'range',
         min: secondsToTimeString(startBin.binStartSeconds),
         max: secondsToTimeString(endBin.binEndSeconds),
-        ...(isLastBin && this.data.isNumericBinning && { maxInclusive: true }),
+        ...(maxInclusive && { maxInclusive: true }),
+        ...(isTimeWithTimeZone(this.column.originalType) && { valueType: 'time' as const }),
       });
     }
   }

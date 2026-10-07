@@ -287,40 +287,50 @@ VisualizationFactory.register({
 
 **After**
 
+A registry of your own scopes the chart to the tables you pass it to:
+
 ```ts
-import {
-  createDataTable,
-  defaultVisualizationRegistry,
-  VisualizationRegistry,
-} from '@jeyabbalas/data-table';
+import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
 import { isNumericType } from '@jeyabbalas/data-table/advanced';
 
-const boxPlot = {
+const visualizationRegistry = new VisualizationRegistry();
+visualizationRegistry.register({
   name: 'box-plot',
   isApplicable: isNumericType,
   constructor: BoxPlot,
   priority: 10,
-};
-
-// As the factory did: every table created without a registry of its own.
-defaultVisualizationRegistry.register(boxPlot);
-
-// Or only the tables you pass this registry to:
-const visualizationRegistry = new VisualizationRegistry();
-visualizationRegistry.register(boxPlot);
+});
 await createDataTable({ container, source, visualizationRegistry });
 ```
 
-See
+`defaultVisualizationRegistry`, a root export, is the drop-in equivalent of
+the factory:
+
+```ts
+import { defaultVisualizationRegistry } from '@jeyabbalas/data-table';
+import { isNumericType } from '@jeyabbalas/data-table/advanced';
+
+defaultVisualizationRegistry.register({
+  name: 'box-plot',
+  isApplicable: isNumericType,
+  constructor: BoxPlot,
+  priority: 10,
+});
+```
+
+A registration on the default registry reaches every table on the page that
+has no registry of its own, as the factory's did. See
 [Visualizations → Per-instance registry](../guides/visualizations.md#per-instance-registry).
 
 **Automated migration.** Replace `VisualizationFactory.` with
-`defaultVisualizationRegistry.`, then import `defaultVisualizationRegistry`
-from `@jeyabbalas/data-table` where `VisualizationFactory` came from
-`/advanced`; TypeScript flags each import left.
+`defaultVisualizationRegistry.`, which keeps the factory's page-wide
+behaviour, then import `defaultVisualizationRegistry` from
+`@jeyabbalas/data-table` where `VisualizationFactory` came from `/advanced`;
+TypeScript flags each import left. In the command, `src` stands for wherever
+the app's source lives: `.` would also rewrite `node_modules`.
 
 ```sh
-grep -rlw VisualizationFactory src | xargs perl -pi -e 's/\bVisualizationFactory\./defaultVisualizationRegistry./g'
+grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizationFactory\./defaultVisualizationRegistry./g'
 ```
 
 ## Non-breaking but recommended

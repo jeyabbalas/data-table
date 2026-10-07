@@ -4,8 +4,8 @@ Everything you need to hack on `@jeyabbalas/data-table` locally. For contributio
 
 ## Prerequisites
 
-- **Node** ≥ 22.22.2 for development. CI runs on **Node 22**; running Node 22 locally matches CI closest and is recommended (`.nvmrc`). Some dev dependencies, such as `jsdom` 30, need it, and `.npmrc` sets `engine-strict=true`, so an older Node fails `npm install` outright rather than warning. The published library still supports Node ≥ 20 (`package.json` `engines`).
-- **npm** 10.9 or newer (ships with Node 22.22.2+).
+- **Node** for development: 22.22.2 or later on Node 22, 24.15 or later on Node 24, or Node 26 and later. CI runs on **Node 22**; running Node 22 locally matches CI closest and is recommended (`.nvmrc`). Some dev dependencies, such as `jsdom` 30, need these versions, and `.npmrc` sets `engine-strict=true`, so any other Node fails `npm install` outright rather than warning. The published library still supports Node ≥ 20 (`package.json` `engines`).
+- **npm** 10.9 or newer (each of those Node versions ships with one).
 - **Git**.
 - A modern Chromium-, Gecko-, or WebKit-based browser for the dev server. DuckDB-WASM does not require cross-origin isolation headers (no COOP/COEP) for this library's use cases — plain `http://localhost` works.
 

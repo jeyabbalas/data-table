@@ -159,6 +159,11 @@ export class CrossfilterCoordinator {
    * start while the rest wait their turn. Only the latest filter cycle
    * refetches after a wait: a chart held through several filter changes
    * refetches once, with the filters in force.
+   *
+   * The same goes for a wait for a turn. A newer cycle refetches every chart
+   * with its own filters, and can get to one before an older cycle's turn
+   * for it comes: refetched then, it would show the older filters until the
+   * next change.
    */
   private async updateVisualizations(
     charts: [string, BaseVisualization][],
@@ -167,6 +172,7 @@ export class CrossfilterCoordinator {
   ): Promise<void> {
     const vizTasks = charts.map(([columnName, viz]) => async () => {
       if (!this.actions.isRelationReadable() && !(await this.waitForReadableRelation(seq))) return;
+      if (this.destroyed || seq !== this.filterSequence) return;
       if (this.visualizations.get(columnName) !== viz || viz.isDestroyed()) return;
       await viz.updateFilters(filters);
     });

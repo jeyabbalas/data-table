@@ -6,7 +6,8 @@ import * as advancedModule from '../src/advanced';
  * Explicit guard covering Phase 4 reclassifications. The snapshot test in
  * `api-surface.snapshot.test.ts` catches all drift; this file documents the
  * specific symbols that must NOT leak at the root (Tier-2 moved to
- * `/advanced`; Tier-3 removed from the public surface entirely).
+ * `/advanced`; Tier-3 removed from the public surface entirely), and the
+ * symbols removed from both entries.
  */
 
 const MUST_NOT_LEAK_AT_ROOT = [
@@ -65,7 +66,6 @@ const MUST_NOT_LEAK_AT_ROOT = [
   'captureSnapshot',
   'applySnapshot',
   'derivedColumnsEqual',
-  'VisualizationFactory',
   'isNumericType',
   'isDateType',
   'isTimeType',
@@ -184,11 +184,17 @@ const MUST_EXIST_AT_ADVANCED = [
   'Histogram',
   'ValueCounts',
   'CrossfilterCoordinator',
-  'VisualizationFactory',
   'isNumericType',
   'isDateType',
   'isTimeType',
   'isCategoricalType',
+];
+
+// Gone from both entries. A name here must not come back through either.
+const REMOVED = [
+  // Deprecated in 0.3.1, removed in 0.9.0: `VisualizationRegistry` and
+  // `defaultVisualizationRegistry` (root) have every one of its methods.
+  'VisualizationFactory',
 ];
 
 describe('Root entry does not leak Tier-2 or Tier-3 symbols', () => {
@@ -211,6 +217,15 @@ describe('/advanced subpath exposes the Tier-2 surface', () => {
   for (const name of MUST_EXIST_AT_ADVANCED) {
     it(`/advanced exports "${name}"`, () => {
       expect(advancedModule).toHaveProperty(name);
+    });
+  }
+});
+
+describe('Removed symbols stay removed', () => {
+  for (const name of REMOVED) {
+    it(`neither the root nor /advanced exports "${name}"`, () => {
+      expect(rootModule).not.toHaveProperty(name);
+      expect(advancedModule).not.toHaveProperty(name);
     });
   }
 });

@@ -1,31 +1,26 @@
 /**
  * Per-instance registry of column visualizations.
  *
- * Replaces the static `VisualizationFactory` (now deprecated) so custom
- * registrations are scoped to a single `createDataTable()` instance rather
- * than leaking across every table on the page. Consumers typically pass
- * a `VisualizationRegistry` via `createDataTable({ visualizationRegistry })`;
- * when omitted the module-scoped `defaultVisualizationRegistry` is used.
+ * A registry scopes custom registrations to the tables it is passed to,
+ * rather than leaking them across every table on the page. Consumers
+ * typically pass a `VisualizationRegistry` via
+ * `createDataTable({ visualizationRegistry })`; when omitted the
+ * module-scoped `defaultVisualizationRegistry` is used.
  *
  * @example
- * import {
- *   VisualizationRegistry,
- *   createDataTable,
- * } from '@jeyabbalas/data-table';
- * import { MyChoroplethVisualization } from './viz/MyChoropleth';
+ * import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
+ * import { BoxPlot } from './viz/BoxPlot'; // extends BaseVisualization
  *
  * const visualizationRegistry = new VisualizationRegistry();
  * visualizationRegistry.register({
- *   name: 'choropleth',
- *   VisualizationClass: MyChoroplethVisualization,
- *   match: (column) => column.name === 'fips_code',
+ *   name: 'box-plot',
+ *   // Called with the column's `DataType`, not the column itself.
+ *   isApplicable: (type) => type === 'integer' || type === 'float',
+ *   constructor: BoxPlot,
+ *   priority: 10, // built-ins use 0
  * });
  *
- * await createDataTable({
- *   container: '#table',
- *   data: csv,
- *   visualizationRegistry,
- * });
+ * await createDataTable({ container, source: '/data.csv', visualizationRegistry });
  *
  * @see VisualizationRegistration
  * @see VisualizationConstructor
@@ -262,9 +257,9 @@ export class VisualizationRegistry {
 }
 
 /**
- * Shared module-scoped registry. Used by the deprecated
- * `VisualizationFactory` static wrapper and as the fallback when
- * `createDataTable()` is called without a `visualizationRegistry` option.
+ * Shared module-scoped registry: the one a table uses when
+ * `createDataTable()` gets no `visualizationRegistry`. A registration on it
+ * reaches every such table on the page.
  */
 export const defaultVisualizationRegistry = new VisualizationRegistry();
 

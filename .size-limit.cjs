@@ -22,7 +22,7 @@
  * 1.0.1 before it, inlines the shared ModalHost code into each modal
  * consumer):
  *   root entry · ESM               10.93 kB   →  11.4 kB cap (4.3 %)
- *   advanced entry · ESM            2.50 kB   →   2.6 kB cap (4.0 %)
+ *   advanced entry · ESM            2.32 kB   →   2.45 kB cap (5.6 %)
  *   stylesheet                     22.57 kB   →  23.7 kB cap (5.0 %)
  *   lazy ExportDialog chunk        97.67 kB   → 100 kB   cap (2.4 %)
  *   lazy SQLFilterModal chunk       2.53 kB   →   2.6 kB cap (2.8 %)
@@ -60,6 +60,9 @@
  * time, a failed initial load torn down, loads that report the tables they
  * replace), it measured 10.85 kB, and the cap moved to 11.4 kB. The
  * nested-type work left it at 10.93 kB.
+ *
+ * Advanced entry history. Removing the deprecated `VisualizationFactory`
+ * took it from 2.50 to 2.32 kB, and the cap from 2.6 to 2.45 kB.
  *
  * ExportDialog chunk history. Despite its name, the glob matches the shared
  * `VisualizationRegistry-*` chunk, which holds most of the table: header,
@@ -159,7 +162,7 @@ module.exports = [
   {
     name: 'advanced entry · ESM (dist/advanced.js)',
     path: 'dist/advanced.js',
-    limit: '2.6 kB',
+    limit: '2.45 kB',
   },
   {
     name: 'stylesheet (dist/data-table.css)',

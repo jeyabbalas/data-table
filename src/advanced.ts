@@ -240,7 +240,3 @@ export type {
   DuckDBUnionMember,
   DuckDBUnknownTypeNode,
 } from './core/duckdbType';
-
-// Deprecated static wrapper — kept reachable here on /advanced only.
-// New code should use `VisualizationRegistry` from the root entry.
-export { VisualizationFactory } from './visualizations/VisualizationFactory';

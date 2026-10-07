@@ -1,8 +1,9 @@
 /**
- * VisualizationFactory Tests
+ * VisualizationRegistry built-ins
  *
- * Tests the centralized visualization factory, helper functions,
- * and WindowListenerManager behavior.
+ * Tests a registry instance's built-in registrations, `create`, plugin
+ * registration and `resetToDefaults`, the type predicates, and
+ * `BaseVisualization`'s shared window listeners (WindowListenerManager).
  *
  * @vitest-environment jsdom
  */
@@ -119,14 +120,14 @@ vi.mock('../../src/visualizations/valuecounts/ValueCountsData', () => ({
   }),
 }));
 
-import { VisualizationFactory } from '../../src/visualizations/VisualizationFactory';
 import {
+  VisualizationRegistry,
   isNumericType,
   isDateType,
   isTimeType,
   isCategoricalType,
   needsVisualization,
-} from '../../src/visualizations/VisualizationFactory';
+} from '../../src/visualizations/VisualizationRegistry';
 import { Histogram } from '../../src/visualizations/histogram/Histogram';
 import { DateHistogram } from '../../src/visualizations/histogram/DateHistogram';
 import { TimeHistogram } from '../../src/visualizations/histogram/TimeHistogram';
@@ -171,14 +172,13 @@ function makeOptions(): VisualizationOptions {
   };
 }
 
-describe('VisualizationFactory', () => {
+describe('VisualizationRegistry built-ins', () => {
+  let registry: VisualizationRegistry;
   let containers: HTMLElement[] = [];
   let visualizations: BaseVisualization[] = [];
 
   beforeEach(() => {
-    // Suppress the Phase 3 deprecation warn emitted on the first static call.
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    VisualizationFactory.resetToDefaults();
+    registry = new VisualizationRegistry();
     vi.clearAllMocks();
   });
 
@@ -196,7 +196,7 @@ describe('VisualizationFactory', () => {
   function createAndTrack(type: DataType): BaseVisualization | null {
     const container = makeContainer();
     containers.push(container);
-    const viz = VisualizationFactory.create(container, makeColumn(type), makeOptions());
+    const viz = registry.create(container, makeColumn(type), makeOptions());
     if (viz) visualizations.push(viz);
     return viz;
   }
@@ -206,7 +206,7 @@ describe('VisualizationFactory', () => {
   // =============================================
   describe('default registration', () => {
     it('registers all 6 built-in types', () => {
-      const types = VisualizationFactory.getRegisteredTypes();
+      const types = registry.getRegisteredTypes();
       expect(types).toContain('histogram');
       expect(types).toContain('date-histogram');
       expect(types).toContain('time-histogram');
@@ -234,11 +234,11 @@ describe('VisualizationFactory', () => {
     ];
 
     it.each(supportedTypes)('returns true for %s', (type) => {
-      expect(VisualizationFactory.isApplicable(makeColumn(type))).toBe(true);
+      expect(registry.isApplicable(makeColumn(type))).toBe(true);
     });
 
     it('returns true for interval', () => {
-      expect(VisualizationFactory.isApplicable(makeColumn('interval'))).toBe(true);
+      expect(registry.isApplicable(makeColumn('interval'))).toBe(true);
     });
   });
 
@@ -302,7 +302,7 @@ describe('VisualizationFactory', () => {
       const column = makeColumn('integer');
       const options = makeOptions();
 
-      const viz = VisualizationFactory.create(container, column, options);
+      const viz = registry.create(container, column, options);
       if (viz) visualizations.push(viz);
 
       expect(viz).not.toBeNull();
@@ -329,7 +329,7 @@ describe('VisualizationFactory', () => {
         protected handleKeyDown() {}
       }
 
-      VisualizationFactory.register({
+      registry.register({
         name: 'custom-histogram',
         isApplicable: (type) => type === 'integer',
         constructor: CustomViz,
@@ -338,18 +338,18 @@ describe('VisualizationFactory', () => {
 
       const viz = createAndTrack('integer');
       expect(viz).toBeInstanceOf(CustomViz);
-      expect(VisualizationFactory.getRegisteredTypes()).toContain('custom-histogram');
+      expect(registry.getRegisteredTypes()).toContain('custom-histogram');
     });
 
     it('unregister removes a registration', () => {
-      expect(VisualizationFactory.unregister('histogram')).toBe(true);
-      expect(VisualizationFactory.getRegisteredTypes()).not.toContain('histogram');
+      expect(registry.unregister('histogram')).toBe(true);
+      expect(registry.getRegisteredTypes()).not.toContain('histogram');
       // integer should now not be applicable
-      expect(VisualizationFactory.isApplicable(makeColumn('integer'))).toBe(false);
+      expect(registry.isApplicable(makeColumn('integer'))).toBe(false);
     });
 
     it('unregister returns false for unknown name', () => {
-      expect(VisualizationFactory.unregister('nonexistent')).toBe(false);
+      expect(registry.unregister('nonexistent')).toBe(false);
     });
 
     it('re-register replaces existing entry', () => {
@@ -364,7 +364,7 @@ describe('VisualizationFactory', () => {
         protected handleKeyDown() {}
       }
 
-      VisualizationFactory.register({
+      registry.register({
         name: 'histogram',
         isApplicable: (type) => type === 'integer',
         constructor: CustomViz,
@@ -372,7 +372,7 @@ describe('VisualizationFactory', () => {
       });
 
       // Should still only have 6 types (replaced, not added)
-      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(6);
+      expect(registry.getRegisteredTypes()).toHaveLength(6);
 
       const viz = createAndTrack('integer');
       expect(viz).toBeInstanceOf(CustomViz);
@@ -396,22 +396,22 @@ describe('VisualizationFactory', () => {
         protected handleKeyDown() {}
       }
 
-      VisualizationFactory.register({
+      registry.register({
         name: 'custom',
         isApplicable: () => true,
         constructor: CustomViz,
         priority: 10,
       });
-      VisualizationFactory.unregister('histogram');
+      registry.unregister('histogram');
 
-      expect(VisualizationFactory.getRegisteredTypes()).toContain('custom');
-      expect(VisualizationFactory.getRegisteredTypes()).not.toContain('histogram');
+      expect(registry.getRegisteredTypes()).toContain('custom');
+      expect(registry.getRegisteredTypes()).not.toContain('histogram');
 
-      VisualizationFactory.resetToDefaults();
+      registry.resetToDefaults();
 
-      expect(VisualizationFactory.getRegisteredTypes()).not.toContain('custom');
-      expect(VisualizationFactory.getRegisteredTypes()).toContain('histogram');
-      expect(VisualizationFactory.getRegisteredTypes()).toHaveLength(6);
+      expect(registry.getRegisteredTypes()).not.toContain('custom');
+      expect(registry.getRegisteredTypes()).toContain('histogram');
+      expect(registry.getRegisteredTypes()).toHaveLength(6);
     });
   });
 

@@ -263,9 +263,23 @@ const HISTOGRAMS: ChartCase[] = [
       isSingleValue: false,
     },
     values: {
+      // With each bar's smallest and largest value, as the unfiltered fetch
+      // sets them: a click filters between them.
       bins: [
-        { binStartSeconds: 0, binEndSeconds: 1800, count: 3 },
-        { binStartSeconds: 1800, binEndSeconds: 3600, count: 1 },
+        {
+          binStartSeconds: 0,
+          binEndSeconds: 1800,
+          count: 3,
+          minValue: '00:00:00',
+          maxValue: '00:25:00',
+        },
+        {
+          binStartSeconds: 1800,
+          binEndSeconds: 3600,
+          count: 1,
+          minValue: '01:00:00',
+          maxValue: '01:00:00',
+        },
       ],
       nullCount: 0,
       minSeconds: 0,

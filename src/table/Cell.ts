@@ -6,7 +6,10 @@
  */
 
 import type { ColumnSchema, DataType } from '../core/types';
-import { MONTH_SECONDS, YEAR_SECONDS } from '../visualizations/histogram/IntervalHistogramData';
+import {
+  intervalFieldsToString,
+  parseIntervalFields,
+} from '../visualizations/histogram/IntervalHistogramData';
 
 // Defined beside the type outline that decides it, so the column layout can
 // use it without importing the renderer. Still exported here, where
@@ -384,112 +387,31 @@ export class CellRenderer {
   }
 
   /**
-   * Format an INTERVAL value in compact human-readable format.
-   * DuckDB formats: "1 year 2 months 3 days 04:05:06", "2 days", "00:00:00"
-   * Output: "1y 2mo 3d 4h 5m 6s", "2d", "0s"
+   * Format an INTERVAL value compactly, its parts as DuckDB stores them:
+   * "1 year 2 months 3 days 04:05:06" is `1y 2mo 3d 4h 5m 6s`, "45 days" is
+   * `45d`, "100:00:00.5" is `100h 0.5s`, "-1 day -01:00:00" is `-1d 1h`. The
+   * chart's labels use the same units, but split a total on the chart's
+   * scale, where a month is 30.4375 days (`intervalFieldsToString` and
+   * `secondsToIntervalString`).
    */
   private formatInterval(value: unknown): string {
     // DuckDB WASM may return INTERVAL as an Arrow MonthDayNano object
-    // with { months, days, nanoseconds }. Convert to total seconds and
-    // decompose into compact display format, preserving sign and fractional seconds.
+    // with { months, days, nanoseconds }.
     if (value !== null && typeof value === 'object' && 'months' in value && 'days' in value) {
       const obj = value as Record<string, unknown>;
-      const months = Number(obj['months']) || 0;
-      const days = Number(obj['days']) || 0;
-      let totalMicros = 0;
-      if ('nanoseconds' in obj) totalMicros = Math.floor(Number(obj['nanoseconds']) / 1000);
-      else if ('micros' in obj) totalMicros = Number(obj['micros']) || 0;
-
-      const DAY_SEC = 86400;
-      const totalSec = months * MONTH_SECONDS + days * DAY_SEC + totalMicros / 1_000_000;
-      if (totalSec === 0) return '0s';
-
-      const isNeg = totalSec < 0;
-      let remaining = Math.abs(totalSec);
-      const parts: string[] = [];
-
-      const y = Math.floor(remaining / YEAR_SECONDS);
-      if (y > 0) {
-        parts.push(`${y}y`);
-        remaining -= y * YEAR_SECONDS;
-      }
-      const mo = Math.floor(remaining / MONTH_SECONDS);
-      if (mo > 0) {
-        parts.push(`${mo}mo`);
-        remaining -= mo * MONTH_SECONDS;
-      }
-      const d = Math.floor(remaining / DAY_SEC);
-      if (d > 0) {
-        parts.push(`${d}d`);
-        remaining -= d * DAY_SEC;
-      }
-      const h = Math.floor(remaining / 3600);
-      if (h > 0) {
-        parts.push(`${h}h`);
-        remaining -= h * 3600;
-      }
-      const m = Math.floor(remaining / 60);
-      if (m > 0) {
-        parts.push(`${m}m`);
-        remaining -= m * 60;
-      }
-      if (remaining > 0 || parts.length === 0) {
-        const secs = Math.round(remaining * 1000) / 1000;
-        if (Number.isInteger(secs)) {
-          parts.push(`${secs}s`);
-        } else {
-          parts.push(`${parseFloat(secs.toFixed(3))}s`);
-        }
-      }
-
-      const result = parts.join(' ');
-      return isNeg ? `-${result}` : result;
+      let micros = 0;
+      if ('nanoseconds' in obj) micros = Math.floor(Number(obj['nanoseconds']) / 1000);
+      else if ('micros' in obj) micros = Number(obj['micros']) || 0;
+      return intervalFieldsToString({
+        months: Number(obj['months']) || 0,
+        days: Number(obj['days']) || 0,
+        micros,
+      });
     }
     if (typeof value !== 'string') {
       return String(value);
     }
-
-    const input = value.trim();
-    if (!input) return '0s';
-
-    const parts: string[] = [];
-
-    // Parse year/month/day components
-    const yearMatch = input.match(/(\d+)\s*years?/i);
-    const monthMatch = input.match(/(\d+)\s*months?/i);
-    const dayMatch = input.match(/(\d+)\s*days?/i);
-
-    if (yearMatch) parts.push(`${parseInt(yearMatch[1]!, 10)}y`);
-    if (monthMatch) parts.push(`${parseInt(monthMatch[1]!, 10)}mo`);
-    if (dayMatch) parts.push(`${parseInt(dayMatch[1]!, 10)}d`);
-
-    // Parse time component (HH:MM:SS or HH:MM:SS.ffffff)
-    const timeMatch = input.match(/(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
-    if (timeMatch) {
-      const hours = parseInt(timeMatch[1]!, 10);
-      const minutes = parseInt(timeMatch[2]!, 10);
-      const seconds = parseInt(timeMatch[3]!, 10);
-      const fraction = timeMatch[4];
-
-      if (hours > 0) parts.push(`${hours}h`);
-      if (minutes > 0) parts.push(`${minutes}m`);
-      if (seconds > 0 || fraction) {
-        if (fraction) {
-          // Remove trailing zeros from fraction
-          const trimmedFraction = fraction.replace(/0+$/, '');
-          if (trimmedFraction) {
-            parts.push(`${seconds}.${trimmedFraction}s`);
-          } else {
-            parts.push(`${seconds}s`);
-          }
-        } else {
-          parts.push(`${seconds}s`);
-        }
-      }
-    }
-
-    // Return "0s" for zero interval
-    return parts.length > 0 ? parts.join(' ') : '0s';
+    return intervalFieldsToString(parseIntervalFields(value) ?? { months: 0, days: 0, micros: 0 });
   }
 
   /**

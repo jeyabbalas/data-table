@@ -4,14 +4,18 @@
  * Converts DuckDB INTERVAL values to a total-seconds numeric scale for equal-width binning.
  * Month/year components use standard approximations (1 month = 30.4375 days).
  *
- * INTERVAL values in DuckDB are returned as strings like "1 year 2 months 3 days 04:05:06"
- * and must be converted to numeric seconds for histogram binning.
+ * The conversion runs in SQL ({@link intervalToSecondsSQL}), and the stats and the bins
+ * both read it, so every value lies between the minimum and maximum it is binned by.
+ * The unfiltered bins also carry their smallest and largest values, which a brush
+ * filters between. Interval text ("1 year 2 months 3 days 04:05:06") is read as DuckDB
+ * reads it ({@link parseIntervalFields}).
  */
 
 import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
+import type { RangeFilter } from '../../filters/FilterTypes';
 
 // =========================================
 // Constants
@@ -25,6 +29,8 @@ export const YEAR_SECONDS = 31557600;
 
 /** Seconds per day */
 const DAY_SECONDS = 86400;
+
+const MILLION = 1_000_000;
 
 // =========================================
 // Interfaces
@@ -40,6 +46,14 @@ export interface IntervalHistogramBin {
   binEndSeconds: number;
   /** Number of values in this bin */
   count: number;
+  /**
+   * The bin's smallest value as DuckDB writes it (`400 days 07:30:00.000001`).
+   * Set by the unfiltered fetch for a bin holding values: a brush filters from
+   * the first such bin's smallest value to the last one's largest.
+   */
+  minValue?: string;
+  /** The bin's largest value as DuckDB writes it; set with {@link minValue}. */
+  maxValue?: string;
 }
 
 /**
@@ -63,12 +77,22 @@ export interface IntervalHistogramData {
 }
 
 /**
- * Statistics query result
+ * An interval as DuckDB stores it: whole months, days and microseconds, each
+ * with its own sign.
+ */
+export interface IntervalFields {
+  months: number;
+  days: number;
+  micros: number;
+}
+
+/**
+ * Statistics query result, in seconds on the chart's scale
  */
 interface IntervalStatsResult {
-  min_val: string | null;
-  max_val: string | null;
-  median_val: string | null;
+  min_sec: number | null;
+  max_sec: number | null;
+  median_sec: number | null;
   count: number;
   null_count: number;
 }
@@ -79,6 +103,8 @@ interface IntervalStatsResult {
 interface IntervalBinResult {
   bin_idx: number;
   count: number;
+  min_value?: string | null;
+  max_value?: string | null;
 }
 
 // =========================================
@@ -86,21 +112,28 @@ interface IntervalBinResult {
 // =========================================
 
 /**
- * Returns a SQL expression that converts an INTERVAL column to total seconds.
+ * Returns a SQL expression that converts an INTERVAL column to total seconds,
+ * a DOUBLE.
  *
- * Uses component extraction since EXTRACT(EPOCH FROM interval) is not reliably
- * supported in DuckDB WASM for all INTERVAL representations. Month/year
- * components use standard approximations (1 month ≈ 30.4375 days).
+ * It sums the interval's parts rather than taking `EXTRACT(epoch …)`, which
+ * counts a month as 30 days: this scale counts 30.4375, as
+ * {@link parseIntervalToSeconds} and the axis labels do. The last term,
+ * `EXTRACT(microseconds …)`, is the seconds within the minute with their
+ * fraction (`1 minute 1.5 seconds` gives 1,500,000); `EXTRACT(second …)`
+ * drops the fraction. The whole seconds are BIGINT arithmetic, exact for any
+ * INTERVAL (at most about 5.8e15 seconds, below 2^53). Constants like
+ * `86400.0` would make it 128-bit DECIMAL arithmetic, which takes twice as
+ * long.
  *
  * @param col Already-quoted column identifier
  */
 export function intervalToSecondsSQL(col: string): string {
   return `(
-    (EXTRACT(year FROM ${col}) * 12 + EXTRACT(month FROM ${col})) * ${MONTH_SECONDS}.0 +
-    EXTRACT(day FROM ${col}) * ${DAY_SECONDS}.0 +
-    EXTRACT(hour FROM ${col}) * 3600.0 +
-    EXTRACT(minute FROM ${col}) * 60.0 +
-    EXTRACT(second FROM ${col})
+    (EXTRACT(year FROM ${col}) * 12 + EXTRACT(month FROM ${col})) * ${MONTH_SECONDS} +
+    EXTRACT(day FROM ${col}) * ${DAY_SECONDS} +
+    EXTRACT(hour FROM ${col}) * 3600 +
+    EXTRACT(minute FROM ${col}) * 60 +
+    EXTRACT(microseconds FROM ${col}) / 1000000.0
   )`;
 }
 
@@ -109,9 +142,105 @@ export function intervalToSecondsSQL(col: string): string {
 // =========================================
 
 /**
+ * The months, days or microseconds one of each unit adds to an interval, by
+ * every name DuckDB reads in interval text: singular, plural and short.
+ */
+const INTERVAL_UNITS = new Map<string, readonly ['months' | 'days' | 'micros', number]>();
+for (const [names, part, per] of [
+  ['millennium millennia millenniums mil mils', 'months', 12000],
+  ['century centuries cent c', 'months', 1200],
+  ['decade decades dec decs', 'months', 120],
+  ['year years yr yrs y', 'months', 12],
+  ['quarter quarters', 'months', 3],
+  ['month months mon mons', 'months', 1],
+  ['week weeks w', 'days', 7],
+  ['day days d', 'days', 1],
+  ['hour hours hr hrs h', 'micros', 3_600_000_000],
+  ['minute minutes min mins m', 'micros', 60_000_000],
+  ['second seconds sec secs s', 'micros', MILLION],
+  ['millisecond milliseconds msecond mseconds msec msecs ms', 'micros', 1000],
+  ['microsecond microseconds usecond useconds usec usecs us', 'micros', 1],
+] as const) {
+  for (const name of names.split(' ')) INTERVAL_UNITS.set(name, [part, per]);
+}
+
+/** `[⌊n / d⌋, n mod d]` for a whole `n` ≥ 0: exact, as `%` is, below 2^53. */
+function divmod(n: number, d: number): [number, number] {
+  const r = n % d;
+  return [(n - r) / d, r];
+}
+
+/** Up to six digits of a decimal fraction as millionths, the rest dropped, as DuckDB keeps them. */
+function millionths(digits: string | undefined): number {
+  return Number((digits ?? '').slice(0, 6).padEnd(6, '0'));
+}
+
+/**
+ * Parse DuckDB interval text into the fields DuckDB stores, as DuckDB reads
+ * it: every `<number> <unit>` pair, in any unit DuckDB knows and each with
+ * its own sign (`-1 year -2 months 3 days`, `2 hours`, `1.5 seconds`,
+ * `500ms`), plus a clock part (`04:05:06.789`, `100:00:00.5`, `10:00`).
+ *
+ * A number keeps six digits of its fraction. Its fraction splits as DuckDB
+ * splits it: of a month or a quarter into whole days, 30 to a month; of a day
+ * or a week into microseconds; of a year, decade, century or millennium into
+ * whole months only. Anything finer than a microsecond is dropped
+ * (`01:02:03.1234567` is `.123456`), except that `us` rounds. A trailing `ago`
+ * negates text with no clock part, as in DuckDB, which ignores it after one.
+ *
+ * @returns The fields, or null for empty text
+ */
+export function parseIntervalFields(text: string): IntervalFields | null {
+  const input = text.trim();
+  if (!input) return null;
+
+  let months = 0;
+  let days = 0;
+  let micros = 0;
+  for (const [, minus, whole, digits, name] of input.matchAll(
+    /(-?)(\d+)(?:\.(\d*))?\s*([a-z]+)/gi,
+  )) {
+    const unit = INTERVAL_UNITS.get(name!.toLowerCase());
+    if (!unit) continue;
+    const [part, per] = unit;
+    const sign = minus ? -1 : 1;
+    const n = Number(whole);
+    const f = millionths(digits);
+    if (part === 'micros') {
+      // A unit of a microsecond rounds its fraction; the others drop what is finer.
+      const fraction = per === 1 ? Number(f >= MILLION / 2) : divmod(f * per, MILLION)[0];
+      micros += sign * (n * per + fraction);
+    } else if (part === 'days') {
+      const [extraDays, rest] = divmod(f * per, MILLION);
+      days += sign * (n * per + extraDays);
+      micros += sign * rest * DAY_SECONDS; // millionths of a day
+    } else {
+      const [extraMonths, rest] = divmod(f * per, MILLION);
+      months += sign * (n * per + extraMonths);
+      if (per <= 3) days += sign * divmod(rest * 30, MILLION)[0];
+    }
+  }
+
+  // The clock part, `[-]H:MM[:SS[.ffffff]]`. DuckDB writes every hour of it,
+  // so there can be more than two digits ("100:00:00.5").
+  const clock = input.match(/(-?)(\d+):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/);
+  if (clock) {
+    const time =
+      Number(clock[2]) * 3_600_000_000 +
+      Number(clock[3]) * 60_000_000 +
+      Number(clock[4] ?? 0) * MILLION +
+      millionths(clock[5]);
+    micros += clock[1] ? -time : time;
+  }
+
+  const sign = !clock && /\bago$/i.test(input) ? -1 : 1;
+  return { months: sign * months || 0, days: sign * days || 0, micros: sign * micros || 0 };
+}
+
+/**
  * Parse a DuckDB INTERVAL value to total seconds.
  *
- * Accepts either a string ("1 year 2 months 3 days 04:05:06") or a
+ * Accepts either a string, read as {@link parseIntervalFields} reads it, or a
  * DuckDB WASM Arrow MonthDayNano object ({ months, days, nanoseconds }).
  *
  * @returns Total seconds (can be negative), or null if input is null/empty
@@ -129,170 +258,212 @@ export function parseIntervalToSeconds(
     if ('nanoseconds' in value) totalMicros = Math.floor(Number(value['nanoseconds']) / 1000);
     else if ('micros' in value) totalMicros = Number(value['micros']) || 0;
 
-    return months * MONTH_SECONDS + days * DAY_SECONDS + totalMicros / 1_000_000;
+    return months * MONTH_SECONDS + days * DAY_SECONDS + totalMicros / MILLION;
   }
 
   if (typeof value !== 'string') return null;
+  const fields = parseIntervalFields(value);
+  if (!fields) return null;
+  return fields.months * MONTH_SECONDS + fields.days * DAY_SECONDS + fields.micros / MILLION;
+}
 
-  const input = value.trim();
-  if (!input) return null;
+/** An interval's parts on the chart's scale, each whole and not negative. */
+interface IntervalParts {
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  /** 0–999,999 */
+  micros: number;
+}
 
-  let totalSeconds = 0;
+const NO_PARTS: IntervalParts = {
+  years: 0,
+  months: 0,
+  days: 0,
+  hours: 0,
+  minutes: 0,
+  seconds: 0,
+  micros: 0,
+};
 
-  // Parse year/month/day components with optional per-component negative signs.
-  // DuckDB outputs intervals with independently-signed components, e.g.
-  // "-1 year -2 months 3 days -04:05:06".
-  const yearMatch = input.match(/(-?\d+)\s*years?/i);
-  const monthMatch = input.match(/(-?\d+)\s*months?/i);
-  const dayMatch = input.match(/(-?\d+)\s*days?/i);
-
-  if (yearMatch) totalSeconds += parseInt(yearMatch[1]!, 10) * YEAR_SECONDS;
-  if (monthMatch) totalSeconds += parseInt(monthMatch[1]!, 10) * MONTH_SECONDS;
-  if (dayMatch) totalSeconds += parseInt(dayMatch[1]!, 10) * DAY_SECONDS;
-
-  // Parse time component with optional leading negative sign.
-  // Matches "-HH:MM:SS.ffffff" or "HH:MM:SS.ffffff".
-  const timeMatch = input.match(/(-?)(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
-  if (timeMatch) {
-    const timeSign = timeMatch[1] === '-' ? -1 : 1;
-    let timeSec = parseInt(timeMatch[2]!, 10) * 3600;
-    timeSec += parseInt(timeMatch[3]!, 10) * 60;
-    timeSec += parseInt(timeMatch[4]!, 10);
-    if (timeMatch[5]) {
-      timeSec += parseFloat(`0.${timeMatch[5]}`);
-    }
-    totalSeconds += timeSign * timeSec;
-  }
-
-  return totalSeconds;
+/** The hours (however many), minutes, seconds and microseconds in `micros` ≥ 0. */
+function clockParts(
+  micros: number,
+): Pick<IntervalParts, 'hours' | 'minutes' | 'seconds' | 'micros'> {
+  const [wholeSeconds, rest] = divmod(micros, MILLION);
+  const [wholeMinutes, seconds] = divmod(wholeSeconds, 60);
+  const [hours, minutes] = divmod(wholeMinutes, 60);
+  return { hours, minutes, seconds, micros: rest };
 }
 
 /**
- * Convert total seconds to compact human-readable interval string.
- *
- * Output format matches Cell.ts's formatInterval: "1y 2mo 3d 4h 5m 6s".
- * Only non-zero components are shown. Returns "0s" for zero.
+ * Split seconds into an interval's parts, rounded once to whole multiples of
+ * `unit` microseconds (1, or 1,000 for milliseconds). A fraction that rounds
+ * up to a whole second carries into the seconds, and on into the minutes,
+ * hours and days: 119.9999999 s is 2 minutes.
+ */
+function splitSeconds(total: number, unit: number): IntervalParts & { negative: boolean } {
+  const abs = Math.abs(total);
+  let whole = Math.floor(abs);
+  let micros = Math.round(((abs - whole) * MILLION) / unit) * unit;
+  if (micros >= MILLION) {
+    whole += 1;
+    micros -= MILLION;
+  }
+  const [years, afterYears] = divmod(whole, YEAR_SECONDS);
+  const [months, afterMonths] = divmod(afterYears, MONTH_SECONDS);
+  const [days, afterDays] = divmod(afterMonths, DAY_SECONDS);
+  const negative = total < 0 && (whole > 0 || micros > 0);
+  return { negative, years, months, days, ...clockParts(afterDays * MILLION + micros) };
+}
+
+/** `1y 2mo 3d 4h 5m 6.5s`: the parts that are not zero, the seconds with every microsecond. */
+function partsText(p: IntervalParts): string {
+  const text: string[] = [];
+  if (p.years) text.push(`${p.years}y`);
+  if (p.months) text.push(`${p.months}mo`);
+  if (p.days) text.push(`${p.days}d`);
+  if (p.hours) text.push(`${p.hours}h`);
+  if (p.minutes) text.push(`${p.minutes}m`);
+  if (p.seconds || p.micros) {
+    const fraction = p.micros ? `.${String(p.micros).padStart(6, '0').replace(/0+$/, '')}` : '';
+    text.push(`${p.seconds}${fraction}s`);
+  }
+  return text.join(' ');
+}
+
+/**
+ * Convert total seconds to compact human-readable interval string, the
+ * chart's labels and stats: "1y 2mo 3d 4h 5m 6s", split on the chart's
+ * scale (a month is 30.4375 days, so 45 days is `1mo 14d 13h 30m`). Only
+ * non-zero components are shown. Returns "0s" for zero. Under a second the
+ * seconds keep every microsecond (`0.0005s`), above it the milliseconds, and
+ * rounding carries: 119.9999999 is `2m`, not `1m 60s`. The grid's cells use
+ * the same units for each value's parts as DuckDB stores them
+ * ({@link intervalFieldsToString}).
  *
  * @param seconds Total seconds (can be negative)
  */
 export function secondsToIntervalString(seconds: number): string {
-  if (seconds === 0) return '0s';
-
-  const isNegative = seconds < 0;
-  let remaining = Math.abs(seconds);
-
-  const parts: string[] = [];
-
-  // Extract years
-  const years = Math.floor(remaining / YEAR_SECONDS);
-  if (years > 0) {
-    parts.push(`${years}y`);
-    remaining -= years * YEAR_SECONDS;
-  }
-
-  // Extract months (from remaining after years)
-  const months = Math.floor(remaining / MONTH_SECONDS);
-  if (months > 0) {
-    parts.push(`${months}mo`);
-    remaining -= months * MONTH_SECONDS;
-  }
-
-  // Extract days
-  const days = Math.floor(remaining / DAY_SECONDS);
-  if (days > 0) {
-    parts.push(`${days}d`);
-    remaining -= days * DAY_SECONDS;
-  }
-
-  // Extract hours
-  const hours = Math.floor(remaining / 3600);
-  if (hours > 0) {
-    parts.push(`${hours}h`);
-    remaining -= hours * 3600;
-  }
-
-  // Extract minutes
-  const minutes = Math.floor(remaining / 60);
-  if (minutes > 0) {
-    parts.push(`${minutes}m`);
-    remaining -= minutes * 60;
-  }
-
-  // Extract seconds (with fractional part)
-  if (remaining > 0 || parts.length === 0) {
-    const secs = Math.round(remaining * 1000) / 1000; // Avoid floating-point noise
-    if (Number.isInteger(secs)) {
-      parts.push(`${secs}s`);
-    } else {
-      // Remove trailing zeros from fraction
-      parts.push(`${parseFloat(secs.toFixed(3))}s`);
-    }
-  }
-
-  const result = parts.join(' ');
-  return isNegative ? `-${result}` : result;
+  const parts = splitSeconds(seconds, Math.abs(seconds) < 1 ? 1 : 1000);
+  const text = partsText(parts) || '0s';
+  return parts.negative ? `-${text}` : text;
 }
 
 /**
- * Convert total seconds to a DuckDB-compatible interval literal string.
- *
- * Output format: "N years N months N days HH:MM:SS" suitable for use in
- * `INTERVAL '...'` SQL expressions.
- *
- * @param seconds Total seconds (can be negative)
+ * Format an interval's fields compactly, as DuckDB stores them: months as
+ * years and months, then days, then the time, each field with every unit it
+ * holds (`45d`, `100h 0.5s`, `0.000001s`). One sign leads when every field is
+ * negative (`-1y 2mo 3d`); fields of different signs keep their own
+ * (`1d -1h`). Returns "0s" for zero.
  */
-export function secondsToIntervalSQL(seconds: number): string {
-  if (seconds === 0) return '00:00:00';
+export function intervalFieldsToString({ months, days, micros }: IntervalFields): string {
+  const fields = [
+    {
+      sign: Math.sign(months),
+      text: partsText({
+        ...NO_PARTS,
+        years: Math.trunc(Math.abs(months) / 12),
+        months: Math.abs(months) % 12,
+      }),
+    },
+    { sign: Math.sign(days), text: partsText({ ...NO_PARTS, days: Math.abs(days) }) },
+    { sign: Math.sign(micros), text: partsText({ ...NO_PARTS, ...clockParts(Math.abs(micros)) }) },
+  ].filter((field) => field.sign !== 0);
 
-  const isNegative = seconds < 0;
-  let remaining = Math.abs(seconds);
-  // Per-component sign prefix: DuckDB requires each component to be
-  // independently signed (e.g. "-1 day -01:01:01") rather than a single
-  // leading negative ("-1 day 01:01:01" would mean -1 day PLUS +1h1m1s).
-  const sign = isNegative ? '-' : '';
-
-  const parts: string[] = [];
-
-  // Extract years
-  const years = Math.floor(remaining / YEAR_SECONDS);
-  if (years > 0) {
-    parts.push(`${sign}${years} year${years > 1 ? 's' : ''}`);
-    remaining -= years * YEAR_SECONDS;
+  if (fields.length === 0) return '0s';
+  if (fields.every((field) => field.sign < 0)) {
+    return `-${fields.map((field) => field.text).join(' ')}`;
   }
+  return fields.map((field) => (field.sign < 0 ? `-${field.text}` : field.text)).join(' ');
+}
 
-  // Extract months
-  const months = Math.floor(remaining / MONTH_SECONDS);
-  if (months > 0) {
-    parts.push(`${sign}${months} month${months > 1 ? 's' : ''}`);
-    remaining -= months * MONTH_SECONDS;
+// =========================================
+// Brush ↔ Filter
+// =========================================
+
+/**
+ * The range filter a brush over bars `startIdx`–`endIdx` writes, or null when
+ * those bars hold no value: from the smallest value of the first bar holding
+ * any to the largest of the last, both inclusive, written as DuckDB writes
+ * those values. The bars split the column's sorted values, so the filter
+ * matches exactly the rows they count, whatever the floating-point arithmetic
+ * of their edges. The bars need the values the unfiltered fetch sets
+ * ({@link IntervalHistogramBin.minValue}).
+ *
+ * DuckDB compares two intervals part by part, after counting 30 days to a
+ * month and 24 hours to a day, while the bars put a month at 30.4375 days. That
+ * is the total-time order for a column whose values hold months only, or
+ * days and time only with one sign: those brushes are exact. A column whose
+ * values mix months with days or time, or a day and a time of opposite signs
+ * (`1 day -00:00:02`), can have a value near a bound fall on the other side of
+ * it from its bar: `30 days 06:00:00` passes a filter from `1 month`, though its
+ * bar lies below. That is left as it is on purpose: comparing the chart's
+ * seconds instead would change what saved interval filters match.
+ */
+export function intervalBrushFilter(
+  column: string,
+  bins: readonly IntervalHistogramBin[],
+  startIdx: number,
+  endIdx: number,
+): RangeFilter | null {
+  const holding = bins
+    .slice(startIdx, endIdx + 1)
+    .filter((bin) => bin.minValue !== undefined && bin.maxValue !== undefined);
+  if (holding.length === 0) return null;
+  return {
+    column,
+    type: 'range',
+    min: holding[0]!.minValue!,
+    max: holding[holding.length - 1]!.maxValue!,
+    valueType: 'interval',
+    maxInclusive: true,
+  };
+}
+
+/** Text or seconds as whole microseconds on the chart's scale; exact below 2^53 (285 years). */
+function toMicros(value: string | number): number {
+  if (typeof value === 'number') {
+    const whole = Math.floor(value);
+    return whole * MILLION + Math.round((value - whole) * MILLION);
   }
+  const fields = parseIntervalFields(value) ?? { months: 0, days: 0, micros: 0 };
+  return (fields.months * MONTH_SECONDS + fields.days * DAY_SECONDS) * MILLION + fields.micros;
+}
 
-  // Extract days
-  const days = Math.floor(remaining / DAY_SECONDS);
-  if (days > 0) {
-    parts.push(`${sign}${days} day${days > 1 ? 's' : ''}`);
-    remaining -= days * DAY_SECONDS;
-  }
+/**
+ * The bars a range filter on the column covers, `[first, last]`, or null for
+ * none: those holding values whose range meets the filter's, by the values the
+ * unfiltered fetch sets ({@link IntervalHistogramBin.minValue}). A brush's own
+ * filter covers exactly its bars, and a filter written by an older version,
+ * from rounded bar edges, the bars holding the values it passes. A number is
+ * a bound in seconds, and an infinite one leaves that side open.
+ */
+export function intervalFilterBars(
+  filter: RangeFilter,
+  bins: readonly IntervalHistogramBin[],
+): [number, number] | null {
+  const bound = (value: string | number | Date, open: number): number => {
+    if (typeof value === 'number') return Number.isFinite(value) ? toMicros(value) : open;
+    return toMicros(String(value));
+  };
+  // The microseconds the filter passes, both ends included.
+  const low = bound(filter.min, -Infinity) + (filter.minExclusive ? 1 : 0);
+  const high = bound(filter.max, Infinity) - (filter.maxInclusive ? 0 : 1);
 
-  // Always add time component for DuckDB parsing reliability
-  const hours = Math.floor(remaining / 3600);
-  remaining -= hours * 3600;
-  const minutes = Math.floor(remaining / 60);
-  remaining -= minutes * 60;
-  const wholeSecs = Math.floor(remaining);
-  const fracSecs = remaining - wholeSecs;
-
-  if (hours > 0 || minutes > 0 || wholeSecs > 0 || fracSecs > 1e-6 || parts.length === 0) {
-    let timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(wholeSecs).padStart(2, '0')}`;
-    if (fracSecs > 1e-6) {
-      // Preserve microsecond precision for accurate bin-edge round-trips
-      const micros = Math.round(fracSecs * 1_000_000);
-      timeStr += `.${String(micros).padStart(6, '0').replace(/0+$/, '')}`;
+  let first = -1;
+  let last = -1;
+  bins.forEach((bin, i) => {
+    if (bin.minValue === undefined || bin.maxValue === undefined) return;
+    if (toMicros(bin.minValue) <= high && toMicros(bin.maxValue) >= low) {
+      if (first === -1) first = i;
+      last = i;
     }
-    parts.push(`${sign}${timeStr}`);
-  }
-
-  return parts.join(' ');
+  });
+  return first === -1 ? null : [first, last];
 }
 
 // =========================================
@@ -302,8 +473,11 @@ export function secondsToIntervalSQL(seconds: number): string {
 /**
  * Fetch interval column statistics (min, max, median, count, nulls).
  *
- * DuckDB supports MIN, MAX, and APPROX_QUANTILE on INTERVAL types.
- * Results are cast to VARCHAR and then parsed to numeric seconds.
+ * The minimum, median and maximum are those of {@link intervalToSecondsSQL},
+ * the seconds the bins use, so every value falls in a bin. DuckDB's own MIN
+ * and MAX order intervals with 30-day months: of `1 month` and
+ * `30 days 06:00:00` they give `1 month` as the minimum, which this scale puts
+ * above the maximum. DuckDB's `APPROX_QUANTILE` takes no INTERVAL.
  */
 export async function fetchIntervalColumnStats(
   tableName: string,
@@ -321,36 +495,19 @@ export async function fetchIntervalColumnStats(
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
+  const sec = intervalToSecondsSQL(col);
 
-  // Try full query with APPROX_QUANTILE first; fall back without it
-  // since APPROX_QUANTILE may not support INTERVAL in all DuckDB versions.
-  let results: IntervalStatsResult[];
-  try {
-    const sql = `
-      SELECT
-        MIN(${col})::VARCHAR as min_val,
-        MAX(${col})::VARCHAR as max_val,
-        APPROX_QUANTILE(${col}, 0.5)::VARCHAR as median_val,
-        COUNT(${col}) as count,
-        COUNT(*) - COUNT(${col}) as null_count
-      FROM ${tbl}
-      ${whereSQL}
-    `;
-    results = await bridge.query<IntervalStatsResult>(sql);
-  } catch {
-    // APPROX_QUANTILE not supported for INTERVAL — retry without median
-    const sql = `
-      SELECT
-        MIN(${col})::VARCHAR as min_val,
-        MAX(${col})::VARCHAR as max_val,
-        NULL as median_val,
-        COUNT(${col}) as count,
-        COUNT(*) - COUNT(${col}) as null_count
-      FROM ${tbl}
-      ${whereSQL}
-    `;
-    results = await bridge.query<IntervalStatsResult>(sql);
-  }
+  const sql = `
+    SELECT
+      MIN(${sec}) as min_sec,
+      MAX(${sec}) as max_sec,
+      APPROX_QUANTILE(${sec}, 0.5) as median_sec,
+      COUNT(${col}) as count,
+      COUNT(*) - COUNT(${col}) as null_count
+    FROM ${tbl}
+    ${whereSQL}
+  `;
+  const results = await bridge.query<IntervalStatsResult>(sql);
 
   if (results.length === 0) {
     return { minSeconds: null, maxSeconds: null, medianSeconds: null, count: 0, nullCount: 0 };
@@ -358,9 +515,9 @@ export async function fetchIntervalColumnStats(
 
   const row = results[0]!;
   return {
-    minSeconds: parseIntervalToSeconds(row.min_val),
-    maxSeconds: parseIntervalToSeconds(row.max_val),
-    medianSeconds: parseIntervalToSeconds(row.median_val),
+    minSeconds: row.min_sec ?? null,
+    maxSeconds: row.max_sec ?? null,
+    medianSeconds: row.median_sec ?? null,
     count: Number(row.count),
     nullCount: Number(row.null_count),
   };
@@ -370,7 +527,8 @@ export async function fetchIntervalColumnStats(
  * Build SQL query for interval histogram using numeric equal-width binning.
  *
  * Converts intervals to total seconds via intervalToSecondsSQL, then divides
- * the range [minSec, maxSec] into numBins equal-width bins.
+ * the range [minSec, maxSec] into numBins equal-width bins. With `values`, each
+ * bin also gives its smallest and largest value as DuckDB writes them.
  */
 function buildIntervalHistogramSQL(
   tableName: string,
@@ -379,6 +537,7 @@ function buildIntervalHistogramSQL(
   minSec: number,
   maxSec: number,
   filters: Filter[],
+  values: boolean,
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
@@ -390,11 +549,21 @@ function buildIntervalHistogramSQL(
 
   const binWidth = (maxSec - minSec) / numBins;
   const secExpr = intervalToSecondsSQL(col);
+  // One bin takes every value, also when they are all equal and it has no width.
+  const binIdx =
+    numBins === 1
+      ? '0'
+      : `LEAST(FLOOR((${secExpr} - ${minSec}) / ${binWidth})::INTEGER, ${numBins - 1})`;
+  const extremes = values
+    ? `,
+      CAST(arg_min(${col}, ${secExpr}) AS VARCHAR) as min_value,
+      CAST(arg_max(${col}, ${secExpr}) AS VARCHAR) as max_value`
+    : '';
 
   return `
     SELECT
-      LEAST(FLOOR((${secExpr} - ${minSec}) / ${binWidth})::INTEGER, ${numBins - 1}) as bin_idx,
-      COUNT(*) as count
+      ${binIdx} as bin_idx,
+      COUNT(*) as count${extremes}
     FROM ${tbl}
     ${whereSQL}
     GROUP BY bin_idx
@@ -408,7 +577,8 @@ function buildIntervalHistogramSQL(
  *
  * Creates all numBins bins (even empty ones) for consistent visualization.
  * Both background and foreground use the same numBins/min/max so their bin
- * edges match for crossfilter ghost-bar rendering.
+ * edges match for crossfilter ghost-bar rendering. With `values`, each bin
+ * holding values gets its smallest and largest ({@link IntervalHistogramBin.minValue}).
  */
 export async function fetchIntervalNumericBins(
   tableName: string,
@@ -418,10 +588,19 @@ export async function fetchIntervalNumericBins(
   maxSec: number,
   filters: Filter[],
   bridge: WorkerBridge,
+  values = false,
 ): Promise<IntervalHistogramBin[]> {
   const binWidth = (maxSec - minSec) / numBins;
 
-  const sql = buildIntervalHistogramSQL(tableName, column, numBins, minSec, maxSec, filters);
+  const sql = buildIntervalHistogramSQL(
+    tableName,
+    column,
+    numBins,
+    minSec,
+    maxSec,
+    filters,
+    values,
+  );
   const binResults = await bridge.query<IntervalBinResult>(sql);
 
   // Create all bins (even empty ones)
@@ -436,7 +615,12 @@ export async function fetchIntervalNumericBins(
   for (const result of binResults) {
     const idx = Number(result.bin_idx);
     if (idx >= 0 && idx < bins.length) {
-      bins[idx]!.count = Number(result.count);
+      const bin = bins[idx]!;
+      bin.count = Number(result.count);
+      if (result.min_value != null && result.max_value != null) {
+        bin.minValue = result.min_value;
+        bin.maxValue = result.max_value;
+      }
     }
   }
 
@@ -445,6 +629,10 @@ export async function fetchIntervalNumericBins(
 
 /**
  * Fetch interval histogram data for an INTERVAL column.
+ *
+ * The bins carry their smallest and largest values, for a brush. There are at
+ * most `maxBins`, and none narrower than a microsecond, the finest step DuckDB
+ * holds: 1 µs and 3 µs make 2 bins.
  *
  * @param tableName - Name of the DuckDB table
  * @param column - Name of the INTERVAL column to histogram
@@ -477,34 +665,19 @@ export async function fetchIntervalHistogramData(
       };
     }
 
-    // Handle edge case: single value (all identical intervals)
-    if (stats.minSeconds === stats.maxSeconds) {
-      return {
-        bins: [
-          {
-            binStartSeconds: stats.minSeconds,
-            binEndSeconds: stats.minSeconds,
-            count: stats.count,
-          },
-        ],
-        nullCount: stats.nullCount,
-        minSeconds: stats.minSeconds,
-        maxSeconds: stats.maxSeconds,
-        medianSeconds: stats.medianSeconds,
-        total: stats.count + stats.nullCount,
-        isSingleValue: true,
-      };
-    }
-
-    // Step 2: Fetch equal-width bins
+    // Step 2: Fetch equal-width bins: one for a single value (all identical intervals)
+    const isSingleValue = stats.minSeconds === stats.maxSeconds;
+    const micros = Math.round((stats.maxSeconds - stats.minSeconds) * MILLION);
+    const numBins = isSingleValue ? 1 : Math.min(maxBins, Math.max(1, micros));
     const bins = await fetchIntervalNumericBins(
       tableName,
       column,
-      maxBins,
+      numBins,
       stats.minSeconds,
       stats.maxSeconds,
       filters,
       bridge,
+      true,
     );
 
     return {
@@ -514,7 +687,7 @@ export async function fetchIntervalHistogramData(
       maxSeconds: stats.maxSeconds,
       medianSeconds: stats.medianSeconds,
       total: stats.count + stats.nullCount,
-      isSingleValue: false,
+      isSingleValue,
     };
   } catch (error) {
     throw new QueryError(

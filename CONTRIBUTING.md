@@ -47,8 +47,8 @@ Use the **Feature request** issue template. Before proposing:
    - `npm run lint`
    - `npm run format:check`
    - `npm run typecheck`
-   - `npm run test:coverage`
    - `npm run build`
+   - `npm run test:coverage` (after the build: two api-surface tests read `dist/`)
    - `npm run size` (bundle-size budgets — fails on > 5 % regression)
    - `npm run docs:api:check` (typedoc dry-run; catches broken JSDoc references)
    - `npm run test:browser` (Playwright accessibility suite; first run needs

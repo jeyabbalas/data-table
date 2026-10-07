@@ -78,11 +78,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test with coverage gate
-        run: npm run test:coverage
-
+      # Build first: tests/api-surface.private-paths.test.ts and
+      # api-surface.cjs-routing.test.ts read `dist/`, and skip without it.
+      # `!cancelled()` still runs the tests when the build fails.
       - name: Build library
         run: npm run build
+
+      - name: Test with coverage gate
+        if: ${{ !cancelled() }}
+        run: npm run test:coverage
 
   browser:
     name: Browser accessibility suite

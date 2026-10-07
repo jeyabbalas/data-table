@@ -88,8 +88,13 @@ vi.mock('../../../src/visualizations/histogram/IntervalHistogramData', () => ({
 }));
 
 import { IntervalHistogram } from '../../../src/visualizations/histogram/IntervalHistogram';
-import { fetchIntervalHistogramData } from '../../../src/visualizations/histogram/IntervalHistogramData';
-import type { ColumnSchema } from '../../../src/core/types';
+import {
+  fetchIntervalHistogramData,
+  fetchIntervalNumericBins,
+  parseIntervalToSeconds,
+  secondsToIntervalSQL,
+} from '../../../src/visualizations/histogram/IntervalHistogramData';
+import type { ColumnSchema, Filter } from '../../../src/core/types';
 import type { VisualizationOptions } from '../../../src/visualizations/BaseVisualization';
 
 describe('IntervalHistogram', () => {
@@ -326,6 +331,63 @@ describe('IntervalHistogram', () => {
       // Should select bins 1-2, NOT bins 1-3 (the epsilon guard prevents bin 3)
       expect(brushState.startBinIndex).toBe(1);
       expect(brushState.endBinIndex).toBe(2);
+    });
+
+    it('restores a brush on 0.3 ms bars after the refetch', async () => {
+      // The real round trip: the brush writes its bounds with
+      // secondsToIntervalSQL, and the refetch reads them back with
+      // parseIntervalToSeconds.
+      const actual = await vi.importActual<
+        typeof import('../../../src/visualizations/histogram/IntervalHistogramData')
+      >('../../../src/visualizations/histogram/IntervalHistogramData');
+      vi.mocked(secondsToIntervalSQL).mockImplementation(actual.secondsToIntervalSQL);
+      vi.mocked(parseIntervalToSeconds).mockImplementation(actual.parseIntervalToSeconds);
+
+      // Five 0.3 ms bars from 0.1 ms.
+      const bins = [0, 1, 2, 3, 4].map((i) => ({
+        binStartSeconds: 0.0001 + i * 0.0003,
+        binEndSeconds: 0.0001 + (i + 1) * 0.0003,
+        count: 10,
+      }));
+      vi.mocked(fetchIntervalHistogramData).mockResolvedValueOnce({
+        bins,
+        nullCount: 0,
+        minSeconds: 0.0001,
+        maxSeconds: 0.0016,
+        medianSeconds: 0.00085,
+        total: 50,
+        isSingleValue: false,
+      });
+      vi.mocked(fetchIntervalNumericBins).mockResolvedValueOnce(bins);
+      const onFilterChange = vi.fn();
+      options.onFilterChange = onFilterChange;
+
+      histogram = new IntervalHistogram(container, column, options);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Brush bars 1–2, as a drag would.
+      const state = histogram as unknown as {
+        brushState: { startBinIndex: number; endBinIndex: number; committed: boolean };
+        emitBrushFilter(): void;
+      };
+      state.brushState.startBinIndex = 1;
+      state.brushState.endBinIndex = 2;
+      state.brushState.committed = true;
+      state.emitBrushFilter();
+      const filter = onFilterChange.mock.calls[0]![0] as Filter;
+      expect(filter).toMatchObject({
+        type: 'range',
+        min: '00:00:00.0004',
+        max: '00:00:00.001',
+        valueType: 'interval',
+      });
+
+      // The crossfilter refetch under that filter keeps the brush on bars 1–2.
+      await histogram.updateFilters([filter]);
+      expect(state.brushState).toMatchObject({ committed: true, startBinIndex: 1, endBinIndex: 2 });
+
+      vi.mocked(secondsToIntervalSQL).mockReset();
+      vi.mocked(parseIntervalToSeconds).mockReset();
     });
   });
 });

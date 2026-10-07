@@ -296,6 +296,14 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
   /**
    * Emit a range filter based on current brush bin indices
+   *
+   * The bounds are INTERVAL literals, which DuckDB compares with 30-day
+   * months and 360-day years (`INTERVAL '1 month' = INTERVAL '30 days'`),
+   * while the bars put a month at 30.4375 days and a year at 365.25. So a
+   * value with months or years near a brush edge can fall on the other side
+   * of it from its bar: a brush from 10 years includes `3620 days`, which the
+   * bars put below 10 years. Comparing the seconds expression instead would
+   * change what saved interval filters match, so the literals stay.
    */
   protected emitBrushFilter(): void {
     if (!this.data) return;
@@ -395,7 +403,12 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
     // and maxInclusive in emitBrushFilter. Other histogram types (numeric,
     // date, time) don't need this because their filter values don't undergo
     // a lossy string conversion.
-    const EPS = 1e-3; // 1ms — well above max drift (~0.5µs), well below any practical bin width
+    //
+    // The inset is 1 ms, or a quarter of a bar when that is less: a fixed
+    // 1 ms is wider than the bars of millisecond data, so after the refetch a
+    // brush on bars of 1 ms or less lost its end bars, or every bar.
+    const width = bins[0]!.binEndSeconds - bins[0]!.binStartSeconds;
+    const EPS = width > 0 ? Math.min(1e-3, width / 4) : 1e-3;
 
     let startIdx = -1;
     let endIdx = -1;

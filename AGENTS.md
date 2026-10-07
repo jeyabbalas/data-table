@@ -26,7 +26,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 
 ### SUPPORTS
 
-- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:160-164).
+- Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:164-168).
 - Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–204). Point, set and not-set filters take `valueType: 'text'`, which compares `CAST(col AS VARCHAR)`: how a nested value is matched exactly. A range filter takes `valueType: 'time'`, which compares `CAST(col AS TIME)`: how a `TIME WITH TIME ZONE` column is compared by its time of day, as its chart and filter panel do.
 - Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation), and `addNestedFieldColumn(column, path, options?)`, which adds one part of a nested or JSON column (a struct field, list element, map value, JSON key, a list's length) as an expression column right after it; in the UI, a nested or JSON column header's extract button and the value inspector's "Add as column" do the same, both part of the `derivedColumns` UI. An expression must give one value for each row: `unnest(…)` and a bare aggregate (`sum(price)`) are refused. Names are unique ignoring ASCII letter case, as DuckDB binds them, on a session restore, an undo and a redo too (src/derived/types.ts, src/derived/DerivedColumnManager.ts, src/core/Actions.ts, src/core/columnNames.ts, src/table/ExtractColumnPanel.ts).
 - Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`), and `actions.getCellValue(rowId, column)` for one cell. Both are exact: every `BIGINT`…`UHUGEINT` digit, a `DECIMAL` as the double nearest its value, nested values as arrays, objects, `Map`s and `{ [tag]: value }` (src/core/types.ts, src/core/Actions.ts).
@@ -132,7 +132,7 @@ body {
 }
 ```
 
-`container` takes an `HTMLElement`, not a selector string. There is no height option — sizing is entirely the host page's job. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`), so it inherits whatever the container resolves to; the scroller then reads `clientHeight` off `.dt-body-scroll` (`src/table/VirtualScroller.ts:353`) and renders `⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — ~29 at 600px, whether the dataset has 1 thousand rows or 10 million. `bufferRows` defaults to 5 and is not exposed through `createDataTable` (`src/table/VirtualScroller.ts:148`, `:18`). `height: 100%` on the container works only if every ancestor up to the viewport also has a resolved height.
+`container` takes an `HTMLElement`, not a selector string. There is no height option — sizing is entirely the host page's job. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-26`), so it inherits whatever the container resolves to; the scroller then reads `clientHeight` off `.dt-body-scroll` (`src/table/VirtualScroller.ts:353`) and renders `⌈clientHeight / rowHeight⌉ + 2 × bufferRows` rows — ~29 at 600px, whether the dataset has 1 thousand rows or 10 million. `bufferRows` defaults to 5 and is not exposed through `createDataTable` (`src/table/VirtualScroller.ts:148`, `:18`). `height: 100%` on the container works only if every ancestor up to the viewport also has a resolved height.
 
 ### (b) Programmatic filter application (every type)
 
@@ -578,7 +578,7 @@ table.on('derivedChange', refresh);
 
 ## 4. Default config cheat-sheet
 
-All values source `src/DataTable.ts:133-367`.
+All values source `src/DataTable.ts:137-371`.
 
 | Option               | Default         | Notes                                                                                            |
 | -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
@@ -604,7 +604,7 @@ All values source `src/DataTable.ts:133-367`.
 
 ## 5. Common pitfalls
 
-1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-19`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:464-468`) grows to the spacer height that `setTotalRows()` writes onto `.dt-body` — `min(totalRows × rowHeight, 15,000,000)` px, capped by the module-private `DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000` (`src/table/VirtualScroller.ts:73`, applied in `setTotalRows`, `:426-464`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:353`) is then that whole capped element, so the visible range is everything under the cap: rows are fetched in blocks (`src/table/TableBody.ts`) and a DOM row — data or placeholder — is built per row, up to ~468,750 rows at the default 32px `rowHeight` (the entire dataset when it is smaller). At 1M rows × 32px that is a 15,000,000px element and ~468,750 DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
+1. **Mounting into an unbounded (auto-height) container.** Symptom: nothing at first — no error, no `warning` event, and on a small dataset it looks correct — then a stalled tab, climbing memory, and unusable scrolling once the data is real. `.dt-root` is `height: 100%` (`src/styles/02-shell.css:11-26`); against an auto-height parent that resolves to content height, so `.dt-body-scroll` (`flex: 1; overflow: auto; min-height: 0`, `src/styles/02-shell.css:464-468`) grows to the spacer height that `setTotalRows()` writes onto `.dt-body` — `min(totalRows × rowHeight, 15,000,000)` px, capped by the module-private `DEFAULT_MAX_VIRTUAL_HEIGHT = 15_000_000` (`src/table/VirtualScroller.ts:73`, applied in `setTotalRows`, `:426-464`). The `clientHeight` the scroller measures (`src/table/VirtualScroller.ts:353`) is then that whole capped element, so the visible range is everything under the cap: rows are fetched in blocks (`src/table/TableBody.ts`) and a DOM row — data or placeholder — is built per row, up to ~468,750 rows at the default 32px `rowHeight` (the entire dataset when it is smaller). At 1M rows × 32px that is a 15,000,000px element and ~468,750 DOM rows. Virtualization is fully defeated and nothing tells you. Fix: give the container a bounded height before mounting.
 
    ```html
    <div id="table" style="height: 600px"></div>
@@ -772,6 +772,6 @@ If the initial load fails, `createDataTable()` first tears down what it built, a
 **Source-of-truth (prefer these over the docs when they disagree)**
 
 - **Source entry points** — `src/index.ts` (Tier-1), `src/advanced.ts` (Tier-2)
-- **Options definition** — `src/DataTable.ts:133-367`
+- **Options definition** — `src/DataTable.ts:137-371`
 - **Event payloads** — `src/core/TableEvents.ts`
 - **Action methods** — `src/core/Actions.ts`

@@ -105,7 +105,7 @@ view. Replacing the entire `EditorState` works too, but discards undo
 history, focus, selection, and scroll position; `Compartment.reconfigure`
 preserves all four. The bundled `CodeMirrorExpressionEditor` uses the
 same pattern internally
-([`src/sql-editor/CodeMirrorExpressionEditor.ts:156-162`](../../src/sql-editor/CodeMirrorExpressionEditor.ts)).
+([`src/sql-editor/CodeMirrorExpressionEditor.ts:143-147`](../../src/sql-editor/CodeMirrorExpressionEditor.ts)).
 
 ```ts
 import {

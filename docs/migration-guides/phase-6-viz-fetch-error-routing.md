@@ -10,7 +10,7 @@ Before Phase 6, the bundled `BaseVisualization` subclasses (`Histogram`,
 caught failures from their `fetchData()` SQL queries and surfaced them
 only via `console.error` in the developer console. The JSDoc contract on
 `VisualizationOptions.onError`
-(`src/visualizations/BaseVisualization.ts:130-142`) explicitly promises
+(`src/visualizations/BaseVisualization.ts:133-145`) explicitly promises
 these errors route to `options.onError`, which the facade re-emits as
 `error` events with `source: 'visualization'`. The implementation did not
 honor that promise.
@@ -85,7 +85,7 @@ table.on('error', ({ error, source }) => {
 
 If you had no `error` handler before, you do not need to add one — the
 facade's `EventEmitter` is non-throwing on unlistened events
-(`src/core/EventEmitter.ts:82-100`).
+(`src/core/EventEmitter.ts:77-110`).
 
 ## Affected files
 

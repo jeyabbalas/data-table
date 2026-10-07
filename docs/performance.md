@@ -69,7 +69,7 @@ the host page's job.
 
 When the mount container has no resolved height, the chain collapses in a
 way that is easy to miss because nothing errors. The library's root carries
-`height: 100%` (`src/styles/02-shell.css:11-19`), which against an
+`height: 100%` (`src/styles/02-shell.css:11-26`), which against an
 auto-height parent resolves to `auto`, making the root content-sized. The
 scroll element (`flex: 1; min-height: 0`) then grows to its own content —
 and that content has the explicit `min(rowCount × rowHeight,

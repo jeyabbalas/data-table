@@ -317,7 +317,7 @@ more than a pixel above ~8.4M px.
 Two operations touch the anchor directly. `scrollToRow()` computes its
 target in virtual space and writes the anchor rather than inverting the
 lossy proportional map, so any index lands exactly even above the cap
-([`src/table/VirtualScroller.ts:508-564`](../../src/table/VirtualScroller.ts)).
+([`src/table/VirtualScroller.ts:507-574`](../../src/table/VirtualScroller.ts)).
 A target just short of an edge keeps its physical position off the
 pixels the edge branches snap from, `scrollTop` 0 and the last pixel,
 which would otherwise move the anchor to the edge and leave the row

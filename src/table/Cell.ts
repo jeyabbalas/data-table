@@ -43,6 +43,44 @@ function formatNumberWithScientific(value: number): string | null {
   return null; // Signal to use standard formatting
 }
 
+/** Milliseconds in a day. */
+const DAY_MS = 86_400_000;
+
+/** The most milliseconds from 1970, either way, that a `Date` holds: 100,000,000 days. */
+const DATE_RANGE_MS = 100_000_000 * DAY_MS;
+
+/** 400 years of the Gregorian calendar, 146,097 days, after which its dates repeat. */
+const GREGORIAN_CYCLE_MS = 146_097 * DAY_MS;
+
+/**
+ * DuckDB's text for a date or timestamp of `infinity` or `-infinity`, which
+ * the worker reads as `Infinity` or `-Infinity`; null for any other value.
+ */
+function infinityText(ms: number): string | null {
+  return ms === Infinity ? 'infinity' : ms === -Infinity ? '-infinity' : null;
+}
+
+/**
+ * The ISO 8601 text `Date.prototype.toISOString` gives for `ms` milliseconds
+ * from 1970 (`2024-01-02T03:04:05.123Z`, `+012000-01-01T00:00:00.000Z`), or
+ * null for `NaN` and the infinities.
+ *
+ * Past the ±8.64e15 ms a `Date` holds, years after 275760 and before
+ * 271822 BC, which a DATE reaches to year 5881580 and a TIMESTAMP to 294247,
+ * it is the text a `Date` would give: the time moves into a `Date`'s range
+ * by whole 400-year cycles, after which the calendar repeats, and its year
+ * moves back. Such a number has no fraction, so the move is exact.
+ */
+function isoText(ms: number): string | null {
+  if (!Number.isFinite(ms)) return null;
+  if (Math.abs(ms) <= DATE_RANGE_MS) return new Date(ms).toISOString();
+  const cycles = Math.floor(ms / GREGORIAN_CYCLE_MS);
+  // A year from 1970 to 2369, four digits.
+  const iso = new Date(ms - cycles * GREGORIAN_CYCLE_MS).toISOString();
+  const year = Number(iso.slice(0, 4)) + 400 * cycles;
+  return `${year < 0 ? '-' : '+'}${String(Math.abs(year)).padStart(6, '0')}${iso.slice(4)}`;
+}
+
 /**
  * Options for configuring the CellRenderer
  */
@@ -240,28 +278,27 @@ export class CellRenderer {
   /**
    * Format a date value as ISO date string (YYYY-MM-DD).
    * Handles: Date objects, ISO strings, and BigInt/number/string (milliseconds from DuckDB-WASM).
+   * DuckDB's `infinity` and `-infinity` arrive as `±Infinity` and show as
+   * DuckDB writes them; a year past 9999 or before 1 shows with its sign,
+   * `+012000-01-01`, as `toISOString` writes it (see {@link isoText}).
    */
   private formatDate(value: unknown): string {
     if (value instanceof Date) {
       // ISO is `YYYY-MM-DDTHH:…` — `split('T')[0]` is always defined.
       return value.toISOString().split('T')[0]!;
     }
-    // DuckDB-WASM returns DATE as milliseconds since epoch (via row.toJSON())
+    // Epoch milliseconds: `infinity` as DuckDB writes it, else the ISO date.
+    const epochDate = (ms: number): string | null =>
+      infinityText(ms) ?? isoText(ms)?.split('T')[0] ?? null;
+    // DuckDB-WASM returns DATE as milliseconds since epoch
     if (typeof value === 'bigint' || typeof value === 'number') {
-      const date = new Date(Number(value)); // Value IS milliseconds
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0]!;
-      }
-      return String(value);
+      return epochDate(Number(value)) ?? String(value);
     }
     // Handle string values
     if (typeof value === 'string') {
-      // Check if it's a numeric string (milliseconds since epoch)
+      // A numeric string is milliseconds since epoch
       if (/^-?\d+(\.\d+)?$/.test(value)) {
-        const date = new Date(Number(value)); // Value IS milliseconds
-        if (!isNaN(date.getTime())) {
-          return date.toISOString().split('T')[0]!;
-        }
+        return epochDate(Number(value)) ?? value;
       }
       // Already formatted string (ISO date or other format)
       return value;
@@ -274,38 +311,39 @@ export class CellRenderer {
    * Output: "2025-12-30 14:30:45" or "2025-12-30 14:30:45.123" (trailing zeros removed)
    * For TIMESTAMPTZ: "2025-12-30 14:30:45 +00:00" (with timezone offset)
    * Handles: Date objects, ISO strings, and BigInt/number/string (milliseconds from DuckDB-WASM).
+   * DuckDB's `infinity` and `-infinity` arrive as `±Infinity` and show as
+   * DuckDB writes them, without a zone; a year past 9999 or before 1 shows
+   * with its sign, `+294247-01-10 04:00:54.776` (see {@link isoText}).
    */
   private formatTimestamp(value: unknown, originalType?: string): string {
     const isTimestampTz =
       originalType?.toUpperCase().includes('TIMESTAMPTZ') ||
       originalType?.toUpperCase().includes('WITH TIME ZONE');
 
-    // Helper to format the result with optional timezone
-    const formatResult = (date: Date): string => {
-      const formatted = this.formatTimestampCore(date);
+    // Helper to format ISO text with optional timezone
+    const formatResult = (iso: string): string => {
+      const formatted = this.formatTimestampCore(iso);
       if (isTimestampTz) {
         return `${formatted} +00:00`;
       }
       return formatted;
     };
+    // Epoch milliseconds: `infinity` as DuckDB writes it, with no zone.
+    const epochTimestamp = (ms: number): string | null => {
+      const iso = isoText(ms);
+      return iso === null ? infinityText(ms) : formatResult(iso);
+    };
 
-    // DuckDB-WASM returns TIMESTAMP as milliseconds since epoch (via row.toJSON())
+    // DuckDB-WASM returns TIMESTAMP as milliseconds since epoch
     if (typeof value === 'bigint' || typeof value === 'number') {
-      const date = new Date(Number(value)); // Value IS milliseconds
-      if (!isNaN(date.getTime())) {
-        return formatResult(date);
-      }
-      return String(value);
+      return epochTimestamp(Number(value)) ?? String(value);
     }
 
     // Handle string values
     if (typeof value === 'string') {
-      // Check if it's a numeric string (milliseconds since epoch)
+      // A numeric string is milliseconds since epoch
       if (/^-?\d+(\.\d+)?$/.test(value)) {
-        const date = new Date(Number(value)); // Value IS milliseconds
-        if (!isNaN(date.getTime())) {
-          return formatResult(date);
-        }
+        return epochTimestamp(Number(value)) ?? value;
       }
 
       // Check if string value has timezone offset: 2025-12-30T14:30:45+05:00
@@ -314,7 +352,7 @@ export class CellRenderer {
         const offset = tzMatch[2]!;
         const parsed = new Date(value);
         if (!isNaN(parsed.getTime())) {
-          const formatted = this.formatTimestampCore(parsed);
+          const formatted = this.formatTimestampCore(parsed.toISOString());
           const normalizedOffset = offset.includes(':')
             ? offset
             : `${offset.slice(0, 3)}:${offset.slice(3)}`;
@@ -326,7 +364,7 @@ export class CellRenderer {
       try {
         const parsed = new Date(value);
         if (!isNaN(parsed.getTime())) {
-          return formatResult(parsed);
+          return formatResult(parsed.toISOString());
         }
       } catch {
         // Fall through
@@ -335,7 +373,7 @@ export class CellRenderer {
 
     // Handle Date objects
     if (value instanceof Date) {
-      return formatResult(value);
+      return formatResult(value.toISOString());
     }
 
     return String(value);
@@ -343,10 +381,9 @@ export class CellRenderer {
 
   /**
    * Core timestamp formatting logic - produces "2025-12-30 14:30:45.123" format
+   * from ISO text, "2025-12-30T14:30:45.123Z"
    */
-  private formatTimestampCore(date: Date): string {
-    // Use ISO format: "2025-12-30T14:30:45.123Z"
-    const iso = date.toISOString();
+  private formatTimestampCore(iso: string): string {
     // Replace T with space, remove Z: "2025-12-30 14:30:45.123"
     let formatted = iso.replace('T', ' ').replace('Z', '');
     // Remove trailing zeros from milliseconds

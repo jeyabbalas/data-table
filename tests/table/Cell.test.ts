@@ -142,6 +142,28 @@ describe('CellRenderer', () => {
       it('should pass through string dates', () => {
         expect(renderer.formatValue('2024-06-15', 'date')).toBe('2024-06-15');
       });
+
+      it('shows DuckDB’s infinity and -infinity, which arrive as ±Infinity, as DuckDB writes them', () => {
+        expect(renderer.formatValue(Infinity, 'date')).toBe('infinity');
+        expect(renderer.formatValue(-Infinity, 'date')).toBe('-infinity');
+      });
+
+      it('shows a date past what a Date holds as the ISO text a Date would give', () => {
+        // A Date's last day, and the next: past 8.64e15 ms.
+        expect(renderer.formatValue(8.64e15, 'date')).toBe('+275760-09-13');
+        expect(renderer.formatValue(8.64e15 + 86_400_000, 'date')).toBe('+275760-09-14');
+        expect(renderer.formatValue(-8.64e15, 'date')).toBe('-271821-04-20');
+        expect(renderer.formatValue(-8.64e15 - 86_400_000, 'date')).toBe('-271821-04-19');
+        // DuckDB's last and first DATE: 5881580-07-10 and 5877642-06-25 (BC).
+        expect(renderer.formatValue(185_542_587_014_400_000, 'date')).toBe('+5881580-07-10');
+        expect(renderer.formatValue(-185_542_587_014_400_000, 'date')).toBe('-5877641-06-25');
+        // A leap day, 400 years apart either side of the shift.
+        expect(
+          renderer.formatValue(Date.UTC(2000, 1, 29) + 1_000 * 146_097 * 86_400_000, 'date'),
+        ).toBe('+402000-02-29');
+        // DuckDB writes 9e18 µs as 287168-08-24 16:00:00.
+        expect(renderer.formatValue('9000000000000000', 'date')).toBe('+287168-08-24');
+      });
     });
 
     describe('timestamp type', () => {
@@ -171,6 +193,32 @@ describe('CellRenderer', () => {
         expect(renderer.formatValue(at('120'), 'timestamp')).toBe('2020-01-01 00:00:16.12');
         expect(renderer.formatValue(at('123'), 'timestamp')).toBe('2020-01-01 00:00:16.123');
         expect(renderer.formatValue(at('005'), 'timestamp')).toBe('2020-01-01 00:00:16.005');
+      });
+
+      it('shows DuckDB’s infinity and -infinity as DuckDB writes them, with no zone', () => {
+        expect(renderer.formatValue(Infinity, 'timestamp', 'TIMESTAMP')).toBe('infinity');
+        expect(renderer.formatValue(-Infinity, 'timestamp', 'TIMESTAMP')).toBe('-infinity');
+        expect(renderer.formatValue(Infinity, 'timestamp', 'TIMESTAMP WITH TIME ZONE')).toBe(
+          'infinity',
+        );
+        expect(renderer.formatValue(-Infinity, 'timestamp', 'TIMESTAMPTZ')).toBe('-infinity');
+      });
+
+      it('shows a time past what a Date holds as the ISO text a Date would give', () => {
+        expect(renderer.formatValue(8.64e15, 'timestamp')).toBe('+275760-09-13 00:00:00');
+        expect(renderer.formatValue(8.64e15 + 1, 'timestamp')).toBe('+275760-09-13 00:00:00.001');
+        expect(renderer.formatValue(-8.64e15 - 1, 'timestamp')).toBe('-271821-04-19 23:59:59.999');
+        // TIMESTAMP's last and first values, 294247-01-10 04:00:54.775806 (as
+        // the nearest number) and 290309-12-22 (BC).
+        expect(renderer.formatValue(9_223_372_036_854_776, 'timestamp')).toBe(
+          '+294247-01-10 04:00:54.776',
+        );
+        expect(
+          renderer.formatValue(-9_223_372_022_400_000, 'timestamp', 'TIMESTAMP WITH TIME ZONE'),
+        ).toBe('-290308-12-22 00:00:00 +00:00');
+        expect(renderer.formatValue('9223372036854000', 'timestamp')).toBe(
+          '+294247-01-10 04:00:54',
+        );
       });
 
       it('should trim trailing zeros from a timestamp that carries an offset', () => {

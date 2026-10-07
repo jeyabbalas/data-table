@@ -588,14 +588,25 @@ a VARIANT: select a VARIANT as `CAST(c AS JSON)`, and a type holding one
   rounded past 2^53, and a `HUGEINT` or `UHUGEINT` with the wrong sign at its
   extremes. Read it with `getColumnValues`, or export to Parquet, when its
   digits matter.
-- **Both** write `INTERVAL`, `BLOB`, `BIT`, `GEOMETRY`, `BIGNUM`, `ENUM`,
-  `TIME WITH TIME ZONE` and `TIME_NS` values as DuckDB's text
-  (`14:05:06+05:30`, `03:04:05.123456789`), a `DECIMAL` as the double nearest
-  its value (`0.35`, not `0.35000000000000003`), and a JSON column's value as
-  its text. A `DATE`, `TIMESTAMP` or `TIMESTAMP WITH TIME ZONE` column is
-  written as epoch milliseconds, and a `TIME` column as microseconds since
-  midnight; dates and times inside a nested value are DuckDB's text
-  (`["2024-01-02"]`).
+- **Both** write `INTERVAL`, `BLOB`, `BIT`, `GEOMETRY`, `BIGNUM` and `ENUM`
+  values as DuckDB's text, a `DECIMAL` as the double nearest its value
+  (`0.35`, not `0.35000000000000003`), and a JSON column's value as its
+  text.
+- **Dates and times** are ISO 8601 text, every digit kept and trailing zeros
+  dropped. JSON writes `"2024-01-02"`, `"03:04:05.5"` and
+  `"2024-01-02T03:04:05.123456"`; CSV and the clipboard put a space between
+  date and time, `2024-01-02 03:04:05.123456`, the form spreadsheets read as
+  a date and time. A `TIMESTAMP WITH TIME ZONE` is written in UTC with `Z`,
+  whatever time zone the table loaded in; a `TIMESTAMP` has no zone and is
+  written without one, so JavaScript's `new Date()` reads it as local time.
+  A `TIME WITH TIME ZONE` keeps its offset (`14:05:06+05:30`), and a
+  `TIME_NS` its nanoseconds (`03:04:05.123456789`). `infinity`, `-infinity`
+  and dates before year 1 (`0044-03-15 (BC)`) are written as DuckDB writes
+  them, which DuckDB reads back and JavaScript's `Date` does not: it takes
+  that date for 2044. Inside a nested value, dates and times are DuckDB's
+  text, a `TIMESTAMP WITH TIME ZONE` in UTC with `+00`. `getColumnValues`,
+  `getCellValue` and `bridge.query` still read a date or timestamp as epoch
+  milliseconds.
 - **Parquet** writes every column natively. A few types come back in part:
   an ARRAY loads back as a LIST, a `HUGEINT` or `UHUGEINT` as a `DOUBLE`, an
   `INTERVAL` to the millisecond, and an `ENUM` inside a struct or a `BIT`

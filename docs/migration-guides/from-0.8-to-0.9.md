@@ -5,14 +5,14 @@
 > summary chart, a value inspector, an extract-to-column panel, exact reads
 > and JSON exports. Most integrations upgrade with a version bump. Code that
 > registers charts or stats panels by column type, reads values with
-> `getColumnValues`, serves the worker script itself, or still calls
-> `VisualizationFactory` needs a look.
+> `getColumnValues`, reads dates from CSV or JSON exports, serves the worker
+> script itself, or still calls `VisualizationFactory` needs a look.
 
 **Released:** with `0.9.0` — see the [CHANGELOG](../../CHANGELOG.md) for the date.
 **Affected versions:** from `v0.8.*`
 **Migration difficulty:** mechanical for most projects; manual review where
-code reads MAP or UNION values, or where the worker script or DuckDB's
-extensions are served from your own host.
+code reads MAP or UNION values or exported dates, or where the worker script
+or DuckDB's extensions are served from your own host.
 
 ## Summary
 
@@ -29,7 +29,9 @@ These changes can break an integration:
    values in new forms.
 3. A self-hosted copy of the worker script must be replaced, and an offline
    deployment with nested data must serve DuckDB's `json` extension.
-4. `VisualizationFactory`, deprecated since `0.3.1`, is removed from
+4. CSV, JSON and clipboard exports write dates and times as ISO 8601 text,
+   not epoch numbers.
+5. `VisualizationFactory`, deprecated since `0.3.1`, is removed from
    `/advanced`.
 
 An integration that does none of these upgrades with a version bump. The
@@ -149,8 +151,9 @@ back as arrays.
 
 CSV, JSON and clipboard exports change in the same way for a UNION, which
 they write as `{"tag": value}`, and for `TIME WITH TIME ZONE` and `TIME_NS`,
-which they write as DuckDB's text. A file a downstream job reads may change
-for those columns; see
+which they write as DuckDB's text; dates and times change too, see
+[§4](#4-exports-write-dates-and-times-as-iso-8601-text). A file a downstream
+job reads may change for those columns; see
 [Loading data → Exporting](../guides/loading-data.md#exporting).
 
 **Who is affected.** Code that reads a MAP, UNION, `TIME WITH TIME ZONE` or
@@ -252,6 +255,68 @@ See
 
 **Automated migration.** `None — copy the worker file in the build or deploy
 step, from the installed package, so that it changes with every upgrade.`
+
+### 4. Exports write dates and times as ISO 8601 text
+
+**What changed.** CSV, JSON and clipboard exports write `DATE`, `TIME`,
+`TIMESTAMP` and `TIMESTAMP WITH TIME ZONE` columns as text, every digit kept
+and trailing zeros dropped. JSON puts `T` between date and time; CSV and the
+clipboard put a space, the form spreadsheets read as a date and time.
+
+| Column                     | `0.8`                                                                | `0.9` JSON                        | `0.9` CSV and clipboard                      |
+| -------------------------- | -------------------------------------------------------------------- | --------------------------------- | -------------------------------------------- |
+| `DATE`                     | `1704153600000`                                                      | `"2024-01-02"`                    | `2024-01-02`                                 |
+| `TIME`                     | `11045500000` (µs since midnight)                                    | `"03:04:05.5"`                    | `03:04:05.5`                                 |
+| `TIMESTAMP`                | `1704164645123.456`                                                  | `"2024-01-02T03:04:05.123456"`    | `2024-01-02 03:04:05.123456`                 |
+| `TIMESTAMP_NS`             | `1704164645123.4568`, nanoseconds lost                               | `"2024-01-02T03:04:05.123456789"` | `2024-01-02 03:04:05.123456789`              |
+| `TIMESTAMP WITH TIME ZONE` | `1704164645500`                                                      | `"2024-01-02T03:04:05.5Z"`        | `2024-01-02 03:04:05.5Z`                     |
+| `infinity`                 | `185542587100800000` for a `DATE`; most timestamps failed the export | `"infinity"`, `"-infinity"`       | `infinity`, `'-infinity` (the formula guard) |
+| a date before year 1       | a negative number, `-63517824000000`                                 | `"0044-03-15 (BC)"`               | `0044-03-15 (BC)`                            |
+
+A `TIMESTAMP WITH TIME ZONE` is written in UTC, whatever time zone the table
+was loaded in; a `TIMESTAMP` has no zone and is written without one. Dates
+inside a nested value were DuckDB's text already, and still are. Parquet
+export still writes dates natively, and `getColumnValues`, `getCellValue` and
+`bridge.query` still read a date or timestamp as epoch milliseconds.
+
+**Who is affected.** Code and pipelines that read a CSV or JSON export, or
+pasted rows, and treat a date column as a number: `new Date(row.created_at)`
+on a number, `pd.to_datetime(df.created_at, unit='ms')`, a downstream column
+typed `BIGINT`.
+
+**Why.** Epoch numbers showed as meaningless numbers in a spreadsheet,
+rounded a `TIMESTAMP_NS` value's nanoseconds away, and could not tell a
+`TIMESTAMP` from a `TIMESTAMP WITH TIME ZONE`. Most timestamps holding
+`infinity` failed the whole export.
+
+**Before**
+
+```ts
+const [row] = JSON.parse(await exportToJSON(name, { scope: 'all' }, context));
+new Date(row.created_at); // TIMESTAMP: epoch milliseconds
+```
+
+**After**
+
+```ts
+const [row] = JSON.parse(await exportToJSON(name, { scope: 'all' }, context));
+// A TIMESTAMP has no zone, and JavaScript reads a date and time without one
+// as local time. Append 'Z' to read it as UTC, as 0.8's numbers were:
+new Date(`${row.created_at}Z`);
+new Date(row.seen_at); // a TIMESTAMP WITH TIME ZONE ends in 'Z' already
+```
+
+JavaScript's `Date` gives an Invalid Date for `infinity` and for a year past
+9999, and misreads a BC date: `new Date('0044-03-15 (BC) 10:00:00Z')` is
+2044-03-15. Check for `infinity` and `(BC)` before parsing where a column may
+hold them. pandas reads the CSV with
+`pd.read_csv(path, parse_dates=['created_at'])`, and DuckDB's `read_csv`
+detects the types.
+
+**Automated migration.** `N/A — manual review required because only you know
+which readers of the files expect numbers.` Grep for `exportToCSV`,
+`exportToJSON`, `exportFromState`, `exportJSONFromState`,
+`copyRowsToClipboard` and `unit='ms'`.
 
 ### 5. `VisualizationFactory` is removed
 
@@ -384,6 +449,8 @@ grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizat
       `TIME_NS` column updated.
 - [ ] A self-hosted worker file replaced with the new version's; offline or
       under a strict CSP, the `json` extension mirrored.
+- [ ] Every reader of a CSV or JSON export, or of copied rows, reads date
+      and time columns as ISO 8601 text, not numbers.
 - [ ] No `VisualizationFactory` left: its calls go to
       `defaultVisualizationRegistry` or a `VisualizationRegistry` of your own.
 - [ ] `npm run build` passes.

@@ -66,6 +66,8 @@ export async function copyToClipboard(data: string, format: 'text' | 'html'): Pr
  * writes nothing, and the clipboard keeps what it holds.
  * Cells are written as {@link exportToCSV} writes them, so a nested value
  * (LIST, STRUCT, MAP, …) is standard JSON: `["a","b"]`, `{"x":1.25}`.
+ * Dates and times are written as spreadsheets read them, with a space
+ * between date and time: `2024-01-02 03:04:05`.
  *
  * @param rows   - 0-based row indices (into the sorted/filtered view) to
  *   copy; an index past the view's last row copies nothing

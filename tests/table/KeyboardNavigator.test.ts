@@ -688,10 +688,10 @@ describe('KeyboardNavigator', () => {
   // ---- Header row cursor, F2 controls mode ----
 
   describe('header row + controls mode', () => {
-    function setupWithHeaders(rows = 100) {
+    function setupWithHeaders(rows = 100, columns: ColumnSchema[] = schema) {
       const state = createTableState();
-      state.schema.set(schema);
-      initializeColumnsFromSchema(state, schema);
+      state.schema.set(columns);
+      initializeColumnsFromSchema(state, columns);
       state.totalRows.set(rows);
       const actions = new StateActions(state, mockBridge);
 
@@ -702,7 +702,7 @@ describe('KeyboardNavigator', () => {
       root.appendChild(grid);
       const bodyScroll = document.createElement('div');
 
-      const headers = schema.map(
+      const headers = columns.map(
         (col, i) => new ColumnHeader(col, state, actions, { cellId: `dt-t1-colheader-${i}` }),
       );
       for (const h of headers) grid.appendChild(h.getElement());
@@ -1115,6 +1115,41 @@ describe('KeyboardNavigator', () => {
         // thing double-clicking the resize handle does.
         expect(state.columnWidths.get().has('b')).toBe(false);
         expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 150));
+        cleanup();
+      });
+
+      /** The schema with `b` a list column: 168 px until it is sized. */
+      const withNestedB = (): ColumnSchema[] =>
+        schema.map((c) =>
+          c.name === 'b' ? { ...c, type: 'nested', originalType: 'VARCHAR[]' } : c,
+        );
+
+      it('Left / Right step a nested column from its 168 px default', () => {
+        const { state, root, announce, cleanup } = enterLayout(
+          setupWithHeaders(100, withNestedB()),
+        );
+
+        keydown(root, { key: 'ArrowLeft' });
+        // 168 − 16. A step from 150 would take the 168 px column to 134 at once.
+        expect(state.columnWidths.get().get('b')).toBe(152);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 152));
+
+        keydown(root, { key: 'ArrowRight' });
+        keydown(root, { key: 'ArrowRight' });
+        expect(state.columnWidths.get().get('b')).toBe(184);
+        cleanup();
+      });
+
+      it('Backspace resets a nested column to its own 168 px default', () => {
+        const { state, root, announce, cleanup } = enterLayout(
+          setupWithHeaders(100, withNestedB()),
+        );
+        keydown(root, { key: 'End' });
+
+        keydown(root, { key: 'Backspace' });
+
+        expect(state.columnWidths.get().has('b')).toBe(false);
+        expect(announce).toHaveBeenLastCalledWith(a11y.columnWidthAnnouncement('b', 168));
         cleanup();
       });
 

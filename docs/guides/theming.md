@@ -223,17 +223,18 @@ text in stretched cells both follow whatever the scroller is using.
 The rest of the table is ordinary CSS and overrides normally.
 
 **A column's width includes its padding and border.** Header cells and body
-cells are `box-sizing: border-box`, so the width in `columnWidths` (150 px
-unless set with `setColumnWidth` or a resize) is the space the column takes,
-on any page, with or without a global `box-sizing` reset. The same goes for a
-row's height and `rowHeight`. Restyling the padding of `.dt-cell` or
-`.dt-col-header` changes how much text fits, not where columns fall. Don't set
-their `box-sizing` back to `content-box`: the header, the body, pinned columns
-and keyboard navigation all place columns by adding widths up, and they only
-agree while each column takes exactly its width. A column is never drawn
-narrower than 50 px, the resize minimum, which leaves room for its padding and
-border (25 px at the default font size); a smaller width set through
-`setColumnWidth` is drawn 50 px wide.
+cells are `box-sizing: border-box`, so the width in `columnWidths` (150 px, or
+168 px for a nested or JSON column, unless set with `setColumnWidth` or a
+resize) is the space the column takes, on any page, with or without a global
+`box-sizing` reset. The same goes for a row's height and `rowHeight`.
+Restyling the padding of `.dt-cell` or `.dt-col-header` changes how much text
+fits, not where columns fall. Don't set their `box-sizing` back to
+`content-box`: the header, the body, pinned columns and keyboard navigation
+all place columns by adding widths up, and they only agree while each column
+takes exactly its width. A column is never drawn narrower than 50 px, the
+resize minimum, which leaves room for its padding and border (25 px at the
+default font size); a smaller width set through `setColumnWidth` is drawn
+50 px wide.
 
 These tokens size the table's _contents_. They are not how you size the table
 itself: the mount container's height comes from your own CSS, is mandatory,

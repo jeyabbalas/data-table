@@ -192,6 +192,37 @@ export function outlinedColumnType(
   return null;
 }
 
+/** `isInspectableColumn`'s answers, by schema entry: it runs for every cell rendered. */
+const inspectableColumns = new WeakMap<ColumnSchema, boolean>();
+
+/**
+ * Whether the value inspector opens a column's values: a nested column
+ * (`type: 'nested'`: LIST, ARRAY, STRUCT, MAP, UNION, VARIANT) or a JSON one
+ * (`type: 'string'` with `originalType` `JSON`). A cell shows only part of
+ * such a value: a nested one's text is bounded, and any text runs on past
+ * the column's edge. The inspector shows all of it, as a tree.
+ *
+ * The columns whose header shows a type outline ({@link outlinedColumnType}):
+ * the header's extract button, the cells' inspect icon, the outline and the
+ * column's 168 px default width go together.
+ *
+ * @example
+ * ```ts
+ * isInspectableColumn({ name: 'tags', type: 'nested', nullable: true, originalType: 'VARCHAR[]' }); // true
+ * isInspectableColumn({ name: 'doc', type: 'string', nullable: true, originalType: 'JSON' });       // true
+ * isInspectableColumn({ name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' });   // false
+ * ```
+ */
+export function isInspectableColumn(column: ColumnSchema | undefined): boolean {
+  if (!column) return false;
+  let inspectable = inspectableColumns.get(column);
+  if (inspectable === undefined) {
+    inspectable = outlinedColumnType(column) !== null;
+    inspectableColumns.set(column, inspectable);
+  }
+  return inspectable;
+}
+
 /**
  * The type text a column header shows: the `label` outline of a nested or
  * JSON column's type (`[integer]`, `struct(3)`, `json`), and the library's

@@ -61,6 +61,11 @@ export interface TableBodyHarnessOptions {
   bridge?: RowFetchBridgeOptions;
   /** Undo history for the body's actions (default none). */
   undoManager?: UndoManager;
+  /**
+   * The table's columns (default {@link HARNESS_SCHEMA}). The mock bridge
+   * answers for {@link HARNESS_COLUMNS}, so name them `id` and `tag`.
+   */
+  schema?: ColumnSchema[];
 }
 
 export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBodyHarness {
@@ -71,7 +76,7 @@ export function setupTableBody(options: TableBodyHarnessOptions = {}): TableBody
 
   const state: TableState = createTableState();
   state.tableName.set('t');
-  initializeColumnsFromSchema(state, HARNESS_SCHEMA);
+  initializeColumnsFromSchema(state, options.schema ?? HARNESS_SCHEMA);
   state.totalRows.set(totalRows);
   state.filteredRows.set(totalRows);
 

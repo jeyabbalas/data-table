@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ColumnHeader, type ColumnHeaderOptions } from '@/table/ColumnHeader';
-import { createTableState } from '@/core/State';
+import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import { defaultStrings, mergeStrings } from '@/core/Strings';
@@ -463,6 +463,115 @@ describe('ColumnHeader', () => {
       pressHandle(header);
       header.destroy();
       expect(recorder.held).toEqual([]);
+    });
+  });
+
+  describe('width', () => {
+    // Six 22 px controls with 2 px between them, and the header's padding
+    // and border: a nested or JSON column needs 167 px for its own header.
+    const tags: ColumnSchema = {
+      name: 'tags',
+      type: 'nested',
+      nullable: true,
+      originalType: 'VARCHAR[]',
+    };
+    const doc: ColumnSchema = { name: 'doc', type: 'string', nullable: true, originalType: 'JSON' };
+
+    // The width comes from the table's column layout, which knows a column
+    // by its entry in the table's schema.
+    beforeEach(() => {
+      initializeColumnsFromSchema(state, [column, tags, doc]);
+    });
+
+    function doubleClickResizeHandle(header: ColumnHeader): void {
+      header
+        .getElement()
+        .querySelector('.dt-col-resize-handle')!
+        .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    }
+
+    it('is 168 for a nested or JSON column without a width of its own, 150 for another', () => {
+      for (const [c, width] of [
+        [tags, 168],
+        [doc, 168],
+        [column, 150],
+      ] as const) {
+        const header = new ColumnHeader(c, state, actions);
+        expect(header.getWidth(), c.name).toBe(width);
+        header.destroy();
+      }
+    });
+
+    it('does not depend on the extract button', () => {
+      // With extraction off (`extractColumns: false`) the header has five
+      // controls, and the column is still 168 px wide.
+      for (const onExtractClick of [vi.fn(), undefined]) {
+        const header = new ColumnHeader(tags, state, actions, { onExtractClick });
+        expect(header.getElement().querySelector('.dt-col-extract-btn') !== null).toBe(
+          onExtractClick !== undefined,
+        );
+        expect(header.getWidth()).toBe(168);
+        header.destroy();
+      }
+    });
+
+    it('takes a keyboard step from 168', () => {
+      const header = new ColumnHeader(tags, state, actions);
+      // 168 − 16, not the 134 a step from 150 gave.
+      expect(header.resizeBy(-16)).toBe(152);
+      expect(state.columnWidths.get().get('tags')).toBe(152);
+      header.destroy();
+    });
+
+    it('keeps a width that was set, even 150', () => {
+      actions.setColumnWidth('tags', 150);
+      const header = new ColumnHeader(tags, state, actions);
+      expect(header.getWidth()).toBe(150);
+      expect(header.resizeBy(16)).toBe(166);
+      header.destroy();
+    });
+
+    it('animates a nested column back to 168 px on a double-click of its resize handle', () => {
+      actions.setColumnWidth('tags', 300);
+      const header = new ColumnHeader(tags, state, actions);
+      header.getElement().style.width = '300px';
+      document.body.appendChild(header.getElement());
+
+      doubleClickResizeHandle(header);
+
+      expect(header.getElement().style.width).toBe('168px');
+      expect(state.columnWidths.get().has('tags')).toBe(false);
+      expect(header.getWidth()).toBe(168);
+      header.destroy();
+    });
+
+    it('animates any other column back to 150 px', () => {
+      actions.setColumnWidth('test_column', 300);
+      const header = new ColumnHeader(column, state, actions);
+      header.getElement().style.width = '300px';
+      document.body.appendChild(header.getElement());
+
+      doubleClickResizeHandle(header);
+
+      expect(header.getElement().style.width).toBe('150px');
+      expect(state.columnWidths.get().has('test_column')).toBe(false);
+      header.destroy();
+    });
+
+    it('follows its column’s schema entry, without being rebuilt for it', () => {
+      // A derived column edited from a number to a list keeps its name and
+      // gets a new schema entry.
+      const header = new ColumnHeader(column, state, actions);
+      document.body.appendChild(header.getElement());
+      expect(header.getWidth()).toBe(150);
+
+      state.schema.set([{ ...column, type: 'nested', originalType: 'INTEGER[]' }, tags, doc]);
+      expect(header.getWidth()).toBe(168);
+
+      actions.setColumnWidth('test_column', 300);
+      doubleClickResizeHandle(header);
+      expect(header.getElement().style.width).toBe('168px');
+      header.destroy();
     });
   });
 

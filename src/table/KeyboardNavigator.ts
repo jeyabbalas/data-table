@@ -45,7 +45,7 @@ import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyRowsToClipboard } from '../export/Clipboard';
 import type { ColumnHeader } from './ColumnHeader';
-import { DEFAULT_COLUMN_WIDTH } from './ColumnLayout';
+import { getColumnLayout } from './ColumnLayout';
 import { clampUnpinnedIndex } from './ColumnReorder';
 import { revealColumnIn } from './ColumnWindowController';
 import type { TableBody } from './TableBody';
@@ -801,11 +801,11 @@ export class KeyboardNavigator {
         this.claimGridFocus();
         this.actions.resetColumnWidth(layout.column);
         this.scrollFocusedCellIntoView(HEADER_ROW_INDEX, layout.column);
-        const header = this.findHeader(layout.column);
+        // The column's own default now: 168 px for a nested or JSON column.
         this.announce(
           this.messages.a11y.columnWidthAnnouncement(
             layout.column,
-            header?.getWidth() ?? DEFAULT_COLUMN_WIDTH,
+            getColumnLayout(this.state).widthOf(layout.column),
           ),
         );
         return true;

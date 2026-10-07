@@ -53,16 +53,25 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/** {@link SCHEMA} with `a` a list column and `b` a JSON one: 168 px each until sized. */
+const NESTED_SCHEMA: ColumnSchema[] = SCHEMA.map((column) =>
+  column.name === 'a'
+    ? { ...column, type: 'nested', originalType: 'INTEGER[]' }
+    : column.name === 'b'
+      ? { ...column, type: 'string', originalType: 'JSON' }
+      : column,
+);
+
 describe('TableContainer pinned styles', () => {
   /** Headers but no body: the header row and the divider are what is checked. */
-  function setup() {
+  function setup(schema = SCHEMA, options: { extractColumns?: boolean } = {}) {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const state = createTableState();
     const actions = new StateActions(state, mockBridge());
-    const container = new TableContainer(host, state, actions);
+    const container = new TableContainer(host, state, actions, undefined, options);
     state.tableName.set('t');
-    initializeColumnsFromSchema(state, SCHEMA);
+    initializeColumnsFromSchema(state, schema);
     const header = (column: string) =>
       host.querySelector<HTMLElement>(`.dt-col-header[data-column="${column}"]`)!;
     const divider = () => host.querySelector<HTMLElement>('.dt-pinned-demarcation');
@@ -112,6 +121,39 @@ describe('TableContainer pinned styles', () => {
 
     // `NaNpx` is dropped by the browser, which left the previous 200px.
     expect(header('c').style.width).toBe('150px');
+    container.destroy();
+  });
+
+  it('gives a nested or JSON column 168 px, and places the next pinned column after it', () => {
+    const { actions, container, header, divider } = setup(NESTED_SCHEMA);
+    expect(['a', 'b', 'c'].map((c) => header(c).style.width)).toEqual(['168px', '168px', '150px']);
+
+    actions.toggleColumnPin('a');
+    actions.toggleColumnPin('b');
+    actions.toggleColumnPin('c');
+
+    expect(header('b').style.left).toBe('168px');
+    expect(header('c').style.left).toBe('336px');
+    expect(divider()!.style.left).toBe('486px');
+    container.destroy();
+  });
+
+  it('keeps a nested column 168 px with extraction off', () => {
+    // Five controls instead of six, and the same width: it does not depend
+    // on the table's options.
+    const { container, header } = setup(NESTED_SCHEMA, { extractColumns: false });
+    expect(header('a').querySelector('.dt-col-extract-btn')).toBeNull();
+    expect(header('a').style.width).toBe('168px');
+    container.destroy();
+  });
+
+  it('keeps a width set on a nested column, and resets it to 168 px', () => {
+    const { actions, container, header } = setup(NESTED_SCHEMA);
+    actions.setColumnWidth('a', 150);
+    expect(header('a').style.width).toBe('150px');
+
+    actions.resetColumnWidth('a');
+    expect(header('a').style.width).toBe('168px');
     container.destroy();
   });
 });
@@ -185,6 +227,23 @@ describe('TableBody pinned and sized cells', () => {
     await renderRows(harness);
 
     expect(cell(harness, 'tag').style.width).toBe('150px');
+    harness.body.destroy();
+  });
+
+  it('gives a nested column’s cells 168 px, and places the next pinned column after it', async () => {
+    // `tag` a list column, first.
+    const harness = setupTableBody({
+      schema: [
+        { name: 'tag', type: 'nested', nullable: true, originalType: 'VARCHAR[]' },
+        { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+      ],
+    });
+    harness.state.pinnedColumns.set(['tag', 'id']);
+    await renderRows(harness);
+
+    expect(cell(harness, 'tag').style.width).toBe('168px');
+    expect(cell(harness, 'id').style.width).toBe('150px');
+    expect(cell(harness, 'id').style.left).toBe('168px');
     harness.body.destroy();
   });
 });

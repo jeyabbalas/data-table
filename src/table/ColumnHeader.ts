@@ -27,7 +27,7 @@ import { columnTypeLabel, columnTypeSpoken, columnTypeTitle } from '../nested/ty
 import type { AnnotationPopover } from './AnnotationPopover';
 import { isInspectableColumn } from './Cell';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
-import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, resolveColumnWidth } from './ColumnLayout';
+import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, getColumnLayout } from './ColumnLayout';
 import { ColumnResizer } from './ColumnResizer';
 
 /**
@@ -415,6 +415,7 @@ export class ColumnHeader {
       () => this.getColumnCells(),
       {
         classPrefix: p,
+        getDefaultWidth: () => getColumnLayout(this.state).defaultWidthOf(this.column.name),
         onDragStart: () => {
           this.actions.beginColumnWidthChange();
           this.releaseResizeHold?.();
@@ -1044,16 +1045,25 @@ export class ColumnHeader {
   }
 
   /**
-   * The current width of this column, in pixels.
+   * The current width of this column, in pixels: the width the table lays it
+   * out at.
    *
    * Reads `columnWidths` rather than the element, so it reports the state the
    * next resize step will build on even before layout has flushed. Resolved
-   * the way the renderer resolves it: rounded to a whole pixel, and 150px when
-   * the column has never been sized or its stored width is not a finite,
-   * non-negative number.
+   * by the table's column layout, as the renderer resolves it: rounded to a
+   * whole pixel, and the column's default width when it has never been sized
+   * or its stored width is not a finite, non-negative number. The default
+   * follows the column's entry in the table's `schema`: 168px for a nested or
+   * JSON column, 150px for any other, and for a column the schema does not
+   * have.
+   *
+   * @example
+   * ```typescript
+   * header.getWidth(); // → 168 for an unsized `VARCHAR[]` column
+   * ```
    */
   getWidth(): number {
-    return resolveColumnWidth(this.state.columnWidths.get().get(this.column.name));
+    return getColumnLayout(this.state).widthOf(this.column.name);
   }
 
   /**

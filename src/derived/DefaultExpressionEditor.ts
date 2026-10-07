@@ -1,25 +1,33 @@
 /**
  * DefaultExpressionEditor — built-in textarea implementation of ExpressionEditor.
  *
- * Provides a monospace textarea with error display and column hints.
- * Used when no custom ExpressionEditorFactory is provided.
+ * Provides a monospace textarea with error display and column hints. An
+ * alternative to the default CodeMirrorExpressionEditor, for an
+ * ExpressionEditorFactory.
  */
 
 import { defaultStrings, type Strings } from '../core/Strings';
-import type { ExpressionEditor } from './ExpressionEditorTypes';
+import type { ExpressionEditor, ExpressionEditorConfig } from './ExpressionEditorTypes';
 import type { CompletionContext } from './types';
 
 /**
- * Plain-textarea fallback that satisfies {@link ExpressionEditor} when no
- * custom factory is supplied. Renders a monospace textarea, an error slot,
- * and a column-hint slot. Apps that want SQL-aware autocompletion should
- * pass `editorFactory: () => new CodeMirrorExpressionEditor(...)` instead.
+ * Plain-textarea implementation of {@link ExpressionEditor}: a monospace
+ * textarea, an error slot, and a column-hint slot, without SQL-aware
+ * autocompletion. The built-in dialogs use `CodeMirrorExpressionEditor`;
+ * pass `editorFactory: (c, ctx, config) => new DefaultExpressionEditor(c,
+ * ctx, 'dt', undefined, config)` to `createDataTable()` to use this one
+ * instead.
  *
  * The optional 4th `messages` constructor argument lets custom factories
  * forward the table's i18n bundle so the placeholder text and the
  * "Available columns:" label localize alongside the rest of the UI.
  * When omitted (the bare-bones `new DefaultExpressionEditor(c, ctx)`
  * call), English defaults apply.
+ *
+ * The optional 5th, the `config` a factory gets, sets the placeholder and
+ * the textarea's accessible name (`aria-label`) for the dialog it opens in;
+ * one left out, or an empty name, comes from `messages`
+ * (`derived.expressionPlaceholder`, `derived.expressionLabel`).
  */
 export class DefaultExpressionEditor implements ExpressionEditor {
   readonly element: HTMLElement;
@@ -34,6 +42,7 @@ export class DefaultExpressionEditor implements ExpressionEditor {
     context: CompletionContext,
     classPrefix = 'dt',
     messages: Strings = defaultStrings,
+    config?: ExpressionEditorConfig,
   ) {
     this.prefix = classPrefix;
     this.messages = messages;
@@ -45,7 +54,14 @@ export class DefaultExpressionEditor implements ExpressionEditor {
     this.textarea = document.createElement('textarea');
     this.textarea.className = `${this.prefix}-expr-editor-input`;
     this.textarea.rows = 4;
-    this.textarea.placeholder = this.messages.derived.expressionPlaceholder;
+    this.textarea.placeholder = config?.placeholder ?? messages.derived.expressionPlaceholder;
+    // `||`: an empty label leaves the textarea unnamed; an empty placeholder is fine.
+    this.textarea.setAttribute(
+      'aria-label',
+      config?.ariaLabel ||
+        messages.derived.expressionLabel ||
+        defaultStrings.derived.expressionLabel,
+    );
     this.textarea.spellcheck = false;
     this.textarea.autocomplete = 'off';
     this.element.appendChild(this.textarea);

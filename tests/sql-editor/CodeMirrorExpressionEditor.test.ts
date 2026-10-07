@@ -148,6 +148,40 @@ describe('CodeMirrorExpressionEditor', () => {
     expect(() => editor.focus()).not.toThrow();
   });
 
+  it('has an English placeholder and accessible name by default', () => {
+    editor = new CodeMirrorExpressionEditor(container, context);
+
+    const content = editor.element.querySelector('.cm-content')!;
+    expect(content.getAttribute('aria-label')).toBe('SQL Expression');
+    expect(content.getAttribute('aria-placeholder')).toBe(
+      'Enter SQL expression, e.g. price * quantity',
+    );
+  });
+
+  it('takes its placeholder and accessible name from config', () => {
+    editor = new CodeMirrorExpressionEditor(container, context, 'dt', {
+      placeholder: 'Saisir une expression SQL, ex. prix * quantité',
+      ariaLabel: 'Expression SQL',
+    });
+
+    const content = editor.element.querySelector('.cm-content')!;
+    expect(content.getAttribute('aria-label')).toBe('Expression SQL');
+    expect(content.getAttribute('aria-placeholder')).toBe(
+      'Saisir une expression SQL, ex. prix * quantité',
+    );
+  });
+
+  it('keeps a name when the config gives an empty one, but not a placeholder', () => {
+    editor = new CodeMirrorExpressionEditor(container, context, 'dt', {
+      placeholder: '',
+      ariaLabel: '',
+    });
+
+    const content = editor.element.querySelector('.cm-content')!;
+    expect(content.getAttribute('aria-label')).toBe('SQL Expression');
+    expect(content.getAttribute('aria-placeholder')).toBe('');
+  });
+
   it('should support custom class prefix', () => {
     editor = new CodeMirrorExpressionEditor(container, context, 'my');
 

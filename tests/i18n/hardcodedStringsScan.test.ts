@@ -5,10 +5,15 @@
  * The scanner walks every TS file under src/ (skipping the worker, types,
  * and known scaffolding) and extracts string literals attached to common
  * UI sinks: `textContent =`, `placeholder =`, `setAttribute('aria-label'`
- * / `'title'` / `'placeholder'`. Each matched literal must EITHER be
+ * / `'title'` / `'placeholder'`, CodeMirror's `placeholder('…')` (also as
+ * the fallback in `placeholder(x ?? '…')`), and an `'aria-label': '…'`
+ * entry in an attribute object. Each matched literal must EITHER be
  * permitted by the explicit allowlist below OR reference the live
  * messages object somewhere in the same file (heuristic — catches
  * `this.messages.foo`, `messages.foo.bar`, `Strings`-typed parameter use).
+ * That heuristic does not cover the last two sinks: their literal sits in
+ * the sink call itself, the fallback to a `messages` value at best, so a
+ * `messages` reference elsewhere in the file does not excuse it.
  *
  * The intent is preventive: any new hardcoded English string added in a
  * later phase will fail this test, forcing the author to either route it
@@ -16,11 +21,13 @@
  *
  * The Phase-8 audit identified 3 such strings (DefaultExpressionEditor.ts
  * placeholder + label, ExportDialog.ts include-system-columns label) and
- * routed them through Strings; this scanner locks the result.
+ * routed them through Strings; this scanner locks the result. The SQL
+ * editor's English placeholder and `aria-label` got past the first three
+ * sinks, so the last two came with moving those to Strings as well.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const ROOT = join(__dirname, '..', '..', 'src');
 
@@ -70,14 +77,51 @@ const LITERAL_ALLOWLIST = new Set<string>([
   // heuristic to inspect.
 ]);
 
-const SINK_PATTERNS: RegExp[] = [
+/**
+ * A UI sink: its pattern captures the literal in group 2. A `strict` sink's
+ * literal is checked even in a file that routes other text through
+ * `messages` (see the header).
+ */
+interface Sink {
+  pattern: RegExp;
+  strict: boolean;
+}
+
+const SINKS: Sink[] = [
   // .textContent = '...'
-  /\.textContent\s*=\s*(['"`])([^'"`\n]{1,200})\1/g,
+  { pattern: /\.textContent\s*=\s*(['"`])([^'"`\n]{1,200})\1/g, strict: false },
   // .placeholder = '...'
-  /\.placeholder\s*=\s*(['"`])([^'"`\n]{1,200})\1/g,
+  { pattern: /\.placeholder\s*=\s*(['"`])([^'"`\n]{1,200})\1/g, strict: false },
   // setAttribute('aria-label' | 'title' | 'placeholder', '...')
-  /setAttribute\s*\(\s*['"](?:aria-label|title|placeholder)['"]\s*,\s*(['"`])([^'"`\n]{1,200})\1/g,
+  {
+    pattern:
+      /setAttribute\s*\(\s*['"](?:aria-label|title|placeholder)['"]\s*,\s*(['"`])([^'"`\n]{1,200})\1/g,
+    strict: false,
+  },
+  // CodeMirror's placeholder('...'), or placeholder(x ?? '...')
+  {
+    pattern: /\bplaceholder\(\s*(?:[^()'"`\n]*\?\?\s*)?(['"`])([^'"`\n]{1,200})\1/g,
+    strict: true,
+  },
+  // { 'aria-label': '...' }, e.g. in EditorView.contentAttributes.of(...)
+  { pattern: /['"]aria-label['"]\s*:\s*(['"`])([^'"`\n]{1,200})\1/g, strict: true },
 ];
+
+interface SinkLiteral {
+  literal: string;
+  strict: boolean;
+}
+
+/** The literals the sinks find in `text`, sink by sink. */
+function sinkLiterals(text: string): SinkLiteral[] {
+  const literals: SinkLiteral[] = [];
+  for (const { pattern, strict } of SINKS) {
+    pattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(text)) !== null) literals.push({ literal: m[2]!, strict });
+  }
+  return literals;
+}
 
 function listFiles(dir: string): string[] {
   const out: string[] = [];
@@ -108,8 +152,9 @@ function stripComments(src: string): string {
     .replace(/(^|[^:\\])\/\/[^\n]*/g, (_, prefix: string) => prefix);
 }
 
+/** `src/…`, the form ALLOWLIST keys take, in a worktree and on Windows too. */
 function relPath(absolute: string): string {
-  return absolute.split('/data-table/').slice(-1)[0]!;
+  return relative(join(ROOT, '..'), absolute).split(sep).join('/');
 }
 
 interface Hit {
@@ -142,35 +187,31 @@ function isProseLike(s: string): boolean {
   return s.includes(' ') || /[.…?!]/.test(s);
 }
 
+/** The literals in one file, its comments stripped, that bypass Strings. */
+function fileHits(rel: string, text: string): Hit[] {
+  const allow = ALLOWLIST[rel];
+  if (allow && allow[0] === '*') return [];
+
+  const hits: Hit[] = [];
+  for (const { literal, strict } of sinkLiterals(text)) {
+    if (LITERAL_ALLOWLIST.has(literal)) continue;
+    if (allow?.includes(literal)) continue;
+    if (!isProseLike(literal)) continue;
+    // File-level heuristic: a file that already routes some text
+    // through messages.* gets the benefit of the doubt for the
+    // remaining hardcoded strings inside it (typically format
+    // pieces, ARIA tokens, dev-only error messages). Not at a strict sink.
+    if (!strict && routesThroughMessages(text)) continue;
+    hits.push({ file: rel, literal });
+  }
+  return hits;
+}
+
 describe('Phase 8 — i18n hardcoded English string scan', () => {
   it('every UI-sink string literal is either translatable or allowlisted', () => {
-    const files = listFiles(ROOT);
-    const hits: Hit[] = [];
-
-    for (const abs of files) {
-      const rel = relPath(abs);
-      const allow = ALLOWLIST[rel];
-      if (allow && allow[0] === '*') continue;
-
-      const text = stripComments(readFileSync(abs, 'utf8'));
-
-      for (const pattern of SINK_PATTERNS) {
-        pattern.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = pattern.exec(text)) !== null) {
-          const lit = m[2]!;
-          if (LITERAL_ALLOWLIST.has(lit)) continue;
-          if (allow?.includes(lit)) continue;
-          if (!isProseLike(lit)) continue;
-          // File-level heuristic: a file that already routes some text
-          // through messages.* gets the benefit of the doubt for the
-          // remaining hardcoded strings inside it (typically format
-          // pieces, ARIA tokens, dev-only error messages).
-          if (routesThroughMessages(text)) continue;
-          hits.push({ file: rel, literal: lit });
-        }
-      }
-    }
+    const hits = listFiles(ROOT).flatMap((abs) =>
+      fileHits(relPath(abs), stripComments(readFileSync(abs, 'utf8'))),
+    );
 
     if (hits.length > 0) {
       const detail = hits.map((h) => `  ${h.file}: ${JSON.stringify(h.literal)}`).join('\n');
@@ -183,5 +224,42 @@ describe('Phase 8 — i18n hardcoded English string scan', () => {
     }
 
     expect(hits).toEqual([]);
+  });
+
+  // Once src/ holds no such literal, only this keeps the patterns honest.
+  it('finds the literal at each sink, and none in an expression', () => {
+    const text = [
+      `el.textContent = 'Row count';`,
+      `input.placeholder = 'Search columns';`,
+      `btn.setAttribute('aria-label', 'Close panel');`,
+      `placeholder('Type a query'),`,
+      `placeholder(config?.placeholder ?? 'Type a query'),`,
+      `EditorView.contentAttributes.of({ 'aria-label': 'Query editor' }),`,
+      `placeholder(config?.placeholder ?? defaultStrings.derived.expressionPlaceholder),`,
+      `EditorView.contentAttributes.of({ 'aria-label': config?.ariaLabel || label }),`,
+    ].join('\n');
+
+    expect(sinkLiterals(text).map((s) => s.literal)).toEqual([
+      'Row count',
+      'Search columns',
+      'Close panel',
+      'Type a query',
+      'Type a query',
+      'Query editor',
+    ]);
+  });
+
+  it('excuses no literal at a CodeMirror sink because the file reads messages', () => {
+    const text = [
+      `label.textContent = this.messages.derived.expressionLabel;`,
+      `el.textContent = 'Row count';`,
+      `placeholder(config?.placeholder ?? 'Type a query'),`,
+      `EditorView.contentAttributes.of({ 'aria-label': 'Query editor' }),`,
+    ].join('\n');
+
+    expect(fileHits('src/x.ts', text)).toEqual([
+      { file: 'src/x.ts', literal: 'Type a query' },
+      { file: 'src/x.ts', literal: 'Query editor' },
+    ]);
   });
 });

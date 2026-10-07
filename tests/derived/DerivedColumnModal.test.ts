@@ -3,9 +3,12 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { DerivedColumnModal } from '@/derived/DerivedColumnModal';
+import { DefaultExpressionEditor } from '@/derived/DefaultExpressionEditor';
+import type { ExpressionEditorFactory } from '@/derived/ExpressionEditorTypes';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { EditorView } from '@codemirror/view';
@@ -229,6 +232,56 @@ describe('DerivedColumnModal', () => {
       .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn).not.toBeNull();
     expect(createBtn.disabled).toBe(true);
+  });
+
+  it('names the SQL editor and sets its placeholder from messages', () => {
+    modal.destroy();
+    modal = new DerivedColumnModal(state, actions, {
+      messages: mergeStrings(defaultStrings, {
+        derived: {
+          expressionLabel: 'Expression SQL',
+          expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+        },
+      }),
+    });
+    document.body.appendChild(modal.getElement());
+    modal.open();
+
+    const content = modal.getElement().querySelector('.cm-content')!;
+    expect(content.getAttribute('aria-placeholder')).toBe(
+      'Saisir une expression SQL, ex. prix * quantité',
+    );
+    expect(content.getAttribute('aria-label')).toBe('Expression SQL');
+  });
+
+  it('gives an editorFactory the placeholder and name from messages', () => {
+    let received: unknown;
+    const editorFactory: ExpressionEditorFactory = (container, context, config) => {
+      received = config;
+      return new DefaultExpressionEditor(container, context, 'dt', undefined, config);
+    };
+    modal.destroy();
+    modal = new DerivedColumnModal(state, actions, {
+      editorFactory,
+      messages: mergeStrings(defaultStrings, {
+        derived: {
+          expressionLabel: 'Expression SQL',
+          expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+        },
+      }),
+    });
+    document.body.appendChild(modal.getElement());
+    modal.open();
+
+    expect(received).toEqual({
+      placeholder: 'Saisir une expression SQL, ex. prix * quantité',
+      ariaLabel: 'Expression SQL',
+    });
+    const textarea = modal
+      .getElement()
+      .querySelector('.dt-expr-editor-input') as HTMLTextAreaElement;
+    expect(textarea.placeholder).toBe('Saisir une expression SQL, ex. prix * quantité');
+    expect(textarea.getAttribute('aria-label')).toBe('Expression SQL');
   });
 
   // =========================================

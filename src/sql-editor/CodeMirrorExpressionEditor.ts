@@ -2,7 +2,8 @@ import { autocompletion } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
-import type { ExpressionEditor } from '../derived/ExpressionEditorTypes';
+import { defaultStrings } from '../core/Strings';
+import type { ExpressionEditor, ExpressionEditorConfig } from '../derived/ExpressionEditorTypes';
 import type { CompletionContext } from '../derived/types';
 import { createSqlExtensions } from './extensions';
 import { dataTableTheme, dataTableHighlighting } from './theme';
@@ -15,6 +16,11 @@ import { dataTableTheme, dataTableHighlighting } from './theme';
  * implement the `ExpressionEditor` interface themselves and pass it via
  * `createDataTable({ editorFactory })`.
  *
+ * The fourth argument sets the placeholder and the accessible name. One left
+ * out, or an empty name, is the English default of
+ * `derived.expressionPlaceholder` or `derived.expressionLabel`; the built-in
+ * dialogs pass the table's `messages`.
+ *
  * @example
  * import { CodeMirrorExpressionEditor } from '@jeyabbalas/data-table/advanced';
  *
@@ -22,7 +28,7 @@ import { dataTableTheme, dataTableHighlighting } from './theme';
  *   hostEl,
  *   { columns: [{ name: 'age', type: 'integer', isDerived: false }] },
  *   'dt',
- *   { placeholder: 'e.g. age * 2' }
+ *   { placeholder: 'e.g. age * 2', ariaLabel: 'Age expression' }
  * );
  * // later:
  * const expr = editor.getValue();
@@ -40,7 +46,7 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
     container: HTMLElement,
     context: CompletionContext,
     classPrefix = 'dt',
-    config?: { placeholder?: string },
+    config?: ExpressionEditorConfig,
   ) {
     this.prefix = classPrefix;
     this.sqlCompartment = new Compartment();
@@ -75,7 +81,7 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
         dataTableHighlighting,
 
         // Placeholder
-        placeholder(config?.placeholder ?? 'Enter SQL expression, e.g. price * quantity'),
+        placeholder(config?.placeholder ?? defaultStrings.derived.expressionPlaceholder),
 
         // Compact sizing
         EditorView.theme({
@@ -89,8 +95,11 @@ export class CodeMirrorExpressionEditor implements ExpressionEditor {
           }
         }),
 
-        // Accessibility
-        EditorView.contentAttributes.of({ 'aria-label': 'SQL Expression' }),
+        // Accessibility. `||`, not `??`: an empty label would leave the
+        // editor unnamed, where an empty placeholder just shows none.
+        EditorView.contentAttributes.of({
+          'aria-label': config?.ariaLabel || defaultStrings.derived.expressionLabel,
+        }),
       ],
     });
 

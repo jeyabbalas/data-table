@@ -69,8 +69,9 @@ npm run test:coverage     # single run with v8 coverage (HTML report in coverage
 ```
 
 `test:coverage` enforces the thresholds declared in
-[`vitest.config.ts`](./vitest.config.ts). Phase-0 baselines are intentionally
-loose; tighten them in Phase 9 of the review plan.
+[`vitest.config.ts`](./vitest.config.ts). Each sits about one point below the
+measured figure; raise them as coverage grows. Two api-surface tests read
+`dist/` and skip until `npm run build` has run; CI builds first.
 
 Run a single test file:
 

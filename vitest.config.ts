@@ -20,18 +20,15 @@ export default defineConfig({
       // Vitest 5 matches these against paths relative to the root, so a
       // directory needs its `/**`: a bare `tests/` matches no file in it.
       exclude: ['node_modules/**', 'dist/**', '**/*.config.*', 'tests/**'],
-      // Phase 9 tightening — actuals minus ~1 percentage point.
-      // Phase 8 actuals: statements 77.11, branches 64.14, functions 82.33,
-      // lines 78.96. Each subsystem phase added 1.5–2 pp; reaching the
-      // review-plan §4 long-term targets (90/85/90/90) needs roughly 5 more
-      // focused subsystem-coverage phases — branches dominate the remaining
-      // gap (CSV/format/error branches in src/data/ + worker glue). Tracked
-      // as a post-1.0 follow-up.
+      // The thresholds trail the measured figures by about one point: each
+      // is the figure rounded down, minus 1. Measured on 2026-10-07 (vitest 5,
+      // coverage-v8 5): statements 91.26, branches 84.17, functions 94.33,
+      // lines 93.01. Raise them as coverage grows.
       thresholds: {
-        statements: 76,
-        branches: 63,
-        functions: 81,
-        lines: 77,
+        statements: 90,
+        branches: 83,
+        functions: 93,
+        lines: 92,
       },
     },
   },

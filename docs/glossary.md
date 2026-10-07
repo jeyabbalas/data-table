@@ -603,8 +603,6 @@ See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations
 Per-instance registry for [Visualizations](#visualization). Construct via `new
 VisualizationRegistry()` and pass to `createDataTable({ visualizationRegistry })`,
 or use `defaultVisualizationRegistry` for a shared default across tables.
-Replaces the deprecated static `VisualizationFactory` (still reachable on
-`/advanced` for backwards compatibility).
 See: [Visualizations](./guides/visualizations.md) · Source: `src/visualizations/VisualizationRegistry.ts`
 
 ### WorkerBridge

@@ -5,7 +5,8 @@
 > summary chart, a value inspector, an extract-to-column panel, exact reads
 > and JSON exports. Most integrations upgrade with a version bump. Code that
 > registers charts or stats panels by column type, reads values with
-> `getColumnValues`, or serves the worker script itself needs a look.
+> `getColumnValues`, serves the worker script itself, or still calls
+> `VisualizationFactory` needs a look.
 
 **Released:** with `0.9.0` — see the [CHANGELOG](../../CHANGELOG.md) for the date.
 **Affected versions:** from `v0.8.*`
@@ -20,7 +21,7 @@ In `0.8` a nested column fell through to `type: 'string'`. The grid showed
 the charts grouped lists and structs by their text. `0.9` gives these columns
 `type: 'nested'` and reads their values exactly.
 
-Three changes can break an integration:
+These changes can break an integration:
 
 1. A custom visualization or stats panel registered for `'string'` no longer
    receives nested columns, nor `TIME_NS` columns, which are now `'time'`.
@@ -28,6 +29,8 @@ Three changes can break an integration:
    values in new forms.
 3. A self-hosted copy of the worker script must be replaced, and an offline
    deployment with nested data must serve DuckDB's `json` extension.
+4. `VisualizationFactory`, deprecated since `0.3.1`, is removed from
+   `/advanced`.
 
 An integration that does none of these upgrades with a version bump. The
 rest of the release, the value inspector and `getCellValue` among it, is new
@@ -250,6 +253,76 @@ See
 **Automated migration.** `None — copy the worker file in the build or deploy
 step, from the installed package, so that it changes with every upgrade.`
 
+### 5. `VisualizationFactory` is removed
+
+**What changed.** `@jeyabbalas/data-table/advanced` no longer exports the
+static `VisualizationFactory` class, and nothing logs its deprecation warning.
+Deprecated since `0.3.1`, it forwarded each call to
+`defaultVisualizationRegistry`, a root export with every one of its methods:
+`register`, `unregister`, `create`, `isApplicable`, `getRegisteredTypes` and
+`resetToDefaults`. The type predicates (`isNumericType`, `isDateType`, …,
+`needsVisualization`) stay on `/advanced`.
+
+**Who is affected.** Code that imports `VisualizationFactory`. TypeScript and
+bundlers report the missing export; a browser that loads the module natively,
+from a CDN for example, stops with a `SyntaxError`.
+
+**Why.** The wrapper added nothing: each call went to
+`defaultVisualizationRegistry`, which code can call directly, and a
+`VisualizationRegistry` of a table's own keeps a custom chart off the page's
+other tables.
+
+**Before**
+
+```ts
+import { VisualizationFactory, isNumericType } from '@jeyabbalas/data-table/advanced';
+
+VisualizationFactory.register({
+  name: 'box-plot',
+  isApplicable: isNumericType,
+  constructor: BoxPlot,
+  priority: 10,
+});
+```
+
+**After**
+
+```ts
+import {
+  createDataTable,
+  defaultVisualizationRegistry,
+  VisualizationRegistry,
+} from '@jeyabbalas/data-table';
+import { isNumericType } from '@jeyabbalas/data-table/advanced';
+
+const boxPlot = {
+  name: 'box-plot',
+  isApplicable: isNumericType,
+  constructor: BoxPlot,
+  priority: 10,
+};
+
+// As the factory did: every table created without a registry of its own.
+defaultVisualizationRegistry.register(boxPlot);
+
+// Or only the tables you pass this registry to:
+const visualizationRegistry = new VisualizationRegistry();
+visualizationRegistry.register(boxPlot);
+await createDataTable({ container, source, visualizationRegistry });
+```
+
+See
+[Visualizations → Per-instance registry](../guides/visualizations.md#per-instance-registry).
+
+**Automated migration.** Replace `VisualizationFactory.` with
+`defaultVisualizationRegistry.`, then import `defaultVisualizationRegistry`
+from `@jeyabbalas/data-table` where `VisualizationFactory` came from
+`/advanced`; TypeScript flags each import left.
+
+```sh
+grep -rlw VisualizationFactory src | xargs perl -pi -e 's/\bVisualizationFactory\./defaultVisualizationRegistry./g'
+```
+
 ## Non-breaking but recommended
 
 - **Give exact filters you add in code on nested or JSON columns
@@ -294,6 +367,8 @@ step, from the installed package, so that it changes with every upgrade.`
       `TIME_NS` column updated.
 - [ ] A self-hosted worker file replaced with the new version's; offline or
       under a strict CSP, the `json` extension mirrored.
+- [ ] No `VisualizationFactory` left: its calls go to
+      `defaultVisualizationRegistry` or a `VisualizationRegistry` of your own.
 - [ ] `npm run build` passes.
 - [ ] Manual smoke test: load a file with list, struct and map columns; check
       their headers, charts and filters; open the value inspector with `F2`;

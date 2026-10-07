@@ -470,6 +470,14 @@ kind: see [Performance → Nested columns](../performance.md#nested-columns).
   integer", from [`messages.values`](./i18n.md#nested-column-types). The
   filter panel's type badge shows the same outline. JSON columns show
   `json`.
+- **Width.** A nested or JSON column is 168 px wide until it is resized, and
+  every other column 150 px: its header has six 22 px controls, the extract
+  button among them, and at 168 px they show whole, 2 px or more apart (see
+  [Accessibility](./accessibility.md#focus-model-single-cursor--aria-activedescendant)).
+  A width set by dragging, by the keyboard, with `setColumnWidth` or in a
+  saved session is kept. Resetting it (double-click the resize handle, or
+  `Backspace` in [column layout mode](./accessibility.md#column-layout-mode-shiftf2))
+  brings it back to 168 px.
 - **Chart.** `NestedSummaryVisualization` draws a bar of the column's
   non-null and null shares, the type outline under it (`{x, y, tier}`), and
   with filters on, the share of each passing them. It reads ungrouped

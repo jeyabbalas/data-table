@@ -313,21 +313,22 @@ the first one, `←` / `→` cycle them, `↑` / `↓` leave and move the cursor
 JSON value, `F2` opens the [value inspector](#value-inspector-f2-on-a-nested-cell)
 instead, whose `Escape` hands focus back the same way.
 
-A column narrower than its buttons (about 135 px at the default padding; a
-column can be 50 px) shows the buttons that fit and clips the rest at its
-edge, so none lies over the next header. The bar shows all of them, running on
-over the next header's bar, once the pointer has rested on it for 200 ms, and
-at once when keyboard focus is in it. The pointer reaches the others along the
-bar; a pointer passing along the row of bars without pausing reveals nothing,
-so a click lands on the button under it. A nested or JSON column's header has
-six controls, so it is narrower than its buttons already at the default
-150 px: six 22-px controls need 132 px where the bar clips at 128, so the
-drag handle loses the last 4 px of its box, past its dots, until hover or
-`F2` shows the bar whole, and its buttons touch, where a five-control
-header's have about 4 px between them. While a bar is shown, it covers the next header's first
-buttons, visibly, until the pointer leaves it. `F2` scrolls the table so the
-button it focuses is always in view, and the last column's bar runs on
-leftward instead, over its own header and the one before.
+The header's buttons are 22 px, under WCAG 2.2's 24 px minimum, and keep at
+least 2 px between them, so their centres are 24 px apart or more: they meet
+the target-spacing exception of SC 2.5.8. A nested or JSON column is 168 px
+wide until resized, and every other column 150 px, so at their default widths
+every button shows whole. A column narrower than its buttons (at the default
+16 px root font, about 143 px for five buttons and 167 px for a nested or JSON
+column's six; a column can be 50 px) shows the buttons that fit and clips the
+rest at its edge, so none lies over the next header. The bar shows all of
+them, 2 px apart, running on over the next header's bar, once the pointer has
+rested on it for 200 ms, and at once when keyboard focus is in it. The pointer
+reaches the others along the bar; a pointer passing along the row of bars
+without pausing reveals nothing, so a click lands on the button under it.
+While a bar is shown, it covers the next header's first buttons, visibly,
+until the pointer leaves it. `F2` scrolls the table so the button it focuses
+is always in view, and the last column's bar runs on leftward instead, over
+its own header and the one before.
 
 Clicking parks real focus on whatever it hit — a cell, a scroll region — which
 would leave `aria-activedescendant` describing a cursor the focused element

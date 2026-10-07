@@ -19,8 +19,9 @@ import baseConfig from './vitest.config.ts';
  * memory-leaks shared-bridge / 100k-mutation / 100-cycle scaffolds);
  * the slow gates only fire under their env vars.
  *
- * `test:perf` collects no coverage, so the base config's thresholds, which
- * the perf files alone could not meet, don't apply to it.
+ * It keeps the base coverage settings but drops their thresholds, which
+ * are the full suite's: the perf files alone can't meet them, so
+ * `npm run test:perf -- --coverage` would always fail.
  */
 export default defineConfig({
   ...baseConfig,
@@ -29,5 +30,6 @@ export default defineConfig({
     include: ['tests/performance/**/*.test.ts'],
     testTimeout: 120_000,
     hookTimeout: 120_000,
+    coverage: { ...baseConfig.test?.coverage, thresholds: undefined },
   },
 });

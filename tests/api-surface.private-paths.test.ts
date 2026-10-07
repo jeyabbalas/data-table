@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { missingDist } from './helpers/missingDist';
 
 /**
  * Verifies no `.d.ts` declaration in `dist/` references a private filesystem
@@ -10,7 +11,8 @@ import { resolve, join } from 'node:path';
  *
  * The test is gated on `dist/index.d.ts` existing — pre-build runs of
  * `npm test` skip it. CI (`npm run build && npm run test:coverage`) and
- * `prepublishOnly` always have a fresh `dist/`.
+ * `prepublishOnly` always have a fresh `dist/`, and in CI a missing one
+ * fails the test instead.
  */
 
 const DIST_DIR = resolve(__dirname, '..', 'dist');
@@ -48,9 +50,7 @@ const FORBIDDEN_PATH_PATTERNS = [
 
 describe('Public .d.ts hygiene — no private paths leak through dist/', () => {
   if (!existsSync(ROOT_TYPES)) {
-    it.skip('dist/ not built — skipping private-paths audit', () => {
-      // Run `npm run build` first to populate dist/, or rely on CI / prepublishOnly.
-    });
+    missingDist('private-paths audit');
     return;
   }
 

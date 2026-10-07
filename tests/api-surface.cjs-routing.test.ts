@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { missingDist } from './helpers/missingDist';
 
 /**
  * Regression guard for the CJS drop in v0.4.0.
@@ -13,7 +14,8 @@ import { resolve } from 'node:path';
  * `lib.formats` in `vite.config.ts`).
  *
  * Gated on `dist/` existing — bare `npm test` skips. CI / `prepublishOnly`
- * build first, so the test always runs there.
+ * build first, so the test always runs there; in CI a missing `dist/`
+ * fails it instead.
  */
 
 const DIST = resolve(__dirname, '..', 'dist');
@@ -23,9 +25,7 @@ const ADVANCED_CJS = resolve(DIST, 'advanced.cjs');
 
 describe('CJS no longer published (ESM-only since 0.4.0)', () => {
   if (!existsSync(ROOT_ESM)) {
-    it.skip('dist/ not built — skipping CJS regression smoke test', () => {
-      // Run `npm run build` first.
-    });
+    missingDist('CJS regression smoke test');
     return;
   }
 

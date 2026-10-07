@@ -208,9 +208,12 @@ export class ExportDialog {
     body.appendChild(this.createCSVOptions());
     body.appendChild(this.createJSONOptions());
 
-    // Error area
+    // Error area: why the export or copy failed. Hidden by the stylesheet,
+    // so shown with a `display` of its own, and an alert, so the text shown
+    // in it is announced.
     this.errorEl = document.createElement('div');
     this.errorEl.className = `${p}-export-error`;
+    this.errorEl.setAttribute('role', 'alert');
     body.appendChild(this.errorEl);
 
     dialog.appendChild(body);
@@ -805,7 +808,7 @@ export class ExportDialog {
 
   private showError(message: string): void {
     this.errorEl.textContent = message;
-    this.errorEl.style.display = '';
+    this.errorEl.style.display = 'block';
   }
 
   private showCopiedFeedback(): void {

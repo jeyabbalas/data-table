@@ -175,9 +175,12 @@ export class DerivedColumnModal {
     this.vectorSection.style.display = 'none';
     body.appendChild(this.vectorSection);
 
-    // General error area
+    // General error area: why the create failed. Hidden by the stylesheet,
+    // so shown with a `display` of its own, and an alert, so the text shown
+    // in it is announced.
     this.errorEl = document.createElement('div');
     this.errorEl.className = `${p}-derived-modal-error`;
+    this.errorEl.setAttribute('role', 'alert');
     this.errorEl.style.display = 'none';
     body.appendChild(this.errorEl);
 
@@ -194,7 +197,10 @@ export class DerivedColumnModal {
     label.textContent = this.messages.derived.nameLabel;
     section.appendChild(label);
 
+    // Named by its label: a description alone (the error below) is no name.
     this.nameInput = document.createElement('input');
+    this.nameInput.id = `${p}-${this.instanceId}-derived-modal-name`;
+    label.htmlFor = this.nameInput.id;
     this.nameInput.type = 'text';
     this.nameInput.className = `${p}-filter-input`;
     this.nameInput.placeholder = this.messages.derived.namePlaceholder;
@@ -206,9 +212,13 @@ export class DerivedColumnModal {
     });
     section.appendChild(this.nameInput);
 
+    // Why the name cannot be used: described by the input, not live, as it
+    // changes with every key typed.
     this.nameErrorEl = document.createElement('div');
     this.nameErrorEl.className = `${p}-derived-modal-name-error`;
+    this.nameErrorEl.id = `${p}-${this.instanceId}-derived-modal-name-error`;
     this.nameErrorEl.style.display = 'none';
+    this.nameInput.setAttribute('aria-describedby', this.nameErrorEl.id);
     section.appendChild(this.nameErrorEl);
 
     return section;
@@ -327,7 +337,10 @@ export class DerivedColumnModal {
     valLabel.style.marginTop = '0.5rem';
     section.appendChild(valLabel);
 
+    // Named by its label, like the name input
     this.vectorTextarea = document.createElement('textarea');
+    this.vectorTextarea.id = `${p}-${this.instanceId}-derived-modal-vector-values`;
+    valLabel.htmlFor = this.vectorTextarea.id;
     this.vectorTextarea.className = `${p}-derived-modal-vector-textarea`;
     this.vectorTextarea.rows = 8;
     this.vectorTextarea.placeholder = this.messages.derived.vectorPlaceholder;
@@ -344,10 +357,12 @@ export class DerivedColumnModal {
     this.vectorInfoEl.className = `${p}-derived-modal-vector-info`;
     section.appendChild(this.vectorInfoEl);
 
-    // Count error
+    // Count or value error, described by the textarea like the name's
     this.vectorErrorEl = document.createElement('div');
     this.vectorErrorEl.className = `${p}-derived-modal-vector-error`;
+    this.vectorErrorEl.id = `${p}-${this.instanceId}-derived-modal-vector-error`;
     this.vectorErrorEl.style.display = 'none';
+    this.vectorTextarea.setAttribute('aria-describedby', this.vectorErrorEl.id);
     section.appendChild(this.vectorErrorEl);
 
     return section;
@@ -396,8 +411,7 @@ export class DerivedColumnModal {
     this.expressionValidated = false;
     this.typePreview.textContent = '';
     this.typePreview.style.color = '';
-    this.vectorErrorEl.style.display = 'none';
-    this.vectorErrorEl.textContent = '';
+    this.setVectorError(null);
     this.errorEl.style.display = 'none';
 
     this.updateCreateButtonState();
@@ -415,8 +429,7 @@ export class DerivedColumnModal {
     const name = this.nameInput.value.trim();
 
     if (!name) {
-      this.nameErrorEl.textContent = this.messages.derived.nameRequired;
-      this.nameErrorEl.style.display = '';
+      this.setNameError(this.messages.derived.nameRequired);
       return;
     }
 
@@ -429,15 +442,34 @@ export class DerivedColumnModal {
     );
 
     if (taken !== undefined) {
-      this.nameErrorEl.textContent =
+      this.setNameError(
         taken === ROWID_COLUMN
           ? this.messages.derived.nameReserved(name)
-          : this.messages.derived.nameDuplicate(taken);
-      this.nameErrorEl.style.display = '';
+          : this.messages.derived.nameDuplicate(taken),
+      );
     } else {
-      this.nameErrorEl.textContent = '';
-      this.nameErrorEl.style.display = 'none';
+      this.setNameError(null);
     }
+  }
+
+  /**
+   * Show why the name cannot be used, and mark the input invalid; `null`
+   * clears both. The stylesheet hides the message, so showing it takes a
+   * `display` of its own: clearing the inline one leaves the stylesheet's.
+   */
+  private setNameError(message: string | null): void {
+    this.nameErrorEl.textContent = message ?? '';
+    this.nameErrorEl.style.display = message === null ? 'none' : 'block';
+    if (message === null) this.nameInput.removeAttribute('aria-invalid');
+    else this.nameInput.setAttribute('aria-invalid', 'true');
+  }
+
+  /** {@link setNameError}, for the vector values. */
+  private setVectorError(message: string | null): void {
+    this.vectorErrorEl.textContent = message ?? '';
+    this.vectorErrorEl.style.display = message === null ? 'none' : 'block';
+    if (message === null) this.vectorTextarea.removeAttribute('aria-invalid');
+    else this.vectorTextarea.setAttribute('aria-invalid', 'true');
   }
 
   private isNameValid(): boolean {
@@ -463,31 +495,21 @@ export class DerivedColumnModal {
   private validateVectorValues(): void {
     const lines = this.getVectorLines();
     if (lines.length === 0) {
-      this.vectorErrorEl.style.display = 'none';
+      this.setVectorError(null);
       return;
     }
 
     // Count check first
     const totalRows = this.state.totalRows.get();
     if (lines.length !== totalRows) {
-      this.vectorErrorEl.textContent = this.messages.derived.vectorCountMismatch(
-        totalRows,
-        lines.length,
-      );
-      this.vectorErrorEl.style.display = '';
+      this.setVectorError(this.messages.derived.vectorCountMismatch(totalRows, lines.length));
       return;
     }
 
     // Type-specific validation
     const vectorType = this.vectorTypeSelect.value as VectorDataType;
     const parseResult = this.parseVectorValues(lines, vectorType);
-    if (!parseResult.success) {
-      this.vectorErrorEl.textContent = parseResult.error!;
-      this.vectorErrorEl.style.display = '';
-    } else {
-      this.vectorErrorEl.textContent = '';
-      this.vectorErrorEl.style.display = 'none';
-    }
+    this.setVectorError(parseResult.success ? null : parseResult.error!);
   }
 
   private isVectorValid(): boolean {
@@ -530,6 +552,11 @@ export class DerivedColumnModal {
 
     const expression = this.currentEditor.getValue().trim();
     if (!expression) {
+      // Said in the type preview, where Validate reports everything else.
+      // The editor's own message line stays hidden by the stylesheet, as it
+      // would repeat the preview.
+      this.typePreview.textContent = this.messages.derived.expressionRequired;
+      this.typePreview.style.color = 'var(--dt-error)';
       this.currentEditor.setError(this.messages.derived.expressionRequired);
       return;
     }
@@ -595,8 +622,7 @@ export class DerivedColumnModal {
       const lines = this.getVectorLines();
       const parseResult = this.parseVectorValues(lines, vectorType);
       if (!parseResult.success) {
-        this.vectorErrorEl.textContent = parseResult.error!;
-        this.vectorErrorEl.style.display = '';
+        this.setVectorError(parseResult.error!);
         return;
       }
       def = { kind: 'vector', name, vectorType, values: parseResult.values! };
@@ -614,12 +640,12 @@ export class DerivedColumnModal {
         this.onCreated?.();
       } else {
         this.errorEl.textContent = result.error ?? this.messages.derived.createFailed;
-        this.errorEl.style.display = '';
+        this.errorEl.style.display = 'block';
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.errorEl.textContent = msg;
-      this.errorEl.style.display = '';
+      this.errorEl.style.display = 'block';
     } finally {
       this.creating = false;
       this.createBtn.textContent = this.messages.derived.createButton;
@@ -847,8 +873,7 @@ export class DerivedColumnModal {
   private resetForm(): void {
     // Name
     this.nameInput.value = '';
-    this.nameErrorEl.textContent = '';
-    this.nameErrorEl.style.display = 'none';
+    this.setNameError(null);
 
     // Mode — reset to expression
     this.expressionRadio.checked = true;
@@ -865,8 +890,7 @@ export class DerivedColumnModal {
     // Vector
     this.vectorTypeSelect.value = 'integer';
     this.vectorTextarea.value = '';
-    this.vectorErrorEl.textContent = '';
-    this.vectorErrorEl.style.display = 'none';
+    this.setVectorError(null);
     this.updateVectorInfo();
 
     // General

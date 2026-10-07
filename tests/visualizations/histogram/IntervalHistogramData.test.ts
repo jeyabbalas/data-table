@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   parseIntervalToSeconds,
   secondsToIntervalString,
@@ -24,15 +24,23 @@ describe('intervalToSecondsSQL', () => {
     expect(sql).toContain('EXTRACT(day FROM "duration")');
     expect(sql).toContain('EXTRACT(hour FROM "duration")');
     expect(sql).toContain('EXTRACT(minute FROM "duration")');
-    expect(sql).toContain('EXTRACT(second FROM "duration")');
+  });
+
+  it('keeps the fraction of a second', () => {
+    // EXTRACT(second …) is a whole number; the microseconds hold the
+    // seconds within the minute with their fraction.
+    const sql = intervalToSecondsSQL('"duration"');
+    expect(sql).toContain('EXTRACT(microseconds FROM "duration") / 1000000.0');
+    expect(sql).not.toContain('EXTRACT(second');
   });
 
   it('should use correct conversion constants', () => {
     const sql = intervalToSecondsSQL('"col"');
-    expect(sql).toContain(`${MONTH_SECONDS}.0`);
-    expect(sql).toContain('86400.0'); // DAY_SECONDS
-    expect(sql).toContain('3600.0');
-    expect(sql).toContain('60.0');
+    // Integer constants keep the whole seconds BIGINT, not DECIMAL, arithmetic.
+    expect(sql).toContain(`* ${MONTH_SECONDS} +`);
+    expect(sql).toContain('* 86400 +'); // DAY_SECONDS
+    expect(sql).toContain('* 3600 +');
+    expect(sql).toContain('* 60 +');
   });
 });
 
@@ -58,6 +66,14 @@ describe('parseIntervalToSeconds', () => {
   it('should parse fractional seconds', () => {
     const result = parseIntervalToSeconds('00:00:01.500000');
     expect(result).toBeCloseTo(1.5, 5);
+  });
+
+  it('should parse 100 hours or more', () => {
+    // DuckDB writes every hour of the time part.
+    expect(parseIntervalToSeconds('100:00:01.5')).toBe(360001.5);
+    expect(parseIntervalToSeconds('-100:00:00')).toBe(-360000);
+    expect(parseIntervalToSeconds('-1 day -100:00:01.5')).toBe(-86400 - 360001.5);
+    expect(parseIntervalToSeconds('2562047788:00:54.775807')).toBeCloseTo(9223372036854.775, 3);
   });
 
   it('should parse day intervals', () => {
@@ -260,16 +276,16 @@ describe('secondsToIntervalSQL', () => {
 describe('fetchIntervalColumnStats', () => {
   function mockBridge(rows: unknown[]): WorkerBridge {
     return {
-      query: async () => rows,
+      query: vi.fn(async () => rows),
     } as unknown as WorkerBridge;
   }
 
-  it('should parse stats from DuckDB VARCHAR output', async () => {
+  it('should read the stats in seconds', async () => {
     const bridge = mockBridge([
       {
-        min_val: '01:00:00',
-        max_val: '1 day 02:30:00',
-        median_val: '12:00:00',
+        min_sec: 3600,
+        max_sec: 86400 + 2 * 3600 + 30 * 60,
+        median_sec: 12 * 3600,
         count: 100,
         null_count: 5,
       },
@@ -283,12 +299,28 @@ describe('fetchIntervalColumnStats', () => {
     expect(stats.nullCount).toBe(5);
   });
 
+  it('computes the stats on the seconds the bins use, in one query', async () => {
+    const bridge = mockBridge([
+      { min_sec: 1, max_sec: 2, median_sec: 1.5, count: 2, null_count: 0 },
+    ]);
+
+    await fetchIntervalColumnStats('t', 'dur', [], bridge);
+
+    expect(bridge.query).toHaveBeenCalledOnce();
+    const sql = vi.mocked(bridge.query).mock.calls[0]![0];
+    const sec = intervalToSecondsSQL('"dur"');
+    expect(sql).toContain(`MIN(${sec})`);
+    expect(sql).toContain(`MAX(${sec})`);
+    expect(sql).toContain(`APPROX_QUANTILE(${sec}, 0.5)`);
+    expect(sql).not.toContain('VARCHAR');
+  });
+
   it('should handle all-null column', async () => {
     const bridge = mockBridge([
       {
-        min_val: null,
-        max_val: null,
-        median_val: null,
+        min_sec: null,
+        max_sec: null,
+        median_sec: null,
         count: 0,
         null_count: 10,
       },
@@ -356,9 +388,9 @@ describe('fetchIntervalHistogramData', () => {
     const bridge = {
       query: async () => [
         {
-          min_val: null,
-          max_val: null,
-          median_val: null,
+          min_sec: null,
+          max_sec: null,
+          median_sec: null,
           count: 0,
           null_count: 10,
         },
@@ -377,9 +409,9 @@ describe('fetchIntervalHistogramData', () => {
     const bridge = {
       query: async () => [
         {
-          min_val: '01:00:00',
-          max_val: '01:00:00',
-          median_val: '01:00:00',
+          min_sec: 3600,
+          max_sec: 3600,
+          median_sec: 3600,
           count: 50,
           null_count: 0,
         },
@@ -403,9 +435,9 @@ describe('fetchIntervalHistogramData', () => {
           // Stats query
           return [
             {
-              min_val: '00:00:00',
-              max_val: '01:00:00',
-              median_val: '00:30:00',
+              min_sec: 0,
+              max_sec: 3600,
+              median_sec: 1800,
               count: 100,
               null_count: 5,
             },

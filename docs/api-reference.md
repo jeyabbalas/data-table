@@ -415,7 +415,7 @@ CSV and the clipboard's TSV write a nested value (`type: 'nested'`) as standard 
 | `formatStatValue(value)`                                               | function | Format a single numeric stat value.                                                                                                                                                                                                            |
 | `formatCount(count)`                                                   | function | Locale-aware integer formatting.                                                                                                                                                                                                               |
 | `formatDefaultStats(stats, type, messages?)`                           | function | Produce the two-line stats HTML shown in headers. For a nested column, line 2 is the escaped type summary.                                                                                                                                     |
-| `fetchIntervalStats(table, column, filters, bridge, unfilteredTotal?)` | function | Compute interval stats on demand.                                                                                                                                                                                                              |
+| `fetchIntervalStats(table, column, filters, bridge, unfilteredTotal?)` | function | Compute an INTERVAL column's stats on demand: the minimum, median and maximum its chart's stats line shows, in seconds on the chart's scale (a month is 30.4375 days).                                                                         |
 
 ### Visualization internals
 

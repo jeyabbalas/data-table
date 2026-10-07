@@ -4,8 +4,10 @@
  * Converts DuckDB INTERVAL values to a total-seconds numeric scale for equal-width binning.
  * Month/year components use standard approximations (1 month = 30.4375 days).
  *
- * INTERVAL values in DuckDB are returned as strings like "1 year 2 months 3 days 04:05:06"
- * and must be converted to numeric seconds for histogram binning.
+ * The conversion runs in SQL ({@link intervalToSecondsSQL}), and the stats and the bins
+ * both read it, so every value lies between the minimum and maximum it is binned by.
+ * Filter bounds arrive as DuckDB's interval text ("1 year 2 months 3 days 04:05:06"),
+ * which {@link parseIntervalToSeconds} reads on the same scale.
  */
 
 import { QueryError } from '../../core/errors';
@@ -63,12 +65,12 @@ export interface IntervalHistogramData {
 }
 
 /**
- * Statistics query result
+ * Statistics query result, in seconds on the chart's scale
  */
 interface IntervalStatsResult {
-  min_val: string | null;
-  max_val: string | null;
-  median_val: string | null;
+  min_sec: number | null;
+  max_sec: number | null;
+  median_sec: number | null;
   count: number;
   null_count: number;
 }
@@ -86,21 +88,28 @@ interface IntervalBinResult {
 // =========================================
 
 /**
- * Returns a SQL expression that converts an INTERVAL column to total seconds.
+ * Returns a SQL expression that converts an INTERVAL column to total seconds,
+ * a DOUBLE.
  *
- * Uses component extraction since EXTRACT(EPOCH FROM interval) is not reliably
- * supported in DuckDB WASM for all INTERVAL representations. Month/year
- * components use standard approximations (1 month ≈ 30.4375 days).
+ * It sums the interval's parts rather than taking `EXTRACT(epoch …)`, which
+ * counts a month as 30 days: this scale counts 30.4375, as
+ * {@link parseIntervalToSeconds} and the axis labels do. The last term,
+ * `EXTRACT(microseconds …)`, is the seconds within the minute with their
+ * fraction (`1 minute 1.5 seconds` gives 1,500,000); `EXTRACT(second …)`
+ * drops the fraction. The whole seconds are BIGINT arithmetic, exact for any
+ * INTERVAL (at most about 5.8e15 seconds, below 2^53). Constants like
+ * `86400.0` would make it 128-bit DECIMAL arithmetic, which takes twice as
+ * long.
  *
  * @param col Already-quoted column identifier
  */
 export function intervalToSecondsSQL(col: string): string {
   return `(
-    (EXTRACT(year FROM ${col}) * 12 + EXTRACT(month FROM ${col})) * ${MONTH_SECONDS}.0 +
-    EXTRACT(day FROM ${col}) * ${DAY_SECONDS}.0 +
-    EXTRACT(hour FROM ${col}) * 3600.0 +
-    EXTRACT(minute FROM ${col}) * 60.0 +
-    EXTRACT(second FROM ${col})
+    (EXTRACT(year FROM ${col}) * 12 + EXTRACT(month FROM ${col})) * ${MONTH_SECONDS} +
+    EXTRACT(day FROM ${col}) * ${DAY_SECONDS} +
+    EXTRACT(hour FROM ${col}) * 3600 +
+    EXTRACT(minute FROM ${col}) * 60 +
+    EXTRACT(microseconds FROM ${col}) / 1000000.0
   )`;
 }
 
@@ -151,8 +160,9 @@ export function parseIntervalToSeconds(
   if (dayMatch) totalSeconds += parseInt(dayMatch[1]!, 10) * DAY_SECONDS;
 
   // Parse time component with optional leading negative sign.
-  // Matches "-HH:MM:SS.ffffff" or "HH:MM:SS.ffffff".
-  const timeMatch = input.match(/(-?)(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
+  // Matches "-HH:MM:SS.ffffff" or "HH:MM:SS.ffffff". DuckDB writes every hour
+  // of the time part, so there can be more than two digits ("100:00:00.5").
+  const timeMatch = input.match(/(-?)(\d+):(\d{2}):(\d{2})(?:\.(\d+))?/);
   if (timeMatch) {
     const timeSign = timeMatch[1] === '-' ? -1 : 1;
     let timeSec = parseInt(timeMatch[2]!, 10) * 3600;
@@ -302,8 +312,11 @@ export function secondsToIntervalSQL(seconds: number): string {
 /**
  * Fetch interval column statistics (min, max, median, count, nulls).
  *
- * DuckDB supports MIN, MAX, and APPROX_QUANTILE on INTERVAL types.
- * Results are cast to VARCHAR and then parsed to numeric seconds.
+ * The minimum, median and maximum are those of {@link intervalToSecondsSQL},
+ * the seconds the bins use, so every value falls in a bin. DuckDB's own MIN
+ * and MAX order intervals with 30-day months: of `1 month` and
+ * `30 days 06:00:00` they give `1 month` as the minimum, which this scale puts
+ * above the maximum. DuckDB's `APPROX_QUANTILE` takes no INTERVAL.
  */
 export async function fetchIntervalColumnStats(
   tableName: string,
@@ -321,36 +334,19 @@ export async function fetchIntervalColumnStats(
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
+  const sec = intervalToSecondsSQL(col);
 
-  // Try full query with APPROX_QUANTILE first; fall back without it
-  // since APPROX_QUANTILE may not support INTERVAL in all DuckDB versions.
-  let results: IntervalStatsResult[];
-  try {
-    const sql = `
-      SELECT
-        MIN(${col})::VARCHAR as min_val,
-        MAX(${col})::VARCHAR as max_val,
-        APPROX_QUANTILE(${col}, 0.5)::VARCHAR as median_val,
-        COUNT(${col}) as count,
-        COUNT(*) - COUNT(${col}) as null_count
-      FROM ${tbl}
-      ${whereSQL}
-    `;
-    results = await bridge.query<IntervalStatsResult>(sql);
-  } catch {
-    // APPROX_QUANTILE not supported for INTERVAL — retry without median
-    const sql = `
-      SELECT
-        MIN(${col})::VARCHAR as min_val,
-        MAX(${col})::VARCHAR as max_val,
-        NULL as median_val,
-        COUNT(${col}) as count,
-        COUNT(*) - COUNT(${col}) as null_count
-      FROM ${tbl}
-      ${whereSQL}
-    `;
-    results = await bridge.query<IntervalStatsResult>(sql);
-  }
+  const sql = `
+    SELECT
+      MIN(${sec}) as min_sec,
+      MAX(${sec}) as max_sec,
+      APPROX_QUANTILE(${sec}, 0.5) as median_sec,
+      COUNT(${col}) as count,
+      COUNT(*) - COUNT(${col}) as null_count
+    FROM ${tbl}
+    ${whereSQL}
+  `;
+  const results = await bridge.query<IntervalStatsResult>(sql);
 
   if (results.length === 0) {
     return { minSeconds: null, maxSeconds: null, medianSeconds: null, count: 0, nullCount: 0 };
@@ -358,9 +354,9 @@ export async function fetchIntervalColumnStats(
 
   const row = results[0]!;
   return {
-    minSeconds: parseIntervalToSeconds(row.min_val),
-    maxSeconds: parseIntervalToSeconds(row.max_val),
-    medianSeconds: parseIntervalToSeconds(row.median_val),
+    minSeconds: row.min_sec ?? null,
+    maxSeconds: row.max_sec ?? null,
+    medianSeconds: row.median_sec ?? null,
     count: Number(row.count),
     nullCount: Number(row.null_count),
   };

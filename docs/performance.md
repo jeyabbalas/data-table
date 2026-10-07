@@ -618,7 +618,6 @@ remove the container if you need to.
 - **Initial schema detection on very wide tables.** Tables with hundreds of columns spend measurable time in `DESCRIBE` queries during load.
 - **First-run WASM compilation.** A cold browser takes a few seconds to compile DuckDB's WASM. Subsequent loads hit the HTTP cache.
 - **Filter changes that shrink the dataset to near-zero.** Some visualizations (e.g., date histogram) recalculate bins, which has a fixed cost that dominates when the result set is tiny. Usually < 300 ms total; on 10M-row datasets it can approach 1 s.
-- **Sub-second `INTERVAL` bin assignment.** The histogram `min` value goes through `MIN(col)::VARCHAR + parseIntervalToSeconds` on the JS side while the bin SQL extracts seconds via `EXTRACT(...)`. The two paths can disagree at the 4th decimal for sub-second intervals; the resulting drift is locked behind `tests/visualizations/histogram/IntervalHistogram.duckdb.test.ts`. A future fix would compute `min_seconds` server-side so both paths agree by construction.
 
 ## Phase-9 benchmark snapshot (2026-04-26, 0.2.0 baseline)
 

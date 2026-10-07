@@ -335,6 +335,7 @@ if (params.has('country')) {
 - **`includeNull: true` adds `OR col IS NULL` to `not-set` filters.** That makes the filter _looser_, not tighter. Read it as "anything except these values, OR a NULL."
 - **Regex patterns don't support backreferences or lookarounds.** DuckDB uses RE2-style semantics.
 - **Date matching is exact.** `{ type: 'point', column: 'created_at', value: new Date(...) }` matches the exact timestamp including milliseconds. Use a `range` filter for day-granularity matching.
+- **A `Date` goes into the SQL as ISO text that DuckDB reads.** A year past 9999 loses the `+` that `toISOString()` gives it: `new Date('+012000-01-01T00:00:00Z')` is written `'12000-01-01T00:00:00.000Z'`, where DuckDB rejects `'+012000-…'` in every query. A year before 1 keeps its sign, `'-000043-03-15T00:00:00.000Z'` for 44 BC.
 - **Raw-SQL filters aren't auto-validated.** The library will happily let you add a syntactically broken fragment; queries will then fail with `QueryError`. Call `validateSQLFilter()` first.
 - **Clearing filters doesn't clear selection.** Selected rows persist across filter changes — they just get hidden when out of the filtered set.
 - **Chips cut long values.** A filter chip shows each value, and a pattern, up to 60 characters, cut between graphemes with `…`; the chip's title holds each value whole. A set filter's chip and title both list its first three values and "N more", and an unlabeled raw-SQL filter's SQL is cut at 40 characters in both (`src/filters/FilterChip.ts`).

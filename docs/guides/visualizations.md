@@ -194,16 +194,29 @@ none, so its histogram leaves them out of its bars, of `min`, `med` and
 `max`, and of the distinct count that decides whether it draws a bar per
 value. Line 2 ends with how many it left out of the rows passing the
 filters: `min 0.57 · med 71.61 · max 142.71 · 30 non-finite`
-(`messages.statistics.nonFiniteCount`). They are values, not nulls, so
+(`messages.statistics.nonFiniteCount`). A date or timestamp column's
+`infinity` and `-infinity` have none either, nor do dates more than about
+270,000 years from 1970, which a JavaScript `Date` cannot hold (a `DATE`
+reaches the year 5881580). Its chart leaves them out of its bars and its
+range, and counts them the same way:
+`2020-01-01 – 2024-12-31 · 2 non-finite`. They are values, not nulls, so
 line 1 and every percentage still count them. A column with no finite
 values draws "No data", or its null bar when it has nulls, and line 2 is
 the count alone. A brush never selects them, as its bounds are finite.
 Two filters the chart draws as a brush do match them: the filter panel's
 `>` and `>=` (`"v" >= 100` holds for `NaN`, which DuckDB sorts above every
-number, and for `Infinity`; `<` and `<=` hold for `-Infinity`), and a
-`not-null` filter, drawn over every bar. Line 1 then counts those rows,
-while the committed selection, which sums the bars under the brush, does
-not. To see only them, add a raw-SQL filter, `NOT isfinite(v)`.
+number, and for `Infinity`, as a date's "after" holds for `infinity`; `<`
+and `<=` hold for `-Infinity`), and a `not-null` filter, drawn over every
+bar. Line 1 then counts those rows, while the committed selection, which
+sums the bars under the brush, does not. To see only them, add a raw-SQL
+filter, `NOT isfinite(v)`.
+
+**Dates before year 1 and past 9999** chart like any other. Line 2 writes
+their years as the grid's cells do, with a sign and six digits:
+`-000043-03-15 – +012000-01-01` runs from 15 March 44 BC (ISO 8601 counts
+a year 0, which is 1 BC) to the year 12000. The labels under the bars and
+on hover write such a year in full, `Mar 15, -43`, where a year from 1000
+to 9999 shortens to `'24`.
 
 All of these strings are localizable via `messages.statistics.*` — see
 the [i18n guide](./i18n.md).

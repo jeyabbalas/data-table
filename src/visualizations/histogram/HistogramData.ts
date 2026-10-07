@@ -35,37 +35,51 @@ export interface HistogramBin {
 }
 
 /**
- * Complete histogram data including bins and metadata
+ * Complete histogram data including bins and metadata.
+ *
+ * The bins, `min`, `max`, `median` and `distinctCount` are of the column's
+ * finite values: `NaN`, `Infinity` and `-Infinity`, which a FLOAT or DOUBLE
+ * column can hold, have no place on the axis, and are counted in
+ * `nonFiniteCount` instead. `total` counts every row.
  */
 export interface HistogramData {
   /** Array of histogram bins sorted by x0 */
   bins: HistogramBin[];
   /** Count of null values in the column */
   nullCount: number;
-  /** Minimum non-null value */
+  /** Minimum finite value; `NaN` when there is none */
   min: number;
-  /** Maximum non-null value */
+  /** Maximum finite value; `NaN` when there is none */
   max: number;
-  /** Total count of all values (including nulls) */
+  /** Total count of all values (including nulls and non-finite values) */
   total: number;
-  /** True when all non-null values are identical (single value column) */
+  /** True when all finite values are identical (single value column) */
   isSingleValue: boolean;
   /** True when using discrete binning (one bin per unique value, ≤ threshold) */
   isDiscrete: boolean;
-  /** Approximate median of non-null values */
+  /** Approximate median of the finite values */
   median: number | null;
-  /** Count of distinct non-null values */
+  /** Count of distinct finite values */
   distinctCount: number;
+  /**
+   * Count of `NaN`, `Infinity` and `-Infinity` values, which the bins leave
+   * out. Always set by the built-in fetch; optional so that data built
+   * elsewhere still type-checks.
+   */
+  nonFiniteCount?: number | undefined;
 }
 
 /**
- * Statistics needed for optimal bin calculation
+ * Statistics needed for optimal bin calculation. `min`, `max`, the quartiles
+ * and `distinctCount` are of the finite values; `count` is of every
+ * non-null value, `nonFiniteCount` of the non-finite ones among them.
  */
 export interface ColumnStats {
   min: number | null;
   max: number | null;
   count: number;
   nullCount: number;
+  nonFiniteCount: number;
   q1: number | null;
   q3: number | null;
   median: number | null;
@@ -80,6 +94,7 @@ interface StatsResult {
   max: number | null;
   count: number;
   null_count: number;
+  non_finite_count: number;
   q1: number | null;
   q3: number | null;
   median: number | null;
@@ -170,7 +185,27 @@ function clampBins(numBins: number, maxBins = 100): number {
 // =========================================
 
 /**
- * Fetch column statistics needed for histogram calculation
+ * SQL that is true for a finite value and false for `NaN`, `Infinity` and
+ * `-Infinity`, which a FLOAT or DOUBLE column can hold; NULL for NULL.
+ *
+ * Non-finite values have no place on a histogram's axis. DuckDB sorts `NaN`
+ * above every number, so a column holding one had a maximum of `NaN`, which
+ * the bin query printed into its SQL as a column name (`Binder Error:
+ * Referenced column "NaN" not found`), and casting an infinite bin index to
+ * INTEGER fails too. The cast to DOUBLE lets the test take a column of any
+ * numeric type; an integer or DECIMAL value is always finite.
+ */
+function finiteSQL(col: string): string {
+  return `isfinite(CAST(${col} AS DOUBLE))`;
+}
+
+/**
+ * Fetch column statistics needed for histogram calculation.
+ *
+ * `min`, `max`, the quartiles and `distinctCount` are of the finite values.
+ * `count` and `nullCount` still count every row, as line 1 of the stats and
+ * the hover percentages do, and `nonFiniteCount` is the non-finite values
+ * among `count`.
  */
 export async function fetchColumnStats(
   tableName: string,
@@ -185,18 +220,27 @@ export async function fetchColumnStats(
 
   // CAST to DOUBLE ensures consistent JavaScript number types regardless of
   // source column type (DECIMAL, FLOAT, HUGEINT from parquet, etc.)
+  //
+  // The subquery's `f` is the value when it is finite and NULL otherwise,
+  // so every aggregate of `f`, as each skips NULLs, is of the finite values.
+  // Testing once per row there costs less than a FILTER clause on each
+  // aggregate, which tests every row again for each one.
   const sql = `
     SELECT
-      CAST(MIN(${col}) AS DOUBLE) as min,
-      CAST(MAX(${col}) AS DOUBLE) as max,
-      COUNT(${col}) as count,
-      COUNT(*) - COUNT(${col}) as null_count,
-      CAST(APPROX_QUANTILE(${col}, 0.25) AS DOUBLE) as q1,
-      CAST(APPROX_QUANTILE(${col}, 0.5) AS DOUBLE) as median,
-      CAST(APPROX_QUANTILE(${col}, 0.75) AS DOUBLE) as q3,
-      COUNT(DISTINCT ${col}) as distinct_count
-    FROM ${tbl}
-    ${whereSQL}
+      CAST(MIN(f) AS DOUBLE) as min,
+      CAST(MAX(f) AS DOUBLE) as max,
+      COUNT(v) as count,
+      COUNT(*) - COUNT(v) as null_count,
+      COUNT(v) - COUNT(f) as non_finite_count,
+      CAST(APPROX_QUANTILE(f, 0.25) AS DOUBLE) as q1,
+      CAST(APPROX_QUANTILE(f, 0.5) AS DOUBLE) as median,
+      CAST(APPROX_QUANTILE(f, 0.75) AS DOUBLE) as q3,
+      COUNT(DISTINCT f) as distinct_count
+    FROM (
+      SELECT ${col} AS v, CASE WHEN ${finiteSQL(col)} THEN ${col} END AS f
+      FROM ${tbl}
+      ${whereSQL}
+    )
   `;
 
   const results = await bridge.query<StatsResult>(sql);
@@ -207,6 +251,7 @@ export async function fetchColumnStats(
       max: null,
       count: 0,
       nullCount: 0,
+      nonFiniteCount: 0,
       q1: null,
       q3: null,
       median: null,
@@ -220,6 +265,7 @@ export async function fetchColumnStats(
     max: row.max,
     count: Number(row.count),
     nullCount: Number(row.null_count),
+    nonFiniteCount: Number(row.non_finite_count ?? 0),
     q1: row.q1,
     q3: row.q3,
     median: row.median ?? null,
@@ -229,7 +275,8 @@ export async function fetchColumnStats(
 
 /**
  * Fetch distinct values with counts for discrete binning
- * Used when a column has few unique values (≤ DISCRETE_BIN_THRESHOLD)
+ * Used when a column has few unique values (≤ DISCRETE_BIN_THRESHOLD).
+ * Non-finite values get no bar: a click on one would filter `"v" = NULL`.
  */
 export async function fetchDiscreteValues(
   tableName: string,
@@ -240,7 +287,7 @@ export async function fetchDiscreteValues(
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `${col} IS NOT NULL`;
+  const baseCondition = `${col} IS NOT NULL AND ${finiteSQL(col)}`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -288,8 +335,9 @@ function buildHistogramSQL(
   // Calculate bin width
   const binWidth = (max - min) / numBins;
 
-  // Build WHERE clause - always exclude nulls, add user filters if present
-  const baseCondition = `${col} IS NOT NULL`;
+  // Build WHERE clause - always exclude nulls and non-finite values, whose
+  // bin index cannot be cast to INTEGER, add user filters if present
+  const baseCondition = `${col} IS NOT NULL AND ${finiteSQL(col)}`;
   const whereSQL = whereClause
     ? `WHERE ${baseCondition} AND ${whereClause}`
     : `WHERE ${baseCondition}`;
@@ -411,9 +459,12 @@ export async function fetchHistogramData(
   try {
     // Step 1: Fetch column statistics
     const stats = await fetchColumnStats(tableName, column, filters, bridge);
+    const { nonFiniteCount } = stats;
+    // The values the bins hold: NaN and ±Infinity have no place on the axis.
+    const finiteCount = stats.count - nonFiniteCount;
 
-    // Handle edge case: no data (all nulls or empty)
-    if (stats.count === 0 || stats.min === null || stats.max === null) {
+    // Handle edge case: no data (all nulls, all non-finite, or empty)
+    if (finiteCount === 0 || stats.min === null || stats.max === null) {
       return {
         bins: [],
         nullCount: stats.nullCount,
@@ -424,18 +475,19 @@ export async function fetchHistogramData(
         isDiscrete: false,
         median: null,
         distinctCount: 0,
+        nonFiniteCount,
       };
     }
 
     // Step 2: Calculate optimal number of bins (clamped to maxBins)
     const iqr = stats.q1 !== null && stats.q3 !== null ? stats.q3 - stats.q1 : 0;
     const maxBinsValue = maxBins === 'auto' ? 100 : maxBins;
-    const actualBins = calculateOptimalBins(stats.min, stats.max, stats.count, iqr, maxBinsValue);
+    const actualBins = calculateOptimalBins(stats.min, stats.max, finiteCount, iqr, maxBinsValue);
 
     // Handle edge case: all same value (single value column)
     if (stats.min === stats.max) {
       return {
-        bins: [{ x0: stats.min, x1: stats.min, count: stats.count }],
+        bins: [{ x0: stats.min, x1: stats.min, count: finiteCount }],
         nullCount: stats.nullCount,
         min: stats.min,
         max: stats.max,
@@ -444,6 +496,7 @@ export async function fetchHistogramData(
         isDiscrete: true, // Single value is also discrete
         median: stats.median,
         distinctCount: stats.distinctCount,
+        nonFiniteCount,
       };
     }
 
@@ -468,6 +521,7 @@ export async function fetchHistogramData(
         isDiscrete: true,
         median: stats.median,
         distinctCount: stats.distinctCount,
+        nonFiniteCount,
       };
     }
 
@@ -492,6 +546,7 @@ export async function fetchHistogramData(
       isDiscrete: false,
       median: stats.median,
       distinctCount: stats.distinctCount,
+      nonFiniteCount,
     };
   } catch (error) {
     throw new QueryError(

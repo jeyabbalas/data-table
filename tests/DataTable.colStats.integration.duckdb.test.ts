@@ -482,6 +482,32 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
     await h.table.destroy();
   }, 20_000);
 
+  it('a column holding NaN charts its finite values, and line 2 counts the rest', async () => {
+    const h = await mountTable();
+    await waitForSlot(h, 'id', /^20 rows/);
+    // The manual pass's C-02 column, NaN on every fifth row. Its chart showed
+    // "Failed to load": its maximum, NaN, went into the bin query's SQL.
+    const res = await h.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'nan_v',
+      expression: "CASE WHEN id % 5 = 0 THEN 'NaN'::DOUBLE ELSE id * 1.5 END",
+    });
+    expect(res.success).toBe(true);
+    await waitForSlot(h, 'nan_v', '4 non-finite');
+    expect(h.slot('nan_v')).toMatch(/^20 rowsmin 1\.5 · med [\d.]+ · max 28\.5 · 4 non-finite$/);
+    const canvas = h.container.querySelector(
+      '.dt-col-header[data-column="nan_v"] .dt-col-viz canvas',
+    )!;
+    expect(canvas.hasAttribute('data-fetch-failed')).toBe(false);
+
+    // Under another column's filter, the note counts the rows passing it.
+    h.table.actions.addFilter({ type: 'range', column: 'id', min: 1, max: 10, maxInclusive: true });
+    await waitForSlot(h, 'nan_v', '2 non-finite');
+    expect(h.slot('nan_v')).toMatch(/^10 \/ 20 rowsmin .* · 2 non-finite$/);
+    expect(canvas.hasAttribute('data-fetch-failed')).toBe(false);
+    await h.table.destroy();
+  }, 20_000);
+
   it('hiding a filtered column keeps its filter active; showing restores the identical detail', async () => {
     const h = await mountTable();
     await waitForSlot(h, 'c', /^20 rows/);

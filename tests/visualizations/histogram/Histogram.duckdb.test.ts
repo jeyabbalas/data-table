@@ -134,14 +134,13 @@ describe('numeric histogram — real DuckDB integration', () => {
     expect(data.bins[data.bins.length - 1]!.x1).toBeGreaterThanOrEqual(49);
   });
 
-  it('Infinity values are excluded from bins (formatSQLValue produces NULL) but DuckDB accepts them in storage', async () => {
+  it('Infinity and -Infinity: left out of the bars and the stats, and counted', async () => {
     const t = tableName('infinity');
-    // DuckDB DOUBLE accepts +Infinity and -Infinity. The histogram path uses
-    // MIN/MAX which DuckDB returns as Infinity; the bin computation then
-    // produces width-Infinity bins which is unusable. This test documents
-    // the current behavior: storage accepts Infinity, but the bin output
-    // becomes degenerate. Consumers should filter Infinity client-side
-    // before binning if they need usable visualizations.
+    // DuckDB DOUBLE stores +Infinity and -Infinity. The chart draws the
+    // finite values and counts the others in nonFiniteCount: a bar at
+    // Infinity would filter `"v" = NULL` when clicked, and an infinite
+    // range has no bins. HistogramData.nonFinite.duckdb.test.ts has the
+    // continuous cases.
     await harness.conn.query(
       `CREATE TABLE "${t}" AS SELECT v FROM (VALUES
         (CAST(1.0 AS DOUBLE)),
@@ -154,10 +153,16 @@ describe('numeric histogram — real DuckDB integration', () => {
     const data = await fetchHistogramData(t, 'v', 10, [], bridge);
     expect(data.nullCount).toBe(0);
     expect(data.total).toBe(5);
-    expect(data.distinctCount).toBe(5);
-    // min === -Infinity, max === Infinity — degenerate range. Document.
-    expect(Number.isFinite(data.min)).toBe(false);
-    expect(Number.isFinite(data.max)).toBe(false);
+    expect(data.isDiscrete).toBe(true);
+    expect(data.bins.map((bin) => [bin.x0, bin.count])).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 1],
+    ]);
+    expect(data.min).toBe(1);
+    expect(data.max).toBe(3);
+    expect(data.distinctCount).toBe(3);
+    expect(data.nonFiniteCount).toBe(2);
   });
 
   it('range filter narrows the histogram: only matching rows counted, nullCount reflects filtered set', async () => {

@@ -442,6 +442,12 @@ export interface Strings {
     min: (value: string) => string;
     median: (value: string) => string;
     max: (value: string) => string;
+    /**
+     * The end of line 2 for a column holding values its chart leaves out,
+     * having no place on its axis: a numeric column's `NaN`, `Infinity` and
+     * `-Infinity`. "30 non-finite".
+     */
+    nonFiniteCount: (count: number) => string;
     percentTrue: (pct: number) => string;
     allUnique: string;
     uniqueCount: (count: number) => string;
@@ -1010,6 +1016,7 @@ export const defaultStrings: Strings = {
     min: (value) => `min ${value}`,
     median: (value) => `med ${value}`,
     max: (value) => `max ${value}`,
+    nonFiniteCount: (count) => `${count.toLocaleString()} non-finite`,
     percentTrue: (pct) => `${pct}% true`,
     allUnique: 'all unique',
     uniqueCount: (count) => `${count.toLocaleString()} unique`,

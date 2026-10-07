@@ -175,6 +175,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         isDiscrete: true,
         median: fgStats.median,
         distinctCount: fgStats.distinctCount,
+        nonFiniteCount: fgStats.nonFiniteCount,
       };
     } else {
       const [fgBins, fgStats] = await Promise.all([
@@ -201,6 +202,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         isDiscrete: false,
         median: fgStats.median,
         distinctCount: fgStats.distinctCount,
+        nonFiniteCount: fgStats.nonFiniteCount,
       };
     }
   }
@@ -301,6 +303,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       max: isNaN(this.data.max) ? null : this.data.max,
       median: this.data.median,
       distinctCount: this.data.distinctCount,
+      nonFiniteCount: this.data.nonFiniteCount ?? 0,
     };
     this.options.onDefaultStatsChange(stats);
   }

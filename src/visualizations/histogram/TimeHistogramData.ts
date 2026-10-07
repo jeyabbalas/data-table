@@ -9,11 +9,12 @@
  * Every position is a number of seconds since midnight from DuckDB,
  * `EXTRACT(EPOCH FROM col)`, for the range as for the bins; no text is
  * parsed. For a TIME WITH TIME ZONE that is the time of day as written, the
- * offset ignored (`01:30:00+05:30` is 5400), which is how DuckDB's MIN and
- * MAX order it too. A TIME_NS is truncated to microseconds. `24:00:00`, a
- * valid TIME, is 86400: it is counted in the day's last bar.
+ * offset ignored (`01:30:00+05:30` is 5400). A TIME_NS is truncated to
+ * microseconds. `24:00:00`, a valid TIME, is 86400: it is counted in the
+ * day's last bar.
  */
 
+import { isTimeWithTimeZone } from '../../core/duckdbType';
 import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
@@ -262,23 +263,39 @@ function binsFromResults(results: TimeBinResult[], interval: TimeInterval): Time
 // =========================================
 
 /**
+ * SQL for a time column's least and greatest seconds since midnight, on the
+ * scale the bins use (`EXTRACT(EPOCH FROM col)`).
+ *
+ * For TIME and TIME_NS it is the epoch of `MIN` and `MAX`: `EXTRACT` keeps
+ * their order, and the aggregates read two values rather than every row's
+ * epoch (2 ms against 11 ms on a million rows). A TIME WITH TIME ZONE takes
+ * the aggregate of every row's epoch instead. DuckDB's `MIN` and `MAX` order
+ * it by time of day today, but its `<` and `ORDER BY` order it by instant,
+ * and a minimum taken by instant could lie above other rows' times of day,
+ * which would then fall out of the bars.
+ */
+function rangeSQL(col: string, originalType: string | undefined): [min: string, max: string] {
+  return isTimeWithTimeZone(originalType)
+    ? [`MIN(EXTRACT(EPOCH FROM ${col}))`, `MAX(EXTRACT(EPOCH FROM ${col}))`]
+    : [`EXTRACT(EPOCH FROM MIN(${col}))`, `EXTRACT(EPOCH FROM MAX(${col}))`];
+}
+
+/**
  * Fetch time column statistics (min, max, count, nulls)
  *
- * The minimum and maximum are `EXTRACT(EPOCH FROM MIN(col))` and the same of
- * `MAX`, on the scale the bins use. `EXTRACT` keeps the order of TIME and
- * TIME_NS values, and DuckDB's MIN and MAX order a TIME WITH TIME ZONE by its
- * time of day, as the bins place it, so this equals
- * `MIN(EXTRACT(EPOCH FROM col))`, which reads every row's epoch: 11 ms
- * against 2 ms on a million rows. DuckDB's text for them would not do: it
- * carries an offset for a TIME WITH TIME ZONE (`23:00:00+05:30`), and
- * nanoseconds for a TIME_NS, whose epoch is truncated to microseconds, so a
- * minimum read from text could lie above the smallest value's bin position.
+ * The minimum and maximum are seconds since midnight from DuckDB (see
+ * {@link rangeSQL}); `originalType`, the column's DuckDB type, picks the SQL
+ * for them. DuckDB's text for them would not do: it carries an offset for a
+ * TIME WITH TIME ZONE (`23:00:00+05:30`), and nanoseconds for a TIME_NS,
+ * whose epoch is truncated to microseconds, so a minimum read from text could
+ * lie above the smallest value's bin position.
  */
 export async function fetchTimeStats(
   tableName: string,
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
+  originalType?: string,
 ): Promise<{
   minSeconds: number | null;
   maxSeconds: number | null;
@@ -289,11 +306,12 @@ export async function fetchTimeStats(
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
+  const [minSQL, maxSQL] = rangeSQL(col, originalType);
 
   const sql = `
     SELECT
-      EXTRACT(EPOCH FROM MIN(${col})) as min_sec,
-      EXTRACT(EPOCH FROM MAX(${col})) as max_sec,
+      ${minSQL} as min_sec,
+      ${maxSQL} as max_sec,
       COUNT(${col}) as count,
       COUNT(*) - COUNT(${col}) as null_count
     FROM ${tbl}
@@ -537,6 +555,8 @@ export async function fetchTimeNumericBins(
  * @param bridge - WorkerBridge for executing queries
  * @param maxBins - Maximum number of bins (default: 15). The time interval will be
  *                  coarsened if necessary to keep bins within this limit.
+ * @param originalType - The column's DuckDB type (`ColumnSchema.originalType`),
+ *                  which picks the SQL for its range (see {@link fetchTimeStats})
  * @returns TimeHistogramData with bins and metadata
  */
 export async function fetchTimeHistogramData(
@@ -545,10 +565,11 @@ export async function fetchTimeHistogramData(
   filters: Filter[],
   bridge: WorkerBridge,
   maxBins = 15,
+  originalType?: string,
 ): Promise<TimeHistogramData> {
   try {
     // Step 1: Fetch column statistics
-    const stats = await fetchTimeStats(tableName, column, filters, bridge);
+    const stats = await fetchTimeStats(tableName, column, filters, bridge, originalType);
 
     // Handle edge case: no data (all nulls or empty)
     if (stats.count === 0 || stats.minSeconds === null || stats.maxSeconds === null) {

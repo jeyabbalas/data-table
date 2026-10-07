@@ -22,7 +22,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { ColumnSchema } from '@/core/types';
+import type { ColumnSchema, Filter } from '@/core/types';
 import { filtersToWhereClause } from '@/filters/FilterSQL';
 import type { RangeFilter } from '@/filters/FilterTypes';
 import type { VisualizationOptions } from '@/visualizations/BaseVisualization';
@@ -96,7 +96,7 @@ const CASES: ReadonlyArray<readonly [string, string]> = [
   [
     // Its earliest instant is 05:00:00+09 (20:00 UTC the day before), and its
     // latest 20:00:00-08 (04:00 UTC the day after): the range must still be
-    // 01:00 to 23:00, which DuckDB's MIN and MAX give by time of day.
+    // 01:00 to 23:00, whichever order DuckDB's MIN and MAX use.
     'TIME WITH TIME ZONE whose earliest and latest instants are not its earliest and latest times',
     `SELECT CAST(t AS TIMETZ) AS t FROM (VALUES
        ('01:00:00-08'), ('05:00:00+09'), ('20:00:00-08'), ('23:00:00+09')) AS s(t)`,
@@ -167,10 +167,18 @@ describe('time histogram — TIME WITH TIME ZONE, 24:00:00 and TIME_NS', () => {
   const binned = (data: TimeHistogramData): number =>
     data.bins.reduce((sum, bin) => sum + bin.count, 0);
 
+  /** The DuckDB type of `t`, as `ColumnSchema.originalType` holds it. */
+  async function typeOf(t: string): Promise<string> {
+    const [row] = await bridge.query<{ type: string }>(
+      `SELECT typeof(t) AS type FROM "${t}" LIMIT 1`,
+    );
+    return row!.type;
+  }
+
   it.each(CASES)('%s: bins every non-null value', async (_label, select) => {
     const t = await table(select);
 
-    const data = await fetchTimeHistogramData(t, 't', [], bridge);
+    const data = await fetchTimeHistogramData(t, 't', [], bridge, 15, await typeOf(t));
 
     const [range] = await bridge.query<{ min: number; max: number; total: number }>(
       `SELECT MIN(EXTRACT(EPOCH FROM t)) AS min, MAX(EXTRACT(EPOCH FROM t)) AS max,
@@ -193,7 +201,7 @@ describe('time histogram — TIME WITH TIME ZONE, 24:00:00 and TIME_NS', () => {
     const byZone: TimeHistogramData[] = [];
 
     await inEachZone(async () => {
-      byZone.push(await fetchTimeHistogramData(t, 't', [], bridge));
+      byZone.push(await fetchTimeHistogramData(t, 't', [], bridge, 15, 'TIME WITH TIME ZONE'));
     });
 
     const [utc] = byZone;
@@ -267,7 +275,11 @@ describe('time histogram — TIME WITH TIME ZONE, 24:00:00 and TIME_NS', () => {
       emitted: () => RangeFilter;
     }
 
-    async function mount(t: string, originalType: string): Promise<Mounted> {
+    async function mount(
+      t: string,
+      originalType: string,
+      filters: Filter[] = [],
+    ): Promise<Mounted> {
       const container = document.createElement('div');
       vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
         width: WIDTH,
@@ -286,7 +298,7 @@ describe('time histogram — TIME WITH TIME ZONE, 24:00:00 and TIME_NS', () => {
       const options: VisualizationOptions = {
         tableName: t,
         bridge: bridge as unknown as VisualizationOptions['bridge'],
-        filters: [],
+        filters,
         onFilterChange,
       };
       const viz = new TimeHistogram(container, column, options);
@@ -386,6 +398,66 @@ describe('time histogram — TIME WITH TIME ZONE, 24:00:00 and TIME_NS', () => {
         expect(await count(t, filtersToWhereClause([filter])), zone).toBe(2);
       });
       viz.destroy();
+    });
+
+    it.each([
+      [
+        'TIME_NS, its maximum 23:59:59.999999999',
+        'TIME_NS',
+        `SELECT CAST(t AS TIME_NS) AS t FROM (VALUES
+           ('00:00:00.000000001'), ('06:30:00.5'), ('12:00:00'), ('18:00:00.123456789'),
+           ('23:59:59.999999999')) AS s(t)`,
+        '24:00:00',
+        1,
+      ],
+      [
+        'TIME, its maximum 20:00:00.7',
+        'TIME',
+        `SELECT CAST(t AS TIME) AS t FROM (VALUES
+           ('01:00:00'), ('05:00:00'), ('12:00:00'), ('19:59:59'), ('20:00:00.7')) AS s(t)`,
+        '20:00:01',
+        2,
+      ],
+    ] as const)(
+      'takes in a fraction of a second past the last bound of equal-width bars: %s',
+      async (_label, originalType, select, max, lastBar) => {
+        const t = await table(select);
+        const { viz, bars, emitted } = await mount(t, originalType);
+        expect(bars).toHaveLength(15);
+
+        drag(viz, bars, 14, 14);
+
+        // A bound no value exceeds: the maximum rounded up to a whole second,
+        // or the end of the day. Rounded down, it left the maximum out.
+        const filter = emitted();
+        expect(filter.max).toBe(max);
+        expect(filter.maxInclusive).toBe(true);
+        expect(await count(t, filtersToWhereClause([filter]))).toBe(lastBar);
+        viz.destroy();
+      },
+    );
+
+    it('draws no brush for a TIME WITH TIME ZONE range that compares instants', async () => {
+      const t = await table(TIMETZ_ROWS);
+      const bounds = { type: 'range', column: 't', min: '01:30:00', max: '06:00:00' } as const;
+
+      // Added with addFilter, without valueType: it filters by instant, so
+      // bars 0–2 are not what it keeps.
+      const byInstant = await mount(t, 'TIME WITH TIME ZONE', [bounds]);
+      expect(byInstant.viz.getBrushState()).toBeNull();
+      byInstant.viz.destroy();
+
+      const byTimeOfDay = await mount(t, 'TIME WITH TIME ZONE', [{ ...bounds, valueType: 'time' }]);
+      expect(byTimeOfDay.viz.getBrushState()).toEqual({ startBinIndex: 0, endBinIndex: 2 });
+      byTimeOfDay.viz.destroy();
+
+      // A TIME column's range compares the column, its time of day.
+      const time = await table(MIDNIGHT_ROWS);
+      const plain = await mount(time, 'TIME', [
+        { type: 'range', column: 't', min: '23:00:00', max: '24:00:00', maxInclusive: true },
+      ]);
+      expect(plain.viz.getBrushState()).toEqual({ startBinIndex: 1, endBinIndex: 1 });
+      plain.viz.destroy();
     });
   });
 });

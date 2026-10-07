@@ -5,6 +5,7 @@ import {
   containsKind,
   dataTypeOf,
   holdsVariant,
+  isTimeWithTimeZone,
   needsTextMatch,
   parseDuckDBType,
   type DuckDBTypeNode,
@@ -322,6 +323,24 @@ describe('childTypes / containsKind / holdsVariant / needsTextMatch', () => {
     ['JSON[]', false],
   ] as const)('needsTextMatch(%s) is %s', (text, expected) => {
     expect(needsTextMatch(parseDuckDBType(text))).toBe(expected);
+  });
+});
+
+describe('isTimeWithTimeZone', () => {
+  it.each([
+    ['TIME WITH TIME ZONE', true],
+    ['time with time zone', true],
+    ['TIMETZ', true],
+    ['TIME', false],
+    ['TIME_NS', false],
+    ['TIME WITHOUT TIME ZONE', false],
+    ['TIMESTAMP WITH TIME ZONE', false],
+    ['TIME WITH TIME ZONE[]', false],
+    ['STRUCT(t TIME WITH TIME ZONE)', false],
+    ['', false],
+    [undefined, false],
+  ] as const)('isTimeWithTimeZone(%s) is %s', (text, expected) => {
+    expect(isTimeWithTimeZone(text)).toBe(expected);
   });
 });
 

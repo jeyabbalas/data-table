@@ -860,3 +860,21 @@ export function holdsVariant(node: DuckDBTypeNode): boolean {
 export function needsTextMatch(node: DuckDBTypeNode): boolean {
   return containsKind(node, ['union', 'variant', 'unknown']);
 }
+
+/**
+ * Whether `originalType` is TIME WITH TIME ZONE (`TIMETZ`): a time of day
+ * with a UTC offset, `01:30:00+05:30`. Its chart places a value by its time
+ * of day as written, and its range filters compare the same way
+ * (`valueType: 'time'`). A `ColumnSchema` built by hand may leave
+ * `originalType` out, which is not one.
+ *
+ * @example
+ * ```ts
+ * isTimeWithTimeZone('TIME WITH TIME ZONE'); // true
+ * isTimeWithTimeZone('TIME');                // false
+ * ```
+ */
+export function isTimeWithTimeZone(originalType: string | undefined): boolean {
+  const node = parseDuckDBType(originalType ?? '');
+  return node.kind === 'scalar' && (node.name === 'TIME WITH TIME ZONE' || node.name === 'TIMETZ');
+}

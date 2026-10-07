@@ -9,6 +9,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { isTimeWithTimeZone } from '../core/duckdbType';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema } from '../core/types';
@@ -680,15 +681,28 @@ export class FilterPanelField {
     if (!val1 && !val2) return null;
 
     const col = this.column.name;
+    // A TIME WITH TIME ZONE is compared by its time of day as written, as
+    // its chart places it; compared as one, `'09:00'` would take the session
+    // time zone's offset and rows would compare by instant.
+    const timeOfDay = isTimeWithTimeZone(this.column.originalType)
+      ? { valueType: 'time' as const }
+      : {};
 
     if (val1 && val2) {
-      return { type: 'range', column: col, min: val1, max: val2, maxInclusive: true };
+      return { type: 'range', column: col, min: val1, max: val2, maxInclusive: true, ...timeOfDay };
     }
     if (val1 && !val2) {
-      return { type: 'range', column: col, min: val1, max: Infinity };
+      return { type: 'range', column: col, min: val1, max: Infinity, ...timeOfDay };
     }
     // !val1 && val2
-    return { type: 'range', column: col, min: -Infinity, max: val2!, maxInclusive: true };
+    return {
+      type: 'range',
+      column: col,
+      min: -Infinity,
+      max: val2!,
+      maxInclusive: true,
+      ...timeOfDay,
+    };
   }
 
   private buildUuidFilter(): Filter | null {

@@ -108,6 +108,60 @@ describe('filterToSQL', () => {
       };
       expect(filterToSQL(filter)).toBe('"duration" >= INTERVAL \'01:00:00\'');
     });
+
+    it("compares the time of day with valueType 'time'", () => {
+      expect(
+        filterToSQL({
+          type: 'range',
+          column: 'pickup',
+          min: '01:30:00',
+          max: '06:00:00',
+          valueType: 'time',
+        }),
+      ).toBe('(CAST("pickup" AS TIME) >= \'01:30:00\' AND CAST("pickup" AS TIME) < \'06:00:00\')');
+      expect(
+        filterToSQL({
+          type: 'range',
+          column: 'pickup',
+          min: '23:00:00',
+          max: '24:00:00',
+          maxInclusive: true,
+          minExclusive: true,
+          valueType: 'time',
+        }),
+      ).toBe('(CAST("pickup" AS TIME) > \'23:00:00\' AND CAST("pickup" AS TIME) <= \'24:00:00\')');
+    });
+
+    it("compares the time of day with valueType 'time' and an open bound", () => {
+      expect(
+        filterToSQL({
+          type: 'range',
+          column: 'pickup',
+          min: -Infinity,
+          max: '17:00',
+          maxInclusive: true,
+          valueType: 'time',
+        }),
+      ).toBe('CAST("pickup" AS TIME) <= \'17:00\'');
+      expect(
+        filterToSQL({
+          type: 'range',
+          column: 'pickup',
+          min: '09:00',
+          max: Infinity,
+          valueType: 'time',
+        }),
+      ).toBe('CAST("pickup" AS TIME) >= \'09:00\'');
+      expect(
+        filterToSQL({
+          type: 'range',
+          column: 'pickup',
+          min: -Infinity,
+          max: Infinity,
+          valueType: 'time',
+        }),
+      ).toBe('TRUE');
+    });
   });
 
   describe('point filter', () => {

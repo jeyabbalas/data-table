@@ -10,6 +10,7 @@
 
 import { DataTableError, QueryError } from '../../core/errors';
 import type { ColumnSchema, Filter } from '../../core/types';
+import type { RangeFilter } from '../../filters/FilterTypes';
 import type { IntervalColumnStats } from '../../statistics/ColumnStatsTypes';
 import type { VisualizationOptions } from '../BaseVisualization';
 import {
@@ -295,7 +296,7 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
 
   /**
    * Emit a range filter based on current brush bin indices: the filter
-   * {@link intervalBrushFilter} writes, which matches exactly the brushed bars'
+   * `intervalBrushFilter` writes, which matches exactly the brushed bars'
    * rows. Its INTERVAL literals compare with 30-day months, a limitation it
    * documents and keeps on purpose.
    */

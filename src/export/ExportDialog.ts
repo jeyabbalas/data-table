@@ -119,6 +119,13 @@ export class ExportDialog {
   private allRadio!: HTMLInputElement;
   private formatRadios: HTMLInputElement[] = [];
   private scopeRadios: HTMLInputElement[] = [];
+  /**
+   * Selected was checked when its count fell to 0, and All took its place.
+   * Selected comes back with its count, unless a scope has been picked
+   * since: a filter change can drop the count to 0 until its own count
+   * lands.
+   */
+  private selectedScopeSetAside = false;
   private csvOptionsEl!: HTMLElement;
   private jsonOptionsEl!: HTMLElement;
   private copyBtn!: HTMLButtonElement;
@@ -332,6 +339,11 @@ export class ExportDialog {
     fieldset.appendChild(this.selectedOption);
 
     this.scopeRadios = [this.allRadio, filteredRadio, this.selectedRadio];
+    for (const radio of this.scopeRadios) {
+      radio.addEventListener('change', () => {
+        this.selectedScopeSetAside = false;
+      });
+    }
     return fieldset;
   }
 
@@ -519,10 +531,15 @@ export class ExportDialog {
     this.selectedRadio.disabled = disabled;
     this.selectedOption.classList.toggle(`${this.prefix}-export-option--disabled`, disabled);
 
-    // Auto-fallback if selected scope is active but no rows are selected
+    // Auto-fallback if selected scope is active but no rows are selected,
+    // and back once there are, unless a scope has been picked meanwhile.
     if (disabled && this.selectedRadio.checked) {
       this.selectedRadio.checked = false;
       this.allRadio.checked = true;
+      this.selectedScopeSetAside = true;
+    } else if (!disabled && this.selectedScopeSetAside) {
+      this.selectedRadio.checked = true;
+      this.selectedScopeSetAside = false;
     }
   }
 
@@ -595,6 +612,7 @@ export class ExportDialog {
 
   private handleHostClose(): void {
     this.isOpen = false;
+    this.selectedScopeSetAside = false;
     this.element.classList.remove(`${this.prefix}-export-backdrop--open`);
 
     // Cancel any in-flight export

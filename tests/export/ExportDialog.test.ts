@@ -408,6 +408,46 @@ describe('ExportDialog', () => {
 
       expect(counts()[2]).toBe('(3)');
     });
+
+    const radio = (scope: string) =>
+      dialog.getElement().querySelector(`input[value="${scope}"]`) as HTMLInputElement;
+
+    /** Open on a filtered view of 10 rows with row 5 selected, and pick Selected. */
+    function openWithSelectedPicked(): void {
+      state.filters.set([filter]);
+      state.filteredRows.set(10);
+      state.selectedRows.set(new Set([5]));
+      dialog.open();
+      radio('selected').click();
+      expect(radio('selected').checked).toBe(true);
+    }
+
+    it('checks Selected again once a filter change that emptied its count settles', () => {
+      openWithSelectedPicked();
+
+      // Another filter, whose count passes through 0 before it settles.
+      state.filters.set([{ ...filter, max: 20 }]);
+      state.filteredRows.set(0);
+      expect(counts()[2]).toBe('(0)');
+      expect(radio('all').checked).toBe(true);
+      state.filteredRows.set(10);
+
+      expect(counts()[2]).toBe('(1)');
+      expect(radio('selected').checked).toBe(true);
+      expect(radio('all').checked).toBe(false);
+    });
+
+    it('keeps a scope picked while Selected was set aside', () => {
+      openWithSelectedPicked();
+      state.filteredRows.set(0);
+      expect(radio('all').checked).toBe(true);
+
+      radio('filtered').click();
+      state.filteredRows.set(10);
+
+      expect(radio('filtered').checked).toBe(true);
+      expect(radio('selected').checked).toBe(false);
+    });
   });
 
   // =========================================

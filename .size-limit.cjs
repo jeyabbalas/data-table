@@ -17,23 +17,23 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, re-measured after the review fixes to the
- * nested-type work under Vite 8.2.0 / rolldown 1.2.1, which, like rolldown
- * 1.0.1 before it, inlines the shared ModalHost code into each modal
- * consumer):
- *   root entry · ESM               10.93 kB   →  11.4 kB cap (4.3 %)
- *   advanced entry · ESM            2.32 kB   →   2.45 kB cap (5.6 %)
- *   stylesheet                     22.57 kB   →  23.7 kB cap (5.0 %)
- *   lazy ExportDialog chunk        97.67 kB   → 100 kB   cap (2.4 %)
- *   lazy SQLFilterModal chunk       2.53 kB   →   2.6 kB cap (2.8 %)
- *   lazy DerivedColumnModal         3.77 kB   →   3.95 kB cap (4.8 %)
- *   lazy DerivedColumnEditPanel     3.15 kB   →   3.3 kB cap (4.8 %)
- *   lazy FilterPresetPanel          2.62 kB   →   2.7 kB cap (3.1 %)
- *   lazy CodeMirror editor          5.16 kB   →   5.5 kB cap (6.6 %)
- *   lazy extractExpression chunk    2.81 kB   →   2.95 kB cap (5.0 %)
- *   lazy ValueInspector chunk       8.45 kB   →   8.9 kB cap (5.3 %)
- *   lazy ExtractColumnPanel chunk   4.95 kB   →   5.3 kB cap (7.1 %)
- *   lazy TreeView chunk             2.79 kB   →   2.85 kB cap (2.2 %)
+ * Current baseline (brotli, re-measured after the 0.9.0 "nice to have"
+ * fixes, RT-16 – RT-21, under Vite 8.3.0 / rolldown 1.2.10, which, like
+ * rolldown 1.0.1 before it, inlines the shared ModalHost code into each
+ * modal consumer):
+ *   root entry · ESM               11.05 kB   →  11.4 kB cap (3.2 %)
+ *   advanced entry · ESM            2.15 kB   →   2.45 kB cap (14.0 %)
+ *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
+ *   lazy ExportDialog chunk       100.88 kB   → 104 kB   cap (3.1 %)
+ *   lazy SQLFilterModal chunk       2.56 kB   →   2.6 kB cap (1.6 %)
+ *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
+ *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
+ *   lazy FilterPresetPanel          2.69 kB   →   2.7 kB cap (0.4 %)
+ *   lazy CodeMirror editor          5.19 kB   →   5.5 kB cap (6.0 %)
+ *   lazy extractExpression chunk    2.78 kB   →   2.95 kB cap (6.1 %)
+ *   lazy ValueInspector chunk       8.44 kB   →   8.9 kB cap (5.5 %)
+ *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
+ *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values

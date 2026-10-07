@@ -242,12 +242,12 @@ one, in ways each kept bounded (see
   table opens them. A load that fails is said in the live region and
   reported as an `error` event coded `CHUNK_LOAD_FAILED`, and the next open
   asks for the chunk again, which Chrome answers with the same failure until
-  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.45 kB,
-  the `ExtractColumnPanel` chunk 4.95 kB, the `TreeView` chunk the two share
-  2.79 kB, and the `extractExpression` chunk 2.81 kB, which both panels and
+  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.44 kB,
+  the `ExtractColumnPanel` chunk 4.98 kB, the `TreeView` chunk the two share
+  2.80 kB, and the `extractExpression` chunk 2.78 kB, which both panels and
   `actions.addNestedFieldColumn` load. The shared chunk every table loads is
-  97.67 kB, the stylesheet 22.57 kB, the root entry 10.93 kB and `/advanced`
-  2.50 kB (`.size-limit.cjs` holds the caps).
+  100.88 kB, the stylesheet 22.87 kB, the root entry 11.05 kB and `/advanced`
+  2.15 kB (`.size-limit.cjs` holds the caps).
 - **Value reads and exports.** `getCellValue`, `getColumnValues` and the CSV
   and JSON exports read nested values as exact JSON text, and none of those
   reads goes through the query cache, which must not keep megabytes of text.

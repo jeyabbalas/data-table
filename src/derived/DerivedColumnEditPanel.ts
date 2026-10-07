@@ -447,6 +447,10 @@ export class DerivedColumnEditPanel {
             this.editorContainer,
             context,
             this.prefix,
+            {
+              placeholder: this.messages.derived.expressionPlaceholder,
+              ariaLabel: this.messages.derived.expressionLabel,
+            },
           );
         }
       }

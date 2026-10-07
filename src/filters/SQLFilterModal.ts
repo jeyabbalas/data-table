@@ -301,7 +301,10 @@ export class SQLFilterModal {
         this.editorContainer,
         context,
         this.prefix,
-        { placeholder: this.messages.filters.sqlFilter.editorPlaceholder },
+        {
+          placeholder: this.messages.filters.sqlFilter.editorPlaceholder,
+          ariaLabel: this.messages.filters.sqlFilter.conditionLabel,
+        },
       );
     }
 

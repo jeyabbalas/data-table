@@ -6,6 +6,7 @@ import { SQLFilterModal } from '@/filters/SQLFilterModal';
 import { createTableState } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { StateActions } from '@/core/Actions';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { RawSQLFilter } from '@/filters/FilterTypes';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -112,6 +113,34 @@ describe('SQLFilterModal', () => {
       expect(modal.getIsOpen()).toBe(false);
       modal.open();
       expect(modal.getIsOpen()).toBe(true);
+    });
+
+    it('names the SQL editor by the label above it', () => {
+      modal.open();
+      const content = modal.getElement().querySelector('.cm-content')!;
+      expect(content.getAttribute('aria-label')).toBe('SQL WHERE condition');
+    });
+
+    it('names the SQL editor and sets its placeholder from messages', () => {
+      modal.destroy();
+      modal = new SQLFilterModal(state, actions, {
+        messages: mergeStrings(defaultStrings, {
+          filters: {
+            sqlFilter: {
+              conditionLabel: 'Condition SQL WHERE',
+              editorPlaceholder: "Saisir la condition WHERE, ex. age > 18 AND status = 'actif'",
+            },
+          },
+        }),
+      });
+      document.body.appendChild(modal.getElement());
+      modal.open();
+
+      const content = modal.getElement().querySelector('.cm-content')!;
+      expect(content.getAttribute('aria-label')).toBe('Condition SQL WHERE');
+      expect(content.getAttribute('aria-placeholder')).toBe(
+        "Saisir la condition WHERE, ex. age > 18 AND status = 'actif'",
+      );
     });
   });
 

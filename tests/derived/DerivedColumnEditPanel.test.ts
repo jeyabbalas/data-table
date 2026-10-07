@@ -6,6 +6,7 @@ import { DerivedColumnEditPanel } from '@/derived/DerivedColumnEditPanel';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import type { DerivedColumnDef } from '@/derived/types';
@@ -299,6 +300,27 @@ describe('DerivedColumnEditPanel', () => {
         .getElement()
         .querySelector('.dt-derived-edit-vector-section') as HTMLElement;
       expect(vectorSection.style.display).toBe('none');
+
+      panel.destroy();
+    });
+
+    it('names the SQL editor and sets its placeholder from messages', () => {
+      const panel = new DerivedColumnEditPanel(state, actions, {
+        messages: mergeStrings(defaultStrings, {
+          derived: {
+            expressionLabel: 'Expression SQL',
+            expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+          },
+        }),
+      });
+      rootEl.appendChild(panel.getElement());
+      panel.open('total', anchorEl);
+
+      const content = panel.getElement().querySelector('.cm-content')!;
+      expect(content.getAttribute('aria-placeholder')).toBe(
+        'Saisir une expression SQL, ex. prix * quantité',
+      );
+      expect(content.getAttribute('aria-label')).toBe('Expression SQL');
 
       panel.destroy();
     });

@@ -6,6 +6,7 @@ import { DerivedColumnModal } from '@/derived/DerivedColumnModal';
 import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { EditorView } from '@codemirror/view';
@@ -229,6 +230,26 @@ describe('DerivedColumnModal', () => {
       .querySelector('.dt-derived-modal-create') as HTMLButtonElement;
     expect(createBtn).not.toBeNull();
     expect(createBtn.disabled).toBe(true);
+  });
+
+  it('names the SQL editor and sets its placeholder from messages', () => {
+    modal.destroy();
+    modal = new DerivedColumnModal(state, actions, {
+      messages: mergeStrings(defaultStrings, {
+        derived: {
+          expressionLabel: 'Expression SQL',
+          expressionPlaceholder: 'Saisir une expression SQL, ex. prix * quantité',
+        },
+      }),
+    });
+    document.body.appendChild(modal.getElement());
+    modal.open();
+
+    const content = modal.getElement().querySelector('.cm-content')!;
+    expect(content.getAttribute('aria-placeholder')).toBe(
+      'Saisir une expression SQL, ex. prix * quantité',
+    );
+    expect(content.getAttribute('aria-label')).toBe('Expression SQL');
   });
 
   // =========================================

@@ -855,11 +855,11 @@ Type definitions inlined under [Column-header tooltip content](#column-header-to
 
 ### Selection
 
-| Method           | Signature                                                          | Notes                                                                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `selectRow`      | `(index: number, mode?: 'replace' \| 'toggle' \| 'range') => void` | `index` is a 0-based position in the filtered, sorted view. Default mode `'replace'`; `'range'` runs from the last row selected or toggled.                              |
-| `clearSelection` | `() => void`                                                       | Also forgets where a `'range'` starts.                                                                                                                                   |
-| `selectAll`      | `() => void`                                                       | Positions `0 … n−1` of the current view: `n` is `filteredRows` while a filter is active, else `totalRows`. After a filter change, call it once `filterChange` has fired. |
+| Method           | Signature                                                          | Notes                                                                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `selectRow`      | `(index: number, mode?: 'replace' \| 'toggle' \| 'range') => void` | `index` is a 0-based position in the filtered, sorted view. Default mode `'replace'`; `'range'` runs from the last row selected or toggled, or selects the row alone when there is none or it is past the end of the view. |
+| `clearSelection` | `() => void`                                                       | Also forgets where a `'range'` starts.                                                                                                                                                                                     |
+| `selectAll`      | `() => void`                                                       | Positions `0 … n−1` of the current view: `n` is `filteredRows` while a filter is active, else `totalRows`. After a filter change, call it once `filterChange` has fired.                                                   |
 
 A filter or sort change keeps the positions, which then name other rows, and fires no `selectionChange`; exports, `Ctrl/Cmd+C` and `getColumnValues({ scope: 'selected' })` skip positions past the end of the view.
 

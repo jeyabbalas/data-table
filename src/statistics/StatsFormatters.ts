@@ -131,19 +131,31 @@ export function formatStatsLine1(
 // =========================================
 
 /**
+ * The end of line 2 for a column holding values its chart leaves out, having
+ * no place on its axis (`NaN`, `Infinity`, `-Infinity`): "30 non-finite".
+ * Null when the count is 0 or missing.
+ */
+function nonFiniteNote(count: number | undefined, messages: Strings): string | null {
+  return count ? messages.statistics.nonFiniteCount(count) : null;
+}
+
+/**
  * Format Line 2 for numeric types (integer, float, decimal).
- * "min 0 · med 42 · max 1.23e+6"
+ * "min 0 · med 42 · max 1.23e+6", then "· 30 non-finite" for the `NaN` and
+ * `±Infinity` values that the minimum, median and maximum leave out. A
+ * column with no finite values shows the note alone.
  */
 function formatNumericLine2(
   stats: Extract<ColumnStatsData, { kind: 'numeric' }>,
   messages: Strings,
 ): string {
   const s = messages.statistics;
+  const note = nonFiniteNote(stats.nonFiniteCount, messages);
   // Loose equality (==) catches both null and undefined as defense-in-depth
-  if (stats.min == null || stats.max == null) return '';
+  if (stats.min == null || stats.max == null) return note ?? '';
 
-  // Single value case
-  if (stats.min === stats.max) {
+  // Single value case. Beside non-finite values, "all values" would be false.
+  if (stats.min === stats.max && !note) {
     return s.allValues(formatStatValue(stats.min));
   }
 
@@ -153,6 +165,7 @@ function formatNumericLine2(
     parts.push(s.median(formatStatValue(stats.median)));
   }
   parts.push(s.max(formatStatValue(stats.max)));
+  if (note) parts.push(note);
 
   return parts.join(s.separator);
 }

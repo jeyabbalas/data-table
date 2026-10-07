@@ -205,6 +205,12 @@ describe('calculateOptimalBins', () => {
     expect(result).toBeGreaterThanOrEqual(5);
     expect(result).toBeLessThanOrEqual(100);
   });
+
+  it('falls back to Sturges when the range and the IQR both pass Number.MAX_VALUE', () => {
+    // `max - min` and the Freedman-Diaconis width are both Infinity, whose
+    // ratio is NaN; ceil(log2(104) + 1) is 8.
+    expect(calculateOptimalBins(-1e308, 1e308, 104, Infinity, 15)).toBe(8);
+  });
 });
 
 // =========================================
@@ -246,6 +252,171 @@ describe('fetchHistogramData', () => {
     expect(result.total).toBe(1005);
     expect(result.bins[0].count).toBe(100);
     expect(result.bins[2].count).toBe(300);
+    // A result without non_finite_count (a custom bridge, an older mock) has none.
+    expect(result.nonFiniteCount).toBe(0);
+  });
+
+  it('leaves NaN and ±Infinity out of the stats and the bins, and counts them', async () => {
+    const mockBridge = createMockBridge({
+      stats: [
+        {
+          min: 0,
+          max: 100,
+          count: 1030,
+          null_count: 5,
+          non_finite_count: 30,
+          q1: 25,
+          q3: 75,
+          distinct_count: 900,
+        },
+      ],
+      bins: [{ bin_idx: 0, count: 1000 }],
+    });
+
+    const result = await fetchHistogramData('test_table', 'price', 5, [], mockBridge);
+
+    const [statsSQL, binsSQL] = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0] as string,
+    );
+    // `__dt_f` is the value when finite, NULL otherwise: each value is
+    // tested once.
+    expect(statsSQL).toContain(
+      'SELECT "price" AS __dt_v, CASE WHEN isfinite(CAST("price" AS DOUBLE)) THEN "price" END AS __dt_f',
+    );
+    expect(statsSQL).toContain('CAST(MIN(__dt_f) AS DOUBLE) as min');
+    expect(statsSQL).toContain('CAST(MAX(__dt_f) AS DOUBLE) as max');
+    expect(statsSQL).toContain('CAST(APPROX_QUANTILE(__dt_f, 0.5) AS DOUBLE) as median');
+    expect(statsSQL).toContain('COUNT(DISTINCT __dt_f) as distinct_count');
+    expect(statsSQL).toContain('COUNT(__dt_v) - COUNT(__dt_f) as non_finite_count');
+    // Line 1 and the percentages still count every value.
+    expect(statsSQL).toContain('COUNT(__dt_v) as count');
+    // Filtering the stats alone is not enough: casting an infinite bin index
+    // to INTEGER fails, so the bin query leaves the non-finite rows out too.
+    expect(binsSQL).toContain('WHERE "price" IS NOT NULL AND isfinite(CAST("price" AS DOUBLE))');
+    expect(result.nonFiniteCount).toBe(30);
+    expect(result.total).toBe(1035);
+  });
+
+  it('skips the finite test for a column that cannot hold NaN or ±Infinity', async () => {
+    const mockBridge = createMockBridge({
+      stats: [
+        { min: 0, max: 100, count: 1000, null_count: 5, q1: 25, q3: 75, distinct_count: 900 },
+      ],
+      bins: [{ bin_idx: 0, count: 1000 }],
+    });
+
+    // An integer or DECIMAL column: `Histogram` passes false.
+    const result = await fetchHistogramData('test_table', 'price', 5, [], mockBridge, false);
+
+    const [statsSQL, binsSQL] = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0] as string,
+    );
+    expect(statsSQL).not.toContain('isfinite');
+    expect(statsSQL).not.toContain('__dt_');
+    expect(statsSQL).toContain('CAST(MIN("price") AS DOUBLE) as min');
+    expect(statsSQL).toContain('COUNT("price") - COUNT("price") as non_finite_count');
+    expect(statsSQL).toContain('FROM "test_table"');
+    expect(binsSQL).not.toContain('isfinite');
+    expect(binsSQL).toContain('WHERE "price" IS NOT NULL\n');
+    expect(result.nonFiniteCount).toBe(0);
+  });
+
+  it('keeps the bin query of an ordinary range as it was', async () => {
+    const mockBridge = createMockBridge({
+      stats: [{ min: 0, max: 100, count: 100, null_count: 0, q1: 25, q3: 75, distinct_count: 100 }],
+      bins: [],
+    });
+
+    await fetchHistogramData('test_table', 'price', 5, [], mockBridge);
+
+    const binsSQL = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls[1]![0] as string;
+    expect(binsSQL).toContain(
+      'LEAST(FLOOR((CAST("price" AS DOUBLE) - 0) / 20)::INTEGER, 4) as bin_idx',
+    );
+  });
+
+  it('divides before subtracting when the range passes Number.MAX_VALUE', async () => {
+    const mockBridge = createMockBridge({
+      stats: [
+        {
+          min: -1e308,
+          max: 1e308,
+          count: 101,
+          null_count: 0,
+          q1: -5e306,
+          q3: 5e306,
+          distinct_count: 101,
+        },
+      ],
+      bins: [],
+    });
+
+    const result = await fetchHistogramData('test_table', 'price', 15, [], mockBridge);
+
+    const binsSQL = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls[1]![0] as string;
+    // `max - min` is Infinity, which DuckDB would read as a column name.
+    expect(binsSQL).not.toMatch(/Infinity|NaN/);
+    const width = 1e308 / 15 - -1e308 / 15;
+    expect(binsSQL).toContain(
+      `LEAST(FLOOR(CAST("price" AS DOUBLE) / ${width} - ${-1e308 / width})::INTEGER, 14) as bin_idx`,
+    );
+    expect(result.bins).toHaveLength(15);
+    expect(result.bins[0]!.x0).toBe(-1e308);
+    expect(result.bins[14]!.x1).toBe(1e308);
+    expect(result.bins.every((bin) => Number.isFinite(bin.x0) && Number.isFinite(bin.x1))).toBe(
+      true,
+    );
+  });
+
+  it('gives no bar to a non-finite value in discrete mode', async () => {
+    const mockBridge = createMockBridge({
+      // distinct_count is of the finite values.
+      stats: [{ min: 1, max: 3, count: 5, null_count: 0, non_finite_count: 2, distinct_count: 3 }],
+      discrete: [
+        { value: 1, count: 1 },
+        { value: 2, count: 1 },
+        { value: 3, count: 1 },
+      ],
+    });
+
+    const result = await fetchHistogramData('test_table', 'price', 15, [], mockBridge);
+
+    const discreteSQL = (mockBridge.query as ReturnType<typeof vi.fn>).mock.calls[1]![0] as string;
+    expect(discreteSQL).toContain(
+      'WHERE "price" IS NOT NULL AND isfinite(CAST("price" AS DOUBLE))',
+    );
+    expect(result.isDiscrete).toBe(true);
+    expect(result.bins.map((bin) => bin.x0)).toEqual([1, 2, 3]);
+    expect(result.nonFiniteCount).toBe(2);
+  });
+
+  it('gives a single value the finite rows only', async () => {
+    const mockBridge = createMockBridge({
+      stats: [
+        { min: 42, max: 42, count: 100, null_count: 0, non_finite_count: 10, q1: 42, q3: 42 },
+      ],
+    });
+
+    const result = await fetchHistogramData('single_value_table', 'value', 'auto', [], mockBridge);
+
+    expect(result.isSingleValue).toBe(true);
+    expect(result.bins).toEqual([{ x0: 42, x1: 42, count: 90 }]);
+    expect(result.nonFiniteCount).toBe(10);
+    expect(result.total).toBe(100);
+  });
+
+  it('draws no bars when no value is finite', async () => {
+    const mockBridge = createMockBridge({
+      stats: [{ min: null, max: null, count: 4, null_count: 1, non_finite_count: 4 }],
+    });
+
+    const result = await fetchHistogramData('nan_table', 'value', 'auto', [], mockBridge);
+
+    expect(mockBridge.query).toHaveBeenCalledTimes(1);
+    expect(result.bins).toEqual([]);
+    expect(result.nonFiniteCount).toBe(4);
+    expect(result.nullCount).toBe(1);
+    expect(result.total).toBe(5);
   });
 
   it('should handle empty result', async () => {

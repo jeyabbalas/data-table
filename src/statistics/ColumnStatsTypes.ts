@@ -25,14 +25,29 @@ export interface BaseColumnStats {
 
 /**
  * Stats for numeric columns (integer, float, decimal).
- * Line 2: "min 0 · med 42 · max 1.2K"
+ * Line 2: "min 0 · med 42 · max 1.2K", then "· 30 non-finite" when the
+ * column holds `NaN`, `Infinity` or `-Infinity`.
+ *
+ * `min`, `max`, `median` and `distinctCount` are of the finite values, as
+ * the histogram's bars are. `nonNullCount` counts the non-finite values too.
  */
 export interface NumericColumnStats extends BaseColumnStats {
   kind: 'numeric';
+  /** Minimum finite value, or null if there is none */
   min: number | null;
+  /** Maximum finite value, or null if there is none */
   max: number | null;
+  /** Approximate median of the finite values */
   median: number | null;
+  /** Count of distinct finite values */
   distinctCount: number;
+  /**
+   * Count of `NaN`, `Infinity` and `-Infinity` values in the (possibly
+   * filtered) column, which the chart leaves out of its bars and of `min`,
+   * `median` and `max`. Line 2 ends with it when above 0. Optional so that
+   * stats built by a custom chart still type-check.
+   */
+  nonFiniteCount?: number | undefined;
 }
 
 /**

@@ -414,7 +414,8 @@ grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizat
   [Filters → Matching nested values](../guides/filters.md#matching-nested-values).
 - **Translate the new strings.** `messages.values` is new: the nested type
   names, the value inspector, the extract panel and `panelLoadFailed`.
-  `messages.statistics` gains `nonNullCategory`, `chartFailed` and `noData`.
+  `messages.statistics` gains `nonNullCategory`, `chartFailed`, `noData` and
+  `nonFiniteCount`.
   Left out, they are English; code that builds a complete `Strings` object
   must add them to compile. See
   [i18n → Nested column types](../guides/i18n.md#nested-column-types).

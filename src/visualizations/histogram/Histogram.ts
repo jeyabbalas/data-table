@@ -114,6 +114,16 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
   // =========================================
 
   /**
+   * Whether this column can hold `NaN` or `±Infinity`, which the data
+   * functions leave out with a test on every row. An integer or DECIMAL
+   * column cannot, and skips it; any other type is tested: a FLOAT or
+   * DOUBLE column, or one a custom registration charts with `Histogram`.
+   */
+  private get checkFinite(): boolean {
+    return this.column.type !== 'integer' && this.column.type !== 'decimal';
+  }
+
+  /**
    * Ensure initialData is cached (unfiltered fetch).
    * Returns immediately if already cached. Deduplicates concurrent calls.
    */
@@ -125,7 +135,14 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       const { tableName, bridge } = this.options;
       const col = this.column.name;
 
-      this.initialDataPromise = fetchHistogramData(tableName, col, maxBins, [], bridge)
+      this.initialDataPromise = fetchHistogramData(
+        tableName,
+        col,
+        maxBins,
+        [],
+        bridge,
+        this.checkFinite,
+      )
         .then((data) => {
           this.initialData = data;
         })
@@ -151,17 +168,19 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
     const initial = this.initialData!;
     const { tableName, bridge } = this.options;
     const col = this.column.name;
+    const checkFinite = this.checkFinite;
 
     // Handle edge cases: no bins in initial data
     if (initial.bins.length === 0) {
-      return fetchHistogramData(tableName, col, this.options.maxBins ?? 15, filters, bridge);
+      const maxBins = this.options.maxBins ?? 15;
+      return fetchHistogramData(tableName, col, maxBins, filters, bridge, checkFinite);
     }
 
     if (initial.isDiscrete) {
       const discreteVals = initial.bins.map((b) => b.x0);
       const [fgDiscreteBins, fgStats] = await Promise.all([
-        fetchDiscreteBins(tableName, col, discreteVals, filters, bridge),
-        fetchColumnStats(tableName, col, filters, bridge),
+        fetchDiscreteBins(tableName, col, discreteVals, filters, bridge, checkFinite),
+        fetchColumnStats(tableName, col, filters, bridge, checkFinite),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
 
@@ -175,6 +194,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         isDiscrete: true,
         median: fgStats.median,
         distinctCount: fgStats.distinctCount,
+        nonFiniteCount: fgStats.nonFiniteCount,
       };
     } else {
       const [fgBins, fgStats] = await Promise.all([
@@ -186,8 +206,9 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           initial.bins.length,
           filters,
           bridge,
+          checkFinite,
         ),
-        fetchColumnStats(tableName, col, filters, bridge),
+        fetchColumnStats(tableName, col, filters, bridge, checkFinite),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
 
@@ -201,6 +222,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
         isDiscrete: false,
         median: fgStats.median,
         distinctCount: fgStats.distinctCount,
+        nonFiniteCount: fgStats.nonFiniteCount,
       };
     }
   }
@@ -246,6 +268,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
           maxBins,
           allFilters,
           this.options.bridge,
+          this.checkFinite,
         );
         if (seq !== this.fetchSequence || this.destroyed) return;
         this.data = fetched;
@@ -301,6 +324,7 @@ export class Histogram extends SharedHistogramBase<HistogramData> {
       max: isNaN(this.data.max) ? null : this.data.max,
       median: this.data.median,
       distinctCount: this.data.distinctCount,
+      nonFiniteCount: this.data.nonFiniteCount ?? 0,
     };
     this.options.onDefaultStatsChange(stats);
   }

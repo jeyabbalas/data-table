@@ -69,11 +69,20 @@ vi.mock('../../../src/visualizations/histogram/HistogramData', () => ({
     max: 50,
     total: 60,
   }),
+  // The crossfilter foreground's fetches, for the tests that set a filter.
+  fetchColumnStats: vi.fn(),
+  fetchHistogramBins: vi.fn(),
+  fetchDiscreteBins: vi.fn(),
 }));
 
 import { Histogram } from '../../../src/visualizations/histogram/Histogram';
-import { fetchHistogramData } from '../../../src/visualizations/histogram/HistogramData';
+import {
+  fetchColumnStats,
+  fetchHistogramBins,
+  fetchHistogramData,
+} from '../../../src/visualizations/histogram/HistogramData';
 import type { ColumnSchema } from '../../../src/core/types';
+import type { NumericColumnStats } from '../../../src/statistics/ColumnStatsTypes';
 import type { VisualizationOptions } from '../../../src/visualizations/BaseVisualization';
 
 describe('Histogram', () => {
@@ -144,13 +153,33 @@ describe('Histogram', () => {
       // Wait for async fetchData
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      // Default maxBins is 15
+      // Default maxBins is 15. An INTEGER column holds no NaN or ±Infinity,
+      // so it skips the finite test (the last argument).
       expect(fetchHistogramData).toHaveBeenCalledWith(
         'test_table',
         'test_column',
         15,
         [],
         options.bridge,
+        false,
+      );
+    });
+
+    it('asks for the finite test on a FLOAT or DOUBLE column', async () => {
+      histogram = new Histogram(
+        container,
+        { ...column, type: 'float', originalType: 'DOUBLE' },
+        options,
+      );
+      await histogram.waitForData();
+
+      expect(fetchHistogramData).toHaveBeenCalledWith(
+        'test_table',
+        'test_column',
+        15,
+        [],
+        options.bridge,
+        true,
       );
     });
   });
@@ -215,6 +244,98 @@ describe('Histogram', () => {
     it('returns the column schema', () => {
       histogram = new Histogram(container, column, options);
       expect(histogram.getColumn()).toBe(column);
+    });
+  });
+
+  describe('default stats: the non-finite count', () => {
+    // Only a FLOAT or DOUBLE column holds NaN or ±Infinity.
+    const doubleColumn: ColumnSchema = {
+      name: 'test_column',
+      type: 'float',
+      nullable: true,
+      originalType: 'DOUBLE',
+    };
+    // 1,000 rows: 960 finite, 30 NaN or ±Infinity, 10 null.
+    const withNonFinite = {
+      bins: [
+        { x0: 0.57, x1: 71.64, count: 500 },
+        { x0: 71.64, x1: 142.71, count: 460 },
+      ],
+      nullCount: 10,
+      min: 0.57,
+      max: 142.71,
+      total: 1000,
+      isSingleValue: false,
+      isDiscrete: false,
+      median: 71.61,
+      distinctCount: 960,
+      nonFiniteCount: 30,
+    };
+
+    const lastStats = (spy: ReturnType<typeof vi.fn>): NumericColumnStats =>
+      spy.mock.calls[spy.mock.calls.length - 1]![0] as NumericColumnStats;
+
+    it('reports the count the data carries', async () => {
+      vi.mocked(fetchHistogramData).mockResolvedValueOnce(withNonFinite);
+      const onDefaultStatsChange = vi.fn();
+      histogram = new Histogram(container, doubleColumn, { ...options, onDefaultStatsChange });
+      await histogram.waitForData();
+
+      expect(lastStats(onDefaultStatsChange)).toEqual({
+        kind: 'numeric',
+        totalRows: 1000,
+        nonNullCount: 990,
+        nullCount: 10,
+        filteredTotalRows: null,
+        min: 0.57,
+        max: 142.71,
+        median: 71.61,
+        distinctCount: 960,
+        nonFiniteCount: 30,
+      });
+    });
+
+    it('reports 0 for data that carries none', async () => {
+      const onDefaultStatsChange = vi.fn();
+      histogram = new Histogram(container, doubleColumn, { ...options, onDefaultStatsChange });
+      await histogram.waitForData();
+
+      expect(lastStats(onDefaultStatsChange).nonFiniteCount).toBe(0);
+    });
+
+    it('counts the rows passing another column’s filter', async () => {
+      vi.mocked(fetchHistogramData).mockResolvedValueOnce(withNonFinite);
+      vi.mocked(fetchHistogramBins).mockResolvedValueOnce([
+        { x0: 0.57, x1: 71.64, count: 200 },
+        { x0: 71.64, x1: 142.71, count: 184 },
+      ]);
+      vi.mocked(fetchColumnStats).mockResolvedValueOnce({
+        min: 1,
+        max: 140,
+        count: 396,
+        nullCount: 4,
+        nonFiniteCount: 12,
+        q1: 30,
+        q3: 110,
+        median: 70,
+        distinctCount: 384,
+      });
+      const onDefaultStatsChange = vi.fn();
+      histogram = new Histogram(container, doubleColumn, {
+        ...options,
+        filters: [{ type: 'range', column: 'other', min: 0, max: 5 }],
+        onDefaultStatsChange,
+      });
+      await histogram.waitForData();
+
+      expect(lastStats(onDefaultStatsChange)).toMatchObject({
+        totalRows: 1000,
+        filteredTotalRows: 400,
+        nonFiniteCount: 12,
+      });
+      // Both foreground fetches leave the non-finite values out.
+      expect(vi.mocked(fetchColumnStats).mock.calls[0]![4]).toBe(true);
+      expect(vi.mocked(fetchHistogramBins).mock.calls[0]![7]).toBe(true);
     });
   });
 

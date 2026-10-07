@@ -117,8 +117,9 @@ What to expect:
   for the charts in view to draw their first data, not for every column's.
 - **Before its data.** A new chart stays blank until its data arrives, at
   load and when its column scrolls into view. "No data"
-  (`messages.statistics.noData`) means the column has no values and no
-  nulls.
+  (`messages.statistics.noData`) means the column has no values the chart
+  can draw and no nulls: see the values a chart leaves out, under
+  [Reading the column stats](#reading-the-column-stats).
 - **Filtering.** A filter change refreshes only the charts that exist. A
   column scrolled into view later gets its chart built with the filters in
   force then, so it is correct when it appears. Until then its stats show
@@ -202,6 +203,23 @@ A continuous histogram can only draw bin-aligned brushes, so a range
 filter created through the panel or API snaps its drawn brush (and the
 selection label) to bin boundaries; line 1 always reflects the exact
 filter.
+
+**Values a chart leaves out.** A chart draws the values that have a place
+on its axis. A numeric column's `NaN`, `Infinity` and `-Infinity` have
+none, so its histogram leaves them out of its bars, of `min`, `med` and
+`max`, and of the distinct count that decides whether it draws a bar per
+value. Line 2 ends with how many it left out of the rows passing the
+filters: `min 0.57 · med 71.61 · max 142.71 · 30 non-finite`
+(`messages.statistics.nonFiniteCount`). They are values, not nulls, so
+line 1 and every percentage still count them. A column with no finite
+values draws "No data", or its null bar when it has nulls, and line 2 is
+the count alone. A brush never selects them, as its bounds are finite.
+Two filters the chart draws as a brush do match them: the filter panel's
+`>` and `>=` (`"v" >= 100` holds for `NaN`, which DuckDB sorts above every
+number, and for `Infinity`; `<` and `<=` hold for `-Infinity`), and a
+`not-null` filter, drawn over every bar. Line 1 then counts those rows,
+while the committed selection, which sums the bars under the brush, does
+not. To see only them, add a raw-SQL filter, `NOT isfinite(v)`.
 
 All of these strings are localizable via `messages.statistics.*` — see
 the [i18n guide](./i18n.md).

@@ -359,6 +359,7 @@ export const frenchMessages: DeepPartial<Strings> = {
     min: (value) => `min ${value}`,
     median: (value) => `méd ${value}`,
     max: (value) => `max ${value}`,
+    nonFiniteCount: (count) => `${count.toLocaleString()} non ${count < 2 ? 'finie' : 'finies'}`,
     percentTrue: (pct) => `${pct} % vrai`,
     allUnique: 'tout unique',
     uniqueCount: (count) => `${count.toLocaleString()} unique`,

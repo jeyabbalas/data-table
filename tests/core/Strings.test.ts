@@ -57,6 +57,8 @@ describe('Strings', () => {
       expect(s.matchCount(0)).toBe('0 match');
       expect(s.valueListSuffix(8)).toBe(', ... (8 values)');
       expect(s.nonNullCategory).toBe('non-null');
+      expect(s.nonFiniteCount(30)).toBe('30 non-finite');
+      expect(s.nonFiniteCount(1234)).toBe('1,234 non-finite');
     });
 
     it('ships the spoken forms of nested and JSON types', () => {

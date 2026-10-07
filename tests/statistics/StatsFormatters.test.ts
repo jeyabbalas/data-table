@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defaultStrings, mergeStrings } from '../../src/core/Strings';
 import {
   formatStatValue,
   formatCount,
@@ -370,6 +371,79 @@ describe('formatDefaultStats - Numeric Line 2', () => {
       'integer',
     );
     expect(result).not.toContain('dt-stats-line2');
+  });
+});
+
+// =========================================
+// Line 2: Numeric, non-finite values
+// =========================================
+
+describe('formatStatsLine2 - numeric non-finite note', () => {
+  // 1,000 rows: 960 finite, 30 NaN or ±Infinity, 10 null.
+  const makeNumeric = (overrides: Partial<NumericColumnStats> = {}): NumericColumnStats => ({
+    kind: 'numeric',
+    totalRows: 1000,
+    nonNullCount: 990,
+    nullCount: 10,
+    filteredTotalRows: null,
+    min: 0.57,
+    max: 142.71,
+    median: 71.61,
+    distinctCount: 960,
+    nonFiniteCount: 30,
+    ...overrides,
+  });
+
+  it('ends line 2 with the count of values the chart leaves out', () => {
+    expect(formatStatsLine2(makeNumeric(), 'float')).toBe(
+      'min 0.57 · med 71.61 · max 142.71 · 30 non-finite',
+    );
+    expect(formatDefaultStats(makeNumeric(), 'float')).toBe(
+      '<span class="dt-stats-line1">1,000 rows · 10 null</span><br>' +
+        '<span class="dt-stats-line2">min 0.57 · med 71.61 · max 142.71 · 30 non-finite</span>',
+    );
+  });
+
+  it('adds nothing for a count of 0, or none', () => {
+    const plain = 'min 0.57 · med 71.61 · max 142.71';
+    expect(formatStatsLine2(makeNumeric({ nonFiniteCount: 0 }), 'float')).toBe(plain);
+    expect(formatStatsLine2(makeNumeric({ nonFiniteCount: undefined }), 'float')).toBe(plain);
+    const { nonFiniteCount: _omitted, ...withoutField } = makeNumeric();
+    expect(formatStatsLine2(withoutField, 'float')).toBe(plain);
+  });
+
+  it('shows the note alone when no value is finite', () => {
+    const stats = makeNumeric({
+      totalRows: 5,
+      nonNullCount: 4,
+      nullCount: 1,
+      min: null,
+      max: null,
+      median: null,
+      distinctCount: 0,
+      nonFiniteCount: 4,
+    });
+    expect(formatStatsLine2(stats, 'float')).toBe('4 non-finite');
+    // No nulls either: the chart draws "No data", and line 2 says why.
+    expect(formatStatsLine2({ ...stats, totalRows: 4, nullCount: 0 }, 'float')).toBe(
+      '4 non-finite',
+    );
+  });
+
+  it('keeps min · med · max for one finite value beside non-finite ones', () => {
+    const stats = makeNumeric({ min: 5, max: 5, median: 5, distinctCount: 1, nonFiniteCount: 1 });
+    // "all values: 5" would be false.
+    expect(formatStatsLine2(stats, 'float')).toBe('min 5 · med 5 · max 5 · 1 non-finite');
+    expect(formatStatsLine2({ ...stats, nonFiniteCount: 0 }, 'float')).toBe('all values: 5');
+  });
+
+  it('takes the note from messages', () => {
+    const messages = mergeStrings(defaultStrings, {
+      statistics: { nonFiniteCount: (count) => `${count} non finies` },
+    });
+    expect(formatStatsLine2(makeNumeric(), 'float', messages)).toBe(
+      'min 0.57 · med 71.61 · max 142.71 · 30 non finies',
+    );
   });
 });
 

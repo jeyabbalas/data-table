@@ -238,4 +238,18 @@ describe('TIME WITH TIME ZONE column stats and filters (real DuckDB)', () => {
     await waitForSlot(h, 'id', '3 / 9 rows');
     await h.table.destroy();
   }, 20_000);
+
+  it("loads a preset's valueType 'time' on a column that is no time without it", async () => {
+    const h = await mountTable();
+    await waitForSlot(h, 't', '01:30:00 – 24:00:00');
+
+    // CAST("id" AS TIME) would fail every query, the row count's included.
+    h.table.actions.loadFilterPreset([
+      { type: 'range', column: 'id', min: 1, max: 5, valueType: 'time' },
+    ]);
+
+    expect(h.table.state.filters.get()).toEqual([{ type: 'range', column: 'id', min: 1, max: 5 }]);
+    await waitForSlot(h, 't', '4 / 9 rows');
+    await h.table.destroy();
+  }, 20_000);
 });

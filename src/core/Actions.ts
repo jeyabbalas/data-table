@@ -18,8 +18,7 @@ import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
-import { jsonFiltersAsText } from '../filters/jsonFilters';
-import { timeTzRangesAsTime } from '../filters/timeTzFilters';
+import { normalizeRestoredFilters } from '../filters/restoredFilters';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
@@ -1233,13 +1232,16 @@ export class StateActions {
    * undo step. Uses suppressUndoCapture + batch() so Ctrl+Z restores the
    * entire pre-load state atomically.
    *
-   * A point, set or not-set filter on a JSON column without `valueType` is
-   * given `valueType: 'text'` (`jsonFiltersAsText`): compared as JSON,
-   * text that is not JSON would fail every query, and a preset saved before
-   * 0.9, or imported, may hold such a filter. A range filter on a TIME WITH
-   * TIME ZONE column without `valueType` is given `valueType: 'time'`
-   * (`timeTzRangesAsTime`), so that it compares the time of day its
-   * column's chart shows rather than the instant.
+   * The filters get the `valueType` they need on this table, as a session
+   * restore gives them (`normalizeRestoredFilters`). A point, set or not-set
+   * filter on a JSON column without one is given `valueType: 'text'`:
+   * compared as JSON, text that is not JSON would fail every query, and a
+   * preset saved before 0.9, or imported, may hold such a filter. A range
+   * filter on a TIME WITH TIME ZONE column whose bounds have no offset is
+   * given `valueType: 'time'`, so that it compares the time of day its
+   * column's chart shows rather than the instant; and a range filter's
+   * `valueType: 'time'` on a column that is not TIME or TIME WITH TIME ZONE,
+   * where the cast would fail every query, goes.
    *
    * Columns the preset does not carry forward have lost their filter, so they
    * are notified — outside the suppression window, since the callback may
@@ -1252,8 +1254,7 @@ export class StateActions {
     this.suppressUndoCapture = true;
     try {
       batch(() => {
-        const schema = this.state.schema.get();
-        this.state.filters.set(timeTzRangesAsTime(jsonFiltersAsText(filters, schema), schema));
+        this.state.filters.set(normalizeRestoredFilters(filters, this.state.schema.get()));
         if (sortColumns) {
           this.state.sortColumns.set(sortColumns);
         }

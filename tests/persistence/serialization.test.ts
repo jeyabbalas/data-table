@@ -1403,30 +1403,37 @@ describe('range filters on a TIME WITH TIME ZONE column saved without valueType'
   // The column's chart places a value by its time of day as written, and its
   // brush compares `CAST("pickup" AS TIME)`. A range saved before 0.9
   // compared the column as TIME WITH TIME ZONE, by instant, with bounds in
-  // the session's time zone. Restored, it compares the time of day.
+  // the session's time zone. Restored, it compares the time of day, unless
+  // its bounds named instants.
   const tzSchema: ColumnSchema[] = [
     { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
     { name: 'pickup', type: 'time', nullable: true, originalType: 'TIME WITH TIME ZONE' },
+    { name: 'dropoff', type: 'time', nullable: true, originalType: 'TIME WITH TIME ZONE' },
     { name: 'start', type: 'time', nullable: true, originalType: 'TIME' },
   ];
+  const columns = tzSchema.map((c) => c.name);
   const saved: Filter[] = [
     { type: 'range', column: 'pickup', min: '01:30:00', max: '06:00:00' },
-    { type: 'range', column: 'pickup', min: '22:00', max: Infinity },
+    { type: 'range', column: 'dropoff', min: '20:00:00+00', max: '23:00:00+00' },
     { type: 'range', column: 'start', min: '09:00', max: '17:00', maxInclusive: true },
+    { type: 'range', column: 'id', min: 1, max: 5, valueType: 'time' },
   ];
   const restoredFilters: Filter[] = [
     { type: 'range', column: 'pickup', min: '01:30:00', max: '06:00:00', valueType: 'time' },
-    { type: 'range', column: 'pickup', min: '22:00', max: Infinity, valueType: 'time' },
+    // Bounds with an offset named instants: compared as they were.
+    { type: 'range', column: 'dropoff', min: '20:00:00+00', max: '23:00:00+00' },
     // A TIME column's filter compares the column, as it did.
     { type: 'range', column: 'start', min: '09:00', max: '17:00', maxInclusive: true },
+    // CAST("id" AS TIME) would fail every query.
+    { type: 'range', column: 'id', min: 1, max: 5 },
   ];
 
   function entry(filters: Filter[]): SerializedStateSnapshot {
     return serializeStateSnapshot({
       filters,
       sortColumns: [],
-      visibleColumns: ['id', 'pickup', 'start'],
-      columnOrder: ['id', 'pickup', 'start'],
+      visibleColumns: columns,
+      columnOrder: columns,
       columnWidths: new Map(),
       pinnedColumns: [],
       hiddenColumnInfo: new Map(),
@@ -1434,15 +1441,15 @@ describe('range filters on a TIME WITH TIME ZONE column saved without valueType'
     });
   }
 
-  it('gives them valueType time, in the filters and in the undo and redo entries', () => {
+  it('gives them the valueType their columns take, in the filters and in the undo and redo entries', () => {
     const state = setupState(tzSchema);
     const undoManager = new UndoManager();
     restoreStateFromSnapshot(
       state,
       createTestSnapshot({
         filters: saved.map((f) => ({ ...f })) as SessionSnapshot['filters'],
-        visibleColumns: ['id', 'pickup', 'start'],
-        columnOrder: ['id', 'pickup', 'start'],
+        visibleColumns: columns,
+        columnOrder: columns,
         undoStack: [entry(saved.slice(0, 1))],
         redoStack: [entry(saved)],
       }),

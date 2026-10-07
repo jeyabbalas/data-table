@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAX_TYPE_DEPTH,
+  castsToTimeExactly,
   childTypes,
   containsKind,
   dataTypeOf,
@@ -341,6 +342,27 @@ describe('isTimeWithTimeZone', () => {
     [undefined, false],
   ] as const)('isTimeWithTimeZone(%s) is %s', (text, expected) => {
     expect(isTimeWithTimeZone(text)).toBe(expected);
+  });
+});
+
+describe('castsToTimeExactly', () => {
+  it.each([
+    ['TIME', true],
+    ['TIME WITHOUT TIME ZONE', true],
+    ['TIME WITH TIME ZONE', true],
+    ['TIMETZ', true],
+    // The cast rounds to microseconds.
+    ['TIME_NS', false],
+    ['TIMESTAMP', false],
+    ['TIMESTAMP WITH TIME ZONE', false],
+    ['DATE', false],
+    ['INTEGER', false],
+    ['VARCHAR', false],
+    ['TIME[]', false],
+    ['', false],
+    [undefined, false],
+  ] as const)('castsToTimeExactly(%s) is %s', (text, expected) => {
+    expect(castsToTimeExactly(text)).toBe(expected);
   });
 });
 

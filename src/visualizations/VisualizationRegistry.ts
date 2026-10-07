@@ -110,7 +110,7 @@ export function isNestedType(type: DataType): boolean {
  *
  * @example
  * import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
- * import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+ * import { BaseVisualization, isNumericType } from '@jeyabbalas/data-table/advanced';
  *
  * class MyBoxPlot extends BaseVisualization {
  *   // ...a constructor that starts the first fetch, fetchData(), render(), and the six
@@ -121,7 +121,7 @@ export function isNestedType(type: DataType): boolean {
  * const registry = new VisualizationRegistry();
  * registry.register({
  *   name: 'box-plot',
- *   isApplicable: (type) => type === 'float' || type === 'integer',
+ *   isApplicable: isNumericType, // integer, float and decimal
  *   constructor: MyBoxPlot,
  *   priority: 10, // higher than built-ins (0) — wins for numeric columns
  * });

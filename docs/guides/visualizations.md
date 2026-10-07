@@ -267,51 +267,72 @@ multi-table dashboards where different tables need different chart types.
 ```ts
 import {
   createDataTable,
+  DataTableError,
   filtersToWhereClause,
+  QueryError,
   quoteIdentifier,
   VisualizationRegistry,
   type ColumnSchema,
 } from '@jeyabbalas/data-table';
 import { BaseVisualization, type VisualizationOptions } from '@jeyabbalas/data-table/advanced';
 
+// One row. All five are NULL together, when no non-NULL value passes the filters.
 interface BoxStats {
-  q1: number;
-  median: number;
-  q3: number;
-  min: number;
-  max: number;
+  q1: number | null;
+  median: number | null;
+  q3: number | null;
+  min: number | null;
+  max: number | null;
 }
 
 class BoxPlot extends BaseVisualization {
   private stats: BoxStats | null = null;
+  private fetchSequence = 0;
 
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
     this.dataPromise = this.fetchData(); // the base class does not fetch on construction
   }
 
+  // Never rejects: like the built-in charts, it reports a failure through onError.
   async fetchData() {
+    if (this.destroyed) return;
+    const seq = ++this.fetchSequence; // the latest fetch wins
     const col = quoteIdentifier(this.column.name);
     const where = filtersToWhereClause(this.options.filters);
-    const rows = await this.options.bridge.query<BoxStats>(`
-      SELECT
-        quantile(${col}, 0.25) AS q1,
-        median(${col})         AS median,
-        quantile(${col}, 0.75) AS q3,
-        min(${col})            AS min,
-        max(${col})            AS max
-      FROM ${quoteIdentifier(this.options.tableName)}
-      ${where ? `WHERE ${where}` : ''}
-    `);
-    if (this.destroyed) return;
-    this.stats = rows[0] ?? null;
+    try {
+      const rows = await this.options.bridge.query<BoxStats>(`
+        SELECT
+          quantile(${col}, 0.25) AS q1,
+          median(${col})         AS median,
+          quantile(${col}, 0.75) AS q3,
+          min(${col})            AS min,
+          max(${col})            AS max
+        FROM ${quoteIdentifier(this.options.tableName)}
+        ${where ? `WHERE ${where}` : ''}
+      `);
+      if (seq !== this.fetchSequence || this.destroyed) return;
+      this.stats = rows[0] ?? null;
+    } catch (error) {
+      if (seq !== this.fetchSequence || this.destroyed) return;
+      const typed =
+        error instanceof DataTableError
+          ? error
+          : new QueryError(error instanceof Error ? error.message : String(error), {
+              code: 'QUERY_RUNTIME',
+              cause: error,
+            });
+      this.options.onError?.(typed, { columnName: this.column.name, stage: 'fetch' });
+      this.stats = null; // a failed fetch draws nothing
+    }
     this.render();
   }
 
   render() {
     this.clear();
-    if (!this.stats) return;
-    // Draw this.stats on this.ctx using this.width, this.height
+    const s = this.stats;
+    if (!s || s.median === null) return; // nothing fetched, a failed fetch, or no rows
+    // Draw s.min, s.q1, s.median, s.q3 and s.max on this.ctx using this.width, this.height
   }
 
   protected handleMouseMove(_x: number, _y: number) {
@@ -385,6 +406,9 @@ Subclasses implement eight methods:
 
 The base class does not fetch on construction: start the first fetch in your
 constructor, as the built-in charts do (`this.dataPromise = this.fetchData()`).
+Like theirs, your `fetchData()` should let only its latest call keep a result,
+and report a failure through `this.options.onError` rather than reject: the
+table waits on that first fetch.
 
 ### Hit-testing rule
 
@@ -404,7 +428,7 @@ of `{ x, width }` slots.
 
 ### Emitting a filter from a visualization
 
-Call the `onFilterChange` callback the registry wires up for you:
+Call the `onFilterChange` callback the table passes in `this.options`:
 
 ```ts
 protected handleClick(x: number, _y: number) {
@@ -436,9 +460,10 @@ runs (a removal, an edit or a replacement, an undo or redo, a reset or a
 restore), the call waits for the change to settle, and a chart whose filters
 changed more than once meanwhile gets one call, with the filters then in
 force. Subclasses usually don't need to override this —
-the default implementation triggers `fetchData()` + `render()` on any change.
-Override it if you want to skip re-renders when the filter is unrelated to
-your column.
+the default implementation stores the new filters and awaits `fetchData()` on
+any change. It does not call `render()`: `fetchData()` does, as in the
+contract table above. Override it if you want to skip the refetch when the
+filter is unrelated to your column.
 
 ### Canvas scaling
 
@@ -496,24 +521,22 @@ table.on('error', ({ error, source }) => {
 
 ### Scoped custom viz for one column
 
-Check the column name inside `isApplicable`:
+`isApplicable` receives the column's type only. To give one column a chart of
+its own, subclass the registry and override `create()`, which receives the
+whole column; every other column keeps its chart.
+`examples/08-custom-visualization` does this for a `state` column. Here the
+`BoxPlot` above draws `revenue` alone:
 
 ```ts
-registry.register({
-  name: 'spark-line-for-revenue',
-  isApplicable: (type) => type === 'float', // coarse matcher
-  constructor: class extends SparkLine {
-    static shouldApply(column: { name: string; type: string }) {
-      return column.name === 'revenue'; // fine-grained
-    }
-  },
-  priority: 10,
-});
-```
+class RevenueRegistry extends VisualizationRegistry {
+  override create(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
+    if (column.name === 'revenue') return new BoxPlot(container, column, options);
+    return super.create(container, column, options);
+  }
+}
 
-`isApplicable` is keyed off type; for per-column behavior, use a coarse type
-matcher and check the column name in your subclass's constructor (bailing out
-to a no-op render if it's the wrong column).
+await createDataTable({ container, source, visualizationRegistry: new RevenueRegistry() });
+```
 
 ### Shared base for many column-specific visualizations
 

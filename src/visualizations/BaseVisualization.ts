@@ -3,7 +3,8 @@
  *
  * Provides common functionality for all visualization types:
  * - Canvas setup with high-DPI support
- * - Mouse event handling (move, click, leave)
+ * - Mouse and key input (move, click, leave and down on the canvas; the
+ *   window's mouseup and keydown)
  * - Responsive resizing via ResizeObserver
  * - Proper cleanup on destruction
  *
@@ -27,7 +28,9 @@
  *     this.dataPromise = this.fetchData(); // the base class does not fetch on construction
  *   }
  *   async fetchData() {
- *     // query this.options.bridge for the column's ordered values, keep them
+ *     // Query this.options.bridge for the column's ordered values and keep
+ *     // them. Keep only the latest call's result, and report a failure
+ *     // through this.options.onError instead of rejecting.
  *     this.render();
  *   }
  *   render() {
@@ -152,7 +155,9 @@ export interface VisualizationOptions {
  *     this.dataPromise = this.fetchData(); // the base class does not fetch on construction
  *   }
  *   async fetchData() {
- *     // Fetch histogram bins from DuckDB, keep them, then render()
+ *     // Fetch histogram bins from DuckDB, keep them, then render(). Keep only
+ *     // the latest call's bins, and report a failure through
+ *     // this.options.onError instead of rejecting.
  *   }
  *   render() {
  *     // Draw histogram bars
@@ -327,17 +332,19 @@ export abstract class BaseVisualization {
   protected abstract handleMouseDown(x: number, y: number): void;
 
   /**
-   * Handle mouse up on the visualization.
-   * Used for completing brush/drag interactions.
+   * Handle a mouse button released anywhere in the window, so that a brush
+   * or drag that ends outside the canvas completes.
    * @param x - X coordinate relative to canvas
    * @param y - Y coordinate relative to canvas
    */
   protected abstract handleMouseUp(x: number, y: number): void;
 
   /**
-   * Handle keyboard events for the visualization.
-   * Used for canceling brush with Escape, etc.
-   * @param key - The key that was pressed
+   * Handle a key pressed anywhere in the window.
+   * The built-in charts leave it empty: Escape clears the latest brush or
+   * selection through the table, which calls the chart's `clearBrush()` or
+   * `clearSelection()` once `onBrushCommit` or `onSelectionChange` reported it.
+   * @param key - The key that was pressed (`KeyboardEvent.key`)
    */
   protected abstract handleKeyDown(key: string): void;
 

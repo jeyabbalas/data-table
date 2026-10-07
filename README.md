@@ -437,14 +437,14 @@ import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
 import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
 
 class MyViz extends BaseVisualization {
-  /* fetchData, render, … */
+  /* a constructor that starts the first fetch, fetchData(), render() and six input handlers */
 }
 
 const registry = new VisualizationRegistry();
 registry.register({
   name: 'my-viz',
   isApplicable: (t) => t === 'float',
-  constructor: MyViz as any,
+  constructor: MyViz,
   priority: 10,
 });
 const table = await createDataTable({ container, source, visualizationRegistry: registry });

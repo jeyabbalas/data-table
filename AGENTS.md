@@ -199,20 +199,57 @@ offFilter(); // returned function
 ### (f) Custom visualization class registration
 
 ```ts
-import { VisualizationRegistry, type ColumnSchema } from '@jeyabbalas/data-table';
+import {
+  DataTableError,
+  filtersToWhereClause,
+  QueryError,
+  quoteIdentifier,
+  VisualizationRegistry,
+  type ColumnSchema,
+} from '@jeyabbalas/data-table';
 import { BaseVisualization, type VisualizationOptions } from '@jeyabbalas/data-table/advanced';
 
+// One row, all NULL when no non-NULL value passes the filters.
+type BoxStats = { q1: number | null; median: number | null; q3: number | null };
+
 class BoxPlot extends BaseVisualization {
+  private stats: BoxStats | null = null;
+  private fetchSeq = 0;
+
   constructor(container: HTMLElement, column: ColumnSchema, options: VisualizationOptions) {
     super(container, column, options);
     this.dataPromise = this.fetchData(); // the base class does not fetch on construction
   }
   async fetchData() {
-    /* query this.options.bridge with this.options.filters, keep the result */
+    const seq = ++this.fetchSeq; // the latest fetch wins
+    const col = quoteIdentifier(this.column.name);
+    const where = filtersToWhereClause(this.options.filters);
+    try {
+      const [row] = await this.options.bridge.query<BoxStats>(`
+        SELECT quantile(${col}, 0.25) AS q1, median(${col}) AS median,
+               quantile(${col}, 0.75) AS q3
+        FROM ${quoteIdentifier(this.options.tableName)} ${where ? `WHERE ${where}` : ''}`);
+      if (seq !== this.fetchSeq || this.destroyed) return;
+      this.stats = row ?? null;
+    } catch (err) {
+      if (seq !== this.fetchSeq || this.destroyed) return;
+      this.stats = null; // a failed fetch draws nothing, and is reported, never thrown
+      this.options.onError?.(
+        err instanceof DataTableError
+          ? err
+          : new QueryError(err instanceof Error ? err.message : String(err), {
+              code: 'QUERY_RUNTIME',
+              cause: err,
+            }),
+        { columnName: this.column.name, stage: 'fetch' },
+      );
+    }
     this.render();
   }
   render() {
-    /* draw on this.ctx */
+    this.clear();
+    if (!this.stats || this.stats.median === null) return; // nothing fetched, or no rows
+    /* draw this.stats on this.ctx */
   }
   // The six input handlers are abstract too: empty for a chart that takes no input.
   protected handleMouseMove() {}

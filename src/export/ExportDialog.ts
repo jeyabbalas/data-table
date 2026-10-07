@@ -20,7 +20,7 @@
 
 import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
-import type { TableState } from '../core/State';
+import { effectiveRowCount, type TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import { copyToClipboard } from './Clipboard';
@@ -119,6 +119,13 @@ export class ExportDialog {
   private allRadio!: HTMLInputElement;
   private formatRadios: HTMLInputElement[] = [];
   private scopeRadios: HTMLInputElement[] = [];
+  /**
+   * Selected was checked when its count fell to 0, and All took its place.
+   * Selected comes back with its count, unless a scope has been picked
+   * since: a filter change can drop the count to 0 until its own count
+   * lands.
+   */
+  private selectedScopeSetAside = false;
   private csvOptionsEl!: HTMLElement;
   private jsonOptionsEl!: HTMLElement;
   private copyBtn!: HTMLButtonElement;
@@ -332,6 +339,11 @@ export class ExportDialog {
     fieldset.appendChild(this.selectedOption);
 
     this.scopeRadios = [this.allRadio, filteredRadio, this.selectedRadio];
+    for (const radio of this.scopeRadios) {
+      radio.addEventListener('change', () => {
+        this.selectedScopeSetAside = false;
+      });
+    }
     return fieldset;
   }
 
@@ -502,7 +514,14 @@ export class ExportDialog {
   private updateScopeCounts(): void {
     const total = this.state.totalRows.get();
     const filtered = this.state.filteredRows.get();
-    const selected = this.state.selectedRows.get().size;
+    // The selected rows a Selected export writes. A selection holds
+    // positions in the view, and a filter change keeps them: those past the
+    // view's last row name no row.
+    const viewRows = effectiveRowCount(this.state);
+    let selected = 0;
+    for (const position of this.state.selectedRows.get()) {
+      if (position < viewRows) selected++;
+    }
 
     this.allCountEl.textContent = `(${total.toLocaleString()})`;
     this.filteredCountEl.textContent = `(${filtered.toLocaleString()})`;
@@ -512,10 +531,15 @@ export class ExportDialog {
     this.selectedRadio.disabled = disabled;
     this.selectedOption.classList.toggle(`${this.prefix}-export-option--disabled`, disabled);
 
-    // Auto-fallback if selected scope is active but no rows are selected
+    // Auto-fallback if selected scope is active but no rows are selected,
+    // and back once there are, unless a scope has been picked meanwhile.
     if (disabled && this.selectedRadio.checked) {
       this.selectedRadio.checked = false;
       this.allRadio.checked = true;
+      this.selectedScopeSetAside = true;
+    } else if (!disabled && this.selectedScopeSetAside) {
+      this.selectedRadio.checked = true;
+      this.selectedScopeSetAside = false;
     }
   }
 
@@ -537,6 +561,13 @@ export class ExportDialog {
     );
     this.unsubscribes.push(
       this.state.filteredRows.subscribe(() => {
+        if (this.isOpen) this.updateScopeCounts();
+      }),
+    );
+    // The view's row count, which the Selected count is clamped to, also
+    // depends on whether a filter is active.
+    this.unsubscribes.push(
+      this.state.filters.subscribe(() => {
         if (this.isOpen) this.updateScopeCounts();
       }),
     );
@@ -581,6 +612,7 @@ export class ExportDialog {
 
   private handleHostClose(): void {
     this.isOpen = false;
+    this.selectedScopeSetAside = false;
     this.element.classList.remove(`${this.prefix}-export-backdrop--open`);
 
     // Cancel any in-flight export

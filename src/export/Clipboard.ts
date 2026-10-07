@@ -9,8 +9,8 @@
 import { ExportError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { exportToCSV } from './CSVExport';
-import type { ExportContext } from './ExportQuery';
+import { escapeCSVField, exportToCSV } from './CSVExport';
+import { resolveColumns, type ExportContext } from './ExportQuery';
 
 /**
  * Copy a string to the clipboard.
@@ -59,11 +59,16 @@ export async function copyToClipboard(data: string, format: 'text' | 'html'): Pr
  *
  * TSV (tab-separated values) is the standard clipboard format understood
  * by Excel, Google Sheets, and other spreadsheet applications. The output
- * includes a header row and uses visible columns in their display order.
+ * includes a header row and the visible columns (`state.visibleColumns`)
+ * in the order the grid shows them: a hidden column is left out, and
+ * `__rowid__` is copied when the app has shown it. With nothing to copy (no
+ * visible column the schema has, or no row of the view among `rows`), it
+ * writes nothing, and the clipboard keeps what it holds.
  * Cells are written as {@link exportToCSV} writes them, so a nested value
  * (LIST, STRUCT, MAP, …) is standard JSON: `["a","b"]`, `{"x":1.25}`.
  *
- * @param rows   - 0-based row indices (into the sorted/filtered view) to copy
+ * @param rows   - 0-based row indices (into the sorted/filtered view) to
+ *   copy; an index past the view's last row copies nothing
  * @param state  - Reactive table state (signals are read, not mutated)
  * @param bridge - WorkerBridge for querying DuckDB
  */
@@ -88,17 +93,28 @@ export async function copyRowsToClipboard(
     schema: state.schema.get(),
   };
 
+  // What the grid shows, of the columns the schema has: between a schema
+  // write and the `visibleColumns` write after it (a derived rename, a
+  // restore), a visible name can be one the schema no longer has. An
+  // explicit list keeps the system columns that `'all'` leaves out.
+  const columns = resolveColumns([...new Set(state.visibleColumns.get())], context);
+  if (columns.length === 0) return;
+
   const tsv = await exportToCSV(
     tableName,
     {
       scope: 'selected',
-      columns: 'all',
+      columns,
       includeHeaders: true,
       delimiter: '\t',
       nullValue: '',
     },
     context,
   );
+
+  // The header alone, as `exportToCSV` writes it: no row of the view among
+  // `rows`, which a filter change can leave a selection with.
+  if (tsv === columns.map((name) => escapeCSVField(name, '\t')).join('\t')) return;
 
   await copyToClipboard(tsv, 'text');
 }

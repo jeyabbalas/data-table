@@ -122,7 +122,12 @@ export type TableEvents = {
   /** Fired on sort changes. */
   sortChange: { sortColumns: readonly SortColumn[] };
 
-  /** Fired when the selected-row set changes. */
+  /**
+   * Fired when the selection is set: by a click, `Enter`, `selectRow`,
+   * `selectAll` or `clearSelection`, and by a load or `clearSession()`,
+   * which empty it. Not fired by filter or sort changes, which keep its
+   * positions as they are.
+   */
   selectionChange: { selectedRows: ReadonlySet<number> };
 
   /** Fired when visibility, order, pin state, or widths change. */

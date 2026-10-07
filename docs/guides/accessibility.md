@@ -61,7 +61,7 @@ four others the table contributes — and then:
 | `Ctrl` + `Z` / `Cmd` + `Z`                             | Undo                                                                         |
 | `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z`         | Redo                                                                         |
 | `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)                          |
-| `Ctrl` + `C` / `Cmd` + `C`                             | Copy selected rows (defers to native copy behavior)                          |
+| `Ctrl` + `C` / `Cmd` + `C`                             | Copy the selected rows' visible columns (native copy when text is selected)  |
 
 The keys that move the cursor scroll its cell into view, and so do the keys
 that act on it where it is — `Enter`, `Space`, `F2` and `Shift+F2` — so a

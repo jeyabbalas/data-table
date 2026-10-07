@@ -443,10 +443,11 @@ export class KeyboardNavigator {
     }
 
     // Ctrl+C / Cmd+C → copy selected rows (deferred to native text copy
-    // when the user has made a text selection).
+    // when the user has made a text selection, or when no selected row is in
+    // the view: a filter change can leave every selected position past its
+    // end).
     if (e.key === 'c' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
-      const selectedRows = this.state.selectedRows.get();
-      if (selectedRows.size === 0) return;
+      if (!this.hasSelectedRowInView()) return;
       const textSelection = window.getSelection();
       if (textSelection && textSelection.toString().length > 0) return;
       e.preventDefault();
@@ -921,6 +922,15 @@ export class KeyboardNavigator {
   private getEffectiveRowCount(): number {
     const filters = this.state.filters.get();
     return filters.length > 0 ? this.state.filteredRows.get() : this.state.totalRows.get();
+  }
+
+  /** Whether a selected position names a row of the view. */
+  private hasSelectedRowInView(): boolean {
+    const rowCount = this.getEffectiveRowCount();
+    for (const position of this.state.selectedRows.get()) {
+      if (position < rowCount) return true;
+    }
+    return false;
   }
 
   /** First row a cursor may occupy — body row 0, or the header if empty. */

@@ -522,12 +522,108 @@ describe('StateActions', () => {
       expect(state.selectedRows.get()).toEqual(new Set([0, 1, 2, 3, 4]));
     });
 
+    it('selectAll() selects the rows of the filtered view while a filter is active', () => {
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      // The count the crossfilter coordinator writes once the filter's
+      // COUNT(*) has settled, before `filterChange` fires.
+      state.filteredRows.set(3);
+
+      actions.selectAll();
+
+      expect(state.selectedRows.get()).toEqual(new Set([0, 1, 2]));
+    });
+
+    it('selectAll() ignores a stale filteredRows when no filter is active', () => {
+      state.totalRows.set(5);
+      state.filteredRows.set(2);
+
+      actions.selectAll();
+
+      expect(state.selectedRows.get()).toEqual(new Set([0, 1, 2, 3, 4]));
+    });
+
     it('default mode should be replace', () => {
       state.selectedRows.set(new Set([1, 2, 3]));
 
       actions.selectRow(5);
 
       expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it('a filter or sort change keeps the selection and where a range starts', () => {
+      actions.selectRow(2);
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      actions.toggleSort('name');
+
+      expect(state.selectedRows.get()).toEqual(new Set([2]));
+      actions.selectRow(5, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([2, 3, 4, 5]));
+    });
+
+    it('clearData() forgets where a range starts', async () => {
+      actions.selectRow(2);
+
+      await actions.clearData();
+      actions.selectRow(5, 'range');
+
+      expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it('a load that lands forgets where a range starts', async () => {
+      mockBridge.loadData.mockResolvedValueOnce({
+        tableName: 't2',
+        rowCount: 10,
+        columns: ['n'],
+        schema: [{ name: 'n', type: 'integer', nullable: true, originalType: 'INTEGER' }],
+      });
+      actions.selectRow(2);
+
+      await actions.loadData('n\n1\n2', { format: 'csv' });
+      actions.selectRow(5, 'range');
+
+      expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it('a load turned away for its source options keeps the selection and where a range starts', async () => {
+      actions.selectRow(2);
+
+      await expect(
+        actions.loadData('n\n1\n2', {
+          format: 'csv',
+          sourceOptions: { timezone: 'Not a zone!' },
+        }),
+      ).rejects.toMatchObject({ code: 'LOAD_INVALID_TIMEZONE' });
+
+      expect(state.selectedRows.get()).toEqual(new Set([2]));
+      actions.selectRow(5, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([2, 3, 4, 5]));
+    });
+
+    it('a load that fails another way forgets where a range starts, with the selection', async () => {
+      mockBridge.loadData.mockRejectedValueOnce(new Error('Parser Error: unterminated quote'));
+      actions.selectRow(2);
+
+      await expect(actions.loadData('n\n1\n2', { format: 'csv' })).rejects.toThrow('Parser Error');
+      expect(state.selectedRows.get().size).toBe(0);
+      // Rows to range over, so that a range from row 2 would show.
+      state.totalRows.set(100);
+      actions.selectRow(5, 'range');
+
+      expect(state.selectedRows.get()).toEqual(new Set([5]));
+    });
+
+    it("a 'range' from a row past the end of the view selects its row alone", () => {
+      // Row 90 of 100 selected, then a filter down to 10 rows.
+      actions.selectRow(90);
+      actions.addFilter({ column: 'age', type: 'range', min: 18, max: 65 });
+      state.filteredRows.set(10);
+
+      actions.selectRow(3, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([3]));
+
+      // Row 3 is where the next range starts.
+      actions.selectRow(5, 'range');
+      expect(state.selectedRows.get()).toEqual(new Set([3, 4, 5]));
     });
   });
 

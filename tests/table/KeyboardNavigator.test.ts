@@ -511,6 +511,48 @@ describe('KeyboardNavigator', () => {
       nav.destroy();
     });
 
+    it('Ctrl/Cmd+C leaves the browser its copy when no selected row is in the view', () => {
+      const { state, actions, root, nav: plain } = setup();
+      plain.destroy();
+      const getBridge = vi.fn(() => mockBridge);
+      const nav = new KeyboardNavigator({
+        rootElement: root,
+        bodyScroll: document.createElement('div'),
+        state,
+        actions,
+        getTableBody: () => makeStubBody(),
+        getBridge,
+      });
+
+      // Rows 50–60 selected, then a filter down to 10 rows.
+      state.selectedRows.set(new Set(Array.from({ length: 11 }, (_, i) => 50 + i)));
+      actions.addFilter({ column: 'a', type: 'range', min: 0, max: 9 });
+      state.filteredRows.set(10);
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'c',
+        ctrlKey: true,
+        cancelable: true,
+      });
+      root.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(getBridge).not.toHaveBeenCalled();
+
+      // One of them back in the view: copied as before.
+      state.filteredRows.set(51);
+      const again = new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'c',
+        ctrlKey: true,
+        cancelable: true,
+      });
+      root.dispatchEvent(again);
+      expect(again.defaultPrevented).toBe(true);
+      expect(getBridge).toHaveBeenCalled();
+      nav.destroy();
+    });
+
     it('native browser undo (Cmd+Z) inside a child input is NOT hijacked', () => {
       const { actions, root, nav } = setup();
       const undo = vi.spyOn(actions, 'undo').mockResolvedValue(true);

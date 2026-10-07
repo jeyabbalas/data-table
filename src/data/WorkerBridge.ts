@@ -354,7 +354,11 @@ export class WorkerBridge {
    * negative (the maximum as `-1`). A LIST or ARRAY value arrives as an
    * array, a STRUCT or MAP value as an object (a MAP's keys as strings; an
    * unnamed STRUCT, as `row(1, 'a')` builds, as an array), a UNION value as
-   * its member's, and a BLOB as a `Uint8Array`.
+   * its member's, and a BLOB as a `Uint8Array`. A DATE or TIMESTAMP, of any
+   * precision and with or without a zone, arrives as epoch milliseconds, a
+   * timestamp's digits past the millisecond as a fraction; DuckDB's
+   * `infinity` and `-infinity` as `Infinity` and `-Infinity`; one past
+   * ±2^53 ms (after year 287396 or before 283458 BC) as the nearest number.
    *
    * DECIMAL, HUGEINT and UHUGEINT values inside a nested value do not
    * arrive intact. In a LIST, ARRAY or STRUCT each reads as a meaningless
@@ -365,10 +369,15 @@ export class WorkerBridge {
    * MAP key as that integer's digits (`MAP {1.25: 'a'}` as
    * `{ '125': 'a' }`). An INTERVAL, nested or a column's own value, reads
    * as an `Int32Array` that does not hold it, and a MAP key as that array's
-   * text (`'0,0'`). Select an INTERVAL column as `CAST(c AS VARCHAR)`, and a
-   * nested value as JSON text, which is exact: `CAST(to_json(c) AS VARCHAR)`
-   * keeps every digit, a MAP's DECIMAL keys included, and writes an
-   * INTERVAL as DuckDB does (`"1 year 2 months 3 days"`). `JSON.parse`
+   * text (`'0,0'`). Inside a STRUCT, MAP or UNION, Arrow reads a date or
+   * timestamp itself and gets DuckDB's `infinity` wrong: a TIMESTAMP's
+   * fails the read (`9223372036854775 is not safe to convert to a
+   * number`), as does a TIMESTAMP past ±2^53 ms, and a DATE's reads as
+   * 185542587100800000. Select an INTERVAL column as
+   * `CAST(c AS VARCHAR)`, and a nested value as JSON text, which is exact:
+   * `CAST(to_json(c) AS VARCHAR)` keeps every digit, a MAP's DECIMAL keys
+   * included, and writes an INTERVAL as DuckDB does
+   * (`"1 year 2 months 3 days"`) and `infinity` as `"infinity"`. `JSON.parse`
    * rounds integers past 2^53 and rejects the bare `NaN` and `Infinity`
    * DuckDB writes for non-finite DOUBLEs.
    *

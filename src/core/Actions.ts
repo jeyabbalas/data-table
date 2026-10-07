@@ -2663,8 +2663,10 @@ export class StateActions {
    *   Arrow returns them as bytes, numbers or `null` that do not hold them.
    * - Other values come as the DuckDB worker returns them: text for
    *   `VARCHAR`, `UUID` and `JSON`, a `Uint8Array` for a `BLOB`, epoch
-   *   milliseconds for `DATE` and `TIMESTAMP`, microseconds since midnight
-   *   for `TIME`.
+   *   milliseconds for `DATE` and `TIMESTAMP` (DuckDB's `infinity` and
+   *   `-infinity` as `Infinity` and `-Infinity`; past ±2^53 ms, after year
+   *   287396 or before 283458 BC, the nearest number), microseconds since
+   *   midnight for `TIME`.
    *
    * The reserved `__rowid__` column is retrievable by name; the loaders
    * always cast its synthesized `row_number()` to `BIGINT` (the conditional
@@ -2843,7 +2845,8 @@ export class StateActions {
    * Any other column's value is the one {@link getColumnValues} returns for
    * the row: a `bigint` for `BIGINT`, `UBIGINT`, `HUGEINT` and `UHUGEINT`; a
    * number for the other integers and for `FLOAT`, `DOUBLE` and `DECIMAL`;
-   * DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`,
+   * epoch milliseconds for `DATE` and `TIMESTAMP`, `Infinity` and
+   * `-Infinity` for DuckDB's `infinity` and `-infinity`; DuckDB's text for `INTERVAL`, `ENUM`, `BIT`, `BIGNUM`, `GEOMETRY`,
    * `TIME WITH TIME ZONE` and `TIME_NS`; a `JSON` column's text; a
    * `Uint8Array` for a `BLOB`. SQL NULL, at the top or anywhere inside, is
    * `null`.

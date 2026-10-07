@@ -23,8 +23,9 @@ export const NESTED_EXAMPLE = 'Nested types (Parquet)';
 
 /**
  * {@link NESTED_EXAMPLE}'s structs and its list of structs, side by side: all
- * of them wholly in the demo's view once `point` is scrolled to its left
- * edge. Its first screen holds lists only.
+ * of them in the demo's view once `point` is scrolled to its left edge, the
+ * five structs wholly and `people` all but its last 14 px (six 168 px columns
+ * in a 994 px view). Its first screen holds lists only.
  */
 export const NESTED_EXAMPLE_STRUCTS = [
   'point',

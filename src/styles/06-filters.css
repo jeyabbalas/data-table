@@ -524,6 +524,14 @@
     background var(--dt-transition);
 }
 
+/* No's hover. It sets the background too: a page's `button:hover` outranks
+   the transparent one above. The modifiers' hovers below win over it. */
+.dt-filter-preset-action-btn:hover {
+  background: transparent;
+  border-color: var(--dt-text-secondary);
+  color: var(--dt-text);
+}
+
 .dt-filter-preset-action-btn--load {
   color: var(--dt-primary);
   border-color: var(--dt-primary);
@@ -531,6 +539,7 @@
 
 .dt-filter-preset-action-btn--load:hover {
   background: var(--dt-primary);
+  border-color: var(--dt-primary);
   color: var(--dt-bg);
 }
 

@@ -249,6 +249,29 @@ async function emptyEditor(page: Page, editor: Locator): Promise<void> {
   await expect(editor.locator('.cm-editor')).toHaveClass(/cm-focused/);
 }
 
+/**
+ * Hover a button and check its text's contrast as painted then. The page a
+ * table is mounted on here gives `button:hover` a blue fill, which outranks
+ * a library class's own background (0,1,1 against 0,1,0) unless the class's
+ * own `:hover` sets one.
+ */
+async function assertHoveredContrast(page: Page, selector: string, label: string): Promise<void> {
+  const button = page.locator(selector);
+  const hovered = (): Promise<boolean> => button.evaluate((el) => el.matches(':hover'));
+  await button.hover();
+  expect(await hovered(), `${label} — under the pointer`).toBe(true);
+  // Its colours ease in (`transition`): read them once they have settled.
+  await button.evaluate((el) => Promise.allSettled(el.getAnimations().map((a) => a.finished)));
+  const summary = await scan(page, { include: selector, only: ['color-contrast'] });
+  // Not scrolled from under the pointer while axe looked.
+  expect(await hovered(), `${label} — still under the pointer`).toBe(true);
+  assertClean(summary, `${label}, hovered`);
+  expect(
+    summary.contrastPassed.length,
+    `${label}, hovered — text whose contrast axe checked`,
+  ).toBeGreaterThan(0);
+}
+
 for (const theme of ['light', 'dark'] as const) {
   test(`the unloaded table shell is axe-clean in ${theme}`, async ({ page }) => {
     // With no data, `.dt-root` is a shell carrying no grid semantics. It
@@ -407,17 +430,15 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(panel).toHaveAccessibleName('Filter Presets');
 
     // The confirmation's No takes focus: the bare action button, which once
-    // showed the page's white button text on the white panel.
+    // showed the page's white button text on the white panel, and then the
+    // page's blue under the pointer.
     await panel.getByRole('button', { name: 'Delete', exact: true }).click();
-    const no = panel.getByRole('button', { name: 'No', exact: true });
-    await expect(no).toBeFocused();
-    const checked = await assertDialogClean(page, `the preset delete confirmation, ${theme}`);
-    await expectContrastChecked(
-      page,
-      checked,
-      `#${HOST_ID} .dt-filter-preset-delete-confirm > .dt-filter-preset-action-btn:not(.dt-filter-preset-action-btn--delete)`,
-      `the preset delete confirmation, ${theme}`,
-    );
+    await expect(panel.getByRole('button', { name: 'No', exact: true })).toBeFocused();
+    const no = `#${HOST_ID} .dt-filter-preset-delete-confirm > .dt-filter-preset-action-btn:not(.dt-filter-preset-action-btn--delete)`;
+    const label = `the preset delete confirmation, ${theme}`;
+    const checked = await assertDialogClean(page, label);
+    await expectContrastChecked(page, checked, no, label);
+    await assertHoveredContrast(page, no, `${label}: No`);
   });
 
   test(`the SQL filter and derived-column modals are axe-clean in ${theme}, their placeholders showing`, async ({
@@ -454,6 +475,25 @@ for (const theme of ['light', 'dark'] as const) {
       derivedChecked,
       '.dt-derived-modal-dialog .cm-placeholder',
       `the derived-column modal, ${theme}`,
+    );
+    await page.keyboard.press('Escape');
+    await expect(derived).toBeHidden();
+
+    // Editing a filter offers Remove, whose confirmation's Cancel is the
+    // twin of the preset panel's No, under the pointer too.
+    await page.evaluate(() => {
+      (window as unknown as TestWindow).__dt.actions.addRawSQLFilter('"c0" > 10', 'c0 over 10');
+    });
+    await page.locator(`#${HOST_ID} .dt-filter-chip-label--sql`).click();
+    const edit = page.getByRole('dialog', { name: 'Edit Expression Filter' });
+    await expect(edit).toBeVisible();
+    await edit.locator('.dt-sql-filter-modal-remove').click();
+    const cancel = '.dt-sql-filter-modal-dialog .dt-sql-filter-modal-remove-confirm-no';
+    await expect(page.locator(cancel)).toBeFocused();
+    await assertHoveredContrast(
+      page,
+      cancel,
+      `the SQL filter modal's Remove confirmation, ${theme}: Cancel`,
     );
   });
 
@@ -501,6 +541,12 @@ for (const theme of ['light', 'dark'] as const) {
 
     await panel.locator('.dt-derived-edit-delete').click();
     await expect(panel.locator('.dt-derived-edit-delete-confirm-no')).toBeFocused();
-    await assertDialogClean(page, `the derived-column editor's delete confirmation, ${theme}`);
+    const label = `the derived-column editor's delete confirmation, ${theme}`;
+    await assertDialogClean(page, label);
+    await assertHoveredContrast(
+      page,
+      `#${HOST_ID} .dt-derived-edit-delete-confirm-no`,
+      `${label}: Cancel`,
+    );
   });
 }

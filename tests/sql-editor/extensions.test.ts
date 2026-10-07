@@ -18,6 +18,7 @@ import {
 import { DUCKDB_FUNCTION_DETAILS } from '@/sql-editor/duckdbFunctionDetails';
 import { dataTableTheme, dataTableHighlighting } from '@/sql-editor/theme';
 import type { CompletionContext } from '@/derived/types';
+import { blocks } from '../styles/cssContrast';
 
 /** A `CompletionResult`-shaped subset that the library's source emits. */
 type AcResult = {
@@ -355,22 +356,26 @@ describe('dataTableTheme', () => {
     }
   }
 
-  const winning = (rules: CSSStyleRule[], property: string): string[] =>
+  /** The values the rules give `property`, in order: the last one wins. */
+  const declared = (rules: CSSStyleRule[], property: string): string[] =>
     rules.map((rule) => rule.style.getPropertyValue(property)).filter((value) => value !== '');
 
   it("paints the placeholder in --dt-text-tertiary, over the base theme's #888", () => {
-    const colours = winning(placeholderRules(), 'color');
+    const colours = declared(placeholderRules(), 'color');
     // #888, 3.54:1 on a white panel.
     expect(colours[0]).toBe('rgb(136, 136, 136)');
-    expect(colours.at(-1)).toBe('var(--dt-text-tertiary)');
+    // Without the library's stylesheet the token is unset; the fallback is
+    // its light value.
+    expect(colours.at(-1)).toBe(`var(--dt-text-tertiary, ${blocks.light['--dt-text-tertiary']})`);
   });
 
-  it("ends the placeholder at the editor's edge instead of widening the content", () => {
+  it("leaves the placeholder's size to CodeMirror, so a host editor keeps its whole hint", () => {
+    // The library's own editors end a long hint in an ellipsis, from the
+    // stylesheet, scoped to them.
     const rules = placeholderRules();
-    expect(winning(rules, 'width').at(-1)).toMatch(/^0(px)?$/);
-    expect(winning(rules, 'min-width').at(-1)).toBe('100%');
-    expect(winning(rules, 'overflow').at(-1)).toBe('hidden');
-    expect(winning(rules, 'text-overflow').at(-1)).toBe('ellipsis');
+    for (const property of ['width', 'min-width', 'overflow', 'text-overflow', 'white-space']) {
+      expect(declared(rules, property), property).toEqual([]);
+    }
   });
 });
 

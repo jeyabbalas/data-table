@@ -105,6 +105,16 @@ describe('FilterPanel — panel-mode focus/escape', () => {
     other.destroy();
   });
 
+  it('mints its title id from the table instance id it is given', () => {
+    const named = new FilterPanel(state, actions, { instanceId: 't7-ab12' });
+    document.querySelector('.dt-root')!.appendChild(named.getElement());
+    named.open('price', anchor);
+    expect(named.getElement().getAttribute('aria-labelledby')).toBe(
+      'dt-t7-ab12-filter-panel-title',
+    );
+    named.destroy();
+  });
+
   it('does not apply body scroll lock', () => {
     panel.open('price', anchor);
     expect(document.body.style.paddingRight).toBe('');

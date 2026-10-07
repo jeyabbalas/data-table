@@ -46,6 +46,13 @@ export interface FilterPanelOptions {
   /** CSS class prefix (default: 'dt') */
   classPrefix?: string | undefined;
   /**
+   * Unique per-instance identifier mixed into the title's id, which names
+   * the panel, so two tables on the same page don't share it. Normally
+   * supplied by `createDataTable()`; a panel constructed without one
+   * generates its own.
+   */
+  instanceId?: string | undefined;
+  /**
    * Element to mirror `data-dt-color-scheme` from (typically the owning
    * table's `.dt-root`). Keeps the panel's theming in sync when the table's
    * color scheme changes at runtime (see `DataTable.setColorScheme` on the
@@ -82,6 +89,7 @@ export class FilterPanel {
   private isOpen = false;
   private destroyed = false;
   private readonly prefix: string;
+  private readonly instanceId: string;
   private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
   private readonly onOpenChange: ((column: string | null) => void) | undefined;
@@ -98,6 +106,7 @@ export class FilterPanel {
     options: FilterPanelOptions = {},
   ) {
     this.prefix = options.classPrefix ?? 'dt';
+    this.instanceId = options.instanceId || nextInstanceId();
     this.colorSchemeSource = options.colorSchemeSource;
     this.messages = options.messages ?? defaultStrings;
     this.onOpenChange = options.onOpenChange;
@@ -142,7 +151,7 @@ export class FilterPanel {
     // Names the panel: "Filter: price", retitled when it switches columns.
     const title = document.createElement('span');
     title.className = `${this.prefix}-filter-panel-title`;
-    title.id = `${this.prefix}-${nextInstanceId()}-filter-panel-title`;
+    title.id = `${this.prefix}-${this.instanceId}-filter-panel-title`;
     title.textContent = this.messages.filters.panelTitle;
 
     const typeBadge = document.createElement('span');

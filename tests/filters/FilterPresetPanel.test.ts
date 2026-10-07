@@ -100,6 +100,16 @@ describe('FilterPresetPanel', () => {
       other.destroy();
     });
 
+    it('mints its title id from the table instance id it is given', () => {
+      const named = new FilterPresetPanel(manager, state, actions, { instanceId: 't7-ab12' });
+      document.body.appendChild(named.getElement());
+      named.open(anchor);
+      expect(named.getElement().getAttribute('aria-labelledby')).toBe(
+        'dt-t7-ab12-filter-preset-title',
+      );
+      named.destroy();
+    });
+
     it('closes the panel', () => {
       panel.toggle(anchor);
       panel.close();

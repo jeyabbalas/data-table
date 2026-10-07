@@ -385,6 +385,33 @@ describe('component rules — text on an inherited surface', () => {
       );
     });
 
+    // Under the pointer, No stays transparent, over its hovered row.
+    it(`a preset's hovered No clears ${AA_NORMAL_TEXT}:1 on its row`, () => {
+      expectRatio(
+        paintedBy('06-filters.css', '.dt-filter-preset-action-btn:hover'),
+        paintedBy('06-filters.css', '.dt-filter-preset-item:hover', 'background'),
+        AA_NORMAL_TEXT,
+        '.dt-filter-preset-action-btn:hover on a hovered preset',
+        themeName,
+      );
+    });
+
+    // Placeholder text is text (WCAG 1.4.3), and no axe scan sees it: it is
+    // not a text node. Each field that shows one colours it.
+    it.each([
+      ['.dt-filter-input', '06-filters.css'],
+      ['.dt-expr-editor-input', '03-columns.css'],
+      ['.dt-derived-modal-vector-textarea', '04-authoring-modals.css'],
+    ] as const)(`%s's placeholder clears ${AA_NORMAL_TEXT}:1 on the field`, (field, file) => {
+      expectRatio(
+        paintedBy(file, `${field}::placeholder`),
+        paintedBy(file, field, 'background'),
+        AA_NORMAL_TEXT,
+        `${field}::placeholder`,
+        themeName,
+      );
+    });
+
     // Annotation tints darken on hover through a color-mix() of the tint and
     // its own border colour, so the foreground has to clear the darker mix
     // too — the composite no token-level check can see.
@@ -560,6 +587,39 @@ describe('stylesheet antipatterns', () => {
       }
     }
     expect(found, 'rules that clear their background and set no colour').toEqual([]);
+  });
+
+  it('keeps its own background under the pointer', () => {
+    // A host page's `button:hover { background: … }` (0,1,1) outranks a
+    // class's own background (0,1,0) under the pointer, unless a `:hover`
+    // rule of the class's (0,2,0) sets one. The preset confirmation's No had
+    // no hover rule, and two confirmations' Cancel had one that set no
+    // background: on the demo's blue they read 1.5:1 and 2.65:1. So a rule
+    // that clears its background, or styles its hover, sets a hover one.
+    const background = (rule: Rule): string | undefined =>
+      rule.declarations['background'] ?? rule.declarations['background-color'];
+    const rules = componentStyleFiles().flatMap((file) =>
+      rulesIn(file).map((rule) => ({ file, rule })),
+    );
+    const found: string[] = [];
+    for (const { file, rule } of rules) {
+      const value = background(rule);
+      if (value === undefined || rule.atRules.some((at) => at.startsWith('@keyframes'))) continue;
+      for (const selector of rule.selectors) {
+        if (selector.includes('::') || selector.includes(':hover')) continue;
+        const hovers = rules.filter(({ rule: hover }) =>
+          hover.selectors.some((s) => s.startsWith(`${selector}:hover`)),
+        );
+        const cleared = /^(transparent|none)$/i.test(value);
+        if (
+          (cleared || hovers.length > 0) &&
+          !hovers.some(({ rule: hover }) => background(hover) !== undefined)
+        ) {
+          found.push(`${file} ${selector}`);
+        }
+      }
+    }
+    expect(found, "backgrounds a page's `button:hover` would replace").toEqual([]);
   });
 
   it('adds no scrollable region without focusable content', () => {

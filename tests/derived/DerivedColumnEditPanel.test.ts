@@ -469,6 +469,21 @@ describe('DerivedColumnEditPanel', () => {
       a.destroy();
       b.destroy();
     });
+
+    it('mints its ids from the table instance id it is given', () => {
+      const panel = new DerivedColumnEditPanel(state, actions, { instanceId: 't7-ab12' });
+      rootEl.appendChild(panel.getElement());
+      panel.open('total', anchorEl);
+      const el = panel.getElement();
+      expect(el.getAttribute('aria-labelledby')).toBe('dt-t7-ab12-derived-edit-title');
+      expect(el.querySelector('.dt-derived-edit-name-input')!.id).toBe(
+        'dt-t7-ab12-derived-edit-name',
+      );
+      expect(el.querySelector('.dt-derived-edit-name-error')!.id).toBe(
+        'dt-t7-ab12-derived-edit-name-error',
+      );
+      panel.destroy();
+    });
   });
 
   describe('Name validation', () => {

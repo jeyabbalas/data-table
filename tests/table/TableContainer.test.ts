@@ -8,6 +8,7 @@ import type { TableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { FilterPresetManager } from '@/filters/FilterPresets';
 
 const mockBridge = {
   initialize: vi.fn(),
@@ -933,5 +934,57 @@ describe('TableContainer', () => {
 
       expect(tableContainer.isDestroyed()).toBe(true);
     });
+  });
+});
+
+describe("TableContainer — its panels' ids", () => {
+  it("names the filter, preset and derived-column panels with the table's instance id", async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const schema: ColumnSchema[] = [
+      { name: 'price', type: 'float', nullable: false, originalType: 'DOUBLE' },
+      {
+        name: 'doubled',
+        type: 'float',
+        nullable: false,
+        originalType: 'DOUBLE',
+        isDerived: true,
+        expression: 'price * 2',
+      },
+    ];
+    const state = createTableState();
+    state.schema.set(schema);
+    initializeColumnsFromSchema(state, schema);
+    state.derivedColumns.set([{ kind: 'expression', name: 'doubled', expression: 'price * 2' }]);
+    state.totalRows.set(5);
+    state.tableName.set('t');
+    const actions = new StateActions(state, mockBridge);
+    const table = new TableContainer(container, state, actions, mockBridge, {
+      presetManager: new FilterPresetManager(),
+    });
+    const root = table.getElement();
+    const id = table.getInstanceId();
+    const name = (panel: string): string | null | undefined =>
+      root.querySelector(panel)?.getAttribute('aria-labelledby');
+
+    root
+      .querySelector<HTMLElement>('.dt-col-header[data-column="price"] .dt-col-filter-btn')!
+      .click();
+    expect(name('.dt-filter-panel')).toBe(`dt-${id}-filter-panel-title`);
+
+    root.querySelector<HTMLElement>('.dt-filter-presets-btn')!.click();
+    await vi.waitFor(() =>
+      expect(name('.dt-filter-preset-panel')).toBe(`dt-${id}-filter-preset-title`),
+    );
+
+    root
+      .querySelector<HTMLElement>('.dt-col-header[data-column="doubled"] .dt-derived-icon-btn')!
+      .click();
+    await vi.waitFor(() =>
+      expect(name('.dt-derived-edit-panel')).toBe(`dt-${id}-derived-edit-title`),
+    );
+
+    table.destroy();
+    container.remove();
   });
 });

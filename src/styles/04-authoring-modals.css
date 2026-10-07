@@ -193,6 +193,10 @@
   box-sizing: border-box;
 }
 
+.dt-derived-modal-vector-textarea::placeholder {
+  color: var(--dt-text-tertiary);
+}
+
 .dt-derived-modal-vector-textarea:focus {
   outline: none;
   border-color: var(--dt-primary);
@@ -555,7 +559,9 @@
   color: var(--dt-text-secondary);
 }
 
+/* With its own background: a page's `button:hover` outranks the one above. */
 .dt-sql-filter-modal-remove-confirm-no:hover {
+  background: var(--dt-bg);
   border-color: var(--dt-text-secondary);
   color: var(--dt-text);
 }

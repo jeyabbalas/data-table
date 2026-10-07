@@ -16,6 +16,13 @@ import type { FilterPreset } from './FilterPresetTypes';
 /** Construction options for {@link FilterPresetPanel}. */
 export interface FilterPresetPanelOptions {
   classPrefix?: string | undefined;
+  /**
+   * Unique per-instance identifier mixed into the title's id, which names
+   * the panel, so two tables on the same page don't share it. Normally
+   * supplied by `createDataTable()`; a panel constructed without one
+   * generates its own.
+   */
+  instanceId?: string | undefined;
   /** Element to mirror `data-dt-color-scheme` from (typically `.dt-root`). */
   colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
@@ -54,7 +61,7 @@ export class FilterPresetPanel {
     options?: FilterPresetPanelOptions,
   ) {
     this.prefix = options?.classPrefix ?? 'dt';
-    this.titleId = `${this.prefix}-${nextInstanceId()}-filter-preset-title`;
+    this.titleId = `${this.prefix}-${options?.instanceId || nextInstanceId()}-filter-preset-title`;
     this.colorSchemeSource = options?.colorSchemeSource;
     this.messages = options?.messages ?? defaultStrings;
     this.element = this.createElement();

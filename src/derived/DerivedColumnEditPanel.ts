@@ -39,6 +39,13 @@ export interface DerivedColumnEditPanelOptions {
    * @internal
    */
   onOpenChange?: ((column: string | null) => void) | undefined;
+  /**
+   * Unique per-instance identifier mixed into element IDs (the title, which
+   * names the panel, and the name field), so two tables on the same page
+   * don't share them. Normally supplied by `createDataTable()`; a panel
+   * constructed without one generates its own.
+   */
+  instanceId?: string | undefined;
 }
 
 /**
@@ -62,6 +69,7 @@ export class DerivedColumnEditPanel {
   private deleteConfirmDiv: HTMLElement;
 
   private prefix: string;
+  private readonly instanceId: string;
   private readonly messages: Strings;
   private editorFactory?: ExpressionEditorFactory | undefined;
   private colorSchemeSource?: HTMLElement | undefined;
@@ -90,6 +98,7 @@ export class DerivedColumnEditPanel {
     this.editorFactory = options?.editorFactory;
     this.colorSchemeSource = options?.colorSchemeSource;
     this.onOpenChange = options?.onOpenChange;
+    this.instanceId = options?.instanceId || nextInstanceId();
 
     // Build DOM
     this.element = this.createElement();
@@ -150,7 +159,7 @@ export class DerivedColumnEditPanel {
 
   private createElement(): HTMLElement {
     const p = this.prefix;
-    const id = `${p}-${nextInstanceId()}-derived-edit`;
+    const id = `${p}-${this.instanceId}-derived-edit`;
     const el = document.createElement('div');
     el.className = `${p}-derived-edit-panel`;
     el.style.display = 'none';

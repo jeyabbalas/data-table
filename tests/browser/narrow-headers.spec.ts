@@ -2,12 +2,12 @@
  * Header controls in columns narrower than their buttons.
  *
  * A header's five 22 px action buttons need about 143 px with its padding
- * and the 2 px between them (a nested or JSON column's six, 167 px; see
- * `header-targets.spec.ts`), and a column can be as narrow as 50 px. Below
- * that the buttons ran on past the header's right edge: under the next
- * header, which painted over them and took their clicks, or, for a pinned
- * column, whose sticky header sits on top, over the first unpinned header,
- * where they took its clicks.
+ * at a 16 px root and the 2 px between them (a nested or JSON column's six,
+ * 167 px; see `header-targets.spec.ts`), and a column can be as narrow as
+ * 50 px. Below that the buttons ran on past the header's right edge: under
+ * the next header, which painted over them and took their clicks, or, for a
+ * pinned column, whose sticky header sits on top, over the first unpinned
+ * header, where they took its clicks.
  */
 
 import { expect, test } from '@playwright/test';

@@ -472,7 +472,8 @@ kind: see [Performance → Nested columns](../performance.md#nested-columns).
   `json`.
 - **Width.** A nested or JSON column is 168 px wide until it is resized, and
   every other column 150 px: its header has six 22 px controls, the extract
-  button among them, and at 168 px they show whole, 2 px or more apart (see
+  button among them, and at 168 px and the default 16 px root font they show
+  whole, 2 px or more apart (see
   [Accessibility](./accessibility.md#focus-model-single-cursor--aria-activedescendant)).
   A width set by dragging, by the keyboard, with `setColumnWidth` or in a
   saved session is kept. Resetting it (double-click the resize handle, or

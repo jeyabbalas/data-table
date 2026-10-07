@@ -367,12 +367,12 @@ grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizat
   chart or panel is destroyed when its column moves away. `getStatsElement()`
   and `getVizContainer()` still answer for every column.
 - **Don't assume an unsized column is 150 px wide.** A nested or JSON column
-  without a width of its own is 168 px wide, so its six header controls fit
-  with room between them; every other column stays 150 px. Widths set by
-  resizing, by `setColumnWidth` or in a saved session are kept. Code that
-  places columns by multiples of 150 px, or screenshot tests of tables with
-  nested or JSON columns, need updating; read a column's width from its
-  header element.
+  without a width of its own is 168 px wide, so at the default 16 px root font
+  its six header controls fit with room between them; every other column stays
+  150 px. Widths set by resizing, by `setColumnWidth` or in a saved session
+  are kept. Code that places columns by multiples of 150 px, or screenshot
+  tests of tables with nested or JSON columns, need updating; read a column's
+  width from its header element.
 
 ## Verification checklist
 

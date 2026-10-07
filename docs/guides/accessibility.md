@@ -317,10 +317,12 @@ The header's buttons are 22 px, under WCAG 2.2's 24 px minimum, and keep at
 least 2 px between them, so their centres are 24 px apart or more: they meet
 the target-spacing exception of SC 2.5.8. A nested or JSON column is 168 px
 wide until resized, and every other column 150 px, so at their default widths
-every button shows whole. A column narrower than its buttons (at the default
-16 px root font, about 143 px for five buttons and 167 px for a nested or JSON
-column's six; a column can be 50 px) shows the buttons that fit and clips the
-rest at its edge, so none lies over the next header. The bar shows all of
+and the default 16 px root font every button shows whole. A column narrower
+than its buttons (at that root font, about 143 px for five buttons and 167 px
+for a nested or JSON column's six; a column can be 50 px) shows the buttons
+that fit and clips the rest at its edge, so none lies over the next header.
+The header's side padding is `0.75rem`, so at a larger root font a column at
+its default width can be narrower than its buttons too. The bar shows all of
 them, 2 px apart, running on over the next header's bar, once the pointer has
 rested on it for 200 ms, and at once when keyboard focus is in it. The pointer
 reaches the others along the bar; a pointer passing along the row of bars

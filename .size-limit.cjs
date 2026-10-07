@@ -91,7 +91,11 @@
  * cap to 100 kB. The fixes after it (F2 on a row still loading, the value
  * inspector's focus) left it at 95.22 kB, and the review fixes, among them
  * the bounded formatting of nested cells, the derived-column checks, the
- * exact reads' paging and the panels' waiting opens, at 97.67 kB.
+ * exact reads' paging and the panels' waiting opens, at 97.67 kB. The 0.9.0
+ * "nice to have" fixes (RT-16 – RT-21: dates and times exported as ISO text,
+ * NaN and infinity left out of charts, sub-second intervals, TIME WITH TIME
+ * ZONE charts, extreme dates and more) took it to 100.12 kB, and the cap to
+ * 104 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -172,7 +176,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '100 kB',
+    limit: '104 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

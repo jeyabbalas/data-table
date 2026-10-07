@@ -573,13 +573,13 @@ export async function fetchTimeHistogramData(
       );
     }
 
-    // Handle edge case: single value (all same time). A bar for 24:00:00
-    // ends there, as the last bar of the day does.
+    // Handle edge case: single value (all same time). The bar starts where
+    // the bin SQL puts the value, so the bins of a filtered fetch line up
+    // with it (12:30:00.5 starts at 12:30:00), and a bar for 24:00:00 ends
+    // there, as the day's last bar does.
     if (stats.minSeconds === stats.maxSeconds) {
-      const binStart = Math.min(
-        stats.minSeconds,
-        SECONDS_PER_DAY - getIntervalBinSizeSeconds(interval),
-      );
+      const size = getIntervalBinSizeSeconds(interval);
+      const binStart = Math.min(Math.floor(stats.minSeconds / size) * size, SECONDS_PER_DAY - size);
       return {
         bins: [
           {

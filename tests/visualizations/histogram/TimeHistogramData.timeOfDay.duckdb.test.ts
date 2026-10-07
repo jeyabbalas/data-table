@@ -224,6 +224,28 @@ describe('time histogram — TIME WITH TIME ZONE, 24:00:00 and TIME_NS', () => {
     expect(data.bins).toEqual([{ binStartSeconds: 86399, binEndSeconds: 86400, count: 4 }]);
   });
 
+  it('keeps a single value’s bar under a filter, a fraction of a second included', async () => {
+    const t = await table(
+      `SELECT CAST(t AS TIME) AS t FROM (VALUES ('12:30:00.5'), ('12:30:00.5'), (NULL)) AS s(t)`,
+    );
+
+    const data = await fetchTimeHistogramData(t, 't', [], bridge);
+    // What the chart fetches for its bars once any filter is on.
+    const filtered = await fetchTimeHistogramBins(
+      t,
+      't',
+      data.interval,
+      [{ type: 'not-null', column: 't' }],
+      bridge,
+    );
+
+    expect(data.isSingleValue).toBe(true);
+    expect(data.minSeconds).toBe(45000.5);
+    expect(data.bins).toEqual([{ binStartSeconds: 45000, binEndSeconds: 45001, count: 2 }]);
+    // The chart finds a filtered bar by its start: 45000.5 found none.
+    expect(filtered).toEqual(data.bins);
+  });
+
   describe('brushing', () => {
     const WIDTH = 150;
     const HEIGHT = 60;

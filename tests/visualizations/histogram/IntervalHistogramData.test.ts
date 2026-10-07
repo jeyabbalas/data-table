@@ -4,6 +4,8 @@ import {
   secondsToIntervalString,
   secondsToIntervalSQL,
   intervalToSecondsSQL,
+  intervalBrushFilter,
+  intervalFilterBars,
   fetchIntervalHistogramData,
   fetchIntervalNumericBins,
   fetchIntervalColumnStats,
@@ -117,6 +119,59 @@ describe('parseIntervalToSeconds', () => {
     expect(parseIntervalToSeconds('-3 days 04:05:06')).toBe(-3 * 86400 + 4 * 3600 + 5 * 60 + 6);
   });
 
+  it('reads every unit DuckDB reads, by any of its names', () => {
+    expect(parseIntervalToSeconds('2 hours')).toBe(7200);
+    expect(parseIntervalToSeconds('90 minutes')).toBe(5400);
+    expect(parseIntervalToSeconds('1.5 seconds')).toBe(1.5);
+    expect(parseIntervalToSeconds('500 milliseconds')).toBe(0.5);
+    expect(parseIntervalToSeconds('250 microseconds')).toBeCloseTo(0.00025, 12);
+    // Singular, short, unspaced, any case
+    expect(parseIntervalToSeconds('1 hour')).toBe(3600);
+    expect(parseIntervalToSeconds('2 hrs')).toBe(7200);
+    expect(parseIntervalToSeconds('2h')).toBe(7200);
+    expect(parseIntervalToSeconds('2HOURS')).toBe(7200);
+    expect(parseIntervalToSeconds('30 mins')).toBe(1800);
+    expect(parseIntervalToSeconds('45 secs')).toBe(45);
+    expect(parseIntervalToSeconds('500ms')).toBe(0.5);
+    expect(parseIntervalToSeconds('250 us')).toBeCloseTo(0.00025, 12);
+    expect(parseIntervalToSeconds('2 w')).toBe(14 * 86400);
+    expect(parseIntervalToSeconds('1 mon')).toBe(MONTH_SECONDS);
+    expect(parseIntervalToSeconds('1 quarter')).toBe(3 * MONTH_SECONDS);
+    expect(parseIntervalToSeconds('1 yr')).toBe(YEAR_SECONDS);
+    expect(parseIntervalToSeconds('1 decade')).toBe(10 * YEAR_SECONDS);
+    expect(parseIntervalToSeconds('1 century')).toBe(100 * YEAR_SECONDS);
+    expect(parseIntervalToSeconds('1 millennium')).toBe(1000 * YEAR_SECONDS);
+    // Several pairs, and a pair beside a clock part
+    expect(parseIntervalToSeconds('1 hour 30 minutes')).toBe(5400);
+    expect(parseIntervalToSeconds('1h 30m')).toBe(5400);
+    expect(parseIntervalToSeconds('2 hours -30 minutes')).toBe(5400);
+    expect(parseIntervalToSeconds('1 day 2 hours')).toBe(93600);
+    expect(parseIntervalToSeconds('1 week 01:00:00')).toBe(7 * 86400 + 3600);
+  });
+
+  it('splits a fraction as DuckDB stores it', () => {
+    // A month's fraction becomes whole days, 30 to a month: 1 month 15 days.
+    expect(parseIntervalToSeconds('1.5 months')).toBe(MONTH_SECONDS + 15 * 86400);
+    // 1 month 9 days: the 0.9 day left over is dropped.
+    expect(parseIntervalToSeconds('1.33 months')).toBe(MONTH_SECONDS + 9 * 86400);
+    expect(parseIntervalToSeconds('0.3 quarters')).toBe(27 * 86400);
+    // A year's fraction becomes whole months only: 13 months.
+    expect(parseIntervalToSeconds('1.1 years')).toBe(13 * MONTH_SECONDS);
+    // A day's fraction becomes time.
+    expect(parseIntervalToSeconds('1.5 days')).toBe(1.5 * 86400);
+    expect(parseIntervalToSeconds('-1.5 days')).toBe(-1.5 * 86400);
+    expect(parseIntervalToSeconds('1.7 weeks')).toBeCloseTo(11.9 * 86400, 6);
+  });
+
+  it('reads a short clock part and a trailing "ago" as DuckDB does', () => {
+    expect(parseIntervalToSeconds('10:00')).toBe(36000);
+    expect(parseIntervalToSeconds('1:02:03')).toBe(3723);
+    expect(parseIntervalToSeconds('2 hours ago')).toBe(-7200);
+    expect(parseIntervalToSeconds('1 month ago')).toBe(-MONTH_SECONDS);
+    // DuckDB ignores "ago" after a clock part.
+    expect(parseIntervalToSeconds('1 day 01:00:00 ago')).toBe(90000);
+  });
+
   it('should handle Arrow MonthDayNano interval objects', () => {
     expect(parseIntervalToSeconds({ months: 0, days: 0, nanoseconds: 3_600_000_000_000 })).toBe(
       3600,
@@ -182,6 +237,25 @@ describe('secondsToIntervalString', () => {
   it('should skip zero components', () => {
     expect(secondsToIntervalString(86400 + 60)).toBe('1d 1m');
     expect(secondsToIntervalString(YEAR_SECONDS + 86400)).toBe('1y 1d');
+  });
+
+  it('keeps the microseconds of a value under a second', () => {
+    // Rounded to milliseconds, these read 0s and 0.001s.
+    expect(secondsToIntervalString(1e-6)).toBe('0.000001s');
+    expect(secondsToIntervalString(0.0005)).toBe('0.0005s');
+    expect(secondsToIntervalString(-0.0005)).toBe('-0.0005s');
+    expect(secondsToIntervalString(0.496)).toBe('0.496s');
+    // From a second up, milliseconds.
+    expect(secondsToIntervalString(1.25)).toBe('1.25s');
+    expect(secondsToIntervalString(1.0004)).toBe('1s');
+  });
+
+  it('carries rounding into the minutes, hours and days', () => {
+    expect(secondsToIntervalString(119.9999999)).toBe('2m'); // not 1m 60s
+    expect(secondsToIntervalString(3599.9999)).toBe('1h');
+    expect(secondsToIntervalString(86399.9999)).toBe('1d');
+    expect(secondsToIntervalString(0.9999999)).toBe('1s');
+    expect(secondsToIntervalString(-119.9999999)).toBe('-2m');
   });
 });
 
@@ -266,6 +340,105 @@ describe('secondsToIntervalSQL', () => {
       const parsed = parseIntervalToSeconds(sql);
       expect(parsed).toBe(v);
     }
+  });
+
+  it('carries a fraction that rounds up to a whole second', () => {
+    // Bar 9's start on data from 0.6 to 9.6 s in 15 bars of 0.6 s.
+    const start = 0.6 + 9 * ((9.6 - 0.6) / 15);
+    expect(start).toBe(5.999999999999999);
+    expect(secondsToIntervalSQL(start)).toBe('00:00:06'); // not 00:00:05.1
+    expect(secondsToIntervalSQL(-start)).toBe('-00:00:06');
+    expect(secondsToIntervalSQL(59.9999999)).toBe('00:01:00');
+    expect(secondsToIntervalSQL(86399.9999999)).toBe('1 day');
+  });
+
+  it('keeps a single microsecond', () => {
+    expect(secondsToIntervalSQL(0.000001)).toBe('00:00:00.000001'); // not 00:00:00
+    expect(secondsToIntervalSQL(-0.000001)).toBe('-00:00:00.000001');
+    expect(secondsToIntervalSQL(1.000001)).toBe('00:00:01.000001');
+    // Under half a microsecond is nothing.
+    expect(secondsToIntervalSQL(0.0000004)).toBe('00:00:00');
+    expect(secondsToIntervalSQL(-0.0000004)).toBe('00:00:00');
+  });
+});
+
+// =========================================
+// Brush ↔ Filter Tests
+// =========================================
+
+describe('intervalBrushFilter and intervalFilterBars', () => {
+  /** Bars as fetchIntervalNumericBins makes them. */
+  const barsOf = (min: number, max: number, numBins = 15) =>
+    fetchIntervalNumericBins('t', 'd', numBins, min, max, [], {
+      query: async () => [],
+    } as unknown as WorkerBridge);
+
+  it('writes edges on whole seconds as they are', async () => {
+    const bins = await barsOf(0, 3600, 5); // bars of 12 minutes
+    const filter = intervalBrushFilter('d', bins, 1, 2);
+    expect(filter).toEqual({
+      column: 'd',
+      type: 'range',
+      min: '00:12:00',
+      max: '00:36:00',
+      valueType: 'interval',
+    });
+    expect(intervalFilterBars(filter, bins)).toEqual([1, 2]);
+  });
+
+  it('includes the maximum when the brush reaches the last bar', async () => {
+    const bins = await barsOf(0, 3600, 5);
+    const filter = intervalBrushFilter('d', bins, 3, 4);
+    expect(filter).toMatchObject({ min: '00:36:00', max: '01:00:00', maxInclusive: true });
+    expect(intervalFilterBars(filter, bins)).toEqual([3, 4]);
+  });
+
+  it('starts a bar at its first whole microsecond, not the nearest', async () => {
+    // 1 to 20 µs in bars of 19/15 µs: bar 5 runs from 7.33 to 8.6 µs.
+    const bins = await barsOf(0.000001, 0.00002);
+    const filter = intervalBrushFilter('d', bins, 5, 5);
+    expect(filter).toMatchObject({ min: '00:00:00.000008', max: '00:00:00.000009' });
+    expect(intervalFilterBars(filter, bins)).toEqual([5, 5]);
+  });
+
+  it('restores every brush on bars under 2 µs wide', async () => {
+    const bins = await barsOf(0.000001, 0.00002);
+    for (let start = 0; start < bins.length; start++) {
+      for (let end = start; end < bins.length; end++) {
+        const filter = intervalBrushFilter('d', bins, start, end);
+        expect(intervalFilterBars(filter, bins), `bars ${start}–${end}`).toEqual([start, end]);
+      }
+    }
+  });
+
+  it('writes a single value as itself, inclusive', async () => {
+    const bins = [{ binStartSeconds: 0.25, binEndSeconds: 0.25, count: 4 }];
+    const filter = intervalBrushFilter('d', bins, 0, 0);
+    expect(filter).toMatchObject({
+      min: '00:00:00.25',
+      max: '00:00:00.25',
+      maxInclusive: true,
+    });
+    expect(intervalFilterBars(filter, bins)).toEqual([0, 0]);
+  });
+
+  it('reads a filter added in code: unit text, a bound a hair off an edge, open ends', async () => {
+    const bins = await barsOf(0, 3600, 5); // edges at 0, 12, 24, 36, 48, 60 minutes
+    const range = (min: string | number, max: string | number) => ({
+      type: 'range' as const,
+      column: 'd',
+      min,
+      max,
+      valueType: 'interval' as const,
+    });
+    expect(intervalFilterBars(range('12 minutes', '0.6 hours'), bins)).toEqual([1, 2]);
+    // Within half a microsecond of an edge is the edge.
+    expect(intervalFilterBars(range('00:11:59.9999996', '00:36:00.0000004'), bins)).toEqual([1, 2]);
+    // A bound inside a bar takes that bar in.
+    expect(intervalFilterBars(range('00:11:59', '00:36:01'), bins)).toEqual([0, 3]);
+    expect(intervalFilterBars(range(-Infinity, '00:24:00'), bins)).toEqual([0, 1]);
+    expect(intervalFilterBars(range('00:48:00', Infinity), bins)).toEqual([4, 4]);
+    expect(intervalFilterBars(range('2 hours', '3 hours'), bins)).toBeNull();
   });
 });
 

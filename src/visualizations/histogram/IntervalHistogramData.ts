@@ -14,6 +14,7 @@ import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
 import { filtersToWhereClause, quoteIdentifier } from '../../filters/FilterSQL';
+import type { RangeFilter } from '../../filters/FilterTypes';
 
 // =========================================
 // Constants
@@ -118,10 +119,45 @@ export function intervalToSecondsSQL(col: string): string {
 // =========================================
 
 /**
+ * The months, days or seconds one of each unit adds to an interval, by every
+ * name DuckDB reads in interval text: singular, plural and short.
+ */
+const INTERVAL_UNITS = new Map<string, readonly ['months' | 'days' | 'seconds', number]>();
+for (const [names, part, per] of [
+  ['millennium millennia millenniums mil mils', 'months', 12000],
+  ['century centuries cent c', 'months', 1200],
+  ['decade decades dec decs', 'months', 120],
+  ['year years yr yrs y', 'months', 12],
+  ['quarter quarters', 'months', 3],
+  ['month months mon mons', 'months', 1],
+  ['week weeks w', 'days', 7],
+  ['day days d', 'days', 1],
+  ['hour hours hr hrs h', 'seconds', 3600],
+  ['minute minutes min mins m', 'seconds', 60],
+  ['second seconds sec secs s', 'seconds', 1],
+  ['millisecond milliseconds msecond mseconds msec msecs ms', 'seconds', 1e-3],
+  ['microsecond microseconds usecond useconds usec usecs us', 'seconds', 1e-6],
+] as const) {
+  for (const name of names.split(' ')) INTERVAL_UNITS.set(name, [part, per]);
+}
+
+/** `Math.trunc`, past floating-point noise: `0.3 * 3 * 30` is 26.999… */
+function wholePart(x: number): number {
+  return Math.trunc(x + Math.sign(x) * 1e-9);
+}
+
+/**
  * Parse a DuckDB INTERVAL value to total seconds.
  *
- * Accepts either a string ("1 year 2 months 3 days 04:05:06") or a
- * DuckDB WASM Arrow MonthDayNano object ({ months, days, nanoseconds }).
+ * Accepts either a string or a DuckDB WASM Arrow MonthDayNano object
+ * ({ months, days, nanoseconds }). A string is read as DuckDB reads interval
+ * text: every `<number> <unit>` pair, in any unit DuckDB knows and each with
+ * its own sign (`-1 year -2 months 3 days`, `2 hours`, `1.5 seconds`,
+ * `500ms`), plus a clock part (`04:05:06.789`, `100:00:00.5`, `10:00`). A
+ * fraction splits as DuckDB stores it: of a month or a quarter into whole
+ * days, 30 to a month; of a day or a week into the time; of a year, decade,
+ * century or millennium into whole months only. A trailing `ago` negates text
+ * with no clock part, as in DuckDB (which ignores it after one).
  *
  * @returns Total seconds (can be negative), or null if input is null/empty
  */
@@ -146,163 +182,271 @@ export function parseIntervalToSeconds(
   const input = value.trim();
   if (!input) return null;
 
-  let totalSeconds = 0;
-
-  // Parse year/month/day components with optional per-component negative signs.
-  // DuckDB outputs intervals with independently-signed components, e.g.
-  // "-1 year -2 months 3 days -04:05:06".
-  const yearMatch = input.match(/(-?\d+)\s*years?/i);
-  const monthMatch = input.match(/(-?\d+)\s*months?/i);
-  const dayMatch = input.match(/(-?\d+)\s*days?/i);
-
-  if (yearMatch) totalSeconds += parseInt(yearMatch[1]!, 10) * YEAR_SECONDS;
-  if (monthMatch) totalSeconds += parseInt(monthMatch[1]!, 10) * MONTH_SECONDS;
-  if (dayMatch) totalSeconds += parseInt(dayMatch[1]!, 10) * DAY_SECONDS;
-
-  // Parse time component with optional leading negative sign.
-  // Matches "-HH:MM:SS.ffffff" or "HH:MM:SS.ffffff". DuckDB writes every hour
-  // of the time part, so there can be more than two digits ("100:00:00.5").
-  const timeMatch = input.match(/(-?)(\d+):(\d{2}):(\d{2})(?:\.(\d+))?/);
-  if (timeMatch) {
-    const timeSign = timeMatch[1] === '-' ? -1 : 1;
-    let timeSec = parseInt(timeMatch[2]!, 10) * 3600;
-    timeSec += parseInt(timeMatch[3]!, 10) * 60;
-    timeSec += parseInt(timeMatch[4]!, 10);
-    if (timeMatch[5]) {
-      timeSec += parseFloat(`0.${timeMatch[5]}`);
+  let months = 0;
+  let days = 0;
+  let seconds = 0;
+  for (const [, amount, name] of input.matchAll(/(-?\d+(?:\.\d*)?)\s*([a-z]+)/gi)) {
+    const unit = INTERVAL_UNITS.get(name!.toLowerCase());
+    if (!unit) continue;
+    const [part, per] = unit;
+    const total = Number(amount) * per;
+    if (part === 'seconds') {
+      seconds += total;
+    } else if (part === 'days') {
+      const whole = wholePart(total);
+      days += whole;
+      seconds += (total - whole) * DAY_SECONDS;
+    } else {
+      const whole = wholePart(total);
+      months += whole;
+      if (per <= 3) days += wholePart((total - whole) * 30);
     }
-    totalSeconds += timeSign * timeSec;
   }
 
-  return totalSeconds;
+  // The clock part, `[-]H:MM[:SS[.ffffff]]`. DuckDB writes every hour of it,
+  // so there can be more than two digits ("100:00:00.5").
+  const clock = input.match(/(-?)(\d+):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/);
+  if (clock) {
+    const time =
+      Number(clock[2]) * 3600 +
+      Number(clock[3]) * 60 +
+      Number(clock[4] ?? 0) +
+      Number(`0.${clock[5] ?? 0}`);
+    seconds += clock[1] === '-' ? -time : time;
+  }
+
+  const total = months * MONTH_SECONDS + days * DAY_SECONDS + seconds;
+  return !clock && /\bago$/i.test(input) ? -total : total;
+}
+
+/** An interval's parts on the chart's scale, each whole, with a sign. */
+interface IntervalParts {
+  negative: boolean;
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  /** 0–999,999 */
+  micros: number;
+}
+
+/** `[⌊n / d⌋, n mod d]` for a whole `n` ≥ 0: exact, as `%` is, below 2^53. */
+function divmod(n: number, d: number): [number, number] {
+  const r = n % d;
+  return [(n - r) / d, r];
+}
+
+/**
+ * Split seconds into an interval's parts, rounded once to whole multiples of
+ * `unit` microseconds (1, or 1,000 for milliseconds). A fraction that rounds
+ * up to a whole second carries into the seconds, and on into the minutes,
+ * hours and days: 5.999999999999999 s is 6 s, and 119.9999999 s is 2 minutes.
+ */
+function splitSeconds(total: number, unit = 1): IntervalParts {
+  const abs = Math.abs(total);
+  let whole = Math.floor(abs);
+  let micros = Math.round(((abs - whole) * 1_000_000) / unit) * unit;
+  if (micros >= 1_000_000) {
+    whole += 1;
+    micros -= 1_000_000;
+  }
+  const [years, afterYears] = divmod(whole, YEAR_SECONDS);
+  const [months, afterMonths] = divmod(afterYears, MONTH_SECONDS);
+  const [days, afterDays] = divmod(afterMonths, DAY_SECONDS);
+  const [hours, afterHours] = divmod(afterDays, 3600);
+  const [minutes, seconds] = divmod(afterHours, 60);
+  const negative = total < 0 && (whole > 0 || micros > 0);
+  return { negative, years, months, days, hours, minutes, seconds, micros };
+}
+
+/** `.5`, `.000001`: microseconds as a decimal fraction, trailing zeros dropped. */
+function fractionText(micros: number): string {
+  return micros > 0 ? `.${String(micros).padStart(6, '0').replace(/0+$/, '')}` : '';
+}
+
+/**
+ * Seconds as whole microseconds, the nearest, as DuckDB holds an INTERVAL.
+ * Exact up to about 9e9 seconds (285 years), past which a double holds no
+ * finer.
+ */
+function secondsToMicros(seconds: number): number {
+  const whole = Math.floor(seconds);
+  return whole * 1_000_000 + Math.round((seconds - whole) * 1_000_000);
 }
 
 /**
  * Convert total seconds to compact human-readable interval string.
  *
  * Output format matches Cell.ts's formatInterval: "1y 2mo 3d 4h 5m 6s".
- * Only non-zero components are shown. Returns "0s" for zero.
+ * Only non-zero components are shown. Returns "0s" for zero. Under a second
+ * the seconds keep every microsecond (`0.0005s`), above it the milliseconds,
+ * and rounding carries: 119.9999999 is `2m`, not `1m 60s`.
  *
  * @param seconds Total seconds (can be negative)
  */
 export function secondsToIntervalString(seconds: number): string {
-  if (seconds === 0) return '0s';
-
-  const isNegative = seconds < 0;
-  let remaining = Math.abs(seconds);
-
+  const p = splitSeconds(seconds, Math.abs(seconds) < 1 ? 1 : 1000);
   const parts: string[] = [];
-
-  // Extract years
-  const years = Math.floor(remaining / YEAR_SECONDS);
-  if (years > 0) {
-    parts.push(`${years}y`);
-    remaining -= years * YEAR_SECONDS;
-  }
-
-  // Extract months (from remaining after years)
-  const months = Math.floor(remaining / MONTH_SECONDS);
-  if (months > 0) {
-    parts.push(`${months}mo`);
-    remaining -= months * MONTH_SECONDS;
-  }
-
-  // Extract days
-  const days = Math.floor(remaining / DAY_SECONDS);
-  if (days > 0) {
-    parts.push(`${days}d`);
-    remaining -= days * DAY_SECONDS;
-  }
-
-  // Extract hours
-  const hours = Math.floor(remaining / 3600);
-  if (hours > 0) {
-    parts.push(`${hours}h`);
-    remaining -= hours * 3600;
-  }
-
-  // Extract minutes
-  const minutes = Math.floor(remaining / 60);
-  if (minutes > 0) {
-    parts.push(`${minutes}m`);
-    remaining -= minutes * 60;
-  }
-
-  // Extract seconds (with fractional part)
-  if (remaining > 0 || parts.length === 0) {
-    const secs = Math.round(remaining * 1000) / 1000; // Avoid floating-point noise
-    if (Number.isInteger(secs)) {
-      parts.push(`${secs}s`);
-    } else {
-      // Remove trailing zeros from fraction
-      parts.push(`${parseFloat(secs.toFixed(3))}s`);
-    }
+  if (p.years > 0) parts.push(`${p.years}y`);
+  if (p.months > 0) parts.push(`${p.months}mo`);
+  if (p.days > 0) parts.push(`${p.days}d`);
+  if (p.hours > 0) parts.push(`${p.hours}h`);
+  if (p.minutes > 0) parts.push(`${p.minutes}m`);
+  if (p.seconds > 0 || p.micros > 0 || parts.length === 0) {
+    parts.push(`${p.seconds}${fractionText(p.micros)}s`);
   }
 
   const result = parts.join(' ');
-  return isNegative ? `-${result}` : result;
+  return p.negative ? `-${result}` : result;
 }
 
 /**
  * Convert total seconds to a DuckDB-compatible interval literal string.
  *
- * Output format: "N years N months N days HH:MM:SS" suitable for use in
- * `INTERVAL '...'` SQL expressions.
+ * Output format: "N years N months N days HH:MM:SS.ffffff" suitable for use in
+ * `INTERVAL '...'` SQL expressions, rounded to the nearest microsecond, which
+ * DuckDB holds.
  *
  * @param seconds Total seconds (can be negative)
  */
 export function secondsToIntervalSQL(seconds: number): string {
-  if (seconds === 0) return '00:00:00';
-
-  const isNegative = seconds < 0;
-  let remaining = Math.abs(seconds);
+  const p = splitSeconds(seconds);
   // Per-component sign prefix: DuckDB requires each component to be
   // independently signed (e.g. "-1 day -01:01:01") rather than a single
   // leading negative ("-1 day 01:01:01" would mean -1 day PLUS +1h1m1s).
-  const sign = isNegative ? '-' : '';
+  const sign = p.negative ? '-' : '';
+  const pad = (n: number): string => String(n).padStart(2, '0');
 
   const parts: string[] = [];
-
-  // Extract years
-  const years = Math.floor(remaining / YEAR_SECONDS);
-  if (years > 0) {
-    parts.push(`${sign}${years} year${years > 1 ? 's' : ''}`);
-    remaining -= years * YEAR_SECONDS;
-  }
-
-  // Extract months
-  const months = Math.floor(remaining / MONTH_SECONDS);
-  if (months > 0) {
-    parts.push(`${sign}${months} month${months > 1 ? 's' : ''}`);
-    remaining -= months * MONTH_SECONDS;
-  }
-
-  // Extract days
-  const days = Math.floor(remaining / DAY_SECONDS);
-  if (days > 0) {
-    parts.push(`${sign}${days} day${days > 1 ? 's' : ''}`);
-    remaining -= days * DAY_SECONDS;
-  }
+  if (p.years > 0) parts.push(`${sign}${p.years} year${p.years > 1 ? 's' : ''}`);
+  if (p.months > 0) parts.push(`${sign}${p.months} month${p.months > 1 ? 's' : ''}`);
+  if (p.days > 0) parts.push(`${sign}${p.days} day${p.days > 1 ? 's' : ''}`);
 
   // Always add time component for DuckDB parsing reliability
-  const hours = Math.floor(remaining / 3600);
-  remaining -= hours * 3600;
-  const minutes = Math.floor(remaining / 60);
-  remaining -= minutes * 60;
-  const wholeSecs = Math.floor(remaining);
-  const fracSecs = remaining - wholeSecs;
-
-  if (hours > 0 || minutes > 0 || wholeSecs > 0 || fracSecs > 1e-6 || parts.length === 0) {
-    let timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(wholeSecs).padStart(2, '0')}`;
-    if (fracSecs > 1e-6) {
-      // Preserve microsecond precision for accurate bin-edge round-trips
-      const micros = Math.round(fracSecs * 1_000_000);
-      timeStr += `.${String(micros).padStart(6, '0').replace(/0+$/, '')}`;
-    }
-    parts.push(`${sign}${timeStr}`);
+  if (p.hours > 0 || p.minutes > 0 || p.seconds > 0 || p.micros > 0 || parts.length === 0) {
+    const time = `${pad(p.hours)}:${pad(p.minutes)}:${pad(p.seconds)}${fractionText(p.micros)}`;
+    parts.push(`${sign}${time}`);
   }
 
   return parts.join(' ');
+}
+
+// =========================================
+// Brush ↔ Filter
+// =========================================
+
+/**
+ * The seconds {@link intervalToSecondsSQL} gives an interval of `micros`
+ * microseconds, computed as DuckDB computes them: the whole minutes, plus the
+ * microseconds within the minute over a million. They are the same bit for
+ * bit, so the bar the bin query puts a value in can be found here.
+ */
+function sqlSeconds(micros: number): number {
+  const abs = Math.abs(micros);
+  const inMinute = abs % 60_000_000;
+  const seconds = (abs - inMinute) / 1_000_000 + inMinute / 1_000_000;
+  return micros < 0 ? -seconds : seconds;
+}
+
+/**
+ * Where each bar's values start, in whole microseconds, as DuckDB holds an
+ * INTERVAL: bar `i` holds those from `starts[i]` up to, not including,
+ * `starts[i + 1]`, and the last entry is one past the maximum.
+ *
+ * A bar's start is the first microsecond the bin query puts in it, found with
+ * the query's own arithmetic ({@link buildIntervalHistogramSQL}). An edge often
+ * falls between two microseconds, where the nearest one can belong to the bar
+ * before; and a value exactly on an edge goes where the query's `FLOOR` sends
+ * it, which rounding the edge up gets wrong about one time in twenty.
+ */
+function barStartMicros(bins: readonly IntervalHistogramBin[]): number[] {
+  const n = bins.length;
+  const minSec = bins[0]!.binStartSeconds;
+  const maxSec = bins[n - 1]!.binEndSeconds;
+  const starts = [secondsToMicros(minSec)];
+  if (maxSec > minSec) {
+    // As fetchIntervalNumericBins computes them.
+    const binWidth = (maxSec - minSec) / n;
+    const binOf = (micros: number): number => Math.floor((sqlSeconds(micros) - minSec) / binWidth);
+    for (let j = 1; j < n; j++) {
+      const previous = starts[j - 1]!;
+      let micros = Math.max(secondsToMicros(minSec + j * binWidth), previous);
+      // The query's boundary is within a microsecond of the edge. The step
+      // limit also ends the search where a double no longer holds microseconds.
+      for (let k = 0; k < 4 && micros > previous && binOf(micros - 1) >= j; k++) micros--;
+      for (let k = 0; k < 4 && binOf(micros) < j; k++) micros++;
+      starts.push(micros);
+    }
+  }
+  starts.push(secondsToMicros(maxSec) + 1);
+  return starts;
+}
+
+/**
+ * The range filter a brush over bars `startIdx`–`endIdx` writes. It runs
+ * from the first microsecond of the first bar to the first past the last
+ * (to the maximum, inclusive, when the brush reaches the last bar), so it
+ * matches exactly the rows those bars count.
+ *
+ * The bounds are INTERVAL literals, which DuckDB compares with 30-day months
+ * and 360-day years (`INTERVAL '1 month' = INTERVAL '30 days'`), while the
+ * bars put a month at 30.4375 days and a year at 365.25. A value with months
+ * or years near a brush edge can therefore fall on the other side of it from
+ * its bar: a brush from 10 years includes `3620 days`, which the bars put
+ * below 10 years. That is left as it is on purpose: comparing the seconds
+ * expression instead would change what saved interval filters match.
+ */
+export function intervalBrushFilter(
+  column: string,
+  bins: readonly IntervalHistogramBin[],
+  startIdx: number,
+  endIdx: number,
+): RangeFilter {
+  const starts = barStartMicros(bins);
+  const toLast = endIdx === bins.length - 1;
+  const end = toLast ? starts[endIdx + 1]! - 1 : starts[endIdx + 1]!;
+  return {
+    column,
+    type: 'range',
+    min: secondsToIntervalSQL(starts[startIdx]! / 1_000_000),
+    max: secondsToIntervalSQL(end / 1_000_000),
+    valueType: 'interval',
+    ...(toLast && { maxInclusive: true }),
+  };
+}
+
+/**
+ * The bars a range filter on the column covers, `[first, last]`, or null for
+ * none: those holding a value the filter passes. It compares in whole
+ * microseconds, as {@link intervalBrushFilter} writes its bounds, so a brush's
+ * own filter covers exactly its bars, however narrow, and a bound a hair off a
+ * whole microsecond reads as that microsecond. A number is a bound in seconds,
+ * and an infinite one leaves that side open.
+ */
+export function intervalFilterBars(
+  filter: RangeFilter,
+  bins: readonly IntervalHistogramBin[],
+): [number, number] | null {
+  const toMicros = (bound: string | number | Date, open: number): number => {
+    if (typeof bound === 'number') return Number.isFinite(bound) ? secondsToMicros(bound) : open;
+    return secondsToMicros(parseIntervalToSeconds(String(bound)) ?? 0);
+  };
+  // The microseconds the filter passes: from `low` up to, not including, `high`.
+  const low = toMicros(filter.min, -Infinity) + (filter.minExclusive ? 1 : 0);
+  const high = toMicros(filter.max, Infinity) + (filter.maxInclusive ? 1 : 0);
+
+  const starts = barStartMicros(bins);
+  let first = -1;
+  let last = -1;
+  for (let i = 0; i < bins.length; i++) {
+    if (starts[i]! < high && starts[i + 1]! > low) {
+      if (first === -1) first = i;
+      last = i;
+    }
+  }
+  return first === -1 ? null : [first, last];
 }
 
 // =========================================

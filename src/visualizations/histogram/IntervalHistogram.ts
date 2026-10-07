@@ -17,9 +17,9 @@ import {
   fetchIntervalHistogramData,
   fetchIntervalColumnStats,
   fetchIntervalNumericBins,
+  intervalBrushFilter,
+  intervalFilterBars,
   secondsToIntervalString,
-  secondsToIntervalSQL,
-  parseIntervalToSeconds,
 } from './IntervalHistogramData';
 import type { IntervalHistogramData } from './IntervalHistogramData';
 import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
@@ -295,26 +295,25 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
   // =========================================
 
   /**
-   * Emit a range filter based on current brush bin indices
+   * Emit a range filter based on current brush bin indices: the filter
+   * `intervalBrushFilter` writes from the unfiltered bars' values, which
+   * matches exactly the brushed bars' rows (for a column mixing months with
+   * days, as near as DuckDB's 30-day months allow). A brush over bars holding
+   * no value writes none: the brush, and any filter it had, go.
    */
   protected emitBrushFilter(): void {
-    if (!this.data) return;
+    const data = this.backgroundData ?? this.data;
+    if (!data) return;
 
     const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
-    const startBin = this.data.bins[startIdx];
-    const endBin = this.data.bins[endIdx];
+    if (!data.bins[startIdx] || !data.bins[endIdx]) return;
 
-    if (startBin && endBin) {
-      const isLastBin = endIdx === this.data.bins.length - 1;
-      this.options.onFilterChange?.({
-        column: this.column.name,
-        type: 'range',
-        min: secondsToIntervalSQL(startBin.binStartSeconds),
-        max: secondsToIntervalSQL(endBin.binEndSeconds),
-        valueType: 'interval',
-        ...(isLastBin && { maxInclusive: true }),
-      });
+    const filter = intervalBrushFilter(this.column.name, data.bins, startIdx, endIdx);
+    if (filter) {
+      this.options.onFilterChange?.(filter);
+    } else {
+      this.clearBrush();
     }
   }
 
@@ -337,9 +336,19 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
     }
 
     switch (ownFilter.type) {
-      case 'range':
-        this.syncBrushFromIntervalRangeFilter(ownFilter, data.bins);
+      case 'range': {
+        // The bars holding values the filter's range meets: a brush's own
+        // filter restores exactly its bars.
+        const bars = intervalFilterBars(ownFilter, data.bins);
+        if (bars) {
+          this.setBrushFromBinRange(bars[0], bars[1]);
+        } else {
+          if (this.brushState.committed) this.clearBrushStateOnly();
+          this.selectedBin = null;
+          this.selectedNull = false;
+        }
         break;
+      }
       case 'null':
         this.clearBrushStateOnly();
         this.selectedBin = null;
@@ -358,68 +367,6 @@ export class IntervalHistogram extends SharedHistogramBase<IntervalHistogramData
         this.selectedBin = null;
         this.selectedNull = false;
         break;
-    }
-  }
-
-  /**
-   * Parse a filter interval value (string or number) to seconds.
-   */
-  private parseFilterValue(value: string | number | Date): number {
-    if (typeof value === 'number') return value;
-    const parsed = parseIntervalToSeconds(String(value));
-    return parsed ?? 0;
-  }
-
-  /**
-   * Map a range filter to brush state by finding overlapping bins.
-   */
-  private syncBrushFromIntervalRangeFilter(
-    filter: RangeFilter,
-    bins: { binStartSeconds: number; binEndSeconds: number }[],
-  ): void {
-    const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
-    const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
-
-    const filterMinSec = minIsOpen ? -Infinity : this.parseFilterValue(filter.min);
-    const filterMaxSec = maxIsOpen ? Infinity : this.parseFilterValue(filter.max);
-
-    // Inset both edges by a small epsilon to compensate for floating-point
-    // drift from the SQL string round-trip (secondsToIntervalSQL rounds to
-    // microsecond precision, so the parsed-back value can differ by up to
-    // ~0.5µs from the original bin edge). Without this, the bin immediately
-    // before/after the selection can be falsely included when the filter
-    // boundary drifts past the shared bin edge.
-    //
-    // This is the left/right counterpart to the fencepost guards already in
-    // place on the data side: LEAST() clamping in buildIntervalHistogramSQL
-    // and maxInclusive in emitBrushFilter. Other histogram types (numeric,
-    // date, time) don't need this because their filter values don't undergo
-    // a lossy string conversion.
-    const EPS = 1e-3; // 1ms — well above max drift (~0.5µs), well below any practical bin width
-
-    let startIdx = -1;
-    let endIdx = -1;
-
-    for (let i = 0; i < bins.length; i++) {
-      const bin = bins[i]!;
-      if (bin.binEndSeconds > filterMinSec + EPS && bin.binStartSeconds < filterMaxSec - EPS) {
-        if (startIdx === -1) startIdx = i;
-        endIdx = i;
-      }
-    }
-
-    if (startIdx >= 0 && endIdx >= 0) {
-      this.selectedBin = null;
-      this.selectedNull = false;
-      this.brushState.committed = true;
-      this.brushState.active = false;
-      this.brushState.sliding = false;
-      this.brushState.startBinIndex = startIdx;
-      this.brushState.endBinIndex = endIdx;
-    } else {
-      if (this.brushState.committed) this.clearBrushStateOnly();
-      this.selectedBin = null;
-      this.selectedNull = false;
     }
   }
 }

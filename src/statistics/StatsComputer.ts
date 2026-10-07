@@ -1,37 +1,27 @@
 /**
- * StatsComputer - Standalone stats computation for columns without visualizations
+ * StatsComputer - Standalone stats computation
  *
- * Used for column types that don't have a registered visualization
- * (currently: interval). Visualized columns emit stats via their
- * onDefaultStatsChange callback instead.
+ * Computes a column's stats without drawing its chart (currently: interval).
+ * Visualized columns emit stats via their onDefaultStatsChange callback
+ * instead.
  */
 
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import {
-  parseIntervalToSeconds,
+  fetchIntervalColumnStats,
   secondsToIntervalString,
 } from '../visualizations/histogram/IntervalHistogramData';
 import type { IntervalColumnStats } from './ColumnStatsTypes';
 
 /**
- * SQL query result for interval stats
- */
-interface IntervalStatsResult {
-  total: number;
-  non_null: number;
-  null_count: number;
-  min_val: string | null;
-  max_val: string | null;
-  median_val: string | null;
-}
-
-/**
  * Fetch stats for an interval column via DuckDB SQL.
  *
- * DuckDB supports MIN, MAX, and APPROX_QUANTILE on INTERVAL types.
- * Results are cast to VARCHAR for display.
+ * Runs the interval histogram's stats query, so the minimum, median and
+ * maximum are computed on the chart's seconds scale (a month is 30.4375
+ * days), and formatted like `4d 4h 0.5s`. All three are of the rows the
+ * filters pass; under a filter the chart's stats line keeps the unfiltered
+ * minimum and maximum beside the filtered median.
  */
 export async function fetchIntervalStats(
   tableName: string,
@@ -40,77 +30,21 @@ export async function fetchIntervalStats(
   bridge: WorkerBridge,
   unfilteredTotal?: number,
 ): Promise<IntervalColumnStats> {
-  const whereClause = filtersToWhereClause(filters);
-  const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
-  const col = quoteIdentifier(column);
-  const table = quoteIdentifier(tableName);
-
   try {
-    // Try full query with APPROX_QUANTILE first; fall back without it
-    // since APPROX_QUANTILE may not support INTERVAL in all DuckDB versions.
-    let results: IntervalStatsResult[];
-    try {
-      const sql = `
-        SELECT
-          COUNT(*) as total,
-          COUNT(${col}) as non_null,
-          COUNT(*) - COUNT(${col}) as null_count,
-          MIN(${col})::VARCHAR as min_val,
-          MAX(${col})::VARCHAR as max_val,
-          APPROX_QUANTILE(${col}, 0.5)::VARCHAR as median_val
-        FROM ${table}
-        ${whereSQL}
-      `;
-      results = await bridge.query<IntervalStatsResult>(sql);
-    } catch {
-      // APPROX_QUANTILE not supported for INTERVAL — retry without median
-      const sql = `
-        SELECT
-          COUNT(*) as total,
-          COUNT(${col}) as non_null,
-          COUNT(*) - COUNT(${col}) as null_count,
-          MIN(${col})::VARCHAR as min_val,
-          MAX(${col})::VARCHAR as max_val,
-          NULL as median_val
-        FROM ${table}
-        ${whereSQL}
-      `;
-      results = await bridge.query<IntervalStatsResult>(sql);
-    }
-
-    if (results.length === 0) {
-      return {
-        kind: 'interval',
-        totalRows: unfilteredTotal ?? 0,
-        nonNullCount: 0,
-        nullCount: 0,
-        filteredTotalRows: unfilteredTotal !== undefined ? 0 : null,
-        minDisplay: null,
-        maxDisplay: null,
-        medianDisplay: null,
-      };
-    }
-
-    const row = results[0]!;
-    const total = Number(row.total);
-    const nonNull = Number(row.non_null);
-    const nullCount = Number(row.null_count);
+    const stats = await fetchIntervalColumnStats(tableName, column, filters, bridge);
+    const total = stats.count + stats.nullCount;
+    const display = (seconds: number | null): string | null =>
+      seconds === null ? null : secondsToIntervalString(seconds);
 
     return {
       kind: 'interval',
       totalRows: unfilteredTotal ?? total,
-      nonNullCount: nonNull,
-      nullCount: nullCount,
+      nonNullCount: stats.count,
+      nullCount: stats.nullCount,
       filteredTotalRows: unfilteredTotal !== undefined ? total : null,
-      minDisplay: row.min_val
-        ? secondsToIntervalString(parseIntervalToSeconds(row.min_val)!)
-        : null,
-      maxDisplay: row.max_val
-        ? secondsToIntervalString(parseIntervalToSeconds(row.max_val)!)
-        : null,
-      medianDisplay: row.median_val
-        ? secondsToIntervalString(parseIntervalToSeconds(row.median_val)!)
-        : null,
+      minDisplay: display(stats.minSeconds),
+      maxDisplay: display(stats.maxSeconds),
+      medianDisplay: display(stats.medianSeconds),
     };
   } catch (error) {
     console.error(

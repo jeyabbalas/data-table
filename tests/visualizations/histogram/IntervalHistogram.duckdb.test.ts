@@ -118,13 +118,9 @@ describe('interval histogram — real DuckDB integration', () => {
     expect(total).toBe(5);
   });
 
-  it('sub-second precision: minSeconds < 0.01 reflects fractional seconds (NOTE: bin assignment may lose rows due to JS-stats / SQL-extract precision drift)', async () => {
-    // The stats path goes through MIN(col)::VARCHAR + JS `parseIntervalToSeconds`,
-    // while the bin-index path uses `intervalToSecondsSQL` (a SQL EXTRACT
-    // sum). For sub-second intervals the two paths can disagree at the 4th
-    // decimal, which sometimes pushes a row's bin_idx past `LEAST(..., n-1)`.
-    // Lock the documented contract (`minSeconds` round-trip) but accept the
-    // bin-count drift; full sub-second binning fidelity is a Phase 9 polish.
+  it('sub-second precision: fractional seconds are kept and every row is binned', async () => {
+    // The stats and the bins read the same seconds expression, which keeps
+    // the fraction (see IntervalHistogramData.seconds.duckdb.test.ts).
     const t = tableName('micros');
     await harness.conn.query(
       `CREATE TABLE "${t}" AS SELECT iv FROM (VALUES
@@ -135,12 +131,12 @@ describe('interval histogram — real DuckDB integration', () => {
       ) AS s(iv)`,
     );
     const data = await fetchIntervalHistogramData(t, 'iv', [], bridge);
-    expect(data.minSeconds).toBeGreaterThan(0);
-    expect(data.minSeconds).toBeLessThan(0.01);
-    expect(data.maxSeconds).toBeGreaterThanOrEqual(5);
-    // total stats reflect all 4 rows; the bin-count drift is documented.
+    expect(data.minSeconds).toBe(0.001);
+    expect(data.maxSeconds).toBe(5);
     expect(data.total).toBe(4);
     expect(data.nullCount).toBe(0);
+    const total = data.bins.reduce((a, b) => a + b.count, 0);
+    expect(total).toBe(4);
   });
 
   it('with NULLs: nullCount tracked separately, bins exclude NULLs', async () => {

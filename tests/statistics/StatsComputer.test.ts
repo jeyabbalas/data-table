@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fetchIntervalStats } from '../../src/statistics/StatsComputer';
 import type { WorkerBridge } from '../../src/data/WorkerBridge';
+import { intervalToSecondsSQL } from '../../src/visualizations/histogram/IntervalHistogramData';
 
 /**
  * Create a mock WorkerBridge that returns the given rows for any query.
@@ -24,12 +25,11 @@ describe('fetchIntervalStats', () => {
   it('returns correct stats for a normal result', async () => {
     const bridge = mockBridge([
       {
-        total: 100,
-        non_null: 95,
+        min_sec: 300,
+        max_sec: 9000,
+        median_sec: 3600,
+        count: 95,
         null_count: 5,
-        min_val: '00:05:00',
-        max_val: '02:30:00',
-        median_val: '01:00:00',
       },
     ]);
 
@@ -45,15 +45,29 @@ describe('fetchIntervalStats', () => {
     expect(stats.medianDisplay).toBe('1h');
   });
 
+  it('runs the interval histogram stats query, on the seconds its bins use', async () => {
+    const bridge = mockBridge([
+      { min_sec: 0.001, max_sec: 0.991, median_sec: 0.496, count: 100, null_count: 0 },
+    ]);
+
+    const stats = await fetchIntervalStats('test_table', 'duration', [], bridge);
+
+    expect(bridge.query).toHaveBeenCalledOnce();
+    const sql = vi.mocked(bridge.query).mock.calls[0]![0];
+    expect(sql).toContain(`APPROX_QUANTILE(${intervalToSecondsSQL('"duration"')}, 0.5)`);
+    expect(stats.minDisplay).toBe('0.001s');
+    expect(stats.medianDisplay).toBe('0.496s');
+    expect(stats.maxDisplay).toBe('0.991s');
+  });
+
   it('returns correct stats with unfilteredTotal (filtered mode)', async () => {
     const bridge = mockBridge([
       {
-        total: 50,
-        non_null: 48,
+        min_sec: 600,
+        max_sec: 3600,
+        median_sec: 1800,
+        count: 48,
         null_count: 2,
-        min_val: '00:10:00',
-        max_val: '01:00:00',
-        median_val: '00:30:00',
       },
     ]);
 
@@ -87,12 +101,11 @@ describe('fetchIntervalStats', () => {
   it('handles all-null column', async () => {
     const bridge = mockBridge([
       {
-        total: 100,
-        non_null: 0,
+        min_sec: null,
+        max_sec: null,
+        median_sec: null,
+        count: 0,
         null_count: 100,
-        min_val: null,
-        max_val: null,
-        median_val: null,
       },
     ]);
 
@@ -107,7 +120,9 @@ describe('fetchIntervalStats', () => {
 
   it('returns safe fallback on query error', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const bridge = mockBridgeError(new Error('APPROX_QUANTILE not supported'));
+    const bridge = mockBridgeError(
+      new Error('Catalog Error: Table with name test_table does not exist!'),
+    );
 
     const stats = await fetchIntervalStats('test_table', 'duration', [], bridge);
 
@@ -125,12 +140,11 @@ describe('fetchIntervalStats', () => {
   it('uses quoteIdentifier for SQL safety', async () => {
     const bridge = mockBridge([
       {
-        total: 10,
-        non_null: 10,
+        min_sec: 60,
+        max_sec: 120,
+        median_sec: 90,
+        count: 10,
         null_count: 0,
-        min_val: '00:01:00',
-        max_val: '00:02:00',
-        median_val: '00:01:30',
       },
     ]);
 

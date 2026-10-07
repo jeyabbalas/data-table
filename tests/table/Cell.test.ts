@@ -322,6 +322,35 @@ describe('CellRenderer', () => {
           '1.5s',
         );
       });
+
+      it('shows the parts as DuckDB stores them', () => {
+        // Not split on the chart's 30.4375-day month (1mo 14d 13h 30m).
+        expect(renderer.formatValue('45 days', 'interval')).toBe('45d');
+        expect(renderer.formatValue('1 day 25:00:00', 'interval')).toBe('1d 25h');
+      });
+
+      it('reads 100 hours or more', () => {
+        expect(renderer.formatValue('100:00:00.5', 'interval')).toBe('100h 0.5s'); // not 0.5s
+        expect(renderer.formatValue('-100:00:00', 'interval')).toBe('-100h');
+      });
+
+      it('keeps the sign of negative text', () => {
+        expect(renderer.formatValue('-1 day -01:00:00', 'interval')).toBe('-1d 1h'); // not 1d 1h
+        expect(renderer.formatValue('-00:00:02.25', 'interval')).toBe('-2.25s');
+        expect(renderer.formatValue('-1 year -2 months', 'interval')).toBe('-1y 2mo');
+        // Parts of different signs keep their own.
+        expect(renderer.formatValue('1 day -01:00:00', 'interval')).toBe('1d -1h');
+      });
+
+      it('keeps every microsecond, and never reads 60 seconds', () => {
+        expect(renderer.formatValue('00:00:00.000001', 'interval')).toBe('0.000001s');
+        expect(renderer.formatValue({ months: 0, days: 0, micros: 1 }, 'interval')).toBe(
+          '0.000001s',
+        ); // not 0s
+        expect(renderer.formatValue({ months: 0, days: 0, micros: 119_999_999 }, 'interval')).toBe(
+          '1m 59.999999s',
+        ); // not 1m 60s
+      });
     });
 
     describe('string type', () => {

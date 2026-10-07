@@ -20,6 +20,7 @@ import type { VectorColumnDef } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { Filter } from '../filters/FilterTypes';
 import { jsonFiltersAsText } from '../filters/jsonFilters';
+import { timeTzRangesAsTime } from '../filters/timeTzFilters';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
@@ -270,7 +271,10 @@ export function snapshotFromState(
  * longer exist are silently dropped. A point, set or not-set filter on a
  * JSON column without `valueType` gets `valueType: 'text'`, in the filters
  * and in the undo and redo entries ({@link jsonFiltersAsText}): one saved
- * before 0.9 would otherwise fail every query on text that is not JSON.
+ * before 0.9 would otherwise fail every query on text that is not JSON. A
+ * range filter on a TIME WITH TIME ZONE column without `valueType` gets
+ * `valueType: 'time'` the same way ({@link timeTzRangesAsTime}), so that it
+ * compares the time of day its column's chart shows.
  * Only the schema's columns are known here, not the derived columns the
  * snapshot brings back. The snapshot's column order is made
  * consistent ({@link consistentColumnOrder}): the visible columns as the
@@ -302,16 +306,19 @@ export function restoreStateFromSnapshot(
 
   const allColumnNames = schemaColumns.map((c) => c.name);
 
+  // The valueType that filters saved before 0.9 lack.
+  const withValueTypes = (saved: Filter[]): Filter[] =>
+    timeTzRangesAsTime(jsonFiltersAsText(saved, schemaColumns), schemaColumns);
+
   // Filters: deserialize and drop stale column references.
   // Raw SQL filters use synthetic column keys that aren't in the schema —
   // they must bypass column validation to survive session restore.
-  const filters = jsonFiltersAsText(
+  const filters = withValueTypes(
     snapshot.filters
       .map(deserializeFilter)
       .filter(
         (f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)),
       ),
-    schemaColumns,
   );
 
   // Sort: drop stale column references
@@ -421,7 +428,7 @@ export function restoreStateFromSnapshot(
     }
     const restore = (s: SerializedStateSnapshot): StateSnapshot => {
       const entry = deserializeStateSnapshot(s, validColumns, hydratedPool);
-      return { ...entry, filters: jsonFiltersAsText(entry.filters, schemaColumns) };
+      return { ...entry, filters: withValueTypes(entry.filters) };
     };
     const deserialized = {
       undoStack: snapshot.undoStack.map(restore),

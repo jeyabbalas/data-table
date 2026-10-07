@@ -8,7 +8,7 @@
 
 > **DataType** = `"integer"` \| `"float"` \| `"decimal"` \| `"string"` \| `"boolean"` \| `"uuid"` \| `"date"` \| `"timestamp"` \| `"time"` \| `"interval"` \| `"nested"`
 
-Defined in: [core/types.ts:19](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/types.ts#L19)
+Defined in: [core/types.ts:19](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/types.ts#L19)
 
 Column data types supported by the library.
 

@@ -8,7 +8,7 @@
 
 > **formatSQLValue**(`value`): `string`
 
-Defined in: [filters/FilterSQL.ts:61](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/filters/FilterSQL.ts#L61)
+Defined in: [filters/FilterSQL.ts:61](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/filters/FilterSQL.ts#L61)
 
 Format a JS value as a SQL literal for splicing into a query string.
 

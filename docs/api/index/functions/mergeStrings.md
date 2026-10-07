@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:1118](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/Strings.ts#L1118)
+Defined in: [core/Strings.ts:1130](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L1130)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -297,7 +297,7 @@ Column-header aria-label fragments.
 
 #### derived?
 
-\{ `addButtonLabel?`: `string`; `availableColumnsLabel?`: `string`; `closeEditLabel?`: `string`; `closeLabel?`: `string`; `createButton?`: `string`; `createFailed?`: `string`; `deleteButton?`: `string`; `deleteFailed?`: \{ \}; `editTitle?`: `string`; `editTitleForColumn?`: \{ \}; `expressionLabel?`: `string`; `expressionModeLabel?`: `string`; `expressionPlaceholder?`: `string`; `expressionRequired?`: `string`; `infoLabel?`: `string`; `nameDuplicate?`: \{ \}; `nameLabel?`: `string`; `namePlaceholder?`: `string`; `nameRequired?`: `string`; `newColumnTitle?`: `string`; `typeLabel?`: `string`; `typePreview?`: \{ \}; `updateButton?`: `string`; `updateFailed?`: `string`; `validationFailed?`: `string`; `vectorCountMismatch?`: \{ \}; `vectorInfo?`: \{ \}; `vectorInfoText?`: \{ \}; `vectorInvalidBoolean?`: \{ \}; `vectorInvalidDate?`: \{ \}; `vectorInvalidDecimal?`: \{ \}; `vectorInvalidFloat?`: \{ \}; `vectorInvalidInteger?`: \{ \}; `vectorInvalidInterval?`: \{ \}; `vectorInvalidTime?`: \{ \}; `vectorInvalidTimestamp?`: \{ \}; `vectorInvalidUUID?`: \{ \}; `vectorModeLabel?`: `string`; `vectorPlaceholder?`: `string`; `vectorTypeLabel?`: `string`; `vectorValuesLabel?`: `string`; \}
+\{ `addButtonLabel?`: `string`; `availableColumnsLabel?`: `string`; `closeEditLabel?`: `string`; `closeLabel?`: `string`; `createButton?`: `string`; `createFailed?`: `string`; `deleteButton?`: `string`; `deleteFailed?`: \{ \}; `editTitle?`: `string`; `editTitleForColumn?`: \{ \}; `expressionLabel?`: `string`; `expressionModeLabel?`: `string`; `expressionPlaceholder?`: `string`; `expressionRequired?`: `string`; `infoLabel?`: `string`; `nameDuplicate?`: \{ \}; `nameLabel?`: `string`; `namePlaceholder?`: `string`; `nameRequired?`: `string`; `nameReserved?`: \{ \}; `newColumnTitle?`: `string`; `typeLabel?`: `string`; `typePreview?`: \{ \}; `updateButton?`: `string`; `updateFailed?`: `string`; `validationFailed?`: `string`; `vectorCountMismatch?`: \{ \}; `vectorInfo?`: \{ \}; `vectorInfoText?`: \{ \}; `vectorInvalidBoolean?`: \{ \}; `vectorInvalidDate?`: \{ \}; `vectorInvalidDecimal?`: \{ \}; `vectorInvalidFloat?`: \{ \}; `vectorInvalidInteger?`: \{ \}; `vectorInvalidInterval?`: \{ \}; `vectorInvalidTime?`: \{ \}; `vectorInvalidTimestamp?`: \{ \}; `vectorInvalidUUID?`: \{ \}; `vectorModeLabel?`: `string`; `vectorPlaceholder?`: `string`; `vectorTypeLabel?`: `string`; `vectorValuesLabel?`: `string`; \}
 
 #### derived.addButtonLabel?
 
@@ -384,6 +384,13 @@ Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor).
 #### derived.nameRequired?
 
 `string`
+
+#### derived.nameReserved?
+
+\{ \}
+
+A new column name that spells `__rowid__` in any letter case: the
+synthetic row id's name, which no other column may take.
 
 #### derived.newColumnTitle?
 
@@ -1139,7 +1146,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `noData?`: `string`; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `noData?`: `string`; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `otherSegmentLabel?`: `string`; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
 
 #### statistics.allNull?
 
@@ -1228,6 +1235,13 @@ Display value for the null bin/segment in a selection detail line.
 \{ \}
 
 Display value for the folded "Other" segment (count = folded distinct values).
+
+#### statistics.otherSegmentLabel?
+
+`string`
+
+The label drawn inside the folded "Other" segment of a value-count
+bar, where it fits; [otherCategory](#mergestrings) is its hover text.
 
 #### statistics.percentTrue?
 

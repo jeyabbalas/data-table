@@ -462,9 +462,13 @@ panels and charts right across a trackpad sweep.
   back into the body, which cancels the animation. `scrollToEnd` turns the header-to-body sync
   off for its own scroll, and wheel, trackpad and keyboard scrolling were unaffected, as was a
   smooth scroll at device pixel ratio 1 in headless Chromium, so what stalls is host code calling
-  `scrollTo({ behavior: 'smooth' })` on the body. Fixed, to be confirmed in desktop Chrome at
-  DPR 2: the controller keeps where it last left each scroller, and a scroll event that finds one
-  within a pixel of there is dropped as the echo of its own write, whatever the other is doing.
-  That covers the body's echo too, which, a frame late, stopped an animated scroll of the header
-  the same way. Headless Chromium fires each echo in the frame of the scroll that caused it, so
-  `scroll-echo.spec.ts` holds one scroller's events back a frame, as that Chrome did.
+  `scrollTo({ behavior: 'smooth' })` on the body. Fixed: the controller keeps where it last left
+  each scroller, and a scroll event that finds one within a pixel of there is dropped as the echo
+  of its own write, whatever the other is doing. That covers the body's echo too, which, a frame
+  late, stopped an animated scroll of the header the same way. Headless Chromium fires each echo
+  in the frame of the scroll that caused it, so `scroll-echo.spec.ts` holds one scroller's events
+  back a frame, as that Chrome did.
+- **2026-10-06, desktop Chrome at device pixel ratio 2, `bbe1e5c3`.** The fix above holds. A
+  smooth `scrollTo({ left: 4000 })` of the body reached 4,000 exactly, then 0, then 4,000 again,
+  with the header's `scrollLeft` equal to the body's in each of the roughly 150 frames of every
+  run.

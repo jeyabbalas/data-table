@@ -6,7 +6,7 @@
 
 # Interface: NestedSummaryData
 
-Defined in: [visualizations/nested/NestedSummaryData.ts:30](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/nested/NestedSummaryData.ts#L30)
+Defined in: [visualizations/nested/NestedSummaryData.ts:30](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/nested/NestedSummaryData.ts#L30)
 
 The counts a nested column's summary chart draws: rows and non-NULL
 values, over the whole relation and over the rows passing the filters.
@@ -27,7 +27,7 @@ const data: NestedSummaryData = {
 
 > **filtered**: \{ `nonNullCount`: `number`; `total`: `number`; \} \| `null`
 
-Defined in: [visualizations/nested/NestedSummaryData.ts:39](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/nested/NestedSummaryData.ts#L39)
+Defined in: [visualizations/nested/NestedSummaryData.ts:39](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/nested/NestedSummaryData.ts#L39)
 
 Rows passing the filters, and of them those whose value is not NULL.
 `null` when no filter is active.
@@ -38,7 +38,7 @@ Rows passing the filters, and of them those whose value is not NULL.
 
 > **nonNullCount**: `number`
 
-Defined in: [visualizations/nested/NestedSummaryData.ts:34](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/nested/NestedSummaryData.ts#L34)
+Defined in: [visualizations/nested/NestedSummaryData.ts:34](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/nested/NestedSummaryData.ts#L34)
 
 Of them, rows whose value is not NULL.
 
@@ -48,6 +48,6 @@ Of them, rows whose value is not NULL.
 
 > **total**: `number`
 
-Defined in: [visualizations/nested/NestedSummaryData.ts:32](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/visualizations/nested/NestedSummaryData.ts#L32)
+Defined in: [visualizations/nested/NestedSummaryData.ts:32](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/nested/NestedSummaryData.ts#L32)
 
 Rows in the relation, filters aside.

@@ -6,7 +6,7 @@
 
 # Interface: ParquetSourceOptions
 
-Defined in: [data/sourceOptions.ts:54](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L54)
+Defined in: [data/sourceOptions.ts:54](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/sourceOptions.ts#L54)
 
 How a Parquet source is read.
 
@@ -16,9 +16,11 @@ How a Parquet source is read.
 
 > `optional` **columns?**: readonly `string`[]
 
-Defined in: [data/sourceOptions.ts:61](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/data/sourceOptions.ts#L61)
+Defined in: [data/sourceOptions.ts:63](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/sourceOptions.ts#L63)
 
 The columns to load, by their names in the file (case-sensitive), in
 this order. Default: every column. The others are never read, and the
 memory check before the load counts only these. Leave out
-`__rowid__`: the table adds that column itself.
+`__rowid__`: the table adds that column itself. A name the file lacks
+rejects the load with `LOAD_INVALID_OPTIONS`, listing the names in
+`details.missing`, and the table keeps the data it had.

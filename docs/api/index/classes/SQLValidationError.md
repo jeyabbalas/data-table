@@ -6,7 +6,7 @@
 
 # Class: SQLValidationError
 
-Defined in: [core/errors.ts:165](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L165)
+Defined in: [core/errors.ts:165](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L165)
 
 SQL expression failed user-facing validation (raw-SQL filter modal etc.).
 
@@ -30,7 +30,7 @@ table.on('error', ({ error, source }) => {
 
 > **new SQLValidationError**(`message`, `options?`): `SQLValidationError`
 
-Defined in: [core/errors.ts:166](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L166)
+Defined in: [core/errors.ts:166](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L166)
 
 #### Parameters
 
@@ -56,7 +56,7 @@ Defined in: [core/errors.ts:166](https://github.com/jeyabbalas/data-table/blob/2
 
 > `readonly` **code**: `string`
 
-Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L56)
+Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L56)
 
 #### Inherited from
 
@@ -68,7 +68,7 @@ Defined in: [core/errors.ts:56](https://github.com/jeyabbalas/data-table/blob/2c
 
 > `readonly` `optional` **details?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L57)
+Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L57)
 
 #### Inherited from
 
@@ -80,7 +80,7 @@ Defined in: [core/errors.ts:57](https://github.com/jeyabbalas/data-table/blob/2c
 
 > **toJSON**(): `object`
 
-Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/2c94035bd17377b3e3f4a2a87d56c65d6781551c/src/core/errors.ts#L66)
+Defined in: [core/errors.ts:66](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/errors.ts#L66)
 
 #### Returns
 

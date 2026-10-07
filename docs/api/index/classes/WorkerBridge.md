@@ -6,7 +6,7 @@
 
 # Class: WorkerBridge
 
-Defined in: [data/WorkerBridge.ts:166](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L166)
+Defined in: [data/WorkerBridge.ts:166](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L166)
 
 Promise-based RPC layer between the main thread and the DuckDB Web Worker.
 
@@ -44,7 +44,7 @@ bridge.terminate();
 
 > **new WorkerBridge**(`options?`): `WorkerBridge`
 
-Defined in: [data/WorkerBridge.ts:183](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L183)
+Defined in: [data/WorkerBridge.ts:183](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L183)
 
 #### Parameters
 
@@ -62,7 +62,7 @@ Defined in: [data/WorkerBridge.ts:183](https://github.com/jeyabbalas/data-table/
 
 > **clearQueryCache**(): `void`
 
-Defined in: [data/WorkerBridge.ts:532](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L532)
+Defined in: [data/WorkerBridge.ts:532](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L532)
 
 Clear all cached query results
 
@@ -76,7 +76,7 @@ Clear all cached query results
 
 > **dropTable**(`tableName`): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:547](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L547)
+Defined in: [data/WorkerBridge.ts:547](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L547)
 
 Drop a table from DuckDB if it exists. The identifier is double-quoted
 (matching the worker-side loaders), so any tableName the bridge issued
@@ -104,7 +104,7 @@ without re-implementing identifier quoting.
 
 > **exportToBuffer**(`sql`, `format`, `signal?`): `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
-Defined in: [data/WorkerBridge.ts:491](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L491)
+Defined in: [data/WorkerBridge.ts:491](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L491)
 
 Export data to a binary file format via DuckDB COPY TO.
 
@@ -135,7 +135,7 @@ Returns the file contents as a Uint8Array.
 
 > **initialize**(): `Promise`\<`void`\>
 
-Defined in: [data/WorkerBridge.ts:246](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L246)
+Defined in: [data/WorkerBridge.ts:246](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L246)
 
 Create the worker and wait for it to be ready.
 
@@ -157,7 +157,7 @@ called again: it starts a new worker, with an empty database.
 
 > **isInitialized**(): `boolean`
 
-Defined in: [data/WorkerBridge.ts:556](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L556)
+Defined in: [data/WorkerBridge.ts:556](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L556)
 
 Check if the bridge is initialized
 
@@ -171,7 +171,7 @@ Check if the bridge is initialized
 
 > **loadData**(`source`, `options`, `onProgress?`, `signal?`): `Promise`\<[`LoadDataResult`](../interfaces/LoadDataResult.md)\>
 
-Defined in: [data/WorkerBridge.ts:457](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L457)
+Defined in: [data/WorkerBridge.ts:457](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L457)
 
 Load data into DuckDB
 
@@ -217,7 +217,7 @@ any other key here, such as a `delimiter` next to `format`, is ignored.
 
 > **query**\<`T`\>(`sql`, `signal?`, `options?`): `Promise`\<`T`[]\>
 
-Defined in: [data/WorkerBridge.ts:407](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L407)
+Defined in: [data/WorkerBridge.ts:407](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L407)
 
 Execute a SQL query.
 
@@ -319,7 +319,7 @@ const rows = await bridge.query(sql, controller.signal, {
 
 > **terminate**(): `void`
 
-Defined in: [data/WorkerBridge.ts:502](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/WorkerBridge.ts#L502)
+Defined in: [data/WorkerBridge.ts:502](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/WorkerBridge.ts#L502)
 
 Terminate the worker
 

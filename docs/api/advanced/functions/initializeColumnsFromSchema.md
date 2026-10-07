@@ -8,7 +8,7 @@
 
 > **initializeColumnsFromSchema**(`state`, `schema`): `void`
 
-Defined in: [core/State.ts:235](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/State.ts#L235)
+Defined in: [core/State.ts:235](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/State.ts#L235)
 
 Initialize column-related state from a schema
 

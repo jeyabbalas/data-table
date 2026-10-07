@@ -6,7 +6,7 @@
 
 # Class: HiddenColumnsGutter
 
-Defined in: [table/HiddenColumnsGutter.ts:34](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/table/HiddenColumnsGutter.ts#L34)
+Defined in: [table/HiddenColumnsGutter.ts:34](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/HiddenColumnsGutter.ts#L34)
 
 HiddenColumnsGutter renders a horizontal bar of chips for hidden columns.
 It auto-shows when columns are hidden and collapses when all are visible.
@@ -24,7 +24,7 @@ four arrow keys move the stop (the chips wrap onto several rows), `Home` /
 
 > **new HiddenColumnsGutter**(`state`, `actions`, `options?`): `HiddenColumnsGutter`
 
-Defined in: [table/HiddenColumnsGutter.ts:44](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/table/HiddenColumnsGutter.ts#L44)
+Defined in: [table/HiddenColumnsGutter.ts:44](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/HiddenColumnsGutter.ts#L44)
 
 #### Parameters
 
@@ -50,7 +50,7 @@ Defined in: [table/HiddenColumnsGutter.ts:44](https://github.com/jeyabbalas/data
 
 > **destroy**(): `void`
 
-Defined in: [table/HiddenColumnsGutter.ts:187](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/table/HiddenColumnsGutter.ts#L187)
+Defined in: [table/HiddenColumnsGutter.ts:187](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/HiddenColumnsGutter.ts#L187)
 
 Destroy and clean up
 
@@ -64,7 +64,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/HiddenColumnsGutter.ts:180](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/table/HiddenColumnsGutter.ts#L180)
+Defined in: [table/HiddenColumnsGutter.ts:180](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/table/HiddenColumnsGutter.ts#L180)
 
 Get the gutter's DOM element
 

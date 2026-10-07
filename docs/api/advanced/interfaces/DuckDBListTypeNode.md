@@ -6,7 +6,7 @@
 
 # Interface: DuckDBListTypeNode
 
-Defined in: [core/duckdbType.ts:90](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/duckdbType.ts#L90)
+Defined in: [core/duckdbType.ts:90](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L90)
 
 A LIST: `INTEGER[]`.
 
@@ -25,7 +25,7 @@ if (node.kind === 'list') node.element.sqlType; // 'VARCHAR'
 
 > `readonly` **element**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:93](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/duckdbType.ts#L93)
+Defined in: [core/duckdbType.ts:93](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L93)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [core/duckdbType.ts:93](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **kind**: `"list"`
 
-Defined in: [core/duckdbType.ts:91](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/duckdbType.ts#L91)
+Defined in: [core/duckdbType.ts:91](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L91)
 
 ***
 
@@ -41,4 +41,4 @@ Defined in: [core/duckdbType.ts:91](https://github.com/jeyabbalas/data-table/blo
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:92](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/duckdbType.ts#L92)
+Defined in: [core/duckdbType.ts:92](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/duckdbType.ts#L92)

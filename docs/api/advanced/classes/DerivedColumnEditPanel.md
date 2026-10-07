@@ -6,7 +6,7 @@
 
 # Class: DerivedColumnEditPanel
 
-Defined in: [derived/DerivedColumnEditPanel.ts:44](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L44)
+Defined in: [derived/DerivedColumnEditPanel.ts:45](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L45)
 
 Floating panel that hosts the rename / SQL-expression editor for an
 existing derived column. Composed by the facade; reach for it directly
@@ -18,7 +18,7 @@ only when assembling a custom container shell.
 
 > **new DerivedColumnEditPanel**(`state`, `actions`, `options?`): `DerivedColumnEditPanel`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:78](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L78)
+Defined in: [derived/DerivedColumnEditPanel.ts:79](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L79)
 
 #### Parameters
 
@@ -44,7 +44,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:78](https://github.com/jeyabbalas
 
 > **close**(): `void`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:505](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L505)
+Defined in: [derived/DerivedColumnEditPanel.ts:513](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L513)
 
 #### Returns
 
@@ -56,7 +56,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:505](https://github.com/jeyabbala
 
 > **destroy**(): `void`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:723](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L723)
+Defined in: [derived/DerivedColumnEditPanel.ts:746](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L746)
 
 #### Returns
 
@@ -68,7 +68,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:723](https://github.com/jeyabbala
 
 > **getCurrentColumn**(): `string` \| `null`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:719](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L719)
+Defined in: [derived/DerivedColumnEditPanel.ts:742](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L742)
 
 #### Returns
 
@@ -80,7 +80,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:719](https://github.com/jeyabbala
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:711](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L711)
+Defined in: [derived/DerivedColumnEditPanel.ts:734](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L734)
 
 #### Returns
 
@@ -92,7 +92,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:711](https://github.com/jeyabbala
 
 > **getIsOpen**(): `boolean`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:715](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L715)
+Defined in: [derived/DerivedColumnEditPanel.ts:738](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L738)
 
 #### Returns
 
@@ -104,7 +104,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:715](https://github.com/jeyabbala
 
 > **open**(`columnName`, `anchorElement`): `void`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:383](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L383)
+Defined in: [derived/DerivedColumnEditPanel.ts:392](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L392)
 
 #### Parameters
 
@@ -126,7 +126,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:383](https://github.com/jeyabbala
 
 > **toggle**(`columnName`, `anchorElement`): `void`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:375](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L375)
+Defined in: [derived/DerivedColumnEditPanel.ts:384](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L384)
 
 #### Parameters
 

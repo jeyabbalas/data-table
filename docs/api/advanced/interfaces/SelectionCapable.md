@@ -6,7 +6,7 @@
 
 # Interface: SelectionCapable
 
-Defined in: [visualizations/InteractionManager.ts:35](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/visualizations/InteractionManager.ts#L35)
+Defined in: [visualizations/InteractionManager.ts:35](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/InteractionManager.ts#L35)
 
 Capability marker — visualizations that expose `clearSelection()` for
 discrete-value selection. See [BrushCapable](BrushCapable.md).
@@ -17,7 +17,7 @@ discrete-value selection. See [BrushCapable](BrushCapable.md).
 
 > **clearSelection**(): `void`
 
-Defined in: [visualizations/InteractionManager.ts:36](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/visualizations/InteractionManager.ts#L36)
+Defined in: [visualizations/InteractionManager.ts:36](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/visualizations/InteractionManager.ts#L36)
 
 #### Returns
 

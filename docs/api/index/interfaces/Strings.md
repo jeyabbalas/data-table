@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L33)
+Defined in: [core/Strings.ts:33](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L33)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:342](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L342)
+Defined in: [core/Strings.ts:342](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L342)
 
 #### ascending
 
@@ -486,7 +486,7 @@ Column-header aria-label fragments.
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L37)
+Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L37)
 
 #### apply
 
@@ -550,7 +550,7 @@ Defined in: [core/Strings.ts:37](https://github.com/jeyabbalas/data-table/blob/4
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L276)
+Defined in: [core/Strings.ts:276](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L276)
 
 #### addButtonLabel
 
@@ -961,7 +961,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:644](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L644)
+Defined in: [core/Strings.ts:644](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L644)
 
 #### stylesheetMissing
 
@@ -973,7 +973,7 @@ Defined in: [core/Strings.ts:644](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L223)
+Defined in: [core/Strings.ts:223](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L223)
 
 #### cancelButton
 
@@ -1123,7 +1123,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L57)
+Defined in: [core/Strings.ts:57](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L57)
 
 #### activeFiltersLabel
 
@@ -1763,7 +1763,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L201)
+Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L201)
 
 #### closeLabel
 
@@ -1873,7 +1873,7 @@ Defined in: [core/Strings.ts:201](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:426](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L426)
+Defined in: [core/Strings.ts:426](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L426)
 
 #### allNull
 
@@ -2192,7 +2192,7 @@ Truncation suffix for a long multi-select value list (total = selected values).
 
 > **values**: `object`
 
-Defined in: [core/Strings.ts:482](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Strings.ts#L482)
+Defined in: [core/Strings.ts:482](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Strings.ts#L482)
 
 #### addAsColumn
 

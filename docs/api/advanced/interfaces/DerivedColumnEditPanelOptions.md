@@ -6,7 +6,7 @@
 
 # Interface: DerivedColumnEditPanelOptions
 
-Defined in: [derived/DerivedColumnEditPanel.ts:20](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L20)
+Defined in: [derived/DerivedColumnEditPanel.ts:21](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L21)
 
 Construction options for [DerivedColumnEditPanel](../classes/DerivedColumnEditPanel.md).
 
@@ -16,7 +16,7 @@ Construction options for [DerivedColumnEditPanel](../classes/DerivedColumnEditPa
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:21](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L21)
+Defined in: [derived/DerivedColumnEditPanel.ts:22](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L22)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [derived/DerivedColumnEditPanel.ts:21](https://github.com/jeyabbalas
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [derived/DerivedColumnEditPanel.ts:25](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L25)
+Defined in: [derived/DerivedColumnEditPanel.ts:26](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L26)
 
 Element to mirror `data-dt-color-scheme` from (typically `.dt-root`).
 
@@ -34,7 +34,7 @@ Element to mirror `data-dt-color-scheme` from (typically `.dt-root`).
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../../index/type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [derived/DerivedColumnEditPanel.ts:23](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L23)
+Defined in: [derived/DerivedColumnEditPanel.ts:24](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L24)
 
 Custom editor factory. If omitted, uses DefaultExpressionEditor.
 
@@ -44,6 +44,6 @@ Custom editor factory. If omitted, uses DefaultExpressionEditor.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [derived/DerivedColumnEditPanel.ts:27](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/derived/DerivedColumnEditPanel.ts#L27)
+Defined in: [derived/DerivedColumnEditPanel.ts:28](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/derived/DerivedColumnEditPanel.ts#L28)
 
 Resolved i18n strings. Defaults to English.

@@ -6,7 +6,7 @@
 
 # Interface: ParquetExportOptions
 
-Defined in: [export/ParquetExport.ts:22](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/export/ParquetExport.ts#L22)
+Defined in: [export/ParquetExport.ts:22](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ParquetExport.ts#L22)
 
 Options controlling Parquet export behavior
 
@@ -16,7 +16,7 @@ Options controlling Parquet export behavior
 
 > **columns**: `"all"` \| `string`[]
 
-Defined in: [export/ParquetExport.ts:26](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/export/ParquetExport.ts#L26)
+Defined in: [export/ParquetExport.ts:26](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ParquetExport.ts#L26)
 
 Which columns to include
 
@@ -26,6 +26,6 @@ Which columns to include
 
 > **scope**: `"all"` \| `"filtered"` \| `"selected"`
 
-Defined in: [export/ParquetExport.ts:24](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/export/ParquetExport.ts#L24)
+Defined in: [export/ParquetExport.ts:24](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/export/ParquetExport.ts#L24)
 
 Which rows to export

@@ -6,7 +6,7 @@
 
 # Interface: LoadDataOptions
 
-Defined in: [core/Actions.ts:189](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Actions.ts#L189)
+Defined in: [core/Actions.ts:189](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Actions.ts#L189)
 
 Options for loading data
 
@@ -20,7 +20,7 @@ Options for loading data
 
 > `optional` **annotationStore?**: [`AnnotationStore`](../classes/AnnotationStore.md)
 
-Defined in: [core/Actions.ts:195](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Actions.ts#L195)
+Defined in: [core/Actions.ts:195](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Actions.ts#L195)
 
 If provided, restores saved annotations after loading
 
@@ -30,7 +30,7 @@ If provided, restores saved annotations after loading
 
 > `optional` **format?**: [`DataFormat`](../../index/type-aliases/DataFormat.md)
 
-Defined in: [data/DataLoader.ts:28](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/DataLoader.ts#L28)
+Defined in: [data/DataLoader.ts:28](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/DataLoader.ts#L28)
 
 #### Inherited from
 
@@ -42,7 +42,7 @@ Defined in: [data/DataLoader.ts:28](https://github.com/jeyabbalas/data-table/blo
 
 > `optional` **onProgress?**: [`ProgressCallback`](../../index/type-aliases/ProgressCallback.md)
 
-Defined in: [data/DataLoader.ts:35](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/DataLoader.ts#L35)
+Defined in: [data/DataLoader.ts:35](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/DataLoader.ts#L35)
 
 Called with each progress message the worker sends as the load runs.
 The table emits them as `loadProgress`.
@@ -57,7 +57,7 @@ The table emits them as `loadProgress`.
 
 > `optional` **presetManager?**: [`FilterPresetManager`](../../index/classes/FilterPresetManager.md)
 
-Defined in: [core/Actions.ts:193](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Actions.ts#L193)
+Defined in: [core/Actions.ts:193](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Actions.ts#L193)
 
 If provided, restores saved filter presets after loading
 
@@ -67,7 +67,7 @@ If provided, restores saved filter presets after loading
 
 > `optional` **sessionStore?**: [`SessionStore`](../../index/classes/SessionStore.md)
 
-Defined in: [core/Actions.ts:191](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/core/Actions.ts#L191)
+Defined in: [core/Actions.ts:191](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/core/Actions.ts#L191)
 
 If provided, restores saved session state after loading
 
@@ -77,7 +77,7 @@ If provided, restores saved session state after loading
 
 > `optional` **sourceOptions?**: [`SourceOptions`](../../index/interfaces/SourceOptions.md)
 
-Defined in: [data/DataLoader.ts:30](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/DataLoader.ts#L30)
+Defined in: [data/DataLoader.ts:30](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/DataLoader.ts#L30)
 
 How the source is read, per format; see [SourceOptions](../../index/interfaces/SourceOptions.md).
 
@@ -91,7 +91,7 @@ How the source is read, per format; see [SourceOptions](../../index/interfaces/S
 
 > `optional` **tableName?**: `string`
 
-Defined in: [data/DataLoader.ts:27](https://github.com/jeyabbalas/data-table/blob/4c11c459c61fe9e21644077f7627edd489657f59/src/data/DataLoader.ts#L27)
+Defined in: [data/DataLoader.ts:27](https://github.com/jeyabbalas/data-table/blob/162e68fef8fc417c3de6b5f5df2ea0ee931673c0/src/data/DataLoader.ts#L27)
 
 #### Inherited from
 

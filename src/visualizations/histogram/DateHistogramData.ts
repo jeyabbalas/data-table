@@ -5,12 +5,19 @@
  * - Automatic time interval detection based on data range
  * - DATE_TRUNC-based temporal binning via DuckDB
  * - Filter to SQL conversion (shared with numeric histogram)
+ * - The range filter a brush over the bins applies
  */
 
 import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
-import { filtersToWhereClause, formatSQLValue, quoteIdentifier } from '../../filters/FilterSQL';
+import {
+  dateToSQLLiteral,
+  filtersToWhereClause,
+  formatSQLValue,
+  quoteIdentifier,
+} from '../../filters/FilterSQL';
+import type { RangeFilter } from '../../filters/FilterTypes';
 import type { TimeInterval } from './DateFormatters';
 
 // Re-export TimeInterval for convenience
@@ -33,42 +40,55 @@ export interface DateHistogramBin {
 }
 
 /**
- * Complete date histogram data including bins and metadata
+ * Complete date histogram data including bins and metadata.
+ *
+ * The bins, `min` and `max` are of the values the chart can place on its
+ * axis. `infinity`, `-infinity` and dates more than about 270,000 years from
+ * 1970, which a JavaScript `Date` cannot hold, are counted in
+ * `nonFiniteCount` instead. `total` counts every row.
  */
 export interface DateHistogramData {
   /** Array of bins sorted by binStart */
   bins: DateHistogramBin[];
   /** Count of null values in the column */
   nullCount: number;
-  /** Minimum non-null date */
+  /** Minimum date the chart draws, or null when there is none */
   min: Date | null;
-  /** Maximum non-null date */
+  /** Maximum date the chart draws, or null when there is none */
   max: Date | null;
-  /** Total count of all values (including nulls) */
+  /** Total count of all values (including nulls and the values left out) */
   total: number;
   /** Detected/used interval for binning */
   interval: TimeInterval;
-  /** True when all non-null values are identical (single timestamp) */
+  /** True when all the values the chart draws are identical (single timestamp) */
   isSingleValue: boolean;
   /** True when using numeric binning fallback (bins not aligned to calendar intervals) */
   isNumericBinning: boolean;
+  /**
+   * Count of `infinity`, `-infinity` and far-off dates, which the bins leave
+   * out. Always set by the built-in fetch; optional so that data built
+   * elsewhere still type-checks.
+   */
+  nonFiniteCount?: number | undefined;
 }
 
 /**
- * Statistics result from initial query
+ * Statistics result from the initial query: epoch milliseconds of the
+ * values the chart can draw.
  */
 interface DateStatsResult {
-  min_date: string | null;
-  max_date: string | null;
+  min_ms: number | null;
+  max_ms: number | null;
   count: number;
   null_count: number;
+  non_finite_count: number;
 }
 
 /**
- * Bin query result
+ * Bin query result: the bin's start in epoch milliseconds
  */
 interface DateBinResult {
-  bin_start: string;
+  bin_start_ms: number;
   count: number;
 }
 
@@ -247,38 +267,39 @@ function computeBinEnd(binStart: Date, interval: TimeInterval): Date {
 }
 
 /**
- * Parse a date string from DuckDB result
- * Handles ISO format and DuckDB timestamp format
- *
- * DuckDB returns timezone-naive strings like "2020-12-31 23:59:59".
- * We interpret these as UTC to match our UTC-based formatting.
+ * The most seconds from 1970, either way, of a value the chart draws: about
+ * 270,000 years, inside the ±8.64e12 s a JavaScript `Date` holds (271821 BC
+ * to 275760 AD), with room for a bin's end. DuckDB's DATE reaches 5881580 AD
+ * and its TIMESTAMP 290309 BC. Past this a `Date` is invalid, and
+ * `DATE_TRUNC` fails on a DATE past TIMESTAMP's range (`Date and time not in
+ * timestamp range`).
  */
-function parseDate(value: string | null): Date | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
+const CHART_EPOCH_LIMIT_SECONDS = 8.6e12;
 
-  // DuckDB returns timezone-naive strings like "2020-12-31 23:59:59"
-  // We need to interpret as UTC to match our UTC-based formatting
-  let dateStr = value;
+/**
+ * SQL that is true for a value the chart can draw: one whose epoch is within
+ * {@link CHART_EPOCH_LIMIT_SECONDS}. Not true for `infinity` and `-infinity`,
+ * whose epoch DuckDB gives as NULL, nor for NULL.
+ */
+function chartableSQL(col: string): string {
+  return `EXTRACT(EPOCH FROM ${col}) BETWEEN -${CHART_EPOCH_LIMIT_SECONDS} AND ${CHART_EPOCH_LIMIT_SECONDS}`;
+}
 
-  // Check if the string already has timezone info (Z, +, or - after position 10)
-  const hasTimezone =
-    value.includes('Z') ||
-    value.includes('+') ||
-    (value.length > 10 && value.lastIndexOf('-') > 10);
+/** True for epoch milliseconds the chart can draw; false for NULL. */
+function isChartableMs(ms: number | null): boolean {
+  return ms !== null && Math.abs(ms) <= CHART_EPOCH_LIMIT_SECONDS * 1000;
+}
 
-  if (!hasTimezone) {
-    // No timezone info - treat as UTC by converting to ISO format with Z suffix
-    dateStr = value.replace(' ', 'T') + 'Z';
-  }
-
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date;
+/**
+ * The WHERE of a bin query. A column known to hold only values the chart can
+ * draw (`allChartable`, from its unfiltered fetch) needs no test of each
+ * value; any other keeps to the values the chart can draw, through a test
+ * that NULL fails too.
+ */
+function binWhereSQL(col: string, filters: Filter[], allChartable: boolean | undefined): string {
+  const base = allChartable === true ? `${col} IS NOT NULL` : chartableSQL(col);
+  const whereClause = filtersToWhereClause(filters);
+  return whereClause ? `WHERE ${base} AND ${whereClause}` : `WHERE ${base}`;
 }
 
 // =========================================
@@ -286,46 +307,98 @@ function parseDate(value: string | null): Date | null {
 // =========================================
 
 /**
- * Fetch date column statistics (min, max, count, nulls)
+ * Fetch date column statistics: the minimum and maximum of the values the
+ * chart can draw, and the counts.
+ *
+ * Positions come from DuckDB as epoch milliseconds, not as its text, which
+ * `new Date()` cannot read before year 1 (`0044-03-15 (BC)`), past 9999
+ * (`12000-01-01 00:00:00`) or at `infinity`, and reads years 1 to 99 as
+ * 1950 to 2049. `count` and `nullCount` count every row, as line 1 of the
+ * stats does; `nonFiniteCount` is the values among `count` that the chart
+ * leaves out: `infinity`, `-infinity`, and dates more than about 270,000
+ * years from 1970, which a JavaScript `Date` cannot hold.
+ *
+ * @param allChartable - What the column's unfiltered fetch found: `false`
+ *   when it holds values the chart leaves out, so the stats test each value
+ *   at once; `true` or unknown (`undefined`) to try MIN and MAX first.
  */
 export async function fetchDateStats(
   tableName: string,
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
+  allChartable?: boolean,
 ): Promise<{
   min: Date | null;
   max: Date | null;
   count: number;
   nullCount: number;
+  nonFiniteCount: number;
 }> {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
 
-  const sql = `
+  // `__dt_e` is the epoch of a value the chart can draw, and NULL otherwise.
+  // The aliases are ones a filter cannot name by mistake: a WHERE binds a
+  // name it cannot find in the table to a select alias.
+  const perValueSQL = `
     SELECT
-      MIN(${col})::VARCHAR as min_date,
-      MAX(${col})::VARCHAR as max_date,
-      COUNT(${col}) as count,
-      COUNT(*) - COUNT(${col}) as null_count
-    FROM ${tbl}
-    ${whereSQL}
+      MIN(__dt_e) * 1000 as min_ms,
+      MAX(__dt_e) * 1000 as max_ms,
+      COUNT(__dt_v) as count,
+      COUNT(*) - COUNT(__dt_v) as null_count,
+      COUNT(__dt_v) - COUNT(__dt_e) as non_finite_count
+    FROM (
+      SELECT ${col} AS __dt_v,
+        CASE WHEN ${chartableSQL(col)} THEN EXTRACT(EPOCH FROM ${col}) END AS __dt_e
+      FROM ${tbl}
+      ${whereSQL}
+    )
   `;
 
-  const results = await bridge.query<DateStatsResult>(sql);
-
-  if (results.length === 0) {
-    return { min: null, max: null, count: 0, nullCount: 0 };
+  let row: DateStatsResult | undefined;
+  if (allChartable === false) {
+    [row] = await bridge.query<DateStatsResult>(perValueSQL);
+  } else {
+    // `-infinity` sorts below every date and `infinity` above, so when the
+    // minimum and maximum can be drawn, every value can. MIN and MAX of the
+    // values themselves then answer, as fast as before; testing each value's
+    // epoch costs about five times as much, so only a column holding a value
+    // the chart leaves out pays for it.
+    [row] = await bridge.query<DateStatsResult>(`
+      SELECT
+        EXTRACT(EPOCH FROM MIN(${col})) * 1000 as min_ms,
+        EXTRACT(EPOCH FROM MAX(${col})) * 1000 as max_ms,
+        COUNT(${col}) as count,
+        COUNT(*) - COUNT(${col}) as null_count,
+        0 as non_finite_count
+      FROM ${tbl}
+      ${whereSQL}
+    `);
+    if (row && Number(row.count) > 0 && !(isChartableMs(row.min_ms) && isChartableMs(row.max_ms))) {
+      [row] = await bridge.query<DateStatsResult>(perValueSQL);
+    }
   }
 
-  const row = results[0]!;
+  if (!row) {
+    return { min: null, max: null, count: 0, nullCount: 0, nonFiniteCount: 0 };
+  }
+
+  // The bins span every value: the minimum rounds down to its millisecond
+  // and the maximum up (a single value to its own), so a brush over the
+  // last bar (`<=`) keeps a maximum with digits past the millisecond.
+  // Rounding goes before `new Date()`, which rounds toward zero: -1.5 ms
+  // would give -1, above the value, whose row would then fall before the
+  // first bar.
+  const { min_ms: minMs, max_ms: maxMs } = row;
   return {
-    min: parseDate(row.min_date),
-    max: parseDate(row.max_date),
+    min: minMs === null ? null : new Date(Math.floor(minMs)),
+    max: maxMs === null ? null : new Date(maxMs === minMs ? Math.floor(maxMs) : Math.ceil(maxMs)),
     count: Number(row.count),
     nullCount: Number(row.null_count),
+    nonFiniteCount: Number(row.non_finite_count ?? 0),
   };
 }
 
@@ -337,26 +410,34 @@ function buildDateHistogramSQL(
   column: string,
   interval: TimeInterval,
   filters: Filter[],
+  allChartable: boolean | undefined,
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
-  const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `${col} IS NOT NULL`;
-  const whereSQL = whereClause
-    ? `WHERE ${baseCondition} AND ${whereClause}`
-    : `WHERE ${baseCondition}`;
-
+  // Only the values the chart can draw, unless the column holds nothing
+  // else: `DATE_TRUNC` fails on a DATE past TIMESTAMP's range, and
+  // `infinity` would make a bin of its own.
+  const whereSQL = binWhereSQL(col, filters, allChartable);
   const truncPart = intervalToDateTruncPart(interval);
+  // The CASE repeats the WHERE's test because DuckDB works out DATE_TRUNC's
+  // range from the column's minimum and maximum while planning, before any
+  // row is filtered: a date at the type's ends (5877642 BC) failed the query
+  // with `Date out of range`. A CASE's range is unknown. A column whose
+  // values can all be drawn has no such ends.
+  const value = allChartable === true ? col : `CASE WHEN ${chartableSQL(col)} THEN ${col} END`;
 
-  // Use DATE_TRUNC for temporal binning
-  // Cast to VARCHAR for consistent string output
+  // Use DATE_TRUNC for temporal binning. Each bin's start comes back as
+  // epoch milliseconds, computed once per bin, where DuckDB's text
+  // (`0044-01-01 (BC) 00:00:00`) is not one `new Date()` can read. The
+  // subquery's aliases are ones a filter cannot name by mistake.
   return `
-    SELECT
-      DATE_TRUNC('${truncPart}', ${col})::VARCHAR as bin_start,
-      COUNT(*) as count
-    FROM ${tbl}
-    ${whereSQL}
-    GROUP BY 1
+    SELECT EXTRACT(EPOCH FROM __dt_bin) * 1000 as bin_start_ms, __dt_n as count
+    FROM (
+      SELECT DATE_TRUNC('${truncPart}', ${value}) as __dt_bin, COUNT(*) as __dt_n
+      FROM ${tbl}
+      ${whereSQL}
+      GROUP BY 1
+    )
     ORDER BY 1
   `;
 }
@@ -382,14 +463,14 @@ function buildNumericDateHistogramSQL(
   minMs: number,
   maxMs: number,
   filters: Filter[],
+  allChartable: boolean | undefined,
 ): string {
   const col = quoteIdentifier(column);
   const tbl = quoteIdentifier(tableName);
-  const whereClause = filtersToWhereClause(filters);
-  const baseCondition = `${col} IS NOT NULL`;
-  const whereSQL = whereClause
-    ? `WHERE ${baseCondition} AND ${whereClause}`
-    : `WHERE ${baseCondition}`;
+  // Only the values the chart can draw, unless the column holds nothing
+  // else: `LEAST` ignores the NULL epoch of `infinity`, which would land in
+  // the last bin, as would a date past what a JavaScript `Date` holds.
+  const whereSQL = binWhereSQL(col, filters, allChartable);
 
   const binWidth = (maxMs - minMs) / numBins;
 
@@ -407,59 +488,6 @@ function buildNumericDateHistogramSQL(
 }
 
 /**
- * Fetch date histogram data using numeric binning
- *
- * Fallback for when interval-based binning exceeds maxBins.
- * Creates exactly numBins equal-width bins based on epoch milliseconds.
- */
-async function fetchDateHistogramWithNumericBinning(
-  tableName: string,
-  column: string,
-  numBins: number,
-  stats: { min: Date; max: Date; count: number; nullCount: number },
-  filters: Filter[],
-  bridge: WorkerBridge,
-): Promise<DateHistogramData> {
-  const minMs = stats.min.getTime();
-  const maxMs = stats.max.getTime();
-  const binWidth = (maxMs - minMs) / numBins;
-
-  const sql = buildNumericDateHistogramSQL(tableName, column, numBins, minMs, maxMs, filters);
-  const binResults = await bridge.query<NumericBinResult>(sql);
-
-  // Create all bins (even empty ones) for consistent visualization
-  const bins: DateHistogramBin[] = [];
-  for (let i = 0; i < numBins; i++) {
-    const binStartMs = minMs + i * binWidth;
-    const binEndMs = i === numBins - 1 ? maxMs : minMs + (i + 1) * binWidth;
-    bins.push({
-      binStart: new Date(binStartMs),
-      binEnd: new Date(binEndMs),
-      count: 0,
-    });
-  }
-
-  // Fill in counts from query results
-  for (const result of binResults) {
-    const idx = Number(result.bin_idx);
-    if (idx >= 0 && idx < bins.length) {
-      bins[idx]!.count = Number(result.count);
-    }
-  }
-
-  return {
-    bins,
-    nullCount: stats.nullCount,
-    min: stats.min,
-    max: stats.max,
-    total: stats.count + stats.nullCount,
-    interval: 'day', // Placeholder - not used for numeric binning
-    isSingleValue: false,
-    isNumericBinning: true,
-  };
-}
-
-/**
  * Fetch date histogram bins using DATE_TRUNC with a pre-determined interval.
  * Used for crossfilter alignment: both background and foreground use the
  * same interval so their bin edges match exactly.
@@ -469,6 +497,8 @@ async function fetchDateHistogramWithNumericBinning(
  * @param interval - Time interval to use for DATE_TRUNC binning
  * @param filters - Filters to apply
  * @param bridge - WorkerBridge for executing queries
+ * @param allChartable - `true` when the column's unfiltered fetch found only
+ *   values the chart can draw, so no value needs testing
  * @returns Array of DateHistogramBin with aligned edges
  */
 export async function fetchDateHistogramBins(
@@ -477,24 +507,19 @@ export async function fetchDateHistogramBins(
   interval: TimeInterval,
   filters: Filter[],
   bridge: WorkerBridge,
+  allChartable?: boolean,
 ): Promise<DateHistogramBin[]> {
-  const sql = buildDateHistogramSQL(tableName, column, interval, filters);
+  const sql = buildDateHistogramSQL(tableName, column, interval, filters, allChartable);
   const binResults = await bridge.query<DateBinResult>(sql);
 
-  const bins: DateHistogramBin[] = [];
-  for (const result of binResults) {
-    const binStart = parseDate(result.bin_start);
-    if (binStart === null) continue;
-
-    const binEnd = computeBinEnd(binStart, interval);
-    bins.push({
+  return binResults.map((result) => {
+    const binStart = new Date(Number(result.bin_start_ms));
+    return {
       binStart,
-      binEnd,
+      binEnd: computeBinEnd(binStart, interval),
       count: Number(result.count),
-    });
-  }
-
-  return bins;
+    };
+  });
 }
 
 /**
@@ -510,6 +535,8 @@ export async function fetchDateHistogramBins(
  * @param maxMs - Maximum epoch milliseconds for bin range
  * @param filters - Filters to apply
  * @param bridge - WorkerBridge for executing queries
+ * @param allChartable - `true` when the column's unfiltered fetch found only
+ *   values the chart can draw, so no value needs testing
  * @returns Array of DateHistogramBin with aligned edges
  */
 export async function fetchDateNumericBins(
@@ -520,13 +547,26 @@ export async function fetchDateNumericBins(
   maxMs: number,
   filters: Filter[],
   bridge: WorkerBridge,
+  allChartable?: boolean,
 ): Promise<DateHistogramBin[]> {
   const binWidth = (maxMs - minMs) / numBins;
 
-  const sql = buildNumericDateHistogramSQL(tableName, column, numBins, minMs, maxMs, filters);
+  const sql = buildNumericDateHistogramSQL(
+    tableName,
+    column,
+    numBins,
+    minMs,
+    maxMs,
+    filters,
+    allChartable,
+  );
   const binResults = await bridge.query<NumericBinResult>(sql);
 
-  // Create all bins (even empty ones) for consistent visualization
+  // Create all bins (even empty ones) for consistent visualization. An inner
+  // edge falls between milliseconds, and `new Date()` rounds it toward zero,
+  // so the brush's bound for it can sit up to 1 ms from the edge the query
+  // counted to, and a value in that millisecond is filtered as though it were
+  // in the neighbouring bar. That is older than 0.9.
   const bins: DateHistogramBin[] = [];
   for (let i = 0; i < numBins; i++) {
     const binStartMs = minMs + i * binWidth;
@@ -558,6 +598,9 @@ export async function fetchDateNumericBins(
  * @param bridge - WorkerBridge for executing queries
  * @param maxBins - Maximum number of bins (default: 15). The time interval will be
  *                  coarsened if necessary to keep bins within this limit.
+ * @param allChartable - What the column's unfiltered fetch found: `true` when
+ *   it holds only values the chart can draw, `false` when it holds others.
+ *   Unknown (`undefined`) without filters, the fetch finds out itself.
  * @returns DateHistogramData with bins and metadata
  */
 export async function fetchDateHistogramData(
@@ -566,13 +609,20 @@ export async function fetchDateHistogramData(
   filters: Filter[],
   bridge: WorkerBridge,
   maxBins = 15,
+  allChartable?: boolean,
 ): Promise<DateHistogramData> {
   try {
     // Step 1: Fetch column statistics
-    const stats = await fetchDateStats(tableName, column, filters, bridge);
+    const stats = await fetchDateStats(tableName, column, filters, bridge, allChartable);
+    const { nonFiniteCount } = stats;
+    // The values the bins hold: infinity and far-off dates have no place on the axis.
+    const finiteCount = stats.count - nonFiniteCount;
+    // Without filters the stats cover the whole column, so the bins need no
+    // test when they left nothing out.
+    const chartable = allChartable ?? (filters.length === 0 ? nonFiniteCount === 0 : undefined);
 
-    // Handle edge case: no data (all nulls or empty)
-    if (stats.count === 0 || stats.min === null || stats.max === null) {
+    // Handle edge case: no data (all nulls, none the chart can draw, or empty)
+    if (finiteCount === 0 || stats.min === null || stats.max === null) {
       return {
         bins: [],
         nullCount: stats.nullCount,
@@ -582,6 +632,7 @@ export async function fetchDateHistogramData(
         interval: 'day', // Default interval for empty data
         isSingleValue: false,
         isNumericBinning: false,
+        nonFiniteCount,
       };
     }
 
@@ -593,15 +644,27 @@ export async function fetchDateHistogramData(
     // If so, fall back to numeric binning
     const estimatedBins = estimateBinCount(stats.min, stats.max, interval);
     if (estimatedBins > maxBins) {
-      // stats.min and stats.max are guaranteed non-null here (checked above)
-      return await fetchDateHistogramWithNumericBinning(
+      const bins = await fetchDateNumericBins(
         tableName,
         column,
         maxBins,
-        { min: stats.min, max: stats.max, count: stats.count, nullCount: stats.nullCount },
+        stats.min.getTime(),
+        stats.max.getTime(),
         filters,
         bridge,
+        chartable,
       );
+      return {
+        bins,
+        nullCount: stats.nullCount,
+        min: stats.min,
+        max: stats.max,
+        total: stats.count + stats.nullCount,
+        interval: 'day', // Placeholder - not used for numeric binning
+        isSingleValue: false,
+        isNumericBinning: true,
+        nonFiniteCount,
+      };
     }
 
     // Handle edge case: single value (all same timestamp)
@@ -612,7 +675,7 @@ export async function fetchDateHistogramData(
           {
             binStart: stats.min,
             binEnd: binEnd,
-            count: stats.count,
+            count: finiteCount,
           },
         ],
         nullCount: stats.nullCount,
@@ -622,27 +685,19 @@ export async function fetchDateHistogramData(
         interval,
         isSingleValue: true,
         isNumericBinning: false,
+        nonFiniteCount,
       };
     }
 
     // Step 3: Fetch binned data using DATE_TRUNC
-    const sql = buildDateHistogramSQL(tableName, column, interval, filters);
-    const binResults = await bridge.query<DateBinResult>(sql);
-
-    // Step 4: Convert results to DateHistogramBin format
-    const bins: DateHistogramBin[] = [];
-
-    for (const result of binResults) {
-      const binStart = parseDate(result.bin_start);
-      if (binStart === null) continue;
-
-      const binEnd = computeBinEnd(binStart, interval);
-      bins.push({
-        binStart,
-        binEnd,
-        count: Number(result.count),
-      });
-    }
+    const bins = await fetchDateHistogramBins(
+      tableName,
+      column,
+      interval,
+      filters,
+      bridge,
+      chartable,
+    );
 
     return {
       bins,
@@ -653,6 +708,7 @@ export async function fetchDateHistogramData(
       interval,
       isSingleValue: false,
       isNumericBinning: false,
+      nonFiniteCount,
     };
   } catch (error) {
     throw new QueryError(
@@ -660,6 +716,69 @@ export async function fetchDateHistogramData(
       { code: 'QUERY_RUNTIME', cause: error, details: { column } },
     );
   }
+}
+
+// =========================================
+// Brush filters
+// =========================================
+
+/**
+ * A TIMESTAMP_NS column's last finite value, `2262-04-11 23:47:16.854775806`
+ * (`infinity` is the next nanosecond), as a bound DuckDB reads.
+ */
+const NS_LAST_BOUND = '2262-04-11T23:47:16.854775806Z';
+const NS_LAST_BOUND_MS = Date.UTC(2262, 3, 11, 23, 47, 16, 854);
+
+/**
+ * The first day DuckDB casts text to TIMESTAMP_NS on. The type reaches back
+ * to 1677-09-21 00:12:43.145224194, but DuckDB casts no text on that day
+ * (`Date out of range in timestamp_ns conversion`), nor reads a value of it.
+ */
+const NS_FIRST_BOUND = '1677-09-22T00:00:00.000Z';
+const NS_FIRST_BOUND_MS = Date.UTC(1677, 8, 22);
+
+/** True for a column DuckDB types `TIMESTAMP_NS`. */
+function isNanosecondTimestamp(originalType: string | undefined): boolean {
+  return originalType?.trim().toUpperCase() === 'TIMESTAMP_NS';
+}
+
+/**
+ * The range filter a brush over bars `startIdx` to `endIdx` applies: from the
+ * first bar's start (`>=`) to the last bar's end (`<`), which the last of the
+ * equal-width bars takes in (`<=`), as it ends at the column's maximum.
+ *
+ * The bounds are ISO text DuckDB reads (`dateToSQLLiteral`): a year past
+ * 9999 without the `+` of `toISOString`. A bound a TIMESTAMP_NS column
+ * cannot hold is written as the end it passes, as DuckDB would reject it in
+ * every query: the last bar's end, rounded up to a millisecond or a calendar
+ * unit, can pass the type's last value (then `<=` that value), and the first
+ * bar's start of a calendar unit can fall before 1677-09-22.
+ *
+ * @param originalType - The column's DuckDB type, for its range
+ * @returns The filter, or null when either bar does not exist
+ */
+export function dateBrushFilter(
+  column: string,
+  originalType: string | undefined,
+  data: Pick<DateHistogramData, 'bins' | 'isNumericBinning'>,
+  startIdx: number,
+  endIdx: number,
+): RangeFilter | null {
+  const startBin = data.bins[startIdx];
+  const endBin = data.bins[endIdx];
+  if (!startBin || !endBin) return null;
+
+  let min = dateToSQLLiteral(startBin.binStart);
+  let max = dateToSQLLiteral(endBin.binEnd);
+  let maxInclusive = endIdx === data.bins.length - 1 && data.isNumericBinning;
+  if (isNanosecondTimestamp(originalType)) {
+    if (startBin.binStart.getTime() < NS_FIRST_BOUND_MS) min = NS_FIRST_BOUND;
+    if (endBin.binEnd.getTime() > NS_LAST_BOUND_MS) {
+      max = NS_LAST_BOUND;
+      maxInclusive = true;
+    }
+  }
+  return { column, type: 'range', min, max, ...(maxInclusive && { maxInclusive: true }) };
 }
 
 // Re-export SQL utilities for external use

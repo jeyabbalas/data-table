@@ -41,6 +41,18 @@ export function quoteIdentifier(name: string): string {
 }
 
 /**
+ * A `Date` as ISO 8601 text that DuckDB reads, for a SQL literal or a filter
+ * bound: its `toISOString()`, except that a year past 9999 loses the sign and
+ * leading zeros `toISOString` gives it. DuckDB rejects `'+012000-01-01T…'`
+ * (`invalid date field format`), and reads `'12000-01-01T00:00:00.000Z'`.
+ * A year before 1 keeps its sign: `'-000043-03-15T00:00:00.000Z'` is 44 BC,
+ * which DuckDB reads as `toISOString` writes it.
+ */
+export function dateToSQLLiteral(date: Date): string {
+  return date.toISOString().replace(/^\+0*(?=\d{5})/, '');
+}
+
+/**
  * Format a JS value as a SQL literal for splicing into a query string.
  *
  * Type handling:
@@ -52,7 +64,8 @@ export function quoteIdentifier(name: string): string {
  *                          quoting would force an implicit cast that is
  *                          fragile near the BIGINT range bounds.
  *  - `boolean`           → `TRUE` / `FALSE`
- *  - `Date`              → `'<ISO-8601>'`, single-quoted ISO string
+ *  - `Date`              → `'<ISO-8601>'`, single-quoted ISO string, a year
+ *                          past 9999 without its `+` (`dateToSQLLiteral`)
  *  - everything else     → `'<String(value)>'` with single quotes doubled
  *
  * Identifier-quoting (column/table names) lives in `quoteIdentifier`; this
@@ -81,7 +94,7 @@ export function formatSQLValue(value: unknown): string {
   }
 
   if (value instanceof Date) {
-    return `'${value.toISOString()}'`;
+    return `'${dateToSQLLiteral(value)}'`;
   }
 
   // String - escape single quotes by doubling them

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SQLValidationError } from '@/core/errors';
 import {
+  dateToSQLLiteral,
   filterToSQL,
   filtersToWhereClause,
   formatSQLValue,
@@ -550,6 +551,43 @@ describe('formatSQLValue', () => {
   it('should format Date objects as ISO strings', () => {
     const d = new Date('2024-06-15T12:00:00.000Z');
     expect(formatSQLValue(d)).toBe("'2024-06-15T12:00:00.000Z'");
+  });
+
+  it('writes a Date past year 9999 without the + that toISOString gives it', () => {
+    // DuckDB rejects '+012000-01-01T…' (`invalid date field format`), which
+    // failed every query the filter was in, and reads '12000-01-01T…'.
+    const d = new Date('+012000-01-01T00:00:00.000Z');
+    expect(d.toISOString()).toBe('+012000-01-01T00:00:00.000Z');
+    expect(formatSQLValue(d)).toBe("'12000-01-01T00:00:00.000Z'");
+    expect(formatSQLValue(new Date('+275760-09-13T00:00:00.000Z'))).toBe(
+      "'275760-09-13T00:00:00.000Z'",
+    );
+    expect(
+      filterToSQL({
+        type: 'range',
+        column: 'd',
+        min: new Date('2024-01-01T00:00:00.000Z'),
+        max: d,
+        maxInclusive: true,
+      }),
+    ).toBe(`("d" >= '2024-01-01T00:00:00.000Z' AND "d" <= '12000-01-01T00:00:00.000Z')`);
+  });
+
+  it('writes a Date from before year 1 to 9999 as toISOString does', () => {
+    // DuckDB reads these as written: '-000043-…' is 44 BC, '0000-…' 1 BC.
+    for (const iso of [
+      '-271821-04-20T00:00:00.000Z',
+      '-000043-03-15T00:00:00.000Z',
+      '0000-01-01T00:00:00.000Z',
+      '0050-06-15T00:00:00.000Z',
+      '2024-06-15T12:00:00.000Z',
+      '9999-12-31T23:59:59.999Z',
+    ]) {
+      expect(dateToSQLLiteral(new Date(iso))).toBe(iso);
+    }
+    expect(dateToSQLLiteral(new Date('+010000-01-01T00:00:00.000Z'))).toBe(
+      '10000-01-01T00:00:00.000Z',
+    );
   });
 
   // Temporal string values (used in derived column vector insertion)

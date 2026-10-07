@@ -22,6 +22,7 @@ import {
 } from './DateFormatters';
 import type { DateFormatContext } from './DateFormatters';
 import {
+  dateBrushFilter,
   fetchDateHistogramData,
   fetchDateStats,
   fetchDateHistogramBins,
@@ -29,6 +30,45 @@ import {
 } from './DateHistogramData';
 import type { DateHistogramData } from './DateHistogramData';
 import { SharedHistogramBase, FONTS, PADDING, LAYOUT } from './SharedHistogramBase';
+
+/**
+ * DuckDB's text for a date before year 1, `0044-03-15 (BC)`: a TIMESTAMP's
+ * time, and a TIMESTAMP WITH TIME ZONE's offset (`+00`, `+05:30`), follow
+ * the `(BC)`.
+ */
+const DUCKDB_BC_DATE =
+  /^(\d{4,})-(\d{2})-(\d{2}) \(BC\)(?: (\d{2}:\d{2}:\d{2}(?:\.\d+)?)(?:([+-]\d{2})(?::?(\d{2}))?)?)?$/;
+
+/** An astronomical year as ISO 8601 writes it: `2024`, `0000`, `-000043`, `+012000`. */
+function isoYear(year: number): string {
+  return year >= 0 && year <= 9999
+    ? String(year).padStart(4, '0')
+    : `${year < 0 ? '-' : '+'}${String(Math.abs(year)).padStart(6, '0')}`;
+}
+
+/**
+ * Epoch milliseconds of a date filter's bound: a `Date`, or text such as the
+ * brush or DuckDB writes. `new Date()` reads ISO 8601 text, so two of
+ * DuckDB's forms are rewritten into it first. A year past 9999, written as
+ * DuckDB reads it (`12000-01-01T00:00:00.000Z`), takes the sign and six
+ * digits `toISOString` writes (`+012000-…`). A date before year 1,
+ * `0044-03-15 (BC) 10:00:00`, becomes `-000043-03-15T10:00:00Z`: year Y BC is
+ * year 1 − Y, as ISO 8601 counts a year 0, and a time without an offset is
+ * UTC, as the bars are.
+ */
+function filterBoundMs(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  const text = String(value);
+  const bc = DUCKDB_BC_DATE.exec(text);
+  if (bc) {
+    const [, year, month, day, time = '00:00:00', offsetHours, offsetMinutes = '00'] = bc;
+    const offset = offsetHours ? `${offsetHours}:${offsetMinutes}` : 'Z';
+    return new Date(`${isoYear(1 - Number(year))}-${month}-${day}T${time}${offset}`).getTime();
+  }
+  return new Date(
+    text.replace(/^(\d{5,6})-/, (_, year: string) => `+${year.padStart(6, '0')}-`),
+  ).getTime();
+}
 
 // =========================================
 // DateHistogram Class
@@ -94,10 +134,15 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
     const initial = this.initialData!;
     const { tableName, bridge } = this.options;
     const col = this.column.name;
+    // What the unfiltered fetch found: whether every value of the column can
+    // be drawn. Then the bins test no value, and the stats only MIN and MAX;
+    // a column with values left out has its stats test each value at once.
+    const allChartable =
+      initial.nonFiniteCount === undefined ? undefined : initial.nonFiniteCount === 0;
 
     if (initial.bins.length === 0) {
       const maxBins = this.options.maxBins ?? 15;
-      return fetchDateHistogramData(tableName, col, filters, bridge, maxBins);
+      return fetchDateHistogramData(tableName, col, filters, bridge, maxBins, allChartable);
     }
 
     if (initial.isNumericBinning && initial.min && initial.max) {
@@ -105,8 +150,17 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       const maxMs = initial.max.getTime();
 
       const [fgBins, fgStats] = await Promise.all([
-        fetchDateNumericBins(tableName, col, initial.bins.length, minMs, maxMs, filters, bridge),
-        fetchDateStats(tableName, col, filters, bridge),
+        fetchDateNumericBins(
+          tableName,
+          col,
+          initial.bins.length,
+          minMs,
+          maxMs,
+          filters,
+          bridge,
+          allChartable,
+        ),
+        fetchDateStats(tableName, col, filters, bridge, allChartable),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
 
@@ -119,11 +173,12 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         interval: initial.interval,
         isSingleValue: initial.isSingleValue,
         isNumericBinning: true,
+        nonFiniteCount: fgStats.nonFiniteCount,
       };
     } else {
       const [rawFgBins, fgStats] = await Promise.all([
-        fetchDateHistogramBins(tableName, col, initial.interval, filters, bridge),
-        fetchDateStats(tableName, col, filters, bridge),
+        fetchDateHistogramBins(tableName, col, initial.interval, filters, bridge, allChartable),
+        fetchDateStats(tableName, col, filters, bridge, allChartable),
       ]);
       if (seq !== this.fetchSequence || this.destroyed) return null;
 
@@ -147,6 +202,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         interval: initial.interval,
         isSingleValue: initial.isSingleValue,
         isNumericBinning: false,
+        nonFiniteCount: fgStats.nonFiniteCount,
       };
     }
   }
@@ -251,6 +307,7 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
       filteredTotalRows: bgTotal !== null ? this.data.total : null,
       min: this.data.min ? this.data.min.toISOString() : null,
       max: this.data.max ? this.data.max.toISOString() : null,
+      nonFiniteCount: this.data.nonFiniteCount ?? 0,
     };
     this.options.onDefaultStatsChange(stats);
   }
@@ -348,26 +405,22 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
   // =========================================
 
   /**
-   * Emit a range filter based on current brush bin indices
+   * Emit a range filter based on current brush bin indices: bounds that
+   * DuckDB reads and the column's type holds (see `dateBrushFilter`).
    */
   protected emitBrushFilter(): void {
     if (!this.data) return;
 
     const startIdx = Math.min(this.brushState.startBinIndex, this.brushState.endBinIndex);
     const endIdx = Math.max(this.brushState.startBinIndex, this.brushState.endBinIndex);
-    const startBin = this.data.bins[startIdx];
-    const endBin = this.data.bins[endIdx];
-
-    if (startBin && endBin) {
-      const isLastBin = endIdx === this.data.bins.length - 1;
-      this.options.onFilterChange?.({
-        column: this.column.name,
-        type: 'range',
-        min: startBin.binStart.toISOString(),
-        max: endBin.binEnd.toISOString(),
-        ...(isLastBin && this.data.isNumericBinning && { maxInclusive: true }),
-      });
-    }
+    const filter = dateBrushFilter(
+      this.column.name,
+      this.column.originalType,
+      this.data,
+      startIdx,
+      endIdx,
+    );
+    if (filter) this.options.onFilterChange?.(filter);
   }
 
   // =========================================
@@ -393,14 +446,13 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
         this.syncBrushFromDateRangeFilter(ownFilter, data.bins);
         break;
       case 'point': {
-        const val = ownFilter.value;
-        const targetDate = val instanceof Date ? val : new Date(String(val));
+        const targetMs = filterBoundMs(ownFilter.value);
         if (this.brushState.committed) this.clearBrushStateOnly();
         this.selectedNull = false;
         this.selectedBin = null;
         for (let i = 0; i < data.bins.length; i++) {
           const bin = data.bins[i]!;
-          if (targetDate >= bin.binStart && targetDate < bin.binEnd) {
+          if (targetMs >= bin.binStart.getTime() && targetMs < bin.binEnd.getTime()) {
             this.selectedBin = i;
             break;
           }
@@ -435,16 +487,8 @@ export class DateHistogram extends SharedHistogramBase<DateHistogramData> {
     const minIsOpen = typeof filter.min === 'number' && !Number.isFinite(filter.min);
     const maxIsOpen = typeof filter.max === 'number' && !Number.isFinite(filter.max);
 
-    const filterMinMs = minIsOpen
-      ? -Infinity
-      : filter.min instanceof Date
-        ? filter.min.getTime()
-        : new Date(String(filter.min)).getTime();
-    const filterMaxMs = maxIsOpen
-      ? Infinity
-      : filter.max instanceof Date
-        ? filter.max.getTime()
-        : new Date(String(filter.max)).getTime();
+    const filterMinMs = minIsOpen ? -Infinity : filterBoundMs(filter.min);
+    const filterMaxMs = maxIsOpen ? Infinity : filterBoundMs(filter.max);
 
     let startIdx = -1;
     let endIdx = -1;

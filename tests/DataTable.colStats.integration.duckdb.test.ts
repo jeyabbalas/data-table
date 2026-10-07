@@ -508,6 +508,35 @@ describe('column stats — uniform denominator end-to-end (real DuckDB)', () => 
     await h.table.destroy();
   }, 20_000);
 
+  it('a date column from 44 BC to the year 12000, with infinity: line 2 as the grid writes it', async () => {
+    const h = await mountTable();
+    await waitForSlot(h, 'id', /^20 rows/);
+    // Its chart drew nothing and line 2 was empty: the minimum's text,
+    // `0044-03-15 (BC)`, is not a date `new Date()` reads.
+    const res = await h.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'far_d',
+      expression: `CASE WHEN id % 5 = 0 THEN 'infinity'::DATE
+                        WHEN id = 1 THEN DATE '0044-03-15 (BC)'
+                        WHEN id = 2 THEN DATE '12000-01-01'
+                        ELSE DATE '2000-01-01' + id END`,
+    });
+    expect(res.success).toBe(true);
+    await waitForSlot(h, 'far_d', '4 non-finite');
+    expect(h.slot('far_d')).toBe('20 rows-000043-03-15 – +012000-01-01 · 4 non-finite');
+    const canvas = h.container.querySelector(
+      '.dt-col-header[data-column="far_d"] .dt-col-viz canvas',
+    )!;
+    expect(canvas.hasAttribute('data-fetch-failed')).toBe(false);
+
+    // Under another column's filter, the note counts the rows passing it.
+    h.table.actions.addFilter({ type: 'range', column: 'id', min: 1, max: 10, maxInclusive: true });
+    await waitForSlot(h, 'far_d', '2 non-finite');
+    expect(h.slot('far_d')).toBe('10 / 20 rows-000043-03-15 – +012000-01-01 · 2 non-finite');
+    expect(canvas.hasAttribute('data-fetch-failed')).toBe(false);
+    await h.table.destroy();
+  }, 20_000);
+
   it('hiding a filtered column keeps its filter active; showing restores the identical detail', async () => {
     const h = await mountTable();
     await waitForSlot(h, 'c', /^20 rows/);

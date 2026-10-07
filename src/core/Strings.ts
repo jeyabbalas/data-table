@@ -445,7 +445,8 @@ export interface Strings {
     /**
      * The end of line 2 for a column holding values its chart leaves out,
      * having no place on its axis: a numeric column's `NaN`, `Infinity` and
-     * `-Infinity`. "30 non-finite".
+     * `-Infinity`, and a date column's `infinity`, `-infinity` and dates a
+     * JavaScript `Date` cannot hold. "30 non-finite".
      */
     nonFiniteCount: (count: number) => string;
     percentTrue: (pct: number) => string;

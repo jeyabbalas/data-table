@@ -15,7 +15,7 @@
 
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   NESTED_EXAMPLE,
   NESTED_EXAMPLE_STRUCTS,
@@ -30,6 +30,7 @@ import {
 import { openExtractPanel } from './helpers/extract';
 import { escapeInspector, openWithF2 } from './helpers/inspector';
 import { scrollToColumn, unpaintedCharts, waitForFilledBody } from './helpers/nested';
+import { HOST_ID, type TestWindow, mountTable } from './helpers/table';
 
 /**
  * The rules issue #84 reported. An `incomplete` result here means axe could
@@ -45,6 +46,8 @@ interface AxeSummary {
   undecided: { id: string; target: string; reason: string | undefined }[];
   /** Every node that passed a rule. */
   passed: string[];
+  /** Every node whose contrast axe checked and passed. */
+  contrastPassed: string[];
 }
 
 interface ScanOptions {
@@ -80,6 +83,9 @@ async function scan(page: Page, options: ScanOptions = {}): Promise<AxeSummary> 
       })),
     ),
     passed: results.passes.flatMap((r) => r.nodes.map((n) => n.target.join(' '))),
+    contrastPassed: results.passes
+      .filter((r) => r.id === 'color-contrast')
+      .flatMap((r) => r.nodes.map((n) => n.target.join(' '))),
   };
 }
 
@@ -113,8 +119,10 @@ function assertClean(summary: AxeSummary, label: string): void {
  * axe tell the background of an item that the tree's own scroll cuts in
  * half (`elmPartiallyObscured`), so the tree is scanned again further down
  * until every item has been wholly in view, and checked, once.
+ *
+ * Returns the elements whose contrast axe checked, as axe's selectors.
  */
-async function assertDialogClean(page: Page, label: string): Promise<void> {
+async function assertDialogClean(page: Page, label: string): Promise<string[]> {
   assertClean(await scan(page, { disable: ['color-contrast'] }), `${label}, contrast aside`);
 
   const tree = page.locator('[role="dialog"] [role="tree"]');
@@ -129,7 +137,7 @@ async function assertDialogClean(page: Page, label: string): Promise<void> {
     : { scrollHeight: 0, clientHeight: 0, tallest: 0, items: 0 };
   /** The tree items whose text passed the contrast check, by position. */
   const checked = new Set<number>();
-  let passes = 0;
+  const contrasted: string[] = [];
   // Positions that overlap by more than the tallest item: every item is
   // wholly inside one of them.
   const step = Math.max(1, clientHeight - tallest - 1);
@@ -167,7 +175,7 @@ async function assertDialogClean(page: Page, label: string): Promise<void> {
       unexplained,
       `${at} — axe could not decide:\n${unexplained.map((u) => `  ${u.id} (${u.reason}) ${u.target}`).join('\n')}`,
     ).toEqual([]);
-    passes += summary.passed.length;
+    contrasted.push(...summary.passed);
     const passed = await page.evaluate((targets) => {
       const t = document.querySelector('[role="dialog"] [role="tree"]');
       const items = t ? Array.from(t.children) : [];
@@ -179,12 +187,66 @@ async function assertDialogClean(page: Page, label: string): Promise<void> {
     for (const index of passed) if (index >= 0) checked.add(index);
     if (!hasTree || top + clientHeight >= scrollHeight) break;
   }
-  expect(passes, `${label} — text whose contrast axe checked`).toBeGreaterThan(0);
-  if (!hasTree) return;
+  expect(contrasted.length, `${label} — text whose contrast axe checked`).toBeGreaterThan(0);
+  if (!hasTree) return contrasted;
   expect(checked.size, `${label} — tree items whose contrast axe checked`).toBe(items);
   await tree.evaluate((t) => {
     t.scrollTop = 0;
   });
+  return contrasted;
+}
+
+/**
+ * axe over a modal: every rule, contrast among them, over the dialog alone.
+ * The table portals its modals to `<body>`, outside `.dt-root`, where the
+ * scans above do not look. Returns the elements whose contrast axe checked.
+ */
+async function assertModalClean(page: Page, label: string): Promise<string[]> {
+  const summary = await scan(page, { include: '[role="dialog"]' });
+  assertClean(summary, label);
+  expect(
+    summary.contrastPassed.length,
+    `${label} — text whose contrast axe checked`,
+  ).toBeGreaterThan(0);
+  return summary.contrastPassed;
+}
+
+/**
+ * Fail unless the element `selector` finds is among those whose contrast
+ * axe checked: a scan that skipped it would pass whatever its colour.
+ */
+async function expectContrastChecked(
+  page: Page,
+  checked: string[],
+  selector: string,
+  label: string,
+): Promise<void> {
+  const found = await page.evaluate(
+    ({ checked, selector }) => {
+      const el = document.querySelector(selector);
+      return el !== null && checked.some((target) => document.querySelector(target) === el);
+    },
+    { checked, selector },
+  );
+  expect(found, `${label} — axe checked the contrast of ${selector}`).toBe(true);
+}
+
+/** Switch a table {@link mountTable} made to `theme`, and wait for it to repaint. */
+async function setTableTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
+  await page.evaluate((t) => {
+    (window as unknown as TestWindow).__dt.setColorScheme(t);
+  }, theme);
+  await expect(page.locator(`#${HOST_ID} .dt-root`)).toHaveAttribute('data-dt-color-scheme', theme);
+  await settle(page);
+}
+
+/** Empty a CodeMirror editor from the keyboard, leaving it focused, its placeholder shown. */
+async function emptyEditor(page: Page, editor: Locator): Promise<void> {
+  await editor.locator('.cm-content').click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.press('Backspace');
+  await expect(editor.locator('.cm-placeholder')).toBeVisible();
+  await expect(editor.locator('.cm-editor')).toHaveClass(/cm-focused/);
 }
 
 for (const theme of ['light', 'dark'] as const) {
@@ -301,5 +363,144 @@ for (const theme of ['light', 'dark'] as const) {
     await assertDialogClean(page, `the extract panel on doc, ${theme}`);
     await page.keyboard.press('Escape');
     await expect(doc).toBeHidden();
+  });
+
+  // The filter panel, the preset panel and the derived-column editor float
+  // over the table inside `.dt-root`, each a non-modal dialog named by its
+  // title. The page the table is mounted on styles its own buttons (white
+  // text on blue), which a control that sets no colour of its own shows.
+
+  test(`the filter panel is axe-clean in ${theme}`, async ({ page }) => {
+    // A number column's field, then a text column's, which has other controls.
+    await mountTable(page, { columns: 6, rows: 50 });
+    await setTableTheme(page, theme);
+    const panel = page.locator(`#${HOST_ID} .dt-filter-panel`);
+    for (const column of ['c0', 'c1']) {
+      await page
+        .locator(`#${HOST_ID} .dt-col-header[data-column="${column}"] .dt-col-filter-btn`)
+        .click();
+      await expect(panel).toBeVisible();
+      await settle(page);
+      await assertDialogClean(page, `the filter panel on ${column}, ${theme}`);
+      await expect(panel).toHaveAccessibleName(`Filter: ${column}`);
+      await page.keyboard.press('Escape');
+      await expect(panel).toBeHidden();
+    }
+  });
+
+  test(`the preset panel and its delete confirmation are axe-clean in ${theme}`, async ({
+    page,
+  }) => {
+    await mountTable(page, { columns: 6, rows: 50 });
+    await setTableTheme(page, theme);
+    await page.evaluate(() => {
+      (window as unknown as TestWindow).__dt.actions.addRawSQLFilter('"c0" > 10', 'c0 over 10');
+    });
+    await page.locator(`#${HOST_ID} .dt-filter-presets-btn`).click();
+    const panel = page.locator(`#${HOST_ID} .dt-filter-preset-panel`);
+    await expect(panel).toBeVisible();
+    await panel.getByPlaceholder('Preset name').fill('Over 10');
+    await panel.locator('.dt-filter-preset-save-btn').click();
+    await expect(panel.locator('.dt-filter-preset-item')).toHaveCount(1);
+    await settle(page);
+    await assertDialogClean(page, `the preset panel, ${theme}`);
+    await expect(panel).toHaveAccessibleName('Filter Presets');
+
+    // The confirmation's No takes focus: the bare action button, which once
+    // showed the page's white button text on the white panel.
+    await panel.getByRole('button', { name: 'Delete', exact: true }).click();
+    const no = panel.getByRole('button', { name: 'No', exact: true });
+    await expect(no).toBeFocused();
+    const checked = await assertDialogClean(page, `the preset delete confirmation, ${theme}`);
+    await expectContrastChecked(
+      page,
+      checked,
+      `#${HOST_ID} .dt-filter-preset-delete-confirm > .dt-filter-preset-action-btn:not(.dt-filter-preset-action-btn--delete)`,
+      `the preset delete confirmation, ${theme}`,
+    );
+  });
+
+  test(`the SQL filter and derived-column modals are axe-clean in ${theme}, their placeholders showing`, async ({
+    page,
+  }) => {
+    // Each editor focused and empty: its placeholder showing on the
+    // dialog's surface, its line the one the cursor is on.
+    await mountTable(page, { columns: 6, rows: 50 });
+    await setTableTheme(page, theme);
+
+    await page.locator(`#${HOST_ID} .dt-filter-expression-btn`).click();
+    const sql = page.getByRole('dialog', { name: 'New Expression Filter' });
+    await expect(sql).toBeVisible();
+    await emptyEditor(page, sql);
+    await settle(page);
+    const sqlChecked = await assertModalClean(page, `the SQL filter modal, ${theme}`);
+    await expectContrastChecked(
+      page,
+      sqlChecked,
+      '.dt-sql-filter-modal-dialog .cm-placeholder',
+      `the SQL filter modal, ${theme}`,
+    );
+    await page.keyboard.press('Escape');
+    await expect(sql).toBeHidden();
+
+    await page.locator(`#${HOST_ID} .dt-add-column-btn`).click();
+    const derived = page.getByRole('dialog', { name: 'New Derived Column' });
+    await expect(derived).toBeVisible();
+    await emptyEditor(page, derived);
+    await settle(page);
+    const derivedChecked = await assertModalClean(page, `the derived-column modal, ${theme}`);
+    await expectContrastChecked(
+      page,
+      derivedChecked,
+      '.dt-derived-modal-dialog .cm-placeholder',
+      `the derived-column modal, ${theme}`,
+    );
+  });
+
+  test(`the derived-column editor and its delete confirmation are axe-clean in ${theme}`, async ({
+    page,
+  }) => {
+    await mountTable(page, { columns: 6, rows: 50 });
+    await setTableTheme(page, theme);
+    const added = await page.evaluate(() =>
+      (window as unknown as TestWindow).__dt.actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'd',
+        expression: 'c0 * 2',
+      }),
+    );
+    expect(added.success).toBe(true);
+    await settle(page);
+
+    await page.locator(`#${HOST_ID} .dt-col-header[data-column="d"] .dt-derived-icon-btn`).click();
+    const panel = page.locator(`#${HOST_ID} .dt-derived-edit-panel`);
+    await expect(panel).toBeVisible();
+    await emptyEditor(page, panel);
+    await settle(page);
+    // The default placeholder is wider than this 360 px editor. It ends in
+    // an ellipsis at the edge, and no longer runs on into a scroll region
+    // no key can scroll (`scrollable-region-focusable`).
+    const { cut, overflow } = await panel.evaluate((p) => {
+      const hint = p.querySelector('.cm-placeholder')!;
+      const scroller = p.querySelector('.cm-scroller')!;
+      return {
+        cut: hint.scrollWidth > hint.clientWidth,
+        overflow: scroller.scrollWidth - scroller.clientWidth,
+      };
+    });
+    expect(cut, 'the placeholder is cut off at the edge').toBe(true);
+    expect(overflow, 'px the editor scrolls sideways').toBe(0);
+    const checked = await assertDialogClean(page, `the derived-column editor, ${theme}`);
+    await expectContrastChecked(
+      page,
+      checked,
+      `#${HOST_ID} .dt-derived-edit-panel .cm-placeholder`,
+      `the derived-column editor, ${theme}`,
+    );
+    await expect(panel).toHaveAccessibleName('Edit: d');
+
+    await panel.locator('.dt-derived-edit-delete').click();
+    await expect(panel.locator('.dt-derived-edit-delete-confirm-no')).toBeFocused();
+    await assertDialogClean(page, `the derived-column editor's delete confirmation, ${theme}`);
   });
 }

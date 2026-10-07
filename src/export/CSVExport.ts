@@ -12,10 +12,11 @@
  * written as its text, as any text.
  *
  * Dates and times are DuckDB's text (see `exportColumnRead` in
- * ExportQuery.ts), ISO 8601 with a space between date and time, the form
- * spreadsheets read as a date and time: `2024-01-02`, `03:04:05.5`,
- * `2024-01-02 03:04:05.123456`, and a TIMESTAMP WITH TIME ZONE in UTC with
- * `Z`, `2024-01-02 03:04:05.5Z`. `infinity` and BC dates
+ * ExportQuery.ts), ISO 8601 with a space between date and time:
+ * `2024-01-02`, `03:04:05.5`, `2024-01-02 03:04:05.123456`. A DATE or
+ * TIMESTAMP is written in the form spreadsheets read; a TIMESTAMP WITH
+ * TIME ZONE is in UTC and keeps its `Z` (`2024-01-02 03:04:05.5Z`), which
+ * some spreadsheets show as text. `infinity` and BC dates
  * (`0044-03-15 (BC)`) are as DuckDB writes them, and the formula guard
  * writes `-infinity` as `'-infinity` (see {@link neutralizeFormulaPrefix}).
  *

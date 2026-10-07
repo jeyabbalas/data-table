@@ -261,7 +261,8 @@ step, from the installed package, so that it changes with every upgrade.`
 **What changed.** CSV, JSON and clipboard exports write `DATE`, `TIME`,
 `TIMESTAMP` and `TIMESTAMP WITH TIME ZONE` columns as text, every digit kept
 and trailing zeros dropped. JSON puts `T` between date and time; CSV and the
-clipboard put a space, the form spreadsheets read as a date and time.
+clipboard put a space, so a `DATE` or `TIMESTAMP` is in the form spreadsheets
+read.
 
 | Column                     | `0.8`                                                                | `0.9` JSON                        | `0.9` CSV and clipboard                      |
 | -------------------------- | -------------------------------------------------------------------- | --------------------------------- | -------------------------------------------- |
@@ -274,8 +275,9 @@ clipboard put a space, the form spreadsheets read as a date and time.
 | a date before year 1       | a negative number, `-63517824000000`                                 | `"0044-03-15 (BC)"`               | `0044-03-15 (BC)`                            |
 
 A `TIMESTAMP WITH TIME ZONE` is written in UTC, whatever time zone the table
-was loaded in; a `TIMESTAMP` has no zone and is written without one. Dates
-inside a nested value were DuckDB's text already, and still are. Parquet
+was loaded in, and keeps its `Z`, which some spreadsheets show as text; a
+`TIMESTAMP` has no zone and is written without one. Dates inside a nested
+value were DuckDB's text already, and still are. Parquet
 export still writes dates natively, and `getColumnValues`, `getCellValue` and
 `bridge.query` still read a date or timestamp as epoch milliseconds.
 
@@ -309,9 +311,12 @@ new Date(row.seen_at); // a TIMESTAMP WITH TIME ZONE ends in 'Z' already
 JavaScript's `Date` gives an Invalid Date for `infinity` and for a year past
 9999, and misreads a BC date: `new Date('0044-03-15 (BC) 10:00:00Z')` is
 2044-03-15. Check for `infinity` and `(BC)` before parsing where a column may
-hold them. pandas reads the CSV with
-`pd.read_csv(path, parse_dates=['created_at'])`, and DuckDB's `read_csv`
-detects the types.
+hold them. For ordinary values, pandas reads the CSV with
+`pd.read_csv(path, parse_dates=['created_at'])`, and DuckDB's `read_csv` and
+`read_json` read them as dates and times. A column holding `infinity`,
+`'-infinity` (CSV's formula guard), a BC date or a five-digit year may load
+as text or another type, and `read_json` can read `infinity` as
+`1900-01-01`.
 
 **Automated migration.** `N/A — manual review required because only you know
 which readers of the files expect numbers.` Grep for `exportToCSV`,

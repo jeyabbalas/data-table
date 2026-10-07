@@ -168,7 +168,8 @@ export type ExportColumnRead = 'raw' | 'text' | 'timestamp' | 'utc' | 'json' | '
  * DuckDB's text writes `infinity`, `-infinity` and a date before year 1 as
  * `0044-03-15 (BC)`, and drops a fraction's trailing zeros. CSV and the
  * clipboard keep the space between date and time, the form spreadsheets
- * read as a date and time; a JSON export puts `T` there (see
+ * read for a DATE or TIMESTAMP (some show a TIMESTAMP WITH TIME ZONE's `Z`
+ * as text); a JSON export puts `T` there (see
  * {@link exportTimestampColumns}).
  *
  * The type is read from `originalType`; a column the library types

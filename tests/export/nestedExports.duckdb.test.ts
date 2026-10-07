@@ -1327,7 +1327,7 @@ describe('dates and times', () => {
     },
   );
 
-  it('loads back through the library’s loaders as dates and times', async () => {
+  it('loads ordinary values back through the library’s loaders as dates and times', async () => {
     // Rows 0 and 1, which a file of every format can hold. read_csv reads a
     // TIMESTAMP_NS's text as a TIMESTAMP, to the microsecond; read_json
     // leaves it text, and reads one ending in `Z` as a TIMESTAMP in UTC.
@@ -1375,4 +1375,110 @@ describe('dates and times', () => {
       );
     }
   });
+
+  /**
+   * What the library's loaders make of a column holding one special value
+   * after rows 0 and 1, by DuckDB 1.5.4's type detection: each column's
+   * type, and the special value read back as text. Pinned so that a DuckDB
+   * upgrade that reads them differently shows up here.
+   *
+   * - CSV: `infinity` turns a TIMESTAMP column into a TIMESTAMP WITH TIME
+   *   ZONE, and the formula guard's `'-infinity` a column into VARCHAR. BC
+   *   dates and five-digit years load as their types.
+   * - JSON: read_json reads `infinity` and `-infinity` in a column it takes
+   *   for a DATE or a TIMESTAMP as 1900-01-01, and leaves the other special
+   *   values' columns text.
+   */
+  const SPECIAL_RELOADS: Record<
+    'csv' | 'json',
+    Record<number, Record<string, readonly [type: string, text: string]>>
+  > = {
+    csv: {
+      2: {
+        d: ['DATE', 'infinity'],
+        tm: ['TIME', '24:00:00'],
+        ts: ['TIMESTAMP WITH TIME ZONE', 'infinity'],
+        ts_s: ['TIMESTAMP WITH TIME ZONE', 'infinity'],
+        ts_ms: ['VARCHAR', "'-infinity"],
+        ts_ns: ['TIMESTAMP WITH TIME ZONE', 'infinity'],
+        tz: ['VARCHAR', "'-infinity"],
+      },
+      3: {
+        d: ['DATE', '0044-03-15 (BC)'],
+        tm: ['TIME', '23:59:59.999999'],
+        ts: ['TIMESTAMP', '0044-03-15 (BC) 10:00:00.5'],
+        ts_s: ['TIMESTAMP', '0044-03-15 (BC) 10:00:00'],
+        ts_ms: ['TIMESTAMP', '0044-03-15 (BC) 10:00:00.5'],
+        ts_ns: ['TIMESTAMP', '1677-09-22 00:00:00'],
+        tz: ['TIMESTAMP WITH TIME ZONE', '0044-03-15 (BC) 10:00:00+00'],
+      },
+      4: {
+        d: ['DATE', '12345-01-02'],
+        tm: ['TIME', '12:00:00.000001'],
+        ts: ['TIMESTAMP', '12345-01-02 03:04:05.25'],
+        ts_s: ['TIMESTAMP', '12345-01-02 03:04:05'],
+        ts_ms: ['TIMESTAMP', '12345-01-02 03:04:05.25'],
+        ts_ns: ['TIMESTAMP', '2262-04-11 23:47:16.854775'],
+        tz: ['TIMESTAMP WITH TIME ZONE', '12345-01-02 03:04:05.25+00'],
+      },
+    },
+    json: {
+      2: {
+        d: ['DATE', '1900-01-01'],
+        tm: ['TIME', '24:00:00'],
+        ts: ['VARCHAR', 'infinity'],
+        ts_s: ['TIMESTAMP', '1900-01-01 00:00:00'],
+        ts_ms: ['VARCHAR', '-infinity'],
+        ts_ns: ['VARCHAR', 'infinity'],
+        tz: ['VARCHAR', '-infinity'],
+      },
+      3: {
+        d: ['VARCHAR', '0044-03-15 (BC)'],
+        tm: ['TIME', '23:59:59.999999'],
+        ts: ['VARCHAR', '0044-03-15 (BC) 10:00:00.5'],
+        ts_s: ['VARCHAR', '0044-03-15 (BC) 10:00:00'],
+        ts_ms: ['VARCHAR', '0044-03-15 (BC) 10:00:00.5'],
+        ts_ns: ['VARCHAR', '1677-09-22T00:00:00.000000001'],
+        tz: ['VARCHAR', '0044-03-15 (BC) 10:00:00Z'],
+      },
+      4: {
+        d: ['VARCHAR', '12345-01-02'],
+        tm: ['TIME', '12:00:00.000001'],
+        ts: ['VARCHAR', '12345-01-02T03:04:05.25'],
+        ts_s: ['VARCHAR', '12345-01-02T03:04:05'],
+        ts_ms: ['VARCHAR', '12345-01-02T03:04:05.25'],
+        ts_ns: ['VARCHAR', '2262-04-11T23:47:16.854775806'],
+        tz: ['VARCHAR', '12345-01-02T03:04:05.25Z'],
+      },
+    },
+  };
+
+  it.each([
+    { format: 'csv', row: 2, label: '±infinity' },
+    { format: 'csv', row: 3, label: 'BC' },
+    { format: 'csv', row: 4, label: 'year 12345' },
+    { format: 'json', row: 2, label: '±infinity' },
+    { format: 'json', row: 3, label: 'BC' },
+    { format: 'json', row: 4, label: 'year 12345' },
+  ] as const)(
+    'loads a $format export holding $label back as DuckDB detects it',
+    async ({ format, row }) => {
+      const columns = ['id', ...Object.keys(SPECIAL_RELOADS[format][row]!)];
+      const context = contextFor(t, { selectedRows: new Set([0, 1, row]) });
+      const file =
+        format === 'csv'
+          ? await exportToCSV(t.name, { scope: 'selected', columns }, context)
+          : await exportToJSON(t.name, { scope: 'selected', columns }, context);
+      const back = await bridge.loadData(file, {
+        format,
+        tableName: `temporal_special_${format}_${row}`,
+      });
+      const types = Object.fromEntries(back.schema.map((c) => [c.name, c.originalType]));
+      for (const [name, [type, text]] of Object.entries(SPECIAL_RELOADS[format][row]!)) {
+        expect(types[name], `${name}'s type`).toBe(type);
+        // Read as DuckDB's text, which shows infinity and BC as they are.
+        expect((await castTexts(back.tableName, name))[2], `${name}'s value`).toBe(text);
+      }
+    },
+  );
 });

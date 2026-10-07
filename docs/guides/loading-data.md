@@ -595,18 +595,26 @@ a VARIANT: select a VARIANT as `CAST(c AS JSON)`, and a type holding one
 - **Dates and times** are ISO 8601 text, every digit kept and trailing zeros
   dropped. JSON writes `"2024-01-02"`, `"03:04:05.5"` and
   `"2024-01-02T03:04:05.123456"`; CSV and the clipboard put a space between
-  date and time, `2024-01-02 03:04:05.123456`, the form spreadsheets read as
-  a date and time. A `TIMESTAMP WITH TIME ZONE` is written in UTC with `Z`,
-  whatever time zone the table loaded in; a `TIMESTAMP` has no zone and is
-  written without one, so JavaScript's `new Date()` reads it as local time.
-  A `TIME WITH TIME ZONE` keeps its offset (`14:05:06+05:30`), and a
-  `TIME_NS` its nanoseconds (`03:04:05.123456789`). `infinity`, `-infinity`
-  and dates before year 1 (`0044-03-15 (BC)`) are written as DuckDB writes
-  them, which DuckDB reads back and JavaScript's `Date` does not: it takes
-  that date for 2044. Inside a nested value, dates and times are DuckDB's
-  text, a `TIMESTAMP WITH TIME ZONE` in UTC with `+00`. `getColumnValues`,
-  `getCellValue` and `bridge.query` still read a date or timestamp as epoch
-  milliseconds.
+  date and time, `2024-01-02 03:04:05.123456`, so a `DATE` or `TIMESTAMP` is
+  in the form spreadsheets read. A `TIMESTAMP WITH TIME ZONE` is written in
+  UTC with `Z`, whatever time zone the table loaded in, and some spreadsheets
+  show it as text; a `TIMESTAMP` has no zone and is written without one, so
+  JavaScript's `new Date()` reads it as local time. A `TIME WITH TIME ZONE`
+  keeps its offset (`14:05:06+05:30`), and a `TIME_NS` its nanoseconds
+  (`03:04:05.123456789`). `infinity`, `-infinity` and dates before year 1
+  (`0044-03-15 (BC)`) are written as DuckDB writes them; JavaScript's `Date`
+  takes that date for 2044. Inside a nested value, dates and times are
+  DuckDB's text, a `TIMESTAMP WITH TIME ZONE` in UTC with `+00`.
+  `getColumnValues`, `getCellValue` and `bridge.query` still read a date or
+  timestamp as epoch milliseconds.
+- **Loading an export back** reads ordinary dates and times as dates and
+  times. From CSV a `TIMESTAMP_NS` keeps microseconds; from JSON it stays
+  text, and a `TIMESTAMP WITH TIME ZONE` loads as a `TIMESTAMP` in UTC. A
+  column holding `infinity`, `'-infinity` (CSV's formula guard), a BC date or
+  a five-digit year may load as text or another type: DuckDB's CSV reader
+  takes a `TIMESTAMP` column holding `infinity` for a
+  `TIMESTAMP WITH TIME ZONE`, and its JSON reader can read `infinity` as
+  `1900-01-01`.
 - **Parquet** writes every column natively. A few types come back in part:
   an ARRAY loads back as a LIST, a `HUGEINT` or `UHUGEINT` as a `DOUBLE`, an
   `INTERVAL` to the millisecond, and an `ENUM` inside a struct or a `BIT`

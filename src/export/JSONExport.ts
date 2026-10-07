@@ -127,8 +127,8 @@ export function formatValueForJSON(value: unknown): unknown {
  * date and time: `2024-01-02 03:04:05.5` is `2024-01-02T03:04:05.5`, and
  * `12345-01-02 03:04:05Z` is `12345-01-02T03:04:05Z`. Only a space before
  * a digit becomes `T`, so `infinity` and a BC timestamp,
- * `0044-03-15 (BC) 10:00:00`, are left as DuckDB writes them, which DuckDB
- * reads back.
+ * `0044-03-15 (BC) 10:00:00`, are left as DuckDB writes them, the form
+ * DuckDB's casts read.
  */
 export function isoDateTime(text: string): string {
   const space = text.indexOf(' ');

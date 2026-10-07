@@ -59,11 +59,15 @@ export async function copyToClipboard(data: string, format: 'text' | 'html'): Pr
  *
  * TSV (tab-separated values) is the standard clipboard format understood
  * by Excel, Google Sheets, and other spreadsheet applications. The output
- * includes a header row and uses visible columns in their display order.
+ * includes a header row and the visible columns (`state.visibleColumns`)
+ * in the order the grid shows them: a hidden column is left out, and
+ * `__rowid__` is copied when the app has shown it. With no column shown,
+ * nothing is copied.
  * Cells are written as {@link exportToCSV} writes them, so a nested value
  * (LIST, STRUCT, MAP, …) is standard JSON: `["a","b"]`, `{"x":1.25}`.
  *
- * @param rows   - 0-based row indices (into the sorted/filtered view) to copy
+ * @param rows   - 0-based row indices (into the sorted/filtered view) to
+ *   copy; an index past the view's last row copies nothing
  * @param state  - Reactive table state (signals are read, not mutated)
  * @param bridge - WorkerBridge for querying DuckDB
  */
@@ -79,6 +83,12 @@ export async function copyRowsToClipboard(
     throw new ExportError('No table loaded', { code: 'NO_TABLE_LOADED' });
   }
 
+  // What the grid shows. An explicit list is checked against the schema
+  // but keeps system columns, which `'all'` leaves out. With none shown
+  // there is nothing to copy, and the clipboard keeps what it holds.
+  const columns = [...new Set(state.visibleColumns.get())];
+  if (columns.length === 0) return;
+
   const context: ExportContext = {
     bridge,
     filters: state.filters.get(),
@@ -92,7 +102,7 @@ export async function copyRowsToClipboard(
     tableName,
     {
       scope: 'selected',
-      columns: 'all',
+      columns,
       includeHeaders: true,
       delimiter: '\t',
       nullValue: '',

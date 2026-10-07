@@ -153,14 +153,48 @@ describe('copyRowsToClipboard', () => {
     expect(lines[2]).toBe('2\tBob\t19.99');
   });
 
-  it('should use all columns', async () => {
-    mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 9.99 }]);
+  it('copies the visible columns in display order', async () => {
+    // `name` hidden, and `price` moved first: what the grid shows.
+    state.columnOrder.set(['price', 'id', 'name']);
+    state.visibleColumns.set(['price', 'id']);
+    mockBridge.query.mockResolvedValueOnce([{ price: 9.99, id: 1 }]);
 
     await copyRowsToClipboard([0], state, mockBridge);
 
+    const sql = mockBridge.query.mock.calls[0][0] as string;
+    expect(sql).toContain('SELECT "price", "id" FROM');
+    expect(sql).not.toContain('"name"');
     const tsv = mockWriteText.mock.calls[0][0] as string;
-    const header = tsv.split('\n')[0];
-    expect(header).toBe('id\tname\tprice');
+    expect(tsv.split('\n')).toEqual(['price\tid', '9.99\t1']);
+  });
+
+  it('copies nothing, leaving the clipboard alone, when no column is shown', async () => {
+    // Removing a derived column that was the only one shown leaves none.
+    state.visibleColumns.set([]);
+
+    await copyRowsToClipboard([0], state, mockBridge);
+
+    expect(mockBridge.query).not.toHaveBeenCalled();
+    expect(mockWriteText).not.toHaveBeenCalled();
+  });
+
+  it('copies __rowid__ when it is shown, and only then', async () => {
+    const withRowId: ColumnSchema[] = [
+      { name: '__rowid__', type: 'integer', nullable: false, originalType: 'BIGINT', system: true },
+      ...testSchema,
+    ];
+    initializeColumnsFromSchema(state, withRowId);
+    mockBridge.query.mockResolvedValueOnce([{ id: 1, name: 'Alice', price: 9.99 }]);
+    await copyRowsToClipboard([0], state, mockBridge);
+    expect((mockWriteText.mock.calls[0][0] as string).split('\n')[0]).toBe('id\tname\tprice');
+
+    state.visibleColumns.set(['__rowid__', 'id', 'name', 'price']);
+    mockBridge.query.mockResolvedValueOnce([{ __rowid__: 0, id: 1, name: 'Alice', price: 9.99 }]);
+    await copyRowsToClipboard([0], state, mockBridge);
+    expect((mockWriteText.mock.calls[1][0] as string).split('\n')).toEqual([
+      '__rowid__\tid\tname\tprice',
+      '0\t1\tAlice\t9.99',
+    ]);
   });
 
   it('should handle null values as empty strings', async () => {

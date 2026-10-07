@@ -444,6 +444,17 @@ grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizat
   are kept. Code that places columns by multiples of 150 px, or screenshot
   tests of tables with nested or JSON columns, need updating; read a column's
   width from its header element.
+- **Give range filters you add in code on `TIME WITH TIME ZONE` columns
+  `valueType: 'time'`.** The column's chart now draws, each value at its time
+  of day as written, and its brush and filter panel compare
+  `CAST(col AS TIME)` the same way. Without it, a range compares instants,
+  its bounds in DuckDB's session time zone, and can miss rows its bars count:
+  in a UTC session `01:30:00+05:30` is not between `'01:30:00'` and
+  `'06:00:00'`; the chart draws no brush for it. A session restore or a
+  preset load gives such a filter `valueType: 'time'` when it has none and
+  its bounds have no offset, so a saved one now matches by time of day; one
+  with offsets (`'20:00:00+00'`) keeps comparing instants. See
+  [Filters → `range`](../guides/filters.md#1-range--numeric-or-date-ranges).
 
 ## Verification checklist
 

@@ -1022,8 +1022,12 @@ interface RangeFilter {
   maxInclusive?: boolean;
   /** When true, lower bound uses > instead of >=. Strict greater-than filters. */
   minExclusive?: boolean;
-  /** Value type hint for SQL generation. When 'interval', values are prefixed with INTERVAL keyword. */
-  valueType?: 'interval';
+  /**
+   * 'interval': the bounds are INTERVAL literals. 'time': compare the column's
+   * time of day, CAST(col AS TIME), as a TIME WITH TIME ZONE column's chart and
+   * filter panel do. Not for TIME_NS, which the cast rounds to microseconds.
+   */
+  valueType?: 'interval' | 'time';
 }
 
 table.actions.addFilter({
@@ -1032,6 +1036,14 @@ table.actions.addFilter({
   min: 18,
   max: 65,
   maxInclusive: true,
+});
+// A TIME WITH TIME ZONE column, 01:30 up to 06:00 as written, whatever the offsets
+table.actions.addFilter({
+  type: 'range',
+  column: 'pickup_time',
+  min: '01:30:00',
+  max: '06:00:00',
+  valueType: 'time',
 });
 ```
 
@@ -1071,7 +1083,7 @@ table.actions.addFilter({
 });
 ```
 
-The field is kept by `serializeFilter`, sessions, presets and undo. On preset import, a range, point, set or not-set filter whose `valueType` is not the one its type reads (`'interval'` for a range, `'text'` for the others) is dropped, like a filter of an unknown type, and the rest of the preset imports, though a preset left with no valid filter is skipped (`src/filters/FilterPresets.ts`); a `valueType` on any other filter type is ignored. An exact filter on a JSON column needs `valueType: 'text'` too: compared as JSON, any text that is not JSON is a Conversion Error (`Malformed JSON`). The filter panel sets it on nested and JSON columns.
+The field is kept by `serializeFilter`, sessions, presets and undo. On preset import, a range, point, set or not-set filter whose `valueType` is not one its type reads (`'interval'` or `'time'` for a range, `'text'` for the others) is dropped, like a filter of an unknown type, and the rest of the preset imports, though a preset left with no valid filter is skipped (`src/filters/FilterPresets.ts`); a `valueType` on any other filter type is ignored. An exact filter on a JSON column needs `valueType: 'text'` too: compared as JSON, any text that is not JSON is a Conversion Error (`Malformed JSON`). The filter panel sets it on nested and JSON columns. A range filter on a `TIME WITH TIME ZONE` column that a session restore or `loadFilterPreset` brings back without a `valueType` gets `valueType: 'time'` when both its bounds are times without an offset (`'01:30:00'`, or open); one with an offset (`'20:00:00+00'`) keeps comparing instants. Both take `valueType: 'time'` off a range filter whose column is not `TIME` or `TIME WITH TIME ZONE`, where `CAST(col AS TIME)` would fail every query (`src/filters/timeFilters.ts`).
 
 ### `SetFilter`
 

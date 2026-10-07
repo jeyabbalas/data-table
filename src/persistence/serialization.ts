@@ -19,7 +19,7 @@ import type { UndoManager, StateSnapshot } from '../core/UndoManager';
 import type { VectorColumnDef } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { Filter } from '../filters/FilterTypes';
-import { jsonFiltersAsText } from '../filters/jsonFilters';
+import { normalizeRestoredFilters } from '../filters/restoredFilters';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
@@ -267,10 +267,14 @@ export function snapshotFromState(
  * Restore TableState from a SessionSnapshot.
  *
  * Validates all snapshot data against the current schema — columns that no
- * longer exist are silently dropped. A point, set or not-set filter on a
- * JSON column without `valueType` gets `valueType: 'text'`, in the filters
- * and in the undo and redo entries ({@link jsonFiltersAsText}): one saved
- * before 0.9 would otherwise fail every query on text that is not JSON.
+ * longer exist are silently dropped. The filters, and those of the undo and
+ * redo entries, get the `valueType` they need on this table
+ * ({@link normalizeRestoredFilters}): a point, set or not-set filter on a
+ * JSON column without one compares text, since one saved before 0.9 would
+ * otherwise fail every query on text that is not JSON; a range filter on a
+ * TIME WITH TIME ZONE column whose bounds have no offset compares the time
+ * of day its column's chart shows; and a range filter's `valueType: 'time'`
+ * on a column that is not TIME or TIME WITH TIME ZONE goes.
  * Only the schema's columns are known here, not the derived columns the
  * snapshot brings back. The snapshot's column order is made
  * consistent ({@link consistentColumnOrder}): the visible columns as the
@@ -305,7 +309,7 @@ export function restoreStateFromSnapshot(
   // Filters: deserialize and drop stale column references.
   // Raw SQL filters use synthetic column keys that aren't in the schema —
   // they must bypass column validation to survive session restore.
-  const filters = jsonFiltersAsText(
+  const filters = normalizeRestoredFilters(
     snapshot.filters
       .map(deserializeFilter)
       .filter(
@@ -421,7 +425,7 @@ export function restoreStateFromSnapshot(
     }
     const restore = (s: SerializedStateSnapshot): StateSnapshot => {
       const entry = deserializeStateSnapshot(s, validColumns, hydratedPool);
-      return { ...entry, filters: jsonFiltersAsText(entry.filters, schemaColumns) };
+      return { ...entry, filters: normalizeRestoredFilters(entry.filters, schemaColumns) };
     };
     const deserialized = {
       undoStack: snapshot.undoStack.map(restore),

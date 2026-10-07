@@ -955,6 +955,59 @@ describe('FilterPanelField', () => {
 
       field.destroy();
     });
+
+    // A TIME WITH TIME ZONE compares its time of day as written, as its chart
+    // places it; compared as one, '09:00' would take the session's offset.
+    it.each([
+      ['09:00', '17:00', { min: '09:00', max: '17:00', maxInclusive: true }],
+      ['09:00', '', { min: '09:00', max: Infinity }],
+      ['', '17:00', { min: -Infinity, max: '17:00', maxInclusive: true }],
+    ])(
+      'compares a TIME WITH TIME ZONE column by time of day (from %j, to %j)',
+      (from, to, bounds) => {
+        const tzColumn: ColumnSchema = {
+          name: 'pickup',
+          type: 'time',
+          nullable: true,
+          originalType: 'TIME WITH TIME ZONE',
+        };
+        const field = createField(tzColumn, state, actions);
+        const inputs = field
+          .getElement()
+          .querySelectorAll('input[type="time"]') as NodeListOf<HTMLInputElement>;
+        inputs[0].value = from;
+        inputs[1].value = to;
+
+        field.applyFilter();
+
+        expect(state.filters.get()).toEqual([
+          { type: 'range', column: 'pickup', ...bounds, valueType: 'time' },
+        ]);
+        field.destroy();
+      },
+    );
+
+    it('leaves a TIME_NS column compared as it is', () => {
+      const nsColumn: ColumnSchema = {
+        name: 'at',
+        type: 'time',
+        nullable: true,
+        originalType: 'TIME_NS',
+      };
+      const field = createField(nsColumn, state, actions);
+      const inputs = field
+        .getElement()
+        .querySelectorAll('input[type="time"]') as NodeListOf<HTMLInputElement>;
+      inputs[0].value = '09:00';
+      inputs[1].value = '17:00';
+
+      field.applyFilter();
+
+      expect(state.filters.get()).toEqual([
+        { type: 'range', column: 'at', min: '09:00', max: '17:00', maxInclusive: true },
+      ]);
+      field.destroy();
+    });
   });
 
   // =========================================

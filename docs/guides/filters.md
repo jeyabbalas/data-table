@@ -50,11 +50,13 @@ Every filter has a `type` discriminator and a `column` field; the rest varies.
 { type: 'range', column: 'price', min: 0, max: 100, minExclusive: true }
 { type: 'range', column: 'started_at', min: new Date('2024-01-01'), max: new Date('2025-01-01') }
 { type: 'range', column: 'duration', min: '1 day', max: '7 days', valueType: 'interval' }
+{ type: 'range', column: 'pickup_time', min: '01:30:00', max: '06:00:00', valueType: 'time' }
 ```
 
-- `min`/`max` accept `number | string | Date`. Pass `Date` for date/timestamp columns and `string` for intervals (with `valueType: 'interval'`).
+- `min`/`max` accept `number | string | Date`. Pass `Date` for date/timestamp columns, `string` for times (`'09:30'`, `'24:00:00'`) and `string` for intervals (with `valueType: 'interval'`).
 - `maxInclusive` (default `false`) switches the upper bound from `<` to `<=`. Histogram brushes set this for the last bin.
 - `minExclusive` (default `false`) switches the lower bound from `>=` to `>`.
+- `valueType: 'time'` compares the column's time of day, `CAST(col AS TIME)`. Give it to a range on a `TIME WITH TIME ZONE` column, which its chart draws by time of day as written: compared as `TIME WITH TIME ZONE`, a bound such as `'01:30:00'` takes the offset of DuckDB's session time zone and rows compare by instant, so in a UTC session `01:30:00+05:30` (20:00 UTC the day before) falls outside `'01:30:00'` to `'06:00:00'`. The chart's brush and the filter panel set it on these columns. A session restore (its filters and its undo and redo entries) and `loadFilterPreset` give it to a range filter on one that has no `valueType` when both its bounds are times without an offset (`'01:30:00'`, or open), as the panel and the brush write them; a bound with an offset (`'20:00:00+00'`) names an instant, and such a filter keeps comparing instants. They also take `valueType: 'time'` off a range filter whose column is not `TIME` or `TIME WITH TIME ZONE`, where the cast would fail every query (`src/filters/timeFilters.ts`). `addFilter` changes nothing, and the chart draws no brush for a range on a `TIME WITH TIME ZONE` column without `valueType: 'time'`, since it keeps rows by instant rather than by the times of day its bars stand for. Don't use it on a `TIME_NS` column: the cast rounds to microseconds, so `23:59:59.9999999` becomes `24:00:00`.
 
 ### 2. `point` — exact match
 
@@ -199,11 +201,11 @@ the whole text. `null` (and `includeNull`) still tests `col IS NULL`.
 
 `valueType` is kept by `serializeFilter`, sessions, presets and undo, which
 tells a text filter from a value filter. On preset import, a range, point, set
-or not-set filter whose `valueType` is not the one its type reads
-(`'interval'` for a range, `'text'` for the others) is dropped, like a filter
-of an unknown type, and the rest of the preset imports (a preset left with
-no valid filter is skipped); a `valueType` on any other filter type is
-ignored (`src/filters/FilterPresets.ts`).
+or not-set filter whose `valueType` is not one its type reads
+(`'interval'` or `'time'` for a range, `'text'` for the others) is dropped,
+like a filter of an unknown type, and the rest of the preset imports (a preset
+left with no valid filter is skipped); a `valueType` on any other filter type
+is ignored (`src/filters/FilterPresets.ts`).
 
 A text comparison has DuckDB format every row's whole value in each query
 the filter is in, which is every row block, the row count and every chart;
@@ -345,4 +347,4 @@ if (params.has('country')) {
 - Events: [Events guide — `filterChange`](./events.md)
 - Filter presets: [Filter presets guide](./filter-presets.md) for save/load/export/import of named filter sets
 - API reference: [Filter types](../api-reference.md#filter-types), [State actions](../api-reference.md#actions-methods)
-- Source: `src/filters/FilterTypes.ts:8-179`, `src/core/Actions.ts` (`addFilter` … `getFiltersSQL`), `src/filters/FilterSQL.ts`
+- Source: `src/filters/FilterTypes.ts:8-204`, `src/core/Actions.ts` (`addFilter` … `getFiltersSQL`), `src/filters/FilterSQL.ts`

@@ -2,15 +2,19 @@
  * TimeHistogramData - Data fetching and processing for TIME histogram visualizations
  *
  * This module provides:
- * - TIME string parsing to seconds from midnight
  * - Automatic time interval detection based on data range
  * - SQL-based binning using EPOCH extraction
  * - Filter to SQL conversion for TIME type
  *
- * TIME values in DuckDB are returned as strings like "12:30:45" or "12:30:45.123456"
- * and must be converted to numeric seconds for histogram binning.
+ * Every position is a number of seconds since midnight from DuckDB,
+ * `EXTRACT(EPOCH FROM col)`, for the range as for the bins; no text is
+ * parsed. For a TIME WITH TIME ZONE that is the time of day as written, the
+ * offset ignored (`01:30:00+05:30` is 5400). A TIME_NS is truncated to
+ * microseconds. `24:00:00`, a valid TIME, is 86400: it is counted in the
+ * day's last bar.
  */
 
+import { isTimeWithTimeZone } from '../../core/duckdbType';
 import { QueryError } from '../../core/errors';
 import type { Filter } from '../../core/types';
 import type { WorkerBridge } from '../../data/WorkerBridge';
@@ -30,7 +34,10 @@ export type { TimeInterval } from './DateFormatters';
 export interface TimeHistogramBin {
   /** Start of the bin in seconds from midnight */
   binStartSeconds: number;
-  /** End of the bin in seconds from midnight (exclusive) */
+  /**
+   * End of the bin in seconds from midnight (exclusive). A bar ending at
+   * 86400 holds `24:00:00` too.
+   */
   binEndSeconds: number;
   /** Number of values in this bin */
   count: number;
@@ -44,9 +51,13 @@ export interface TimeHistogramData {
   bins: TimeHistogramBin[];
   /** Count of null values in the column */
   nullCount: number;
-  /** Minimum non-null time in seconds from midnight */
+  /**
+   * Minimum non-null time in seconds from midnight, as `EXTRACT(EPOCH …)`
+   * gives it: a TIME WITH TIME ZONE's time of day as written, its offset
+   * ignored.
+   */
   minSeconds: number | null;
-  /** Maximum non-null time in seconds from midnight */
+  /** Maximum non-null time in seconds from midnight; `24:00:00` is 86400. */
   maxSeconds: number | null;
   /** Total count of all values (including nulls) */
   total: number;
@@ -62,11 +73,17 @@ export interface TimeHistogramData {
  * Statistics result from initial query
  */
 interface TimeStatsResult {
-  min_time: string | null;
-  max_time: string | null;
+  min_sec: number | null;
+  max_sec: number | null;
   count: number;
   null_count: number;
 }
+
+/**
+ * Seconds in a day, and the largest time of day: `24:00:00`. No bar starts
+ * there; the day's last bar ends there and holds it.
+ */
+export const SECONDS_PER_DAY = 86400;
 
 /**
  * Bin query result
@@ -77,50 +94,8 @@ interface TimeBinResult {
 }
 
 // =========================================
-// TIME Parsing
+// TIME Formatting
 // =========================================
-
-/**
- * Parse a TIME string from DuckDB to seconds from midnight
- *
- * Handles formats:
- * - "HH:MM:SS" (e.g., "12:30:45")
- * - "HH:MM:SS.ffffff" (e.g., "12:30:45.123456")
- *
- * @param value TIME string from DuckDB
- * @returns Seconds from midnight (with fractional part for subsecond precision), or null if invalid
- */
-export function parseTimeToSeconds(value: string | null): number | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  // Match HH:MM:SS with optional fractional seconds
-  const match = value.match(/^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/);
-  if (!match) {
-    return null;
-  }
-
-  const [, h, m, s, frac] = match;
-  const hours = parseInt(h!, 10);
-  const minutes = parseInt(m!, 10);
-  const seconds = parseInt(s!, 10);
-
-  // Validate ranges
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
-    return null;
-  }
-
-  // Calculate total seconds
-  let totalSeconds = hours * 3600 + minutes * 60 + seconds;
-
-  // Add fractional seconds if present
-  if (frac) {
-    totalSeconds += parseFloat(`0.${frac}`);
-  }
-
-  return totalSeconds;
-}
 
 /**
  * Convert seconds from midnight back to TIME string format
@@ -255,18 +230,72 @@ function computeBinEnd(binStartSeconds: number, interval: TimeInterval): number 
   return binStartSeconds + binSize;
 }
 
+/**
+ * Bins from the rows of {@link buildTimeHistogramSQL}, in its order.
+ *
+ * `24:00:00` (86400) comes back in a bin of its own, past the day's end,
+ * whose brush would end at `'25:00:00'`, which is not a TIME. It is counted
+ * in the day's last bar instead. The merge is done here because `LEAST(…)`
+ * in the query's GROUP BY made it 3.5 times slower.
+ */
+function binsFromResults(results: TimeBinResult[], interval: TimeInterval): TimeHistogramBin[] {
+  const lastStart = SECONDS_PER_DAY - getIntervalBinSizeSeconds(interval);
+  const bins: TimeHistogramBin[] = [];
+  for (const result of results) {
+    const binStartSeconds = Math.min(Number(result.bin_start), lastStart);
+    const count = Number(result.count);
+    const previous = bins[bins.length - 1];
+    if (previous?.binStartSeconds === binStartSeconds) {
+      previous.count += count;
+    } else {
+      bins.push({
+        binStartSeconds,
+        binEndSeconds: computeBinEnd(binStartSeconds, interval),
+        count,
+      });
+    }
+  }
+  return bins;
+}
+
 // =========================================
 // Data Fetching
 // =========================================
 
 /**
+ * SQL for a time column's least and greatest seconds since midnight, on the
+ * scale the bins use (`EXTRACT(EPOCH FROM col)`).
+ *
+ * For TIME and TIME_NS it is the epoch of `MIN` and `MAX`: `EXTRACT` keeps
+ * their order, and the aggregates read two values rather than every row's
+ * epoch (2 ms against 11 ms on a million rows). A TIME WITH TIME ZONE takes
+ * the aggregate of every row's epoch instead. DuckDB's `MIN` and `MAX` order
+ * it by time of day today, but its `<` and `ORDER BY` order it by instant,
+ * and a minimum taken by instant could lie above other rows' times of day,
+ * which would then fall out of the bars.
+ */
+function rangeSQL(col: string, originalType: string | undefined): [min: string, max: string] {
+  return isTimeWithTimeZone(originalType)
+    ? [`MIN(EXTRACT(EPOCH FROM ${col}))`, `MAX(EXTRACT(EPOCH FROM ${col}))`]
+    : [`EXTRACT(EPOCH FROM MIN(${col}))`, `EXTRACT(EPOCH FROM MAX(${col}))`];
+}
+
+/**
  * Fetch time column statistics (min, max, count, nulls)
+ *
+ * The minimum and maximum are seconds since midnight from DuckDB (see
+ * {@link rangeSQL}); `originalType`, the column's DuckDB type, picks the SQL
+ * for them. DuckDB's text for them would not do: it carries an offset for a
+ * TIME WITH TIME ZONE (`23:00:00+05:30`), and nanoseconds for a TIME_NS,
+ * whose epoch is truncated to microseconds, so a minimum read from text could
+ * lie above the smallest value's bin position.
  */
 export async function fetchTimeStats(
   tableName: string,
   column: string,
   filters: Filter[],
   bridge: WorkerBridge,
+  originalType?: string,
 ): Promise<{
   minSeconds: number | null;
   maxSeconds: number | null;
@@ -277,12 +306,12 @@ export async function fetchTimeStats(
   const tbl = quoteIdentifier(tableName);
   const whereClause = filtersToWhereClause(filters);
   const whereSQL = whereClause ? `WHERE ${whereClause}` : '';
+  const [minSQL, maxSQL] = rangeSQL(col, originalType);
 
-  // Cast TIME to VARCHAR for consistent string output
   const sql = `
     SELECT
-      MIN(${col})::VARCHAR as min_time,
-      MAX(${col})::VARCHAR as max_time,
+      ${minSQL} as min_sec,
+      ${maxSQL} as max_sec,
       COUNT(${col}) as count,
       COUNT(*) - COUNT(${col}) as null_count
     FROM ${tbl}
@@ -297,8 +326,8 @@ export async function fetchTimeStats(
 
   const row = results[0]!;
   return {
-    minSeconds: parseTimeToSeconds(row.min_time),
-    maxSeconds: parseTimeToSeconds(row.max_time),
+    minSeconds: row.min_sec === null ? null : Number(row.min_sec),
+    maxSeconds: row.max_sec === null ? null : Number(row.max_sec),
     count: Number(row.count),
     nullCount: Number(row.null_count),
   };
@@ -324,7 +353,9 @@ function buildTimeHistogramSQL(
   const binSizeSeconds = getIntervalBinSizeSeconds(interval);
 
   // Use EPOCH to convert TIME to seconds, then bin
-  // EXTRACT(EPOCH FROM time_column) returns seconds from midnight for TIME type
+  // EXTRACT(EPOCH FROM time_column) returns seconds from midnight for TIME type.
+  // 24:00:00 gets a bin of its own at 86400, which binsFromResults merges
+  // into the day's last bar.
   return `
     SELECT
       FLOOR(EXTRACT(EPOCH FROM ${col}) / ${binSizeSeconds}) * ${binSizeSeconds} as bin_start,
@@ -461,19 +492,7 @@ export async function fetchTimeHistogramBins(
 ): Promise<TimeHistogramBin[]> {
   const sql = buildTimeHistogramSQL(tableName, column, interval, filters);
   const binResults = await bridge.query<TimeBinResult>(sql);
-
-  const bins: TimeHistogramBin[] = [];
-  for (const result of binResults) {
-    const binStartSeconds = Number(result.bin_start);
-    const binEndSeconds = computeBinEnd(binStartSeconds, interval);
-    bins.push({
-      binStartSeconds,
-      binEndSeconds,
-      count: Number(result.count),
-    });
-  }
-
-  return bins;
+  return binsFromResults(binResults, interval);
 }
 
 /**
@@ -536,6 +555,8 @@ export async function fetchTimeNumericBins(
  * @param bridge - WorkerBridge for executing queries
  * @param maxBins - Maximum number of bins (default: 15). The time interval will be
  *                  coarsened if necessary to keep bins within this limit.
+ * @param originalType - The column's DuckDB type (`ColumnSchema.originalType`),
+ *                  which picks the SQL for its range (see {@link fetchTimeStats})
  * @returns TimeHistogramData with bins and metadata
  */
 export async function fetchTimeHistogramData(
@@ -544,10 +565,11 @@ export async function fetchTimeHistogramData(
   filters: Filter[],
   bridge: WorkerBridge,
   maxBins = 15,
+  originalType?: string,
 ): Promise<TimeHistogramData> {
   try {
     // Step 1: Fetch column statistics
-    const stats = await fetchTimeStats(tableName, column, filters, bridge);
+    const stats = await fetchTimeStats(tableName, column, filters, bridge, originalType);
 
     // Handle edge case: no data (all nulls or empty)
     if (stats.count === 0 || stats.minSeconds === null || stats.maxSeconds === null) {
@@ -592,14 +614,18 @@ export async function fetchTimeHistogramData(
       );
     }
 
-    // Handle edge case: single value (all same time)
+    // Handle edge case: single value (all same time). The bar starts where
+    // the bin SQL puts the value, so the bins of a filtered fetch line up
+    // with it (12:30:00.5 starts at 12:30:00), and a bar for 24:00:00 ends
+    // there, as the day's last bar does.
     if (stats.minSeconds === stats.maxSeconds) {
-      const binEnd = computeBinEnd(stats.minSeconds, interval);
+      const size = getIntervalBinSizeSeconds(interval);
+      const binStart = Math.min(Math.floor(stats.minSeconds / size) * size, SECONDS_PER_DAY - size);
       return {
         bins: [
           {
-            binStartSeconds: stats.minSeconds,
-            binEndSeconds: binEnd,
+            binStartSeconds: binStart,
+            binEndSeconds: computeBinEnd(binStart, interval),
             count: stats.count,
           },
         ],
@@ -618,17 +644,7 @@ export async function fetchTimeHistogramData(
     const binResults = await bridge.query<TimeBinResult>(sql);
 
     // Step 4: Convert results to TimeHistogramBin format
-    const bins: TimeHistogramBin[] = [];
-
-    for (const result of binResults) {
-      const binStartSeconds = Number(result.bin_start);
-      const binEndSeconds = computeBinEnd(binStartSeconds, interval);
-      bins.push({
-        binStartSeconds,
-        binEndSeconds,
-        count: Number(result.count),
-      });
-    }
+    const bins = binsFromResults(binResults, interval);
 
     return {
       bins,

@@ -42,16 +42,16 @@ import type { Filter } from './FilterTypes';
 const VALID_PATTERN_MODES = new Set(['contains', 'starts', 'ends', 'regex']);
 
 /**
- * The `valueType` each filter type that reads one understands. An imported
+ * The `valueType`s each filter type that reads one understands. An imported
  * filter naming another — from a later version, say — is skipped as invalid,
  * like an unknown filter type, rather than run as a comparison it was not
  * written for.
  */
-const KNOWN_VALUE_TYPES: Readonly<Record<string, string>> = {
-  range: 'interval',
-  point: 'text',
-  set: 'text',
-  'not-set': 'text',
+const KNOWN_VALUE_TYPES: Readonly<Record<string, readonly unknown[]>> = {
+  range: ['interval', 'time'],
+  point: ['text'],
+  set: ['text'],
+  'not-set': ['text'],
 };
 
 /** Known filter type discriminants for import validation */
@@ -283,11 +283,11 @@ export class FilterPresetManager {
             break;
           // null, not-null, point: no additional required fields
         }
-        const knownValueType = KNOWN_VALUE_TYPES[fObj['type']];
+        const knownValueTypes = KNOWN_VALUE_TYPES[fObj['type']];
         if (
-          knownValueType !== undefined &&
+          knownValueTypes !== undefined &&
           fObj['valueType'] !== undefined &&
-          fObj['valueType'] !== knownValueType
+          !knownValueTypes.includes(fObj['valueType'])
         ) {
           typeInvalid = true;
         }

@@ -130,6 +130,11 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
   return parts.join(' ');
 }
 
+/** A LIST or fixed-size ARRAY value: an Arrow `Vector` of its items. */
+interface ArrowVector extends ResultVector, Iterable<unknown> {
+  readonly length: number;
+}
+
 /**
  * Check if a value is an Arrow `Vector`: what a LIST or fixed-size ARRAY
  * cell holds.
@@ -139,7 +144,7 @@ function intervalObjectToString(obj: Record<string, unknown>): string {
  * `type` and a `data` field would pass for a Vector's; a Vector's `data` is
  * an array of its chunks, and no field value is an array.
  */
-function isArrowVector(obj: object): obj is Iterable<unknown> {
+function isArrowVector(obj: object): obj is ArrowVector {
   const vector = obj as {
     toArray?: unknown;
     type?: unknown;
@@ -220,7 +225,8 @@ function copyTypedArray(view: ArrayBufferView): ArrayBufferView {
  * - A BigInt becomes a Number: the nearest one, past ±2^53.
  * - A LIST or ARRAY value becomes an array. Arrow returns one as a
  *   `Vector`, whose own properties include functions, so copied field by
- *   field it could not be posted.
+ *   field it could not be posted. Dates and timestamps in it are read as a
+ *   column of them is: see {@link temporalReader}.
  * - A STRUCT or MAP value becomes an object whose own properties are its
  *   fields, or its keys as `String` writes them; `__proto__` included. An
  *   unnamed STRUCT, as `row(1, 'a')` builds, names every field '', and
@@ -242,6 +248,13 @@ function copyTypedArray(view: ArrayBufferView): ArrayBufferView {
  * (`'125'`). Arrow reads an INTERVAL, anywhere, as an `Int32Array` that
  * does not hold it. `CAST(to_json(c) AS VARCHAR)` reads all of them
  * exactly, as JSON text.
+ *
+ * Arrow reads a STRUCT's fields, a MAP's keys and values and a UNION's
+ * member before this sees them, with its own getter, which gets DuckDB's
+ * `infinity` wrong: a TIMESTAMP's fails the read (`9223372036854775 is not
+ * safe to convert to a number`), as does a TIMESTAMP past ±2^53 ms, and a
+ * DATE's reads as 185542587100800000. `to_json` writes `infinity` as
+ * DuckDB does, `"infinity"`.
  */
 export function convertBigInts(obj: unknown): unknown {
   return convertValue(obj, true);
@@ -273,6 +286,9 @@ function convertValue(value: unknown, topLevel: boolean): unknown {
     return convertArrowRow(row);
   }
   if (isArrowVector(value)) {
+    // A list of dates or timestamps is read as a column of them is.
+    const read = temporalReader(value);
+    if (read !== null) return Array.from({ length: value.length }, (_, index) => read(index));
     return Array.from(value, (item) => convertValue(item, false));
   }
 
@@ -311,13 +327,123 @@ function convertArrowRow({ isStruct, entries }: ArrowRowEntries): unknown {
 export interface ResultBatch {
   readonly numRows: number;
   readonly schema: { readonly fields: readonly { readonly name: string }[] };
-  getChildAt(index: number): { get(index: number): unknown } | null;
+  getChildAt(index: number): ResultVector | null;
+}
+
+/**
+ * What {@link convertBatch} reads of a column's Arrow `Vector`: its values
+ * through `get`, or, for a date or timestamp column, its type and its
+ * chunks' storage (see {@link temporalReader}). A vector without `type` is
+ * read through `get`.
+ */
+export interface ResultVector {
+  get(index: number): unknown;
+  /** Arrow's type: `typeId` is apache-arrow's `Type`, `unit` its `TimeUnit` or `DateUnit`. */
+  readonly type?: { readonly typeId: number; readonly unit?: number } | null;
+  /** The vector's chunks: apache-arrow's `Data`. */
+  readonly data?: readonly ResultChunk[];
+}
+
+/**
+ * What {@link temporalReader} reads of a chunk of a vector (apache-arrow's
+ * `Data`): its values' storage, which starts at the chunk's first value
+ * (a LIST value's chunk is a slice of the column's items), and whether a
+ * value is not NULL.
+ */
+export interface ResultChunk {
+  /** A DATE's days as an `Int32Array`, a TIMESTAMP's as a `BigInt64Array` in its unit. */
+  readonly values: unknown;
+  getValid(index: number): boolean;
+}
+
+/** `Type.Date` and `Type.Timestamp` in apache-arrow. */
+const ARROW_DATE_TYPE_ID = 8;
+const ARROW_TIMESTAMP_TYPE_ID = 10;
+
+/** `DateUnit.DAY` in apache-arrow: days since 1970, how DuckDB sends a DATE. */
+const ARROW_DATE_DAY = 0;
+
+/**
+ * DuckDB's `infinity` for a TIMESTAMP of any unit, with or without a zone:
+ * the largest int64. `-infinity` is its negation.
+ */
+const TIMESTAMP_INFINITY = 9_223_372_036_854_775_807n;
+
+/** DuckDB's DATE `infinity`, in days: the largest int32. `-infinity` is its negation. */
+const DATE_INFINITY = 2_147_483_647;
+
+/**
+ * Arrow's milliseconds for a TIMESTAMP's stored integer, by `TimeUnit`
+ * (second, millisecond, microsecond, nanosecond), in Arrow's arithmetic but
+ * without its check: the whole milliseconds plus the rest's fraction, for
+ * the digits past the millisecond that a number keeps.
+ */
+const TIMESTAMP_MILLISECONDS: readonly ((value: bigint) => number)[] = [
+  (seconds) => 1000 * Number(seconds),
+  (milliseconds) => Number(milliseconds),
+  (micros) => Number(micros / 1000n) + Number(micros % 1000n) / 1000,
+  (nanos) => Number(nanos / 1_000_000n) + Number(nanos % 1_000_000n) / 1_000_000,
+];
+
+/**
+ * A reader of the values of `vector` when they are dates or timestamps,
+ * which does not use Arrow's getter; null for any other vector.
+ *
+ * Arrow's getter reads a DATE as `86400000 × days`, and a TIMESTAMP as
+ * milliseconds, a fraction for the digits past them, through a check that
+ * throws `… is not safe to convert to a number` once the integer it
+ * converts passes ±2^53. DuckDB stores a TIMESTAMP's `infinity` and
+ * `-infinity` as the largest int64 and its negation, in the column's unit,
+ * so those threw, as did years near 294247 and 290309 BC, and one such
+ * value failed the whole result: a block of the grid's rows, a value read.
+ * A DATE `infinity`, the largest int32, read as 185542587100800000, and a
+ * TIMESTAMP_NS `infinity` as a time in 2262.
+ *
+ * This reads each value from the vector's storage and converts it in
+ * Arrow's arithmetic, so every number Arrow returned is the same, to the
+ * last bit; past ±2^53 ms the number is the nearest one, as a BIGINT's past
+ * 2^53 is. DuckDB's `infinity` and `-infinity` become `Infinity` and
+ * `-Infinity`, and NULL stays `null`.
+ *
+ * Decided once for a column, before its values are read: a TIMESTAMP of any
+ * unit, with or without a zone, or a DATE in days, as DuckDB sends one, in
+ * a vector of one chunk, as every column of a record batch and every LIST
+ * or ARRAY value is. Any other vector is left to `get`.
+ */
+function temporalReader(vector: ResultVector): ((index: number) => number | null) | null {
+  const { type, data } = vector;
+  if (!type || data?.length !== 1) return null;
+  const chunk = data[0]!;
+  if (type.typeId === ARROW_TIMESTAMP_TYPE_ID) {
+    const toMilliseconds = TIMESTAMP_MILLISECONDS[type.unit ?? -1];
+    if (toMilliseconds === undefined) return null;
+    const values = chunk.values as BigInt64Array;
+    return (index) => {
+      if (!chunk.getValid(index)) return null;
+      const value = values[index]!;
+      if (value === TIMESTAMP_INFINITY) return Infinity;
+      if (value === -TIMESTAMP_INFINITY) return -Infinity;
+      return toMilliseconds(value);
+    };
+  }
+  if (type.typeId === ARROW_DATE_TYPE_ID && type.unit === ARROW_DATE_DAY) {
+    const days = chunk.values as Int32Array;
+    return (index) => {
+      if (!chunk.getValid(index)) return null;
+      const day = days[index]!;
+      if (day === DATE_INFINITY) return Infinity;
+      if (day === -DATE_INFINITY) return -Infinity;
+      return 86_400_000 * day;
+    };
+  }
+  return null;
 }
 
 /**
  * Convert a result's record batch to rows for posting to the main thread,
  * appended to `rows`: each a plain object whose own properties are the
- * result's columns, each value converted by {@link convertBigInts}.
+ * result's columns, each value converted by {@link convertBigInts}, or,
+ * in a date or timestamp column, read by {@link temporalReader}.
  *
  * Each row is read by position, from the columns' vectors. Arrow's own
  * `StructRow.toJSON()` assigns each column to a plain object, so a column
@@ -335,10 +461,16 @@ export interface ResultBatch {
 export function convertBatch<T = Record<string, unknown>>(batch: ResultBatch, rows: T[] = []): T[] {
   const names = batch.schema.fields.map((field) => field.name);
   const columns = names.map((_, index) => batch.getChildAt(index)!);
+  const temporal = columns.map(temporalReader);
   for (let row = 0; row < batch.numRows; row += 1) {
     const record: Record<string, unknown> = {};
     for (let column = 0; column < columns.length; column += 1) {
-      setOwnProperty(record, names[column]!, convertBigInts(columns[column]!.get(row)));
+      const read = temporal[column];
+      setOwnProperty(
+        record,
+        names[column]!,
+        read ? read(row) : convertBigInts(columns[column]!.get(row)),
+      );
     }
     rows.push(record as T);
   }

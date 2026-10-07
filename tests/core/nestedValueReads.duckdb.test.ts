@@ -645,6 +645,129 @@ describe.each([
   });
 });
 
+describe('dates and timestamps at infinity and at the ends of their range', () => {
+  // Rows: the infinities, NULL, an ordinary value, each type's last and
+  // first values. Arrow's getter threw on TIMESTAMP's infinity and its ends
+  // (`… is not safe to convert to a number`) and read DATE's infinity as
+  // 185542587100800000.
+  beforeAll(async () => {
+    await harness.conn.query(`
+      CREATE OR REPLACE TABLE temporals AS
+      SELECT CAST(r AS BIGINT) AS "__rowid__", CAST(ts AS TIMESTAMP) AS ts,
+        CAST(ts_s AS TIMESTAMP_S) AS ts_s, CAST(ts_ms AS TIMESTAMP_MS) AS ts_ms,
+        CAST(ts_ns AS TIMESTAMP_NS) AS ts_ns, CAST(tstz AS TIMESTAMPTZ) AS tstz,
+        CAST(d AS DATE) AS d
+      FROM (VALUES
+        (0, 'infinity', 'infinity', 'infinity', 'infinity', 'infinity', 'infinity'),
+        (1, '-infinity', '-infinity', '-infinity', '-infinity', '-infinity', '-infinity'),
+        (2, NULL, NULL, NULL, NULL, NULL, NULL),
+        (3, '2024-01-02 03:04:05.123456', '2024-01-02 03:04:05', '2024-01-02 03:04:05.123',
+         '2024-01-02 03:04:05.123456789', '2024-01-02 03:04:05.123456+00', '2024-01-02'),
+        (4, '294247-01-10 04:00:54.775806', '294247-01-10 04:00:54', '294247-01-10 04:00:54.775',
+         '2262-04-11 23:47:16.854775806', '294247-01-10 04:00:54.775806+00', '5881580-07-10'),
+        (5, '290309-12-22 (BC) 00:00:00', '290309-12-22 (BC) 00:00:00',
+         '290309-12-22 (BC) 00:00:00', '1677-09-22', '290309-12-22 (BC) 00:00:00+00',
+         '5877642-06-25 (BC)')
+      ) AS v(r, ts, ts_s, ts_ms, ts_ns, tstz, d)`);
+    relations.set('temporals', { schema: await describeSchema('temporals'), rows: 6 });
+  });
+
+  // Epoch milliseconds, as Arrow reads them; past ±2^53 the nearest number.
+  const EXPECTED: [string, (number | null)[]][] = [
+    [
+      'ts',
+      [
+        Infinity,
+        -Infinity,
+        null,
+        1_704_164_645_123.456,
+        9_223_372_036_854_776,
+        -9_223_372_022_400_000,
+      ],
+    ],
+    [
+      'ts_s',
+      [Infinity, -Infinity, null, 1_704_164_645_000, 9_223_372_036_854_000, -9_223_372_022_400_000],
+    ],
+    [
+      'ts_ms',
+      [Infinity, -Infinity, null, 1_704_164_645_123, 9_223_372_036_854_776, -9_223_372_022_400_000],
+    ],
+    [
+      'ts_ns',
+      [
+        Infinity,
+        -Infinity,
+        null,
+        1_704_164_645_123.4568,
+        9_223_372_036_854.775,
+        -9_223_286_400_000,
+      ],
+    ],
+    [
+      'tstz',
+      [
+        Infinity,
+        -Infinity,
+        null,
+        1_704_164_645_123.456,
+        9_223_372_036_854_776,
+        -9_223_372_022_400_000,
+      ],
+    ],
+    [
+      'd',
+      [
+        Infinity,
+        -Infinity,
+        null,
+        1_704_153_600_000,
+        185_542_587_014_400_000,
+        -185_542_587_014_400_000,
+      ],
+    ],
+  ];
+
+  describe.each([
+    ['the worker path', () => workerBridge],
+    ['conn.query', () => nodeBridge],
+  ] as const)('through %s', (_path, bridgeOf) => {
+    it('the columns are the types they claim', () => {
+      const { schema } = tableOn('temporals', bridgeOf());
+      expect(schema.map((c) => [c.name, c.type, c.originalType])).toEqual([
+        ['__rowid__', 'integer', 'BIGINT'],
+        ['ts', 'timestamp', 'TIMESTAMP'],
+        ['ts_s', 'timestamp', 'TIMESTAMP_S'],
+        ['ts_ms', 'timestamp', 'TIMESTAMP_MS'],
+        ['ts_ns', 'timestamp', 'TIMESTAMP_NS'],
+        ['tstz', 'timestamp', 'TIMESTAMP WITH TIME ZONE'],
+        ['d', 'date', 'DATE'],
+      ]);
+    });
+
+    it.each(EXPECTED)('getCellValue reads %s, infinity as ±Infinity', async (column, expected) => {
+      const { actions } = tableOn('temporals', bridgeOf());
+      for (const [rowId, value] of expected.entries()) {
+        expect(await actions.getCellValue(rowId, column), `row ${rowId}`).toBe(value);
+      }
+    });
+
+    it.each(EXPECTED)(
+      'getColumnValues reads %s the same, in an array',
+      async (column, expected) => {
+        const { actions } = tableOn('temporals', bridgeOf());
+        const values = await actions.getColumnValues(column);
+        expect(Array.isArray(values)).toBe(true);
+        expect(values).toEqual(expected);
+        // Without the NULL row, still an array: no typed array holds a date.
+        const infinities = await actions.getColumnValues(column, { limit: 2 });
+        expect(Array.isArray(infinities)).toBe(true);
+        expect(infinities).toEqual([Infinity, -Infinity]);
+      },
+    );
+  });
+});
+
 describe('a struct field named ""', () => {
   beforeAll(async () => {
     const loader = makeNodeBridge(harness.conn, harness.db);

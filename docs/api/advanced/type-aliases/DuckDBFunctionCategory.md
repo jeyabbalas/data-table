@@ -8,6 +8,6 @@
 
 > **DuckDBFunctionCategory** = `"aggregate"` \| `"numeric"` \| `"string"` \| `"date/time"` \| `"casting"` \| `"conditional"` \| `"list"` \| `"struct"` \| `"window"` \| `"utility"`
 
-Defined in: [sql-editor/duckdbFunctionDetails.ts:29](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/sql-editor/duckdbFunctionDetails.ts#L29)
+Defined in: [sql-editor/duckdbFunctionDetails.ts:29](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/duckdbFunctionDetails.ts#L29)
 
 Category labels surfaced in the autocomplete `detail` slot.

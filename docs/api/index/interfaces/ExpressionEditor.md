@@ -6,7 +6,7 @@
 
 # Interface: ExpressionEditor
 
-Defined in: [derived/ExpressionEditorTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L18)
+Defined in: [derived/ExpressionEditorTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L18)
 
 Interface that custom expression editors must implement.
 
@@ -19,7 +19,7 @@ bubble from child elements) so the hosting panel can detect content changes.
 
 > `readonly` **element**: `HTMLElement`
 
-Defined in: [derived/ExpressionEditorTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L20)
+Defined in: [derived/ExpressionEditorTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L20)
 
 The root DOM element to mount in the panel/modal
 
@@ -29,7 +29,7 @@ The root DOM element to mount in the panel/modal
 
 > **destroy**(): `void`
 
-Defined in: [derived/ExpressionEditorTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L32)
+Defined in: [derived/ExpressionEditorTypes.ts:32](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L32)
 
 Clean up resources
 
@@ -43,7 +43,7 @@ Clean up resources
 
 > **focus**(): `void`
 
-Defined in: [derived/ExpressionEditorTypes.ts:26](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L26)
+Defined in: [derived/ExpressionEditorTypes.ts:26](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L26)
 
 Focus the editor
 
@@ -57,7 +57,7 @@ Focus the editor
 
 > **getValue**(): `string`
 
-Defined in: [derived/ExpressionEditorTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L22)
+Defined in: [derived/ExpressionEditorTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L22)
 
 Get current editor content
 
@@ -71,7 +71,7 @@ Get current editor content
 
 > **setError**(`error`): `void`
 
-Defined in: [derived/ExpressionEditorTypes.ts:28](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L28)
+Defined in: [derived/ExpressionEditorTypes.ts:28](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L28)
 
 Display an error message inline (null clears the error)
 
@@ -91,7 +91,7 @@ Display an error message inline (null clears the error)
 
 > **setValue**(`value`): `void`
 
-Defined in: [derived/ExpressionEditorTypes.ts:24](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L24)
+Defined in: [derived/ExpressionEditorTypes.ts:24](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L24)
 
 Set editor content (for editing existing columns)
 
@@ -111,7 +111,7 @@ Set editor content (for editing existing columns)
 
 > **updateCompletionContext**(`context`): `void`
 
-Defined in: [derived/ExpressionEditorTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L30)
+Defined in: [derived/ExpressionEditorTypes.ts:30](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L30)
 
 Update completion context when schema changes
 

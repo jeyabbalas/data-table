@@ -6,7 +6,7 @@
 
 # Class: VisualizationRegistry
 
-Defined in: [visualizations/VisualizationRegistry.ts:131](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L131)
+Defined in: [visualizations/VisualizationRegistry.ts:131](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L131)
 
 Per-instance registry of visualization types. Built-ins are seeded at
 construction and on `resetToDefaults()`.
@@ -15,7 +15,7 @@ construction and on `resetToDefaults()`.
 
 ```ts
 import { createDataTable, VisualizationRegistry } from '@jeyabbalas/data-table';
-import { BaseVisualization } from '@jeyabbalas/data-table/advanced';
+import { BaseVisualization, isNumericType } from '@jeyabbalas/data-table/advanced';
 
 class MyBoxPlot extends BaseVisualization {
   // ...a constructor that starts the first fetch, fetchData(), render(), and the six
@@ -26,7 +26,7 @@ class MyBoxPlot extends BaseVisualization {
 const registry = new VisualizationRegistry();
 registry.register({
   name: 'box-plot',
-  isApplicable: (type) => type === 'float' || type === 'integer',
+  isApplicable: isNumericType, // integer, float and decimal
   constructor: MyBoxPlot,
   priority: 10, // higher than built-ins (0) — wins for numeric columns
 });
@@ -40,7 +40,7 @@ const table = await createDataTable({ container, source, visualizationRegistry: 
 
 > **new VisualizationRegistry**(): `VisualizationRegistry`
 
-Defined in: [visualizations/VisualizationRegistry.ts:134](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L134)
+Defined in: [visualizations/VisualizationRegistry.ts:134](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L134)
 
 #### Returns
 
@@ -52,7 +52,7 @@ Defined in: [visualizations/VisualizationRegistry.ts:134](https://github.com/jey
 
 > **create**(`container`, `column`, `options`): [`BaseVisualization`](../../advanced/classes/BaseVisualization.md) \| `null`
 
-Defined in: [visualizations/VisualizationRegistry.ts:168](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L168)
+Defined in: [visualizations/VisualizationRegistry.ts:168](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L168)
 
 Create the appropriate visualization for a column. Iterates the
 registry by descending priority and returns the first match or null.
@@ -81,7 +81,7 @@ registry by descending priority and returns the first match or null.
 
 > **getRegisteredTypes**(): `string`[]
 
-Defined in: [visualizations/VisualizationRegistry.ts:192](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L192)
+Defined in: [visualizations/VisualizationRegistry.ts:192](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L192)
 
 List all registered visualization type names.
 
@@ -95,7 +95,7 @@ List all registered visualization type names.
 
 > **isApplicable**(`column`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:185](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L185)
+Defined in: [visualizations/VisualizationRegistry.ts:185](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L185)
 
 Check if any registered visualization matches the column's type.
 
@@ -115,7 +115,7 @@ Check if any registered visualization matches the column's type.
 
 > **register**(`registration`): `void`
 
-Defined in: [visualizations/VisualizationRegistry.ts:142](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L142)
+Defined in: [visualizations/VisualizationRegistry.ts:142](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L142)
 
 Register a visualization type. Replaces any existing registration
 with the same name.
@@ -136,7 +136,7 @@ with the same name.
 
 > **resetToDefaults**(): `void`
 
-Defined in: [visualizations/VisualizationRegistry.ts:199](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L199)
+Defined in: [visualizations/VisualizationRegistry.ts:199](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L199)
 
 Clear the registry and re-register all built-in visualization types.
 
@@ -150,7 +150,7 @@ Clear the registry and re-register all built-in visualization types.
 
 > **unregister**(`name`): `boolean`
 
-Defined in: [visualizations/VisualizationRegistry.ts:155](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/VisualizationRegistry.ts#L155)
+Defined in: [visualizations/VisualizationRegistry.ts:155](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/VisualizationRegistry.ts#L155)
 
 Unregister a visualization type by name.
 

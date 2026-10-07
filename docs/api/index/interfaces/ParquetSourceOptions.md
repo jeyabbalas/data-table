@@ -6,7 +6,7 @@
 
 # Interface: ParquetSourceOptions
 
-Defined in: [data/sourceOptions.ts:54](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/sourceOptions.ts#L54)
+Defined in: [data/sourceOptions.ts:54](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/sourceOptions.ts#L54)
 
 How a Parquet source is read.
 
@@ -16,7 +16,7 @@ How a Parquet source is read.
 
 > `optional` **columns?**: readonly `string`[]
 
-Defined in: [data/sourceOptions.ts:63](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/data/sourceOptions.ts#L63)
+Defined in: [data/sourceOptions.ts:63](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/sourceOptions.ts#L63)
 
 The columns to load, by their names in the file (case-sensitive), in
 this order. Default: every column. The others are never read, and the

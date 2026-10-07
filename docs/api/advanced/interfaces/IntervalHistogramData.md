@@ -6,7 +6,7 @@
 
 # Interface: IntervalHistogramData
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:62](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L62)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:62](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L62)
 
 Complete interval histogram data including bins and metadata
 
@@ -16,7 +16,7 @@ Complete interval histogram data including bins and metadata
 
 > **bins**: [`IntervalHistogramBin`](IntervalHistogramBin.md)[]
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:64](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L64)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:64](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L64)
 
 Array of bins sorted by binStartSeconds
 
@@ -26,7 +26,7 @@ Array of bins sorted by binStartSeconds
 
 > **isSingleValue**: `boolean`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:76](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L76)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:76](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L76)
 
 True when all non-null values are identical
 
@@ -36,7 +36,7 @@ True when all non-null values are identical
 
 > **maxSeconds**: `number` \| `null`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:70](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L70)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:70](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L70)
 
 Maximum non-null interval in total seconds
 
@@ -46,7 +46,7 @@ Maximum non-null interval in total seconds
 
 > **medianSeconds**: `number` \| `null`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:72](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L72)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:72](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L72)
 
 Median non-null interval in total seconds
 
@@ -56,7 +56,7 @@ Median non-null interval in total seconds
 
 > **minSeconds**: `number` \| `null`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:68](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L68)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:68](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L68)
 
 Minimum non-null interval in total seconds
 
@@ -66,7 +66,7 @@ Minimum non-null interval in total seconds
 
 > **nullCount**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:66](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L66)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:66](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L66)
 
 Count of null values in the column
 
@@ -76,6 +76,6 @@ Count of null values in the column
 
 > **total**: `number`
 
-Defined in: [visualizations/histogram/IntervalHistogramData.ts:74](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/visualizations/histogram/IntervalHistogramData.ts#L74)
+Defined in: [visualizations/histogram/IntervalHistogramData.ts:74](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/visualizations/histogram/IntervalHistogramData.ts#L74)
 
 Total count of all values (including nulls)

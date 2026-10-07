@@ -8,7 +8,7 @@
 
 > **ExpressionEditorFactory** = (`container`, `context`, `config`) => [`ExpressionEditor`](../interfaces/ExpressionEditor.md)
 
-Defined in: [derived/ExpressionEditorTypes.ts:67](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/derived/ExpressionEditorTypes.ts#L67)
+Defined in: [derived/ExpressionEditorTypes.ts:67](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/derived/ExpressionEditorTypes.ts#L67)
 
 Factory function for creating expression editors.
 Downstream apps provide this to use DefaultExpressionEditor, Monaco or

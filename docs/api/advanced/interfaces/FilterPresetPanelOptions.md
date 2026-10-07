@@ -6,7 +6,7 @@
 
 # Interface: FilterPresetPanelOptions
 
-Defined in: [filters/FilterPresetPanel.ts:17](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterPresetPanel.ts#L17)
+Defined in: [filters/FilterPresetPanel.ts:17](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPresetPanel.ts#L17)
 
 Construction options for [FilterPresetPanel](../classes/FilterPresetPanel.md).
 
@@ -16,7 +16,7 @@ Construction options for [FilterPresetPanel](../classes/FilterPresetPanel.md).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [filters/FilterPresetPanel.ts:18](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterPresetPanel.ts#L18)
+Defined in: [filters/FilterPresetPanel.ts:18](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPresetPanel.ts#L18)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [filters/FilterPresetPanel.ts:18](https://github.com/jeyabbalas/data
 
 > `optional` **colorSchemeSource?**: `HTMLElement`
 
-Defined in: [filters/FilterPresetPanel.ts:27](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterPresetPanel.ts#L27)
+Defined in: [filters/FilterPresetPanel.ts:27](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPresetPanel.ts#L27)
 
 Element to mirror `data-dt-color-scheme` from (typically `.dt-root`).
 
@@ -34,7 +34,7 @@ Element to mirror `data-dt-color-scheme` from (typically `.dt-root`).
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [filters/FilterPresetPanel.ts:25](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterPresetPanel.ts#L25)
+Defined in: [filters/FilterPresetPanel.ts:25](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPresetPanel.ts#L25)
 
 Unique per-instance identifier mixed into the title's id, which names
 the panel, so two tables on the same page don't share it. Normally
@@ -47,6 +47,6 @@ generates its own.
 
 > `optional` **messages?**: [`Strings`](../../index/interfaces/Strings.md)
 
-Defined in: [filters/FilterPresetPanel.ts:29](https://github.com/jeyabbalas/data-table/blob/f0a74064947b08a567448b3a07c08ba71d58898e/src/filters/FilterPresetPanel.ts#L29)
+Defined in: [filters/FilterPresetPanel.ts:29](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterPresetPanel.ts#L29)
 
 Resolved i18n strings. Defaults to English.

@@ -56,7 +56,9 @@ export interface ParquetSourceOptions {
    * The columns to load, by their names in the file (case-sensitive), in
    * this order. Default: every column. The others are never read, and the
    * memory check before the load counts only these. Leave out
-   * `__rowid__`: the table adds that column itself.
+   * `__rowid__`: the table adds that column itself. A name the file lacks
+   * rejects the load with `LOAD_INVALID_OPTIONS`, listing the names in
+   * `details.missing`, and the table keeps the data it had.
    */
   columns?: readonly string[] | undefined;
 }
@@ -70,7 +72,8 @@ export interface ParquetSourceOptions {
  * the wrong type or out of range, or an unknown key, rejects the load with a
  * `LoadError` whose code is `LOAD_INVALID_OPTIONS` (or
  * `LOAD_INVALID_TIMEZONE`), and `details.option` names it. The table keeps
- * the data it had.
+ * the data it had, as it does when DuckDB does not know the time zone or
+ * the Parquet file lacks one of the `columns`.
  */
 export interface SourceOptions {
   /**
@@ -84,7 +87,8 @@ export interface SourceOptions {
    * UTC either way. It is a setting of the worker's DuckDB connection, so it
    * holds for every table on one `WorkerBridge`, and every load sets it: to
    * UTC unless given. Default: `'UTC'`. A name DuckDB does not know rejects
-   * the load with `LOAD_INVALID_TIMEZONE`.
+   * the load with `LOAD_INVALID_TIMEZONE`, and the table keeps the data it
+   * had.
    */
   timezone?: string | undefined;
   /** Read by a CSV load. */
@@ -236,4 +240,15 @@ export function validateSourceOptions(options: unknown): void {
       );
     }
   }
+}
+
+/**
+ * Whether a load failed for its source options: a value
+ * {@link validateSourceOptions} turns away, a time zone DuckDB does not
+ * know, or Parquet `columns` the file lacks. The worker rejects these before
+ * it creates or replaces a table, so the table keeps the data it had.
+ */
+export function rejectsSourceOptions(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null | undefined)?.code;
+  return code === 'LOAD_INVALID_OPTIONS' || code === 'LOAD_INVALID_TIMEZONE';
 }

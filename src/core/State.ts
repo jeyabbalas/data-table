@@ -171,6 +171,53 @@ export function resetTableState(state: TableState): void {
 }
 
 /**
+ * Hold the values {@link resetTableState} resets, and return a function
+ * that sets them back in one batch: for a load that is turned away after the
+ * reset, before it changes any table. Hover is left as the reset made it, as
+ * the pointer has moved on.
+ *
+ * @param state - The TableState to capture
+ * @returns A function that puts the captured values back
+ */
+export function captureTableState(state: TableState): () => void {
+  const tableName = state.tableName.get();
+  const schema = state.schema.get();
+  const totalRows = state.totalRows.get();
+  const baseTableName = state.baseTableName.get();
+  const derivedColumns = state.derivedColumns.get();
+  const filters = state.filters.get();
+  const filteredRows = state.filteredRows.get();
+  const sortColumns = state.sortColumns.get();
+  const visibleColumns = state.visibleColumns.get();
+  const columnOrder = state.columnOrder.get();
+  const columnWidths = state.columnWidths.get();
+  const pinnedColumns = state.pinnedColumns.get();
+  const hiddenColumnInfo = state.hiddenColumnInfo.get();
+  const columnHeaderTooltips = state.columnHeaderTooltips.get();
+  const selectedRows = state.selectedRows.get();
+  const focusedCell = state.focusedCell.get();
+  return () =>
+    batch(() => {
+      state.tableName.set(tableName);
+      state.schema.set(schema);
+      state.totalRows.set(totalRows);
+      state.baseTableName.set(baseTableName);
+      state.derivedColumns.set(derivedColumns);
+      state.filters.set(filters);
+      state.filteredRows.set(filteredRows);
+      state.sortColumns.set(sortColumns);
+      state.visibleColumns.set(visibleColumns);
+      state.columnOrder.set(columnOrder);
+      state.columnWidths.set(columnWidths);
+      state.pinnedColumns.set(pinnedColumns);
+      state.hiddenColumnInfo.set(hiddenColumnInfo);
+      state.columnHeaderTooltips.set(columnHeaderTooltips);
+      state.selectedRows.set(selectedRows);
+      state.focusedCell.set(focusedCell);
+    });
+}
+
+/**
  * Initialize column-related state from a schema
  *
  * Sets up the schema, visibleColumns, and columnOrder based on the provided

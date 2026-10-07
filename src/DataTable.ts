@@ -58,7 +58,11 @@ import type { TableEvents } from './core/TableEvents';
 import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
-import { validateSourceOptions, type SourceOptions } from './data/sourceOptions';
+import {
+  rejectsSourceOptions,
+  validateSourceOptions,
+  type SourceOptions,
+} from './data/sourceOptions';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
@@ -1593,10 +1597,20 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     let loadEpoch: number | null = null;
     const superseded = (): boolean => loadEpoch !== null && actions.getLoadEpoch() !== loadEpoch;
     let failed = false;
+    // The presets and annotations cleared below, to put back if the worker
+    // rejects the load for its source options, as `actions` puts back the
+    // rest: such a load keeps the data it had.
+    let restoreCleared: (() => void) | null = null;
     try {
       // A bad source option fails the load here, as loadError, and leaves
       // the table as it was: everything below clears it for the new data.
       validateSourceOptions(loadOpts?.sourceOptions);
+      const ownPresets = ownsPresetManager ? presetManager?.presets.get() : undefined;
+      const annotationFile = annotationStore.count() > 0 ? annotationStore.toJSON() : null;
+      restoreCleared = () => {
+        if (ownPresets) presetManager?.presets.set(ownPresets);
+        if (annotationFile) annotationStore.loadJSON(annotationFile, 'replace');
+      };
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.
       // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
@@ -1698,7 +1712,15 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     } catch (error) {
       failed = true;
       // The table the load replaced is stranded already (see
-      // `strandedTables`): nothing names it after a failed load.
+      // `strandedTables`): nothing names it after a failed load, unless it
+      // was rejected for its source options, and `actions` put it back.
+      if (restoreCleared && rejectsSourceOptions(error) && !destroyed && !superseded()) {
+        try {
+          restoreCleared();
+        } catch (err) {
+          console.warn('[data-table] Could not put back the annotations:', err);
+        }
+      }
       const typed =
         error instanceof DataTableError
           ? error

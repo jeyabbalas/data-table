@@ -58,6 +58,10 @@ export async function dropSourceFile(db: AsyncDuckDB, fileName: string): Promise
  * A `LOAD_INVALID_OPTIONS` error naming the option, as `csv.delimiter`. The
  * main thread checks options before a load (`validateSourceOptions`); these
  * catch a loader called without that check.
+ *
+ * A loader throws this, and `LOAD_INVALID_TIMEZONE`, only before it creates
+ * or replaces a table: the main thread then puts back the table it had
+ * (`rejectsSourceOptions` in src/data/sourceOptions.ts).
  */
 export function invalidOptionError(option: string, message: string): Error {
   return Object.assign(new Error(message), {

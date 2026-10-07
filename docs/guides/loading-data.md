@@ -13,6 +13,7 @@ or a spinner.
   values, a JSON layout, the Parquet columns to load
 - Show a progress bar from `loadStart` / `loadProgress` / `loadComplete`
 - Recover from a load failure and retry
+- Know how dates and timestamps show and read, `infinity` included
 - Know when text columns of dates load as dates
 - Know what list, struct, map and JSON columns become, and how to read their values
 - Replace the current dataset without destroying the table
@@ -294,6 +295,27 @@ table.on('loadError', ({ error }) => {
 See [Troubleshooting §27](../troubleshooting.md#27-loaderror-with-code-load_memory_exceeded)
 for what to do about it.
 
+## Dates and timestamps
+
+A `DATE` cell shows `2024-03-15`, and a `TIMESTAMP` cell, of any precision,
+its time to the millisecond, `2024-03-15 14:30:00.25`; a
+`TIMESTAMP WITH TIME ZONE` cell shows UTC, `2024-03-15 14:30:00.25 +00:00`.
+A year past 9999 or before 1 shows with its sign, as JavaScript writes it:
+`+012000-01-01`, and `-000043-03-15` for 44 BC. DuckDB's `infinity` and
+`-infinity` show as `infinity` and `-infinity`, and sort after and before
+every other date. A CSV file can hold them: PostgreSQL writes them for its
+infinite dates, and DuckDB's CSV reader types such a column as a date or a
+timestamp.
+
+[`getCellValue`](../api-reference.md#getcellvalue) and
+[`getColumnValues`](../api-reference.md#column-values-read-only-export) read a
+date or timestamp as epoch milliseconds, a timestamp's digits past the
+millisecond as a fraction: `2024-03-15 14:30:00.123456` is
+`1710513000123.456`. `infinity` and `-infinity` are `Infinity` and
+`-Infinity`. Past ±2^53 ms, after year 287396 or before 283458 BC, the
+number is the nearest one, as a `BIGINT`'s is past 2^53
+(`src/worker/duckdb.ts`, `temporalReader`).
+
 ## Dates and times stored as text
 
 Text columns of ISO 8601 dates (`2024-03-15`), timestamps
@@ -544,8 +566,9 @@ the column as JSON. To look at a value rather than compute with it, open the
 [value inspector](#the-value-inspector) on its cell.
 
 A raw `bridge.query` reads values as Arrow carries them, which loses
-`DECIMAL`, `HUGEINT` and `INTERVAL` values inside a nested value and cannot
-carry a VARIANT, or a value holding one, at all. Select a nested column as
+`DECIMAL`, `HUGEINT` and `INTERVAL` values inside a nested value, gets
+`infinity` wrong for a date or timestamp inside a STRUCT, MAP or UNION, and
+cannot carry a VARIANT, or a value holding one, at all. Select a nested column as
 `CAST(to_json(c) AS VARCHAR)`, which is exact for every type but those with
 a VARIANT: select a VARIANT as `CAST(c AS JSON)`, and a type holding one
 (`VARIANT[]`, `STRUCT(v VARIANT)`) as `CAST(CAST(c AS VARIANT) AS JSON)`. See

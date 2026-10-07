@@ -16,6 +16,7 @@ import type { StateActions } from '../../src/core/Actions';
 import type { WorkerBridge } from '../../src/data/WorkerBridge';
 import type { BaseVisualization } from '../../src/visualizations/BaseVisualization';
 import type { Filter } from '../../src/core/types';
+import { deferred, type Deferred } from '../helpers/rowFetchBridge';
 
 /** Stub visualization that tracks concurrency through a shared counter. */
 function makeStubViz(tracker: { inflight: number; peak: number }, ms = 10): BaseVisualization {
@@ -120,6 +121,61 @@ describe('CrossfilterCoordinator — concurrency cap', () => {
   });
 });
 
+describe('CrossfilterCoordinator — overlapping filter changes', () => {
+  /** A chart whose refetches stay pending until the test settles each one. */
+  function makeHeldViz(): {
+    viz: BaseVisualization;
+    calls: { filters: Filter[]; settle: () => void }[];
+  } {
+    const calls: { filters: Filter[]; settle: () => void }[] = [];
+    const viz = {
+      updateFilters(filters: Filter[]): Promise<void> {
+        return new Promise<void>((resolve) => calls.push({ filters, settle: resolve }));
+      },
+      isDestroyed: () => false,
+    } as unknown as BaseVisualization;
+    return { viz, calls };
+  }
+
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  };
+
+  it('leaves a chart with the newer filters when the newer change gets to it first', async () => {
+    const state = createTableState();
+    state.tableName.set('t');
+    state.totalRows.set(100);
+    // One refetch at a time, so the second chart waits its turn in each change.
+    const coord = new CrossfilterCoordinator(state, makeActions(), makeBridge(), 1);
+    const a = makeHeldViz();
+    const b = makeHeldViz();
+    coord.register('a', a.viz);
+    coord.register('b', b.viz);
+
+    const older = [{ type: 'not-null', column: 'a' } as unknown as Filter];
+    const newer = [{ type: 'null', column: 'a' } as unknown as Filter];
+    state.filters.set(older);
+    await flush();
+    state.filters.set(newer);
+    await flush();
+    expect(a.calls.map((c) => c.filters)).toEqual([older, newer]);
+
+    // The newer change's refetch of `a` lands first and moves on to `b`.
+    a.calls[1]!.settle();
+    await flush();
+    expect(b.calls.map((c) => c.filters)).toEqual([newer]);
+    b.calls[0]!.settle();
+
+    // Then the older change's refetch of `a` lands: its turn for `b` has
+    // passed to the newer change, which refetched it already.
+    a.calls[0]!.settle();
+    await flush();
+    expect(b.calls.map((c) => c.filters)).toEqual([newer]);
+
+    coord.destroy();
+  });
+});
+
 describe('CrossfilterCoordinator — after destroy', () => {
   /** A bridge whose count query stays pending until the test settles it. */
   function makeDeferredBridge(): {
@@ -191,5 +247,121 @@ describe('CrossfilterCoordinator — after destroy', () => {
     await coord.syncExistingFilters();
 
     expect(bridge.query).not.toHaveBeenCalled();
+  });
+});
+
+describe('CrossfilterCoordinator — filter cycle complete', () => {
+  /** A chart whose refetches stay pending until the test settles them. */
+  function makeHeldViz(): { viz: BaseVisualization; refetches: Deferred<void>[] } {
+    const refetches: Deferred<void>[] = [];
+    const viz = {
+      updateFilters(_filters: Filter[]): Promise<void> {
+        const refetch = deferred<void>();
+        refetches.push(refetch);
+        return refetch.promise;
+      },
+      isDestroyed: () => false,
+    } as unknown as BaseVisualization;
+    return { viz, refetches };
+  }
+
+  /** A bridge whose count queries stay pending until the test settles them. */
+  function makeHeldBridge(): { bridge: WorkerBridge; counts: Deferred<{ cnt: number }[]>[] } {
+    const counts: Deferred<{ cnt: number }[]>[] = [];
+    const bridge = {
+      query: vi.fn(() => {
+        const count = deferred<{ cnt: number }[]>();
+        counts.push(count);
+        return count.promise;
+      }),
+    } as unknown as WorkerBridge;
+    return { bridge, counts };
+  }
+
+  /**
+   * A coordinator with one held chart, whose hook records the filters and
+   * the row count it sees, as the facade's `filterChange` payload reads it.
+   */
+  function setup() {
+    const state = createTableState();
+    state.tableName.set('t');
+    state.totalRows.set(100);
+    state.filteredRows.set(100);
+    const { bridge, counts } = makeHeldBridge();
+    const seen: { filters: Filter[]; filteredRows: number }[] = [];
+    const coord = new CrossfilterCoordinator(state, makeActions(), bridge, 4, {
+      onFilterCycleComplete: (filters) => {
+        seen.push({ filters, filteredRows: state.filteredRows.get() });
+      },
+    });
+    const chart = makeHeldViz();
+    coord.register('a', chart.viz);
+    return { state, coord, counts, chart, seen };
+  }
+
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  const A = { type: 'not-null', column: 'a' } as unknown as Filter;
+  const B = { type: 'null', column: 'b' } as unknown as Filter;
+
+  it('fires once the row count settles, while a chart refetch is still pending', async () => {
+    const { state, coord, counts, chart, seen } = setup();
+
+    state.filters.set([A]);
+    await flush();
+    expect(chart.refetches).toHaveLength(1);
+    expect(counts).toHaveLength(1);
+    expect(seen).toEqual([]);
+
+    counts[0]!.resolve([{ cnt: 42 }]);
+    await flush();
+    expect(seen).toEqual([{ filters: [A], filteredRows: 42 }]);
+
+    // The chart's refetch settling later fires nothing more.
+    chart.refetches[0]!.resolve();
+    await flush();
+    expect(seen).toHaveLength(1);
+    coord.destroy();
+  });
+
+  it('fires for cleared filters without waiting for the charts', async () => {
+    const { state, coord, counts, chart, seen } = setup();
+    state.filters.set([A]);
+    await flush();
+    counts[0]!.resolve([{ cnt: 42 }]);
+    await flush();
+    seen.length = 0;
+
+    state.filters.set([]);
+    await flush();
+    // No count to run: every row is in. The charts rebuild unfiltered.
+    expect(counts).toHaveLength(1);
+    expect(chart.refetches).toHaveLength(2);
+    expect(seen).toEqual([{ filters: [], filteredRows: 100 }]);
+    coord.destroy();
+  });
+
+  it('skips an older cycle whose count settles after a newer cycle started', async () => {
+    const { state, coord, counts, chart, seen } = setup();
+
+    state.filters.set([A]);
+    await flush();
+    state.filters.set([A, B]);
+    await flush();
+    expect(counts).toHaveLength(2);
+    expect(chart.refetches).toHaveLength(2);
+
+    counts[0]!.resolve([{ cnt: 42 }]);
+    await flush();
+    expect(seen).toEqual([]);
+    expect(state.filteredRows.get()).toBe(100);
+
+    counts[1]!.resolve([{ cnt: 7 }]);
+    await flush();
+    expect(seen).toEqual([{ filters: [A, B], filteredRows: 7 }]);
+
+    for (const refetch of chart.refetches) refetch.resolve();
+    await flush();
+    expect(seen).toHaveLength(1);
+    coord.destroy();
   });
 });

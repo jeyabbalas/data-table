@@ -8,6 +8,7 @@
 
 import type { StateActions } from '../core/Actions';
 import { takenColumnName } from '../core/columnNames';
+import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -183,14 +184,22 @@ export class DerivedColumnEditPanel {
     const nameLabel = document.createElement('label');
     nameLabel.textContent = this.messages.derived.nameLabel;
 
+    // Named by its label: a description alone (the error below) is no name.
+    const id = `${p}-${nextInstanceId()}-derived-edit`;
     const nameInput = document.createElement('input');
+    nameInput.id = `${id}-name`;
+    nameLabel.htmlFor = nameInput.id;
     nameInput.type = 'text';
     nameInput.className = `${p}-filter-input ${p}-derived-edit-name-input`;
     nameInput.autocomplete = 'off';
     nameInput.spellcheck = false;
 
+    // Why the name cannot be used: described by the input, not live, as it
+    // changes with every key typed.
     const nameError = document.createElement('div');
     nameError.className = `${p}-derived-edit-name-error`;
+    nameError.id = `${id}-name-error`;
+    nameInput.setAttribute('aria-describedby', nameError.id);
 
     nameSection.appendChild(nameLabel);
     nameSection.appendChild(nameInput);
@@ -412,8 +421,7 @@ export class DerivedColumnEditPanel {
 
     // Populate name input
     this.nameInput.value = def.name;
-    this.nameErrorEl.textContent = '';
-    this.nameErrorEl.style.display = 'none';
+    this.setNameError(null);
 
     // Clear type preview
     this.typePreview.textContent = '';
@@ -528,8 +536,7 @@ export class DerivedColumnEditPanel {
     const name = this.nameInput.value.trim();
 
     if (!name) {
-      this.nameErrorEl.textContent = this.messages.derived.nameRequired;
-      this.nameErrorEl.style.display = '';
+      this.setNameError(this.messages.derived.nameRequired);
       return;
     }
 
@@ -540,15 +547,26 @@ export class DerivedColumnEditPanel {
     const taken = takenColumnName(name, this.otherColumnNames());
 
     if (taken !== undefined) {
-      this.nameErrorEl.textContent =
+      this.setNameError(
         taken === ROWID_COLUMN
           ? this.messages.derived.nameReserved(name)
-          : this.messages.derived.nameDuplicate(taken);
-      this.nameErrorEl.style.display = '';
+          : this.messages.derived.nameDuplicate(taken),
+      );
     } else {
-      this.nameErrorEl.textContent = '';
-      this.nameErrorEl.style.display = 'none';
+      this.setNameError(null);
     }
+  }
+
+  /**
+   * Show why the name cannot be used, and mark the input invalid; `null`
+   * clears both. The stylesheet hides the message, so showing it takes a
+   * `display` of its own: clearing the inline one leaves the stylesheet's.
+   */
+  private setNameError(message: string | null): void {
+    this.nameErrorEl.textContent = message ?? '';
+    this.nameErrorEl.style.display = message === null ? 'none' : 'block';
+    if (message === null) this.nameInput.removeAttribute('aria-invalid');
+    else this.nameInput.setAttribute('aria-invalid', 'true');
   }
 
   private isNameValid(): boolean {
@@ -580,6 +598,11 @@ export class DerivedColumnEditPanel {
 
     const expression = this.currentEditor.getValue().trim();
     if (!expression) {
+      // Said in the type preview, where Validate reports everything else.
+      // The editor's own message line stays hidden by the stylesheet, as it
+      // would repeat the preview.
+      this.typePreview.textContent = this.messages.derived.expressionRequired;
+      this.typePreview.style.color = 'var(--dt-error)';
       this.currentEditor.setError(this.messages.derived.expressionRequired);
       return;
     }

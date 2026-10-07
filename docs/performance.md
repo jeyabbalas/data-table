@@ -469,19 +469,17 @@ any SQL-driving code.
 ### Time a filter change
 
 ```ts
-table.on('filterChange', () => {
-  const t = performance.now();
-  table.on(
-    'filterChange',
-    () => {
-      console.log(`Filter change rendered in ${(performance.now() - t).toFixed(1)} ms`);
-    },
-    { once: true },
-  );
+const t = performance.now();
+const off = table.on('filterChange', ({ filteredRowCount }) => {
+  off();
+  console.log(`${filteredRowCount} rows counted in ${(performance.now() - t).toFixed(1)} ms`);
 });
+table.actions.addFilter({ type: 'range', column: 'fare_amount', min: 10, max: 50 });
 ```
 
-This approximates the filter → re-query → re-render round-trip.
+This times the filter → row-count round-trip. `filterChange` does not wait
+for the column charts, which refetch alongside the count and can take
+longer on a large table.
 
 ### Profile in DevTools
 

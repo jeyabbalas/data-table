@@ -109,7 +109,10 @@ export type TableEvents = {
     details?: Record<string, unknown>;
   };
 
-  /** Fired on any change to the active filter list. */
+  /**
+   * Fired on any change to the active filter list, once `filteredRowCount`
+   * is known, without waiting for the column charts to refetch.
+   */
   filterChange: {
     filters: readonly Filter[];
     filteredRowCount: number;

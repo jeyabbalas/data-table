@@ -195,6 +195,19 @@ describe('CellRenderer', () => {
         expect(renderer.formatValue(at('005'), 'timestamp')).toBe('2020-01-01 00:00:16.005');
       });
 
+      it('shows a time before 1970 in the millisecond it falls in', () => {
+        // TIMESTAMP '1969-12-31 23:59:59.9995' is -0.5 ms, which a Date
+        // rounds toward zero, into 1970.
+        expect(renderer.formatValue(-0.5, 'timestamp')).toBe('1969-12-31 23:59:59.999');
+        // TIMESTAMP '1969-12-31 23:59:58.4995' is -1500.5 ms.
+        expect(renderer.formatValue(-1500.5, 'timestamp')).toBe('1969-12-31 23:59:58.499');
+        expect(renderer.formatValue('-1500.5', 'timestamp', 'TIMESTAMP WITH TIME ZONE')).toBe(
+          '1969-12-31 23:59:58.499 +00:00',
+        );
+        // After 1970 the millisecond it falls in is the one a Date keeps.
+        expect(renderer.formatValue(1500.5, 'timestamp')).toBe('1970-01-01 00:00:01.5');
+      });
+
       it('shows DuckDB’s infinity and -infinity as DuckDB writes them, with no zone', () => {
         expect(renderer.formatValue(Infinity, 'timestamp', 'TIMESTAMP')).toBe('infinity');
         expect(renderer.formatValue(-Infinity, 'timestamp', 'TIMESTAMP')).toBe('-infinity');

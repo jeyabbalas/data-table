@@ -25,6 +25,8 @@ describe('date and timestamp cells on real DuckDB', () => {
   let harness: NodeDuckDBHarness;
   let bridge: WorkerBridge;
   let schema: ColumnSchema[];
+  /** `before_1970`'s schema: times either side of 1970 with digits past the millisecond. */
+  let before1970: ColumnSchema[];
 
   beforeAll(async () => {
     harness = await createNodeDuckDB();
@@ -50,43 +52,66 @@ describe('date and timestamp cells on real DuckDB', () => {
             TIMESTAMPTZ '290309-12-22 (BC) 00:00:00+00', DATE '5877642-06-25 (BC)')
       ) AS t("__rowid__", ts, ts_s, ts_ms, ts_ns, tstz, d)`,
     );
-    const columns = await bridge.query<{ column_name: string; column_type: string }>(
-      'DESCRIBE temporals',
+    schema = await describeTable('temporals');
+    await bridge.query(
+      `CREATE TABLE before_1970 AS SELECT * FROM (VALUES
+        (0, TIMESTAMP '1969-12-31 23:59:59.9995', '1969-12-31 23:59:59.9995'::TIMESTAMP_NS,
+            TIMESTAMPTZ '1969-12-31 23:59:59.9995+00'),
+        (1, TIMESTAMP '1969-12-31 23:59:58.4995', '1969-12-31 23:59:58.4995'::TIMESTAMP_NS,
+            TIMESTAMPTZ '1969-12-31 23:59:58.4995+00'),
+        (2, TIMESTAMP '1970-01-01 00:00:01.5005', '1970-01-01 00:00:01.5005'::TIMESTAMP_NS,
+            TIMESTAMPTZ '1970-01-01 00:00:01.5005+00')
+      ) AS t("__rowid__", ts, ts_ns, tstz)`,
     );
-    schema = columns.map(({ column_name, column_type }) => ({
-      name: column_name,
-      type: mapDuckDBType(column_type),
-      nullable: true,
-      originalType: column_type,
-    }));
+    before1970 = await describeTable('before_1970');
   }, 30_000);
 
   afterAll(async () => {
     await harness?.cleanup();
   });
 
-  /** Each row's cell text for `columns`, as the grid fetches and shows them. */
-  async function cells(...columns: string[]): Promise<string[][]> {
+  async function describeTable(table: string): Promise<ColumnSchema[]> {
+    const columns = await bridge.query<{ column_name: string; column_type: string }>(
+      `DESCRIBE ${table}`,
+    );
+    return columns.map(({ column_name, column_type }) => ({
+      name: column_name,
+      type: mapDuckDBType(column_type),
+      nullable: true,
+      originalType: column_type,
+    }));
+  }
+
+  /** Each row's cell text for `columns` of `table`, as the grid fetches and shows them. */
+  async function cellsOf(
+    table: string,
+    tableSchema: ColumnSchema[],
+    columns: string[],
+  ): Promise<string[][]> {
     const rows = await bridge.query<Record<string, unknown>>(
       buildRowQuery({
-        tableName: 'temporals',
+        tableName: table,
         columns,
         sortColumns: [],
         filters: [],
         offset: 0,
         limit: 128,
-        schema,
+        schema: tableSchema,
         rowidFastPath: true,
       }),
     );
     const renderer = new CellRenderer();
     return rows.map((row) =>
       columns.map((name) => {
-        const column = schema.find((c) => c.name === name)!;
+        const column = tableSchema.find((c) => c.name === name)!;
         return renderer.formatValue(row[name], column.type, column.originalType);
       }),
     );
   }
+
+  /** {@link cellsOf} the `temporals` table. */
+  const cells = (...columns: string[]): Promise<string[][]> =>
+    cellsOf('temporals', schema, columns);
 
   it('load as date and timestamp columns', () => {
     expect(schema.map((c) => [c.name, c.type, c.originalType])).toEqual([
@@ -153,6 +178,16 @@ describe('date and timestamp cells on real DuckDB', () => {
       '+5881580-07-10',
       // 5877642 BC.
       '-5877641-06-25',
+    ]);
+  });
+
+  it('a time before 1970 shows the millisecond it falls in, as one after 1970 does', async () => {
+    // -0.5 ms and -1500.5 ms, which a Date rounds toward zero: they showed
+    // 1970-01-01 00:00:00 and 1969-12-31 23:59:58.5.
+    expect(await cellsOf('before_1970', before1970, ['ts', 'ts_ns', 'tstz'])).toEqual([
+      ['1969-12-31 23:59:59.999', '1969-12-31 23:59:59.999', '1969-12-31 23:59:59.999 +00:00'],
+      ['1969-12-31 23:59:58.499', '1969-12-31 23:59:58.499', '1969-12-31 23:59:58.499 +00:00'],
+      ['1970-01-01 00:00:01.5', '1970-01-01 00:00:01.5', '1970-01-01 00:00:01.5 +00:00'],
     ]);
   });
 });

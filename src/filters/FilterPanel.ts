@@ -32,6 +32,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { nextInstanceId } from '../core/instanceId';
 import { ModalHost } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -138,8 +139,10 @@ export class FilterPanel {
     const header = document.createElement('div');
     header.className = `${this.prefix}-filter-panel-header`;
 
+    // Names the panel: "Filter: price", retitled when it switches columns.
     const title = document.createElement('span');
     title.className = `${this.prefix}-filter-panel-title`;
+    title.id = `${this.prefix}-${nextInstanceId()}-filter-panel-title`;
     title.textContent = this.messages.filters.panelTitle;
 
     const typeBadge = document.createElement('span');
@@ -271,6 +274,7 @@ export class FilterPanel {
     this.modalHost.open({
       mode: 'panel',
       element: this.element,
+      labelledBy: this.titleEl.id,
       outsideClickIgnore: [`.${this.prefix}-col-filter-btn`],
       // The button that opened the panel for this column, the one clicked
       // last when the panel switched columns: the column held open.

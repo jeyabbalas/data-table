@@ -150,6 +150,7 @@ export class DerivedColumnEditPanel {
 
   private createElement(): HTMLElement {
     const p = this.prefix;
+    const id = `${p}-${nextInstanceId()}-derived-edit`;
     const el = document.createElement('div');
     el.className = `${p}-derived-edit-panel`;
     el.style.display = 'none';
@@ -159,8 +160,10 @@ export class DerivedColumnEditPanel {
     const header = document.createElement('div');
     header.className = `${p}-derived-edit-header`;
 
+    // Names the panel: "Edit: total", retitled when it switches columns.
     const title = document.createElement('span');
     title.className = `${p}-derived-edit-title`;
+    title.id = `${id}-title`;
     title.textContent = this.messages.derived.editTitle;
 
     const closeBtn = document.createElement('button');
@@ -189,7 +192,6 @@ export class DerivedColumnEditPanel {
     nameLabel.textContent = this.messages.derived.nameLabel;
 
     // Named by its label: a description alone (the error below) is no name.
-    const id = `${p}-${nextInstanceId()}-derived-edit`;
     const nameInput = document.createElement('input');
     nameInput.id = `${id}-name`;
     nameLabel.htmlFor = nameInput.id;
@@ -505,6 +507,7 @@ export class DerivedColumnEditPanel {
     this.modalHost.open({
       mode: 'panel',
       element: this.element,
+      labelledBy: this.titleEl.id,
       outsideClickIgnore: [`.${this.prefix}-derived-icon-btn`],
       // Let CodeMirror autocomplete consume Escape before we close.
       escapeGuard: () => !!document.querySelector('.cm-tooltip-autocomplete'),

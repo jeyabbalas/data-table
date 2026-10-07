@@ -20,11 +20,15 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import axe from 'axe-core';
-import { TableContainer } from '@/table/TableContainer';
+import { TableContainer, type TableContainerOptions } from '@/table/TableContainer';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import { SQLFilterModal } from '@/filters/SQLFilterModal';
+import { FilterPanel } from '@/filters/FilterPanel';
+import { FilterPresetManager } from '@/filters/FilterPresets';
+import { FilterPresetPanel } from '@/filters/FilterPresetPanel';
 import { DerivedColumnModal } from '@/derived/DerivedColumnModal';
+import { DerivedColumnEditPanel } from '@/derived/DerivedColumnEditPanel';
 import { ExportDialog } from '@/export/ExportDialog';
 import { AnnotationPopover } from '@/table/AnnotationPopover';
 import { ColumnHeaderTooltipPopover } from '@/table/ColumnHeaderTooltipPopover';
@@ -81,18 +85,22 @@ async function scan(target: HTMLElement): Promise<void> {
   expect(blocking).toEqual([]);
 }
 
-function buildTable(host: HTMLElement): {
+function buildTable(
+  host: HTMLElement,
+  columns: ColumnSchema[] = schema,
+  options?: TableContainerOptions,
+): {
   state: ReturnType<typeof createTableState>;
   actions: StateActions;
   tc: TableContainer;
 } {
   const state = createTableState();
-  state.schema.set(schema);
-  initializeColumnsFromSchema(state, schema);
+  state.schema.set(columns);
+  initializeColumnsFromSchema(state, columns);
   state.totalRows.set(25);
   state.tableName.set('test_table');
   const actions = new StateActions(state, mockBridge);
-  const tc = new TableContainer(host, state, actions, mockBridge);
+  const tc = new TableContainer(host, state, actions, mockBridge, options);
   return { state, actions, tc };
 }
 
@@ -240,6 +248,86 @@ describe('a11y: axe-core grid scan', () => {
     modal.open();
     await scan(modal.getElement());
     modal.destroy();
+  });
+
+  // ------------------------------------------------------------------
+  // Floating panels (non-modal dialogs in the table root, each named by
+  // its title)
+  // ------------------------------------------------------------------
+
+  it('reports zero blocking violations with the filter panel open', async () => {
+    const { state, actions, tc } = buildTable(container);
+    const button = (column: string): HTMLElement =>
+      tc
+        .getElement()
+        .querySelector<HTMLElement>(`.dt-col-header[data-column="${column}"] .dt-col-filter-btn`)!;
+    expect(button('score')).toBeTruthy();
+    const panel = new FilterPanel(state, actions, { colorSchemeSource: tc.getElement() });
+    tc.getElement().appendChild(panel.getElement());
+    panel.open('score', button('score'));
+    await scan(tc.getElement());
+    // A text column's field, which has other controls.
+    panel.open('name', button('name'));
+    await scan(tc.getElement());
+    panel.destroy();
+    tc.destroy();
+  });
+
+  it('reports zero blocking violations with the preset panel open, and its delete confirmation', async () => {
+    const manager = new FilterPresetManager();
+    manager.save('Top scores', [{ type: 'range', column: 'score', min: 90 }], [], 'Over 90');
+    const { state, actions, tc } = buildTable(container, schema, { presetManager: manager });
+    const button = tc.getElement().querySelector<HTMLElement>('.dt-filter-presets-btn')!;
+    expect(button).toBeTruthy();
+    const panel = new FilterPresetPanel(manager, state, actions, {
+      colorSchemeSource: tc.getElement(),
+    });
+    tc.getElement().appendChild(panel.getElement());
+    panel.open(button);
+    await scan(tc.getElement());
+    panel.getElement().querySelector<HTMLElement>('.dt-filter-preset-action-btn--delete')!.click();
+    expect(
+      panel.getElement().querySelector<HTMLElement>('.dt-filter-preset-delete-confirm')!.style
+        .display,
+    ).toBe('flex');
+    await scan(tc.getElement());
+    panel.destroy();
+    tc.destroy();
+  });
+
+  it('reports zero blocking violations with the derived-column editor open, and its delete confirmation', async () => {
+    const withDerived: ColumnSchema[] = [
+      ...schema,
+      {
+        name: 'doubled',
+        type: 'float',
+        nullable: false,
+        originalType: 'DOUBLE',
+        isDerived: true,
+        expression: 'score * 2',
+      },
+    ];
+    const { state, actions, tc } = buildTable(container, withDerived);
+    state.derivedColumns.set([{ kind: 'expression', name: 'doubled', expression: 'score * 2' }]);
+    const icon = tc
+      .getElement()
+      .querySelector<HTMLElement>('.dt-col-header[data-column="doubled"] .dt-derived-icon-btn')!;
+    expect(icon).toBeTruthy();
+    const panel = new DerivedColumnEditPanel(state, actions, {
+      colorSchemeSource: tc.getElement(),
+    });
+    tc.getElement().appendChild(panel.getElement());
+    panel.open('doubled', icon);
+    expect(panel.getElement().querySelector('.cm-editor')).toBeTruthy();
+    await scan(tc.getElement());
+    panel.getElement().querySelector<HTMLElement>('.dt-derived-edit-delete')!.click();
+    expect(
+      panel.getElement().querySelector<HTMLElement>('.dt-derived-edit-delete-confirm')!.style
+        .display,
+    ).toBe('flex');
+    await scan(tc.getElement());
+    panel.destroy();
+    tc.destroy();
   });
 
   // ------------------------------------------------------------------

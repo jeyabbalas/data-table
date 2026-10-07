@@ -1,8 +1,9 @@
 /**
  * DefaultExpressionEditor — built-in textarea implementation of ExpressionEditor.
  *
- * Provides a monospace textarea with error display and column hints.
- * Used when no custom ExpressionEditorFactory is provided.
+ * Provides a monospace textarea with error display and column hints. An
+ * alternative to the default CodeMirrorExpressionEditor, for an
+ * ExpressionEditorFactory.
  */
 
 import { defaultStrings, type Strings } from '../core/Strings';
@@ -10,10 +11,11 @@ import type { ExpressionEditor } from './ExpressionEditorTypes';
 import type { CompletionContext } from './types';
 
 /**
- * Plain-textarea fallback that satisfies {@link ExpressionEditor} when no
- * custom factory is supplied. Renders a monospace textarea, an error slot,
- * and a column-hint slot. Apps that want SQL-aware autocompletion should
- * pass `editorFactory: () => new CodeMirrorExpressionEditor(...)` instead.
+ * Plain-textarea implementation of {@link ExpressionEditor}: a monospace
+ * textarea, an error slot, and a column-hint slot, without SQL-aware
+ * autocompletion. The built-in dialogs use `CodeMirrorExpressionEditor`;
+ * pass `editorFactory: (c, ctx) => new DefaultExpressionEditor(c, ctx)` to
+ * `createDataTable()` to use this one instead.
  *
  * The optional 4th `messages` constructor argument lets custom factories
  * forward the table's i18n bundle so the placeholder text and the

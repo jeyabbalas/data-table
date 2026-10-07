@@ -346,10 +346,10 @@ when assembling a custom container shell.
 | `DerivedColumnModalOptions`                 | interface   | Modal ctor options.                                                                                                                                          |
 | `AddColumnButton`                           | class       | The "+" button that opens `DerivedColumnModal`.                                                                                                              |
 | `AddColumnButtonOptions`                    | interface   | Button ctor options.                                                                                                                                         |
-| `DefaultExpressionEditor`                   | class       | Minimal plain-textarea fallback editor.                                                                                                                      |
+| `DefaultExpressionEditor`                   | class       | Plain-textarea editor, an alternative to `CodeMirrorExpressionEditor` through `editorFactory`.                                                               |
 | `DerivedColumnManager`                      | class       | DuckDB-side lifecycle (VIEW, vector helper tables, validation); every change is all or nothing. `restoreColumns` is below the table.                         |
 | `DerivedColumnInfo`                         | interface   | Stored def + detected type metadata.                                                                                                                         |
-| `CodeMirrorExpressionEditor`                | class       | CodeMirror 6 editor with DuckDB SQL grammar + autocompletion.                                                                                                |
+| `CodeMirrorExpressionEditor`                | class       | CodeMirror 6 editor with DuckDB SQL grammar + autocompletion. Its 4th argument sets `placeholder` and `ariaLabel` (English `derived.*` defaults).            |
 | `DUCKDB_FUNCTIONS`                          | const array | Function names surfaced by autocomplete. Derived from `DUCKDB_FUNCTION_DETAILS`.                                                                             |
 | `DUCKDB_FUNCTION_DETAILS`                   | const array | `{ name, category, description }` for each curated DuckDB function.                                                                                          |
 | `DuckDBFunctionInfo`                        | interface   | Shape of one entry in `DUCKDB_FUNCTION_DETAILS`.                                                                                                             |
@@ -1400,13 +1400,13 @@ UI is the host's responsibility. Without `autocompletion()` from
 `@codemirror/autocomplete` in your extension array, no dropdown ever
 appears (`src/sql-editor/extensions.ts:156-158`). The bundled
 `CodeMirrorExpressionEditor` adds it explicitly
-(`src/sql-editor/CodeMirrorExpressionEditor.ts:60-62`).
+(`src/sql-editor/CodeMirrorExpressionEditor.ts:75-77`).
 
 Wrap the result in a `Compartment` to enable schema swaps via
 `Compartment.reconfigure()` without rebuilding the editor — preserves undo
 history, focus, selection, and scroll position. The bundled
 `CodeMirrorExpressionEditor` uses the same pattern internally
-(`src/sql-editor/CodeMirrorExpressionEditor.ts:142-148`).
+(`src/sql-editor/CodeMirrorExpressionEditor.ts:146-150`).
 
 ### `buildCompletionContext(columns, options?)`
 

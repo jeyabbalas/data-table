@@ -185,7 +185,9 @@ export interface Strings {
       labelFieldLabel: string;
       labelPlaceholder: string;
       labelHint: string;
+      /** Label above the expression filter's SQL editor, and the editor's accessible name. */
       conditionLabel: string;
+      /** Placeholder of the expression filter's SQL editor. */
       editorPlaceholder: string;
       validationResult: (matchCount: number) => string;
       removeButton: string;
@@ -297,9 +299,16 @@ export interface Strings {
     expressionModeLabel: string;
     vectorModeLabel: string;
 
+    /**
+     * Label above the SQL editor in the add-column dialog and the column
+     * edit panel, and the editor's accessible name.
+     */
     expressionLabel: string;
     expressionRequired: string;
-    /** Placeholder text inside the SQL-expression textarea (DefaultExpressionEditor). */
+    /**
+     * Placeholder of the SQL editor in the add-column dialog and the column
+     * edit panel, and of `DefaultExpressionEditor`'s textarea.
+     */
     expressionPlaceholder: string;
     /** Prefix shown before the comma-separated column-hint list (DefaultExpressionEditor). */
     availableColumnsLabel: string;

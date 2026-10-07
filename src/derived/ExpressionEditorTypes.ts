@@ -2,8 +2,9 @@
  * Expression Editor Extension Point
  *
  * Defines the interface that custom expression editors must implement.
- * The library provides a default textarea editor (DefaultExpressionEditor).
- * Downstream apps can replace it with CodeMirror, Monaco, or similar.
+ * The library's default is CodeMirrorExpressionEditor (CodeMirror 6 with
+ * DuckDB SQL autocompletion); DefaultExpressionEditor is a plain-textarea
+ * alternative. Downstream apps can also bring Monaco or similar.
  */
 
 import type { CompletionContext } from './types';
@@ -33,8 +34,11 @@ export interface ExpressionEditor {
 
 /**
  * Factory function for creating expression editors.
- * Downstream apps provide this to use CodeMirror or similar.
- * If not provided, DefaultExpressionEditor is used.
+ * Downstream apps provide this to use DefaultExpressionEditor, Monaco or
+ * similar. If not provided, CodeMirrorExpressionEditor is used.
+ *
+ * The factory gets no `messages`: an editor it builds takes its placeholder
+ * and accessible name from the factory, not from the table's strings.
  */
 export type ExpressionEditorFactory = (
   container: HTMLElement,

@@ -29,7 +29,7 @@ export interface DerivedColumnModalOptions {
    * one generates its own.
    */
   instanceId?: string | undefined;
-  /** Custom editor factory (e.g., CodeMirror). If omitted, uses DefaultExpressionEditor. */
+  /** Custom editor factory. If omitted, uses CodeMirrorExpressionEditor. */
   editorFactory?: ExpressionEditorFactory | undefined;
   /** Called after a derived column is successfully created. */
   onCreated?: (() => void) | undefined;

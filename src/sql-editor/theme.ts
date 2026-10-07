@@ -10,6 +10,9 @@ import { tags } from '@lezer/highlight';
  * `[data-dt-color-scheme="dark"]`. Pair with {@link dataTableHighlighting}
  * for SQL-token coloring; or use {@link createSqlExtensions} (which bundles
  * both by default via `includeTheme`).
+ *
+ * A `placeholder(...)` is painted in `--dt-text-tertiary`, which meets WCAG
+ * AA in both schemes, and one wider than the editor ends in an ellipsis.
  */
 export const dataTableTheme = EditorView.theme({
   '&': {
@@ -25,6 +28,22 @@ export const dataTableTheme = EditorView.theme({
   },
   '.cm-activeLine': {
     backgroundColor: 'var(--dt-bg-secondary)',
+  },
+  // CodeMirror's own placeholder grey, #888, is 3.54:1 on a light panel,
+  // and 4.14:1 in dark on the active line above (an editor that highlights
+  // it): under WCAG AA's 4.5:1. The tertiary text token is 7.56:1 in light
+  // and 9.57:1 in dark on `--dt-bg`, 7.23:1 and 7.92:1 on the active line.
+  //
+  // A hint wider than the editor (the derived-column edit panel's, 360 px)
+  // ends in an ellipsis at its edge. It ran on past it, into a scroller no
+  // key can scroll, as the caret never enters the hint. A width of 0 keeps
+  // it from widening the content; `min-width` stretches it across the line.
+  '.cm-placeholder': {
+    color: 'var(--dt-text-tertiary)',
+    width: '0',
+    minWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   '.cm-selectionBackground': {
     backgroundColor: 'var(--dt-primary-lighter) !important',

@@ -512,6 +512,8 @@
   border: 1px solid var(--dt-border);
   border-radius: var(--dt-radius-sm);
   background: transparent;
+  /* A button inherits no colour: No, with no modifier, took the page's. */
+  color: var(--dt-text-secondary);
   font-size: var(--dt-font-size-xs);
   font-weight: 500;
   font-family: var(--dt-font-family);

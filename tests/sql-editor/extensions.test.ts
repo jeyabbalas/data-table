@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import type { Extension } from '@codemirror/state';
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, placeholder } from '@codemirror/view';
 import {
   autocompletion,
   CompletionContext as CMCompletionContext,
@@ -318,6 +318,59 @@ describe('createSqlExtensions', () => {
     expect(DUCKDB_FUNCTION_DETAILS.length).toBeGreaterThan(0);
     const ext = createSqlExtensions({ columns: [] });
     EditorState.create({ extensions: ext });
+  });
+});
+
+describe('dataTableTheme', () => {
+  /**
+   * Every rule that reaches an empty editor's placeholder, in the order
+   * CodeMirror mounts them: one style sheet, its own base theme first, each
+   * scoped by one class on the editor. They are equally specific, so for
+   * each property the last rule that sets it wins.
+   */
+  function placeholderRules(): CSSStyleRule[] {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [dataTableTheme, placeholder('e.g. price > 10')],
+      }),
+      parent: container,
+    });
+    try {
+      const shown = container.querySelector('.cm-placeholder')!;
+      expect(shown).toBeTruthy();
+      const rules = [...document.styleSheets]
+        .flatMap((sheet) => [...sheet.cssRules])
+        .filter(
+          (rule): rule is CSSStyleRule =>
+            rule instanceof CSSStyleRule && shown.matches(rule.selectorText),
+        );
+      for (const rule of rules) expect(rule.selectorText).toMatch(/^\.[^\s.]+ \.cm-placeholder$/);
+      return rules;
+    } finally {
+      view.destroy();
+      container.remove();
+    }
+  }
+
+  const winning = (rules: CSSStyleRule[], property: string): string[] =>
+    rules.map((rule) => rule.style.getPropertyValue(property)).filter((value) => value !== '');
+
+  it("paints the placeholder in --dt-text-tertiary, over the base theme's #888", () => {
+    const colours = winning(placeholderRules(), 'color');
+    // #888, 3.54:1 on a white panel.
+    expect(colours[0]).toBe('rgb(136, 136, 136)');
+    expect(colours.at(-1)).toBe('var(--dt-text-tertiary)');
+  });
+
+  it("ends the placeholder at the editor's edge instead of widening the content", () => {
+    const rules = placeholderRules();
+    expect(winning(rules, 'width').at(-1)).toMatch(/^0(px)?$/);
+    expect(winning(rules, 'min-width').at(-1)).toBe('100%');
+    expect(winning(rules, 'overflow').at(-1)).toBe('hidden');
+    expect(winning(rules, 'text-overflow').at(-1)).toBe('ellipsis');
   });
 });
 

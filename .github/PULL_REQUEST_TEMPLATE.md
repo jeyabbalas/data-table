@@ -23,10 +23,10 @@ Thanks for contributing! Please fill out the sections below. See CONTRIBUTING.md
 - [ ] Tests added or updated under `tests/`
 - [ ] `npm test` passes locally
 - [ ] `npm run build` passes locally
-- [ ] User-visible changes → a changeset (`npx changeset`) in the form `CONTRIBUTING.md` describes; `CHANGELOG.md` is generated from changesets, so don't edit it
+- [ ] User-visible changes → a changeset (`npx changeset`): a one-line summary first, then the details under bold labels such as `**Fixed**`, as `CONTRIBUTING.md` describes. Don't edit `CHANGELOG.md`; it is generated from changesets
 - [ ] Public-API changes → `docs/api-reference.md` updated
 - [ ] User-visible behavior changes → relevant guide in `docs/guides/` updated
-- [ ] Breaking changes → `**Changed (breaking)**` and `**Migration**` in the changeset, and a section in the version's guide under `docs/migration-guides/`
+- [ ] Breaking changes → `**Changed (breaking)**` and `**Migration**` sections in the changeset, and a migration walkthrough in the version's guide under `docs/migration-guides/`
 - [ ] API-surface snapshot regenerated if exports changed (`npx vitest -u`)
 - [ ] Screenshots / short clips attached for UI-visible changes
 - [ ] JSDoc added on new public exports (at minimum a one-sentence description + `@example`)

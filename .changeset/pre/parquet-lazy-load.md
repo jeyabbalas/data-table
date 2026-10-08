@@ -10,7 +10,7 @@ A Parquet `File`, `Blob` or URL is read from disk as the table is built, not cop
 
 **Changed**
 
-- A Parquet `File`, `Blob`, or URL is no longer read into memory before loading. DuckDB reads the file from disk as it builds the table, so the file no longer has to fit in memory alongside it. A 1.1 GB file of 200,000 rows × 1,000 columns now loads in about 11 seconds in Chrome; it used to run out of memory. Typical files load about as fast as before. A Parquet `ArrayBuffer` is still copied into memory whole, so pass a `File` or `Blob` for large files.
+- A Parquet `File`, `Blob`, or URL is no longer read into memory before loading. DuckDB reads the file from disk as it builds the table, so the file no longer has to fit in memory alongside it. A 1.1 GB file of 200,000 rows × 1,000 columns now loads in about 11 seconds in Chrome. Copying the file into memory first, as before, ran out of memory at 1,000 columns somewhere between 150,000 and 200,000 rows. Typical files load about as fast as before; near the memory limit, or with very large row groups, a file is read a column chunk at a time, two to four times slower. A Parquet `ArrayBuffer` is still copied into memory whole, so pass a `File` or `Blob` for large files.
 - `table.loadData`, `actions.loadData`, and `WorkerBridge.loadData` accept a `Blob` directly. The facade used to convert a `Blob` to an `ArrayBuffer` first.
 
 **Fixed**

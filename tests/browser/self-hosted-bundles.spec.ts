@@ -22,10 +22,12 @@
  * without `'wasm-unsafe-eval'`, shows that it reached DuckDB's worker, which
  * compiles the `.wasm`. Two more tests show which response that takes: the
  * library's worker gets the policy its script arrives with, not the page's,
- * and DuckDB's `blob:` worker inherits the library worker's.
+ * and DuckDB's `blob:` worker inherits the library worker's. The rest cover
+ * what fails, and how fast and how clearly it says so, and the guide's two
+ * ways of serving the library's worker script yourself.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,6 +103,18 @@ const TYPES: Record<string, string> = {
 };
 
 const BUILT = existsSync(path.join(DIST, 'data-table.js'));
+
+/** Where the page serves its own copy of the library's worker script. */
+const WORKER_COPY = '/static/data-table-worker.js';
+
+/** The file name of the built worker script, `worker-<hash>.js`. */
+function builtWorker(): string {
+  const [name] = readdirSync(path.join(DIST, 'assets')).filter((file) =>
+    /^worker-[\w-]+\.js$/.test(file),
+  );
+  if (!name) throw new Error('dist/assets has no worker-*.js: run `npm run build`');
+  return name;
+}
 const CI = !['', 'false', '0'].includes(process.env['CI'] ?? '');
 
 /** What the page asked of each host. */
@@ -142,6 +156,7 @@ async function mirrored(route: Route, pathname: string): Promise<Buffer | null> 
 /** The file for a path of `https://app.test`, or null. */
 async function fileFor(route: Route, pathname: string): Promise<Buffer | string | null> {
   if (pathname === '/') return PAGE;
+  if (pathname === WORKER_COPY) return readFile(path.join(DIST, 'assets', builtWorker()));
   if (pathname === '/violations.js') return VIOLATIONS_JS;
   if (pathname === '/app.js') return APP_JS;
   if (pathname === '/app.css') return APP_CSS;
@@ -228,11 +243,29 @@ interface Start {
  */
 async function startBridge(
   page: Page,
-  options: { mainWorker?: string; initializeTimeoutMs?: number; urlObject?: boolean } = {},
+  options: {
+    mainWorker?: string;
+    initializeTimeoutMs?: number;
+    urlObject?: boolean;
+    /** The library's worker from `WORKER_COPY`: its URL, or its text in a `blob:` URL. */
+    worker?: { copy: string; as: 'workerUrl' | 'workerFactory' };
+  } = {},
 ): Promise<Start> {
-  return page.evaluate(async ({ mainWorker, initializeTimeoutMs, urlObject }) => {
+  return page.evaluate(async ({ mainWorker, initializeTimeoutMs, urlObject, worker }) => {
     const library = (window as unknown as { __dataTable: Library }).__dataTable;
+    // The guide's workerFactory: the text first, since the factory runs synchronously.
+    const code =
+      worker?.as === 'workerFactory' ? await fetch(worker.copy).then((r) => r.text()) : '';
     const bridge = new library.WorkerBridge({
+      ...(worker?.as === 'workerUrl' ? { workerUrl: worker.copy } : {}),
+      ...(worker?.as === 'workerFactory'
+        ? {
+            workerFactory: () =>
+              new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), {
+                type: 'module',
+              }),
+          }
+        : {}),
       initializeTimeoutMs,
       duckdbBundles: {
         mvp: {
@@ -499,3 +532,27 @@ test("a policy that blocks the library's worker names workerFactory and CSP", as
   expect(start.message).toMatch(/Content Security Policy/);
   expect(start.message).toMatch(/workerFactory/);
 });
+
+for (const as of ['workerUrl', 'workerFactory'] as const) {
+  test(`a copy of the library's worker script runs from bridgeOptions.${as}`, async ({
+    context,
+    page,
+  }) => {
+    // The built worker imports nothing, so a copy of it runs on its own: at a
+    // URL of the page's, or as text in a blob: URL, which takes the page's policy.
+    const traffic = await serve(context, () => policy());
+    await open(page);
+
+    expect(await startBridge(page, { worker: { copy: WORKER_COPY, as } })).toEqual({
+      ok: true,
+      ms: expect.any(Number),
+    });
+    const rows = await page.evaluate(() =>
+      (window as unknown as InPage).__bridge.query('SELECT 42 AS answer'),
+    );
+
+    expect(rows).toEqual([{ answer: 42 }]);
+    expect(traffic.served).toContain(WORKER_COPY);
+    expect(traffic.served.filter((p) => p.startsWith('/dist/assets/'))).toEqual([]);
+  });
+}

@@ -118,6 +118,11 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      # tests/browser/self-hosted-bundles.spec.ts serves the built library,
+      # as a deployment does, rather than the dev server's source.
+      - name: Build library
+        run: npm run build
+
       - name: Browser accessibility tests
         run: npm run test:browser
 

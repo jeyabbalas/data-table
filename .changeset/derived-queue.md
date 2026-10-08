@@ -13,4 +13,4 @@ Derived-column changes, `undo`, `redo`, `resetToInitial` and `loadData` run one 
 
 **Changed**
 
-- A second add of a name that an earlier add is still adding now waits for that add and gets `Column name "X" already exists`, instead of `is already being added` at once. The same applies to a rename to that name.
+- A second add of a name that an earlier add is still adding now waits for that add and gets `Column name "X" already exists`. The same applies to a rename to that name.

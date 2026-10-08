@@ -84,9 +84,9 @@ Use the **Feature request** issue template. Before proposing:
    - **Summary first.** The first line after the front matter is a
      one-sentence summary of the user-visible change.
    - **Then the details, under bold labels.** Each label goes on a line of
-     its own: `**Added**`, `**Changed**`, `**Fixed**`,
-     `**Changed (breaking)**` and `**Migration**`. Use the ones the change
-     needs. A lone `**Fixed**` can go when the summary already says what
+     its own, with a blank line before and after it: `**Added**`,
+     `**Changed**`, `**Fixed**`, `**Changed (breaking)**` and
+     `**Migration**`. Use the ones the change needs. A lone `**Fixed**` can go when the summary already says what
      was fixed.
    - **No headings.** Don't start a line with `#` outside a code block. As
      the first line, `### Fixed` shows in the changelog as literal text;

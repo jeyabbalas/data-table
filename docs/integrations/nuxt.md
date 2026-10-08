@@ -139,8 +139,11 @@ root.
 
 ## Self-hosted WASM
 
-Same pattern as Next.js — drop DuckDB WASM bundles into `public/duckdb/`
-and point `bridgeOptions.duckdbBundles` at them. See
+Same pattern as Next.js: pin `@duckdb/duckdb-wasm` to exactly
+`1.33.1-dev57.0`, copy its `duckdb-browser-eh.worker.js`, `duckdb-eh.wasm`,
+`duckdb-browser-mvp.worker.js` and `duckdb-mvp.wasm` into `public/duckdb/`,
+point `bridgeOptions.duckdbBundles` at them, and mirror DuckDB's `icu`,
+`parquet` and `json` extensions. See
 [CSP and offline](../guides/csp-and-offline.md).
 
 ## CSP
@@ -153,7 +156,9 @@ export default defineNuxtConfig({
     routeRules: {
       '/**': {
         headers: {
-          'Content-Security-Policy': "script-src 'self'; worker-src 'self';",
+          'Content-Security-Policy':
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; " +
+            "worker-src 'self' blob:; connect-src 'self'; style-src 'self'",
         },
       },
     },
@@ -161,7 +166,13 @@ export default defineNuxtConfig({
 });
 ```
 
-Adjust to match your app's other CSP requirements.
+This policy is only the table's part. Nuxt itself needs more: its inline
+`window.__NUXT__` script and inline styles need a nonce or hash setup of
+their own (the `nuxt-security` module, say), and this combination is
+untested. Check that the header reaches every response, the library's
+worker script among them: a library worker started from a URL takes the
+policy sent with its script, not the page's. See
+[CSP and offline](../guides/csp-and-offline.md#send-it-with-every-response).
 
 ## Gotchas
 

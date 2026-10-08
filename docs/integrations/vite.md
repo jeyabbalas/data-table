@@ -64,20 +64,24 @@ Reference them with absolute URLs (`/data/trips.csv`).
 
 For deployments that can't reach jsDelivr:
 
-1. **Copy the DuckDB-WASM bundles** into `public/duckdb/`:
+1. **Pin `@duckdb/duckdb-wasm` exactly** to the version the library is built
+   with, and copy its files into `public/duckdb/`, which Vite serves at
+   `/duckdb/`:
 
    ```sh
+   npm install --save-exact @duckdb/duckdb-wasm@1.33.1-dev57.0
    mkdir -p public/duckdb
-   cp node_modules/@duckdb/duckdb-wasm/dist/duckdb-{mvp,eh}.* public/duckdb/
-   cp node_modules/@duckdb/duckdb-wasm/dist/duckdb-browser-*.worker.js public/duckdb/
+   for file in duckdb-browser-eh.worker.js duckdb-eh.wasm \
+               duckdb-browser-mvp.worker.js duckdb-mvp.wasm; do
+     cp "node_modules/@duckdb/duckdb-wasm/dist/$file" public/duckdb/
+   done
    ```
 
-2. **Pass custom bundles** to `createDataTable`:
+2. **Pass the bundles** to `createDataTable`. Relative URLs resolve against
+   the page:
 
    ```ts
-   import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
-
-   const bundles: DuckDBBundles = {
+   const duckdbBundles = {
      mvp: {
        mainModule: '/duckdb/duckdb-mvp.wasm',
        mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
@@ -91,16 +95,24 @@ For deployments that can't reach jsDelivr:
    await createDataTable({
      container,
      source,
-     bridgeOptions: { duckdbBundles: bundles },
+     bridgeOptions: { duckdbBundles },
    });
    ```
 
-3. **Set your CSP** to match:
+3. **Mirror DuckDB's extensions**, `icu` (every load needs it), `parquet`
+   and `json`, under `public/duckdb-ext/`, and point DuckDB at them with
+   `custom_extension_repository` before anything loads. See
+   [CSP and offline → DuckDB's extensions](../guides/csp-and-offline.md#duckdbs-extensions).
+
+4. **Send one policy with every response**, the worker scripts' too:
 
    ```
-   script-src 'self';
-   worker-src 'self';
+   default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self'
    ```
+
+   `'wasm-unsafe-eval'` lets DuckDB compile its `.wasm`, and `blob:` lets it
+   start its worker. Size the table's container in a stylesheet: the policy
+   drops `style` attributes.
 
 See [CSP and offline](../guides/csp-and-offline.md) for the reasoning.
 
@@ -118,6 +130,9 @@ npm install @jeyabbalas/data-table \
 
 Skip the CodeMirror packages if you disable derived columns and raw-SQL
 filters (`expressionFilter: false`, or pass a custom `editorFactory`).
+
+If you serve DuckDB-WASM's files yourself, install `@duckdb/duckdb-wasm`
+at exactly `1.33.1-dev57.0` (`--save-exact`), as above.
 
 ## Production build
 

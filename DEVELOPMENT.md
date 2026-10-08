@@ -75,8 +75,13 @@ entry. Each threshold sits about one point below the measured figure: on
 2026-10-07, statements 91.26, branches 84.17, functions 94.33 and lines 93.01,
 against thresholds of 90, 83, 93 and 92. Raise them as coverage grows.
 
-Three api-surface tests read `dist/`. Locally they skip until `npm run build`
-has run; in CI, which builds first, a missing `dist/` fails them.
+Four tests read `dist/`: `tests/api-surface.private-paths.test.ts`,
+`api-surface.cjs-routing.test.ts` and `api-surface.error-names.test.ts`, and
+`tests/dist.worker-chunk.test.ts`, which checks that the built worker imports
+nothing. Locally they skip until `npm run build` has run; in CI, which builds
+first, a missing `dist/` fails them. The browser spec
+`tests/browser/self-hosted-bundles.spec.ts` serves the built `dist/` too, so
+build before `npm run test:browser`.
 
 Run a single test file:
 

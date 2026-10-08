@@ -26,9 +26,15 @@ export interface WorkerResponse {
 // Specific message payloads
 export interface InitPayload {
   /**
-   * Custom DuckDB WASM bundles. When omitted, the worker falls back to
-   * `getJsDelivrBundles()`. Consumers on strict-CSP / offline deployments
-   * supply self-hosted bundles here.
+   * Self-hosted DuckDB-WASM bundles, from `bridgeOptions.duckdbBundles`.
+   * When omitted, the worker falls back to `getJsDelivrBundles()`.
+   *
+   * Every `mainModule`, `mainWorker` and `pthreadWorker` is an absolute URL
+   * string: `WorkerBridge.initialize()` resolves them against the page
+   * (`document.baseURI`) before posting, and turns `URL` objects into
+   * strings, which `postMessage` can clone. DuckDB's own worker, not this
+   * one, fetches them, and it runs from a `blob:` URL that is no base for a
+   * relative URL: `initializeDuckDB` rejects one.
    */
   bundles?: DuckDBBundles;
 }

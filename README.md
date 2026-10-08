@@ -54,6 +54,11 @@ the default SQL expression editor (for derived columns and raw-SQL filters).
 If you supply your own `editorFactory` or disable those features, you can
 omit them.
 
+To serve DuckDB-WASM's files yourself, for a strict Content Security Policy
+or an offline deployment, install `@duckdb/duckdb-wasm` at exactly
+`1.33.1-dev57.0` (`npm install --save-exact`): see
+[CSP and offline deployments](./docs/guides/csp-and-offline.md).
+
 ## Quick start
 
 Give the container a bounded height — the table virtualizes against it, and
@@ -410,12 +415,18 @@ For the full list of error codes with triggers and fixes, see
   `SessionStore` / `FilterPresetManager`) to avoid spinning up two DuckDB
   instances. Give each table a distinct `tableName` so session snapshots
   don't clobber each other.
-- **CSP / air-gapped:** self-host the worker and WASM bundles and pass
-  `bridgeOptions.workerFactory` + `bridgeOptions.duckdbBundles`.
+- **CSP / air-gapped:** serve DuckDB-WASM's files from your origin, copied
+  from `@duckdb/duckdb-wasm` pinned to exactly `1.33.1-dev57.0`, and pass
+  them as `bridgeOptions.duckdbBundles` (relative URLs resolve against the
+  page). Mirror DuckDB's `icu`, `parquet` and `json` extensions and set
+  `custom_extension_repository`, and send one policy, with
+  `'wasm-unsafe-eval'` and `worker-src 'self' blob:`, with every response.
 
 See [AGENTS.md §3(h)](./AGENTS.md#3-canonical-snippets) for a shared-bridge
-snippet, and [docs/troubleshooting.md §4](./docs/troubleshooting.md#4-duckdb-cdn-blocked-by-csp)
-for the CSP recipe.
+snippet, [CSP and offline deployments](./docs/guides/csp-and-offline.md) for
+the self-hosting recipe, and
+[docs/troubleshooting.md §4](./docs/troubleshooting.md#4-duckdb-does-not-start-under-a-csp-or-offline)
+when DuckDB does not start.
 
 ## Accessibility
 

@@ -5,7 +5,7 @@
 > `connection.cancelSent()`. Two distinct error codes describe the two
 > places where a cancel can settle.
 
-**Released:** 2026-04-26 (`@jeyabbalas/data-table` next patch)
+**Released:** in `@jeyabbalas/data-table` 0.3.0 (first published to npm as 0.3.1, 2026-04-28)
 **Affected versions:** consumers branching on `error.code` for cancel detection
 **Migration difficulty:** trivial — purely additive, no rename
 

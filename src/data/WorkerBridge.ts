@@ -114,17 +114,41 @@ export interface WorkerBridgeOptions {
    */
   workerUrl?: string | URL | undefined;
   /**
-   * DuckDB WASM bundles override for offline / self-hosted deployments.
-   * Forwarded to the worker on init; when omitted the worker falls back
-   * to `getJsDelivrBundles()`.
+   * DuckDB-WASM bundles to load instead of jsDelivr's, for a self-hosted,
+   * offline or strict-CSP deployment: `@duckdb/duckdb-wasm`'s
+   * `DuckDBBundles`, whose URLs may also be `URL` objects. When omitted,
+   * the worker loads `getJsDelivrBundles()`.
    *
-   * **Trust boundary.** The bundle URLs are passed verbatim to
-   * `@duckdb/duckdb-wasm`'s `selectBundle`, which `fetch`-es them and
-   * instantiates WASM. Treat as developer-controlled — never derived from
-   * end-user input. See `docs/integrations/csp-and-offline.md` for the
-   * recommended self-hosting pattern.
+   * DuckDB's own worker fetches these files, not the library's: it starts
+   * from a `blob:` URL, runs `importScripts(mainWorker)`, then fetches
+   * `mainModule`, and the `coi` bundle starts its threads from
+   * `pthreadWorker`. A `blob:` URL is no base for a relative URL, so
+   * `initialize()` resolves each `mainModule`, `mainWorker` and
+   * `pthreadWorker` against the page, `document.baseURI` (a `<base href>`
+   * when it has one), before any worker exists, and posts the absolute
+   * URLs. One that cannot be resolved, or that is not a string or a `URL`,
+   * rejects `initialize()` with a `ConfigurationError` whose code is
+   * `OPTIONS_INVALID` and whose `details.option` names it, such as
+   * `'duckdbBundles.eh.mainWorker'`. Your object is not changed.
+   *
+   * Copy every file from one `@duckdb/duckdb-wasm` version, pinned exactly
+   * to `1.33.1-dev57.0`: the library's worker has DuckDB-WASM's JavaScript
+   * built in (`1.33.1-dev57.0`), and the library is tested with it. A worker
+   * script only runs with the `.wasm` files of its own version. See
+   * `docs/guides/csp-and-offline.md` for the files, the Content Security
+   * Policy and DuckDB's extensions.
+   *
+   * **Trust boundary.** DuckDB runs these scripts and modules in your
+   * origin. Treat the URLs as developer-controlled, never derived from
+   * end-user input.
    */
-  duckdbBundles?: DuckDBBundles | undefined;
+  duckdbBundles?:
+    | {
+        [Bundle in keyof DuckDBBundles]: {
+          [Field in keyof NonNullable<DuckDBBundles[Bundle]>]: string | URL;
+        };
+      }
+    | undefined;
 }
 
 interface PendingRequest {
@@ -136,6 +160,58 @@ interface PendingRequest {
 }
 
 const DEFAULT_INIT_TIMEOUT_MS = 30_000;
+
+/** Where to go when the default worker cannot start: see `createWorker` and `initialize`. */
+const WORKER_FACTORY_HINT = 'see bridgeOptions.workerFactory in docs/guides/csp-and-offline.md.';
+
+/**
+ * A copy of `bundles` whose URLs are absolute strings: each `mainModule`,
+ * `mainWorker` and `pthreadWorker` resolved against the page, its
+ * `document.baseURI` (a `<base href>` when it has one) or, without a
+ * document, `location.href`. A `URL` object becomes its `href`, which
+ * `postMessage` can clone. A `null` or `undefined` entry or field stays as
+ * it is, and so does any other key. `bundles` is not changed.
+ *
+ * @throws {@link ConfigurationError} `OPTIONS_INVALID`, `details.option`
+ *   naming the field (`'duckdbBundles.eh.mainWorker'`): a URL that is not a
+ *   string or a `URL`, that is empty, or that cannot be resolved.
+ */
+function resolveBundleUrls(
+  bundles: NonNullable<WorkerBridgeOptions['duckdbBundles']>,
+): DuckDBBundles {
+  const page = globalThis as { document?: { baseURI?: string }; location?: { href?: string } };
+  const base = page.document?.baseURI ?? page.location?.href;
+  const entries = Object.entries(bundles).map(([name, entry]: [string, unknown]) => {
+    if (entry === null || typeof entry !== 'object') return [name, entry];
+    const resolved: Record<string, unknown> = { ...entry };
+    for (const field of ['mainModule', 'mainWorker', 'pthreadWorker']) {
+      const value = resolved[field];
+      if (value == null) continue;
+      let url: string | undefined;
+      try {
+        url =
+          value instanceof URL
+            ? value.href
+            : typeof value === 'string' && value.trim()
+              ? new URL(value, base).href
+              : undefined;
+      } catch {
+        // Not a URL: reported below.
+      }
+      if (url === undefined) {
+        const option = `duckdbBundles.${name}.${field}`;
+        const shown = typeof value === 'string' ? JSON.stringify(value) : typeof value;
+        throw new ConfigurationError(
+          `${option} (${shown}) is not a URL that resolves against the page${base ? ` (${base})` : ', which has no URL'}.`,
+          { code: 'OPTIONS_INVALID', details: { option } },
+        );
+      }
+      resolved[field] = url;
+    }
+    return [name, resolved];
+  });
+  return Object.fromEntries(entries) as DuckDBBundles;
+}
 
 /**
  * Promise-based RPC layer between the main thread and the DuckDB Web Worker.
@@ -172,7 +248,7 @@ export class WorkerBridge {
   private initializeTimeoutMs: number;
   private workerFactory?: (() => Worker) | undefined;
   private workerUrl?: string | URL | undefined;
-  private duckdbBundles?: DuckDBBundles | undefined;
+  private duckdbBundles?: WorkerBridgeOptions['duckdbBundles'];
   /** Why the worker failed, until `initialize()` starts another; see {@link failWorker}. */
   private workerFailure: WorkerInitError | null = null;
   /** Rejects the `initialize()` still waiting for its worker, if any. */
@@ -191,8 +267,9 @@ export class WorkerBridge {
   /**
    * Construct the Worker using (in priority) workerFactory, workerUrl, or
    * the built-in default. Failures are wrapped in `WorkerInitError` with a
-   * `source` discriminator on `details` so consumers can tell factory/url
-   * mistakes from runtime crashes.
+   * `source` discriminator on `details` (`'workerFactory'`, `'workerUrl'` or
+   * `'default'`) so consumers can tell factory/url mistakes from runtime
+   * crashes.
    */
   private createWorker(): Worker {
     if (this.workerFactory) {
@@ -227,16 +304,46 @@ export class WorkerBridge {
         );
       }
     }
-    return new Worker(new URL('../worker/worker.ts', import.meta.url), {
-      type: 'module',
-    });
+    // The expression stays as Vite and webpack detect it, to emit the worker.
+    try {
+      return new Worker(new URL('../worker/worker.ts', import.meta.url), {
+        type: 'module',
+      });
+    } catch (err) {
+      // A worker script on another origin than the page, as when the library
+      // is imported from a CDN, or one the page's CSP blocks. Without a
+      // Worker at all (SSR, jsdom) neither applies.
+      throw new WorkerInitError(
+        `Failed to construct the library's worker (${err instanceof Error ? err.message : String(err)})` +
+          (typeof Worker === 'function'
+            ? `. A Content Security Policy (worker-src) or another origin can block it: ${WORKER_FACTORY_HINT}`
+            : ''),
+        {
+          code: 'WORKER_CRASHED',
+          cause: err,
+          details: { source: 'default' },
+        },
+      );
+    }
   }
 
   /**
    * Create the worker and wait for it to be ready.
    *
-   * Rejects with a descriptive error if the worker fails to signal ready
-   * or DuckDB fails to initialize within `initializeTimeoutMs` (default 30s).
+   * First, before any worker exists, it resolves the URLs of
+   * {@link WorkerBridgeOptions.duckdbBundles} against the page: one that
+   * cannot be resolved rejects with a `ConfigurationError`
+   * (`OPTIONS_INVALID`).
+   *
+   * Rejects at once with a `WorkerInitError` whose code is `WORKER_CRASHED`
+   * when the worker cannot be constructed, or the worker or DuckDB fails to
+   * start: a worker script that does not load (a missing file, or one the
+   * page's Content Security Policy blocks), or DuckDB's own worker failing
+   * to start. A `.wasm` file that fails to download or compile is left
+   * unhandled by duckdb-wasm, which only the console shows: that rejects
+   * with `WORKER_INIT_TIMEOUT` after `initializeTimeoutMs` (default 30 s).
+   * After either, the worker is gone, a request sent meanwhile rejects too,
+   * and calling `initialize()` again starts a new one.
    *
    * If the worker fails later, with an error it does not catch, every
    * pending request rejects with a `WorkerInitError` whose code is
@@ -248,7 +355,12 @@ export class WorkerBridge {
       return this.initPromise;
     }
 
-    this.initPromise = new Promise((resolve, reject) => {
+    // DuckDB's worker, which fetches these, runs from a blob: URL that is no
+    // base for a relative one. A bad URL throws here, before any worker.
+    const bundles = this.duckdbBundles && resolveBundleUrls(this.duckdbBundles);
+
+    let constructed = true;
+    const started = new Promise<void>((resolve, reject) => {
       let settled = false;
       const settle = (fn: () => void) => {
         if (settled) return;
@@ -266,27 +378,36 @@ export class WorkerBridge {
       // initialize(), has nothing left to fail.
       let worker: Worker | null = null;
       const isCurrent = (): boolean => worker !== null && this.worker === worker;
-
-      const timeoutHandle = setTimeout(() => {
+      // DuckDB did not start: tear down the half-initialized worker, so a
+      // later initialize() starts a new one.
+      // A request sent meanwhile would wait for good: its reply dies with it.
+      const giveUp = (error: unknown) =>
         settle(() => {
-          // Tear down the half-initialized worker so a later retry can rebuild.
           if (isCurrent()) {
             worker!.terminate();
             this.worker = null;
             this.initPromise = null;
+            const failure =
+              error instanceof Error
+                ? error
+                : new WorkerInitError(String(error), { code: 'WORKER_CRASHED', cause: error });
+            this.rejectPending(() => failure);
           }
-          reject(
-            new WorkerInitError(
-              `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms ` +
-                `(worker did not reach ready state or DuckDB failed to init). ` +
-                `If your app bundles the worker separately, verify it can import @duckdb/duckdb-wasm.`,
-              {
-                code: 'WORKER_INIT_TIMEOUT',
-                details: { timeoutMs: this.initializeTimeoutMs },
-              },
-            ),
-          );
+          reject(error);
         });
+
+      const timeoutHandle = setTimeout(() => {
+        giveUp(
+          new WorkerInitError(
+            `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms. A mainModule ` +
+              '.wasm that fails to load or compile ends here: serve it as application/wasm, and ' +
+              "allow it in connect-src, with 'wasm-unsafe-eval' in script-src.",
+            {
+              code: 'WORKER_INIT_TIMEOUT',
+              details: { timeoutMs: this.initializeTimeoutMs },
+            },
+          ),
+        );
       }, this.initializeTimeoutMs);
 
       try {
@@ -301,7 +422,15 @@ export class WorkerBridge {
           // A script that fails to load fires a plain Event, with no message.
           const message = event.message
             ? `Worker error: ${event.message}`
-            : `The worker script failed to load${this.workerFactory || this.workerUrl === undefined ? '' : ` (${String(this.workerUrl)})`}`;
+            : `The worker script failed to load${
+                this.workerFactory
+                  ? ''
+                  : this.workerUrl !== undefined
+                    ? ` (${String(this.workerUrl)})`
+                    : ': assets/worker-*.js is missing (a 404, or HTML served in its place), or a ' +
+                      'Content Security Policy (worker-src) or another origin blocks it; ' +
+                      WORKER_FACTORY_HINT
+              }`;
           const error = new WorkerInitError(message, {
             code: 'WORKER_CRASHED',
             cause: event,
@@ -321,21 +450,23 @@ export class WorkerBridge {
           if ((event.data as { id?: unknown } | null)?.id === '__ready__') {
             worker!.removeEventListener('message', readyHandler);
             // Now initialize DuckDB — forward optional bundles override.
-            const initPayload: InitPayload = this.duckdbBundles
-              ? { bundles: this.duckdbBundles }
-              : {};
+            const initPayload: InitPayload = bundles ? { bundles } : {};
             this.sendMessage('init', initPayload)
               .then(() => settle(() => resolve()))
-              .catch((err) => settle(() => reject(err)));
+              .catch(giveUp);
           }
         };
         worker.addEventListener('message', readyHandler);
       } catch (error) {
+        constructed = false;
         settle(() => reject(error));
       }
     });
 
-    return this.initPromise;
+    // A worker that could not be constructed leaves nothing to wait for: a
+    // later initialize() tries again, as after any other failed start.
+    this.initPromise = constructed ? started : null;
+    return started;
   }
 
   /**

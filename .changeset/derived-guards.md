@@ -2,7 +2,7 @@
 '@jeyabbalas/data-table': patch
 ---
 
-### Fixed
+A derived column whose expression does not give one value per row, such as `unnest(tags)` or a bare `sum(price)`, is refused, and a derived-column change that fails leaves everything as it was.
 
 - A derived column whose expression does not give one value per row is refused with `EXPRESSION_INVALID`, and the message says what to write instead.
   - **Before:** validation bound the expression alone, which takes both kinds. `unnest("tags")`, and a macro over it such as `generate_subscripts`, gave the VIEW a row for each element and none for an empty list, with `__rowid__` repeated: the grid's blocks stayed placeholders and a filtered count read `3 / 2 rows`. A bare aggregate such as `sum(price)` passed validation but not the VIEW build, and stayed in the list of derived columns, so every later add, extract and removal failed until an undo, a redo or a new load.

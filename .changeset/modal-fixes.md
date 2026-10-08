@@ -2,7 +2,7 @@
 '@jeyabbalas/data-table': patch
 ---
 
-### Fixed
+The SQL filter modal offers Remove when it edits a filter, dialogs keep focus through their delete confirmations, and two tables on one page no longer share their dialogs' radio buttons.
 
 - The SQL filter modal shows its Remove section when it edits an expression filter. The stylesheet hid the section in both modes, and opening a filter for editing only cleared an inline style, so the modal never offered Remove; the filter's chip was the only way to remove it. The section is also `hidden` outside edit mode, so a table with a class prefix of its own never shows it when creating a filter.
 - Closing the SQL filter modal after editing a filter gives focus back to the filter bar's Expression button. Focus used to drop to the page: the filter's chip, which opened the modal, takes no focus, and updating or removing the filter rebuilds it. `SQLFilterModal.openForEdit()` takes an optional `returnFocus` for hosts that open it themselves.

@@ -232,7 +232,7 @@ and the code that turns DuckDB's results into rows. Reading nested values as
 JSON is what makes them exact, and `to_json` lives in the `json` extension.
 
 **Before / After.** Copy the worker file of the version you install, and
-mirror the extension where the page cannot fetch it:
+mirror the extensions where the page cannot fetch them:
 
 ```ts
 import { WorkerBridge, createDataTable } from '@jeyabbalas/data-table';
@@ -240,18 +240,26 @@ import { WorkerBridge, createDataTable } from '@jeyabbalas/data-table';
 const bridge = new WorkerBridge({
   // Copy node_modules/@jeyabbalas/data-table/dist/assets/worker-*.js here on every upgrade.
   workerUrl: '/static/data-table-worker.js',
+  // From @duckdb/duckdb-wasm 1.33.1-dev57.0, pinned exactly. Relative URLs
+  // resolve against the page.
   duckdbBundles,
 });
 await bridge.initialize();
-// Offline or under a strict CSP: the json and parquet extensions, mirrored.
-await bridge.query(
-  "SET custom_extension_repository = 'https://intranet.example/duckdb-extensions'",
-);
+// Offline or under a strict CSP: the icu, parquet and json extensions,
+// mirrored, at an absolute URL.
+const repository = new URL('/duckdb-ext', document.baseURI).href;
+await bridge.query(`SET custom_extension_repository = '${repository}'`);
 const table = await createDataTable({ container, source, bridge });
 ```
 
-See
-[CSP and offline → DuckDB extensions](../guides/csp-and-offline.md#duckdb-extensions-parquet-and-json).
+The self-hosting recipes before `0.9` did not work as written: they passed
+root-relative bundle URLs, which DuckDB's worker, started from a `blob:`
+URL, could not resolve, and a policy without `'wasm-unsafe-eval'` and
+`blob:`. In `0.9` the bridge resolves the URLs against the page, and
+[CSP and offline deployments](../guides/csp-and-offline.md) gives the files
+to copy, the extensions to mirror, `icu` among them, which every load needs,
+and a policy that the library's browser test runs: send it with every
+response, the library's worker script included.
 
 **Automated migration.** `None — copy the worker file in the build or deploy
 step, from the installed package, so that it changes with every upgrade.`
@@ -464,8 +472,12 @@ grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizat
 - [ ] Every switch over `DataType` or `stats.kind` has a `'nested'` case.
 - [ ] Every `getColumnValues` call on a MAP, UNION, `TIME WITH TIME ZONE` or
       `TIME_NS` column updated.
-- [ ] A self-hosted worker file replaced with the new version's; offline or
-      under a strict CSP, the `json` extension mirrored.
+- [ ] A self-hosted worker file replaced with the new version's. Offline or
+      under a strict CSP: DuckDB-WASM's files copied from `@duckdb/duckdb-wasm`
+      pinned to exactly `1.33.1-dev57.0`; the `icu`, `parquet` and `json`
+      extensions mirrored, with `custom_extension_repository` set to an
+      absolute URL; and one policy, with `'wasm-unsafe-eval'` and
+      `worker-src 'self' blob:`, sent with every response.
 - [ ] Every reader of a CSV or JSON export, or of copied rows, reads date
       and time columns as ISO 8601 text, not numbers.
 - [ ] No `VisualizationFactory` left: its calls go to

@@ -2,8 +2,9 @@
 '@jeyabbalas/data-table': patch
 ---
 
-### Fixed
+The table's own scroll updates no longer undo or stop a scroll the user or the page has started, and adding a column scrolls all the way to it.
 
 - A sideways scroll right after a filter change now stays where the user put it. For a second after a filter change, a table scrolled sideways put its horizontal position back every frame, which undid any scroll made in that second. A wheel scroll straight after brushing a chart went nowhere, and moving the keyboard cursor with `End` could leave it off-screen. The hold now ends at the first wheel, key press, click or touch in the table.
 - Hiding, showing, pinning or moving a column now puts the scroll position back as soon as the table is rebuilt, not a frame later. The table no longer flashes to its first column for a frame. The late restore also undid a scroll made right after the rebuild: moving a column to the far right with `Shift+F2` and then `Shift+End` left it off-screen. And it lost the position when the table was rebuilt twice in a row, as when a derived column is added: the table jumped back to its first column.
-- Adding a column with the + button now scrolls the table all the way to it. The smooth scroll to the right end was cut off after 600ms, before a wide table got there, and the new column was left out of view.
+- A smooth sideways scroll of the table body, such as a host's `scrollTo({ left, behavior: 'smooth' })`, no longer stops a pixel or two in. At a device pixel ratio of 2, Chrome can deliver the header's scroll event for a sync a frame late, after the body has moved on, and the table then wrote the header's older position back into the body, which cancelled the animation. The table now drops a scroll event that finds a scroller where the table itself last put it, to within a pixel, so the header follows the body without pulling it back. An animated scroll of the header, such as a fling over it or a host's `scrollTo` on it, is no longer pulled back by the body in the same way.
+- Adding a column with the + button now scrolls the table all the way to it, on a busy machine too. The smooth scroll to the right end was cut off after 600ms, before a wide table got there, and the new column was left out of view. It also turned off the header's sync until the body seemed to stop, and stalled frames made it look stopped mid-way.

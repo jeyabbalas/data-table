@@ -64,6 +64,6 @@ This file follows the [llms.txt](https://llmstxt.org) convention. It is a curate
 
 ## Optional
 
-- [CHANGELOG.md](./CHANGELOG.md): Release notes in [Keep a Changelog](https://keepachangelog.com) format.
+- [CHANGELOG.md](./CHANGELOG.md): Release notes, newest first, generated from changesets.
 - [docs/migration-guides/](./docs/migration-guides/): Per-release migration entries for every behavior or type change consumers need to action.
 - [LICENSE](./LICENSE): MIT.

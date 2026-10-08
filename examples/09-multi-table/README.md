@@ -14,8 +14,8 @@ npm run dev
 
 ## API surface
 
-- [`WorkerBridge`](../../docs/api-reference.md#workerbridge) — construct and initialize once, pass to each table via `bridge`. Cuts DuckDB memory and init cost roughly in half.
-- [`FilterPresetManager`](../../docs/api-reference.md#filterpresetmanager) — construct once, pass to many tables via `presets: { manager }`
+- [`WorkerBridge`](../../docs/api-reference.md#data-layer) — construct and initialize once, pass to each table via `bridge`. Cuts DuckDB memory and init cost roughly in half.
+- [`FilterPresetManager`](../../docs/api-reference.md#filter-presets) — construct once, pass to many tables via `presets: { manager }`
 - [`SessionStore`](../../docs/api-reference.md#sessionstore) — construct once, pass via `persistence: { sessionStore }`
 - [`tableName` option](../../docs/api-reference.md#createdatatable) — unique per table so snapshots and DuckDB tables don't collide
 

@@ -1,81 +1,14 @@
 # Changelog
 
-## 0.9.0-next.0
+All notable changes to `@jeyabbalas/data-table`, newest release first.
 
-### Minor Changes
-
-- 8a9e949: `setOnFilterRemove` now fires for every way a filter can be dropped, not just undo, redo and reset — so a chart's brush no longer outlives the filter it created.
-
-  The documented contract was always the broad one ("called when a filter chip is removed"). The code implemented a narrower one: `StateActions.notifyRemovedFilters` was reachable only from `undo`, `redo`, `resetToInitial` and the derived-column paths. `removeFilter` and `clearFilters` — which is to say the filter chips, the filter panel, and a chart clearing its own selection — never called it, so anything keyed to a filter went stale the moment a user removed one by hand.
-
-  The visible symptom: drag a brush on a histogram, remove the resulting filter from its chip, then hide any column. The header row rebuilds, the chart is re-created, and the brush comes back — painting a selection for a filter that no longer exists, with the stats slot reading `60,000 rows` on line one and `24,271 rows (40.5%)` underneath.
-
-  **Changed**
-
-  - **`setOnFilterRemove` fires once per column that loses its filter, from every path that can drop one**: `removeFilter` (and so the chips, the filter panel, `removeRawSQLFilter`, and a chart clearing its own brush or selection), `clearFilters`, `loadFilterPreset` for columns the preset does not carry forward, plus the `undo` / `redo` / `resetToInitial` / derived-column paths that already fired. It is called synchronously once the signals have settled, so reading `state.filters` inside the callback shows the post-removal list.
-  - **It still does not fire when a filter is merely replaced** — `addFilter` over a column that already has one, or a preset that hands that column a different filter. The column still has a filter, so state keyed to it is still live. Removal is judged per column, not per filter.
-  - **`removeFilter` and `clearFilters` are now idempotent.** Asking to remove a filter that is not there writes nothing, notifies no subscriber, and pushes no undo entry; previously it set `state.filters` to a fresh array with identical contents, which woke every subscriber and cost a full filter cycle, and it recorded an undo step that made the first `Ctrl+Z` look broken. `clearFilters` still resets `filteredRows` to `totalRows` unconditionally — that repairs the count whether or not there was anything to clear.
-
-    This is what makes the wider callback safe rather than merely correct: clearing a chart's brush calls `onFilterChange(null)`, which the crossfilter coordinator routes straight back into `removeFilter` while the removal that triggered it is still unwinding. Without idempotence every chip click would have cost a duplicate filter cycle and a dead undo step, and clearing _n_ filters would have cost _n_ of each.
-
-  **If you registered `setOnFilterRemove`**
-
-  On `table.actions`, don't: the callback has one slot, and the table fills it to clear its charts' brushes and selections, so registering your own replaces that handler. Listen to the `filterChange` event instead.
-
-  On a `StateActions` you built yourself, you will now see calls you did not see before — one per column, on paths that previously stayed silent. Handlers should be idempotent and cheap: the callback fires synchronously inside the removal, and one user action can produce several calls. Removing a filter from inside the handler is safe.
-
-  Nothing else changes. Filters, chips, presets, undo and redo behave as before; only the notification and the two no-op cases are different.
-
-- c223b5e: ### Changed
-
-  - Column-header charts are built only for columns near the view. A chart is created when its header scrolls within 200 px of the visible header row and removed once the header is 400 px away, and a filter change refreshes only the charts that exist. A column scrolled into view later gets its chart built with the filters in force then. On a 50,000-row × 1,000-column Parquet file in Chrome, `loadData` drops from 20.4 s to 6.2 s (2,004 queries to 22), a filter from 4.4 s to 0.5 s, and hiding a column from 20.6 s to 2.2 s.
-  - `loadData`, and `await createDataTable({ source })`, now wait for the charts in view to draw their first data rather than every column's. In a hidden tab they don't wait for charts, and in a page the browser isn't rendering, such as a hidden iframe, they stop waiting after one second. Without `IntersectionObserver` (jsdom, for example), every column's chart is built at once, as before.
-  - A custom visualization is now constructed each time its column comes within reach, and destroyed when the column leaves. Header rebuilds still re-create the ones near the view. One that throws in its constructor is reported once and not tried again until the next header rebuild. A custom stats panel gets `update(null)` again when its column's chart is removed.
-
-  ### Added
-  - `InteractionManager.replaceVisualization(columnName, viz)` points a column's brush or selection at another visualization without moving it on the Escape stack. Escape now still clears the most recent brush or selection when its column has scrolled out of view.
-
-  ### Fixed
-  - A chart's brush or selection is now always drawn from its column's filter. Hiding, showing, pinning or reordering any column used to put back a saved brush or selection, which after the filter was removed with its chip or Clear all drew a brush that no longer filtered anything.
-  - `loadData` no longer resolves before the charts of a header rebuild that happens while it waits, such as a column change during the load.
-
-- 28b4062: ### Added
-
-  - `LoadError` code `LOAD_MEMORY_EXCEEDED`. A Parquet load that will not fit in browser memory now rejects before anything is loaded. The message names the check that failed — the table's share of DuckDB's free memory, or the load's peak against the 4 GiB WebAssembly limit — with its numbers, which `error.details` also carries (`check`, `neededBytes`, `availableBytes`, plus the estimated size, the memory limit, and the memory other tables already hold). If DuckDB still runs out partway through, the load rejects with the same code, `details.stage: 'load'`, and DuckDB's own message in `error.details.duckdbMessage` and at the end of `error.message`, and the partly built table is dropped. Such loads used to fail late with a raw DuckDB "Out of Memory" message under `LOAD_PARSE_FAILED`.
-
-  ### Changed
-  - A Parquet `File`, `Blob`, or URL is no longer read into memory before loading. DuckDB reads the file from disk as it builds the table, so the file no longer has to fit in memory alongside it. A 1.5 GB file of 200,000 rows × 1,000 columns now loads in about 35 seconds in Chrome; it used to run out of memory. Typical files load about as fast as before. A Parquet `ArrayBuffer` is still copied into memory whole, so pass a `File` or `Blob` for large files.
-  - `table.loadData`, `actions.loadData`, and `WorkerBridge.loadData` accept a `Blob` directly. The facade used to convert a `Blob` to an `ArrayBuffer` first.
-  - If you self-host the worker script (`bridgeOptions.workerUrl` or `workerFactory`), copy the new worker file when you upgrade. The main thread now posts a Parquet `File` or `Blob` to the worker as is, and an older worker file cannot read it, so every Parquet load from a `File`, `Blob`, or URL fails.
-
-  ### Fixed
-  - A load that fails no longer leaves the previous table in DuckDB for good. The next successful load, or `destroy()` over a shared `WorkerBridge`, drops it.
-
-### Patch Changes
-
-- 20b08c7: ### Fixed
-
-  - Destroying a table while a filter's row-count query is still running no longer logs `[CrossfilterCoordinator] Failed to update filtered row count` when the terminated worker rejects that query. `CrossfilterCoordinator.destroy()` now also discards a count that settles afterwards: it no longer writes `state.filteredRows` or fires `onFilterCycleComplete` — relevant to `/advanced` users who drive the coordinator directly.
-
-- 9d2827c: ### Fixed
-
-  - A `tableName` containing a single quote (for example `O'Brien`) no longer breaks the load with a SQL parser error. Loaders used to register the source as `<tableName>.<ext>` and splice that name unescaped into `read_csv_auto('…')` / `read_json_auto('…')` / `read_parquet('…')`; the source file now gets a generated name, so the table name only ever reaches SQL as a quoted identifier.
-  - A failure while unregistering the source file after a load no longer replaces the load's own error, or fails a load that succeeded.
-
-- 2f5cb4b: ### Fixed
-
-  - Converting text columns of ISO dates, timestamps, or times no longer loses values. The loader sampled 100 distinct values and converted the column if 95% of them matched, and any other value became `null` without warning. It now checks every value, and a column with one value that would not convert unchanged stays text: `N/A` or `2024-02-30`, which would become `null`, and `2024-03-15 (approx)`, `02:30:00 PM` or a seventh fractional digit, which DuckDB would cut. Blank values count as missing and become `null`, as before.
-  - Text timestamps with a UTC offset (`2024-03-15T14:30:00+05:30`) now load as `TIMESTAMP WITH TIME ZONE`, displayed in UTC. They used to load as plain timestamps with the offset dropped, which shifted each value by its offset.
-  - A Parquet file with text columns of dates no longer needs memory for a second copy of the table. The dates convert as the file is read, and the memory check counts them at their final size. A 200,000 rows × 1,000 columns file with 10 date columns now loads in about 12 seconds in Chrome; it used to run out of memory. CSV and JSON loads convert each date column in place instead of rebuilding the table.
-
-- c610c6a: ### Fixed
-
-  - Scrolling deep into a sorted or filtered table no longer runs DuckDB out of memory. Each block of rows used to be fetched by sorting every visible column down to the block's position, so DuckDB held all the rows above it in full; halfway down a sorted 5-million-row, 40-column table that exceeded the browser's WASM memory limit and the rows never loaded. The table now sorts only the sort columns and row ids to find the block, then reads that block's rows, which takes under a second at that size. Scrolls still slow down with depth when sorted or filtered.
-  - Sorting the grid by an interval column now orders rows by duration. While the column was displayed, the grid sorted it by its text, so `100 days` came before `9 days`.
-
-- a4ab723: ### Fixed
-
-  - Timestamp cells now drop every trailing zero from the milliseconds. A whole-second value such as `2020-01-01 00:00:16.000` used to render as `2020-01-01 00:00:16.00`, and `.100` as `.10`; they now render as `2020-01-01 00:00:16` and `.1`, matching the documented format.
+From 0.3.0 on, each release's entries are generated from its
+[changesets](https://github.com/changesets/changesets), so they do not follow
+the Keep a Changelog format; the changes before 0.3.0, at the end of this
+file, were written by hand. Versions follow
+[Semantic Versioning](https://semver.org/). While the version is 0.x, a minor
+release can carry breaking changes. Walkthroughs for breaking changes are in
+[`docs/migration-guides/`](./docs/migration-guides/).
 
 ## 0.8.0
 
@@ -468,7 +401,7 @@ import.meta.url), { type: 'module' })`) was rewritten by Vite's library
   - `tests/core/ModalHost.phase3.test.ts` (7 new cases) adds the nested-modal Esc behaviour (Esc on the inner host closes only inner; outer's z-index reservation and focus restoration to the inner-opener button are preserved), the `destroy()`-without-`close()` path (asserts `wheel` and `touchmove` document listeners are torn down and the open-stack reservation is released), and mixed inline-panel + portalled-modal stacking (modal base 1000 always tops panel base 50 regardless of open order).
 
   **Strict-TS rollout**
-  - `tsconfig.json` now sets `exactOptionalPropertyTypes: true` (deferred from Phase 2 §10). Every public option type whose field is genuinely "optional and may be `undefined`" was widened from `prop?: T` to `prop?: T | undefined` so explicit-undefined consumer pass-throughs continue to compile. The runtime behaviour is unchanged; the api-surface snapshot reflects only the type-level diff. See [`docs/migration-guides/phase-3-exact-optional-properties.md`](../docs/migration-guides/phase-3-exact-optional-properties.md) for the full list of affected option types and the guidance for downstream apps that mirror the flag.
+  - `tsconfig.json` now sets `exactOptionalPropertyTypes: true` (deferred from Phase 2 §10). Every public option type whose field is genuinely "optional and may be `undefined`" was widened from `prop?: T` to `prop?: T | undefined` so explicit-undefined consumer pass-throughs continue to compile. The runtime behaviour is unchanged; the api-surface snapshot reflects only the type-level diff. See [`docs/migration-guides/phase-3-exact-optional-properties.md`](./docs/migration-guides/phase-3-exact-optional-properties.md) for the full list of affected option types and the guidance for downstream apps that mirror the flag.
   - `noUncheckedIndexedAccess` was temporarily flipped on to identify and fix every offending site in `src/core/` (32 sites across `Actions.ts`, `UndoManager.ts`, `ModalHost.ts`, `columnHeaderTooltip.ts`). Sites were narrowed via post-bounds-check non-null assertions or `?? null` fallbacks. The flag stays disabled globally until Phase 9 flips it project-wide; subsystem phases 4–8 each clean their slice in turn.
 
   **No public-API runtime surface change.** `tests/api-surface.exports.test.ts`, `tests/api-surface.snapshot.test.ts`, `tests/api-surface.jsdoc.test.ts`, `tests/api-surface.private-paths.test.ts`, and `tests/api-surface.cjs-routing.test.ts` all stay green. Tests: 2946 → 3007 (+61). `npm run docs:api:check`: 0 → 0 warnings.
@@ -477,7 +410,7 @@ import.meta.url), { type: 'module' })`) was rewritten by Vite's library
 
   **Worker-side cancel implemented**
   - `src/worker/dispatcher.ts` (extracted from `worker.ts` for testability) now tracks an in-flight `{ id, type }` reference and, on receipt of a `cancel` message whose `targetId` matches, calls `connection.cancelSent()`. Mismatched targetIds reply with `{ cancelled: false, reason: 'no-matching-inflight' }`. Previously the worker accepted the cancel message but did nothing — DuckDB kept grinding the orphaned query.
-  - New error code `QUERY_CANCELLED` (worker-side, when DuckDB interrupts an in-flight query/load/export) is distinct from the existing `QUERY_ABORTED` (bridge-side, when the consumer's `AbortSignal` fires before the worker reply lands). Consumers branching on `QUERY_ABORTED` continue to work; `QUERY_CANCELLED` is purely additive. See [`docs/migration-guides/phase-4-cancel-codes.md`](../docs/migration-guides/phase-4-cancel-codes.md).
+  - New error code `QUERY_CANCELLED` (worker-side, when DuckDB interrupts an in-flight query/load/export) is distinct from the existing `QUERY_ABORTED` (bridge-side, when the consumer's `AbortSignal` fires before the worker reply lands). Consumers branching on `QUERY_ABORTED` continue to work; `QUERY_CANCELLED` is purely additive. See [`docs/migration-guides/phase-4-cancel-codes.md`](./docs/migration-guides/phase-4-cancel-codes.md).
   - DuckDB does not ship a typed `CancelledError`; the worker maps interrupt-shaped rejection messages (`INTERRUPT`, `interrupted`, `cancelled`) to `QUERY_CANCELLED` via a single `isCancelRejection` helper. Future DuckDB-WASM versions could add a typed cancel class — the heuristic lives in one place behind a documented helper.
   - `docs/troubleshooting.md` gains the `QUERY_CANCELLED` row; `tests/api-surface.error-codes.test.ts` (Phase 3 lock) auto-validates the addition.
 
@@ -532,7 +465,7 @@ import.meta.url), { type: 'module' })`) was rewritten by Vite's library
     identically-named entries. `importFromJSON` keeps importing — duplicate
     presets within the imported file or against the existing collection
     are skipped and reported on the `errors[]` channel rather than
-    throwing. Migration: [`docs/migration-guides/phase-5-preset-name-uniqueness.md`](../docs/migration-guides/phase-5-preset-name-uniqueness.md).
+    throwing. Migration: [`docs/migration-guides/phase-5-preset-name-uniqueness.md`](./docs/migration-guides/phase-5-preset-name-uniqueness.md).
   - `actions.addDerivedColumn` and `actions.updateDerivedColumn` (rename
     path) now reject the reserved name `__rowid__` with the message
     `Column name "__rowid__" is reserved for the synthetic row id`. The
@@ -542,7 +475,7 @@ import.meta.url), { type: 'module' })`) was rewritten by Vite's library
     unaffected (rename is already rejected separately). The
     `Promise<{ success: boolean; error?: string }>` return shape is
     unchanged — no new error class, no api-surface delta. Migration:
-    [`docs/migration-guides/phase-5-derived-rowid-reservation.md`](../docs/migration-guides/phase-5-derived-rowid-reservation.md).
+    [`docs/migration-guides/phase-5-derived-rowid-reservation.md`](./docs/migration-guides/phase-5-derived-rowid-reservation.md).
 
   **New error code routed to `ConfigurationError`**
   - `PRESET_DUPLICATE_NAME` joins the `CONFIG_*` / `OPTIONS_*` / `CONTAINER_*` /
@@ -768,16 +701,14 @@ import.meta.url), { type: 'module' })`) was rewritten by Vite's library
 - 1a228a8: Surface `AnnotationError` in the `MUST_EXIST_AT_ROOT` API gate (`tests/api-surface.exports.test.ts`). The class was already exported from `src/index.ts` and tracked by `tests/api-surface.snapshot.test.ts`; this aligns the explicit gate manifest with the runtime exports so future drift surfaces immediately.
 - 1a228a8: Phase 9 — performance, memory, release readiness. Tightened coverage thresholds (76 / 63 / 81 / 77 — actuals minus 1 pp) and bundle-size budgets (root ESM 7.7 kB, lazy ExportDialog 81 kB ESM, etc. — actuals + ~5 % headroom). Added an opt-in perf suite (`npm run test:perf`, `RUN_DUCKDB_PERF=1` / `RUN_LIFECYCLE_STRESS=1`) covering 1 M-row filter latency, 10 k annotation insert / lookup, scroll-handler frame budget, 1000-cycle create / destroy stress, and shared-bridge / 1k-mutation autosave memory leak gates. Wired `npm run size` into the CI matrix as a third job. Added high-contrast + forced-colors CSS for `prefers-contrast: more` and `forced-colors: active`. Removed the dead-code `splitCrossfilterFilters` (was never exported). Coalesced duplicate `columnChange` emit on column re-pinning via `queueMicrotask`. Defensive shallow-clone of `loadComplete.schema`. New `warning` event with `code: 'PERSISTENCE_VERSION_REJECTED'` when `SessionStore.load()` rejects a stored snapshot whose version is outside `[1, SNAPSHOT_VERSION]`. Documented OIDC trusted publishing in `DEVELOPMENT.md`. Refreshed `docs/performance.md` with a 0.2.0 benchmark snapshot.
 
-All notable changes to `@jeyabbalas/data-table` are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
-the project adheres to [Semantic Versioning](https://semver.org/).
+## Before 0.3.0
 
-Planned work and discussion lives in GitHub Issues under the
-[`roadmap`](https://github.com/jeyabbalas/data-table/issues?q=is%3Aissue+label%3Aroadmap)
-label. Releases with breaking changes also get a dedicated walkthrough under
-[`docs/migration-guides/`](./docs/migration-guides/) alongside the entry below.
-
-## [Unreleased]
+Changes made after 0.1.0 and before the project moved to changesets in April
+2026, written by hand. No version was released for them alone: they are part
+of 0.3.0, the first version cut with changesets, whose entry above lists only
+its changesets. 0.3.0 was never published; 0.3.1 is the first version on npm.
+There was no 0.2.0 release: `package.json` was bumped to 0.2.0 by hand just
+before that first changesets release, whose minor bump then made it 0.3.0.
 
 ### Added
 
@@ -1119,6 +1050,7 @@ new WorkerBridge(); await bridge.initialize();`. Pass the bridge into
   `if (!table.isDestroyed()) await table.destroy()` in the unmount handler
   (React `useEffect` return, Vue `onBeforeUnmount`).
 
-## [0.1.0]
+## 0.1.0
 
-Initial prerelease.
+The initial version, set when the project was created in December 2025. Never
+tagged or published.

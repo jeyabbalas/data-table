@@ -229,6 +229,24 @@ describe('WorkerBridge — events from a worker it no longer uses', () => {
     expect(await settledWithin(query)).toEqual({ status: 'resolved', value: [{ x: 1 }] });
   });
 
+  it('an init that times out rejects the requests sent meanwhile too', async () => {
+    const mock = createMockWorker({ autoInit: false });
+    const bridge = new WorkerBridge({
+      workerFactory: () => mock.worker,
+      initializeTimeoutMs: 30,
+    });
+    const init = bridge.initialize();
+    await mock.waitForPosts(1);
+    const query = bridge.query('SELECT 1', undefined, { cache: false });
+    await mock.waitForPosts(2);
+
+    expect(codeOf(await settledWithin(init))).toBe('WORKER_INIT_TIMEOUT');
+    const settled = await settledWithin(query);
+    expect(settled.status === 'rejected' && settled.reason).toBeInstanceOf(WorkerInitError);
+    expect(codeOf(settled)).toBe('WORKER_INIT_TIMEOUT');
+    expect(pendingCount(bridge)).toBe(0);
+  });
+
   it('terminate() while the init message awaits its reply rejects initialize() at once', async () => {
     const mock = createMockWorker({ autoInit: false });
     const bridge = new WorkerBridge({ workerFactory: () => mock.worker });

@@ -1,6 +1,6 @@
 # Phase 9 — `TableEvents` payload arrays / Sets are now `readonly`
 
-**Status:** Landing in `0.2.0`.
+**Status:** Shipped in `0.3.0` (first published to npm as `0.3.1`).
 **Affects:** TypeScript consumers compiling against `@jeyabbalas/data-table`'s `.d.ts`. Runtime behavior is unchanged.
 
 ## What changed
@@ -63,7 +63,7 @@ table.on('derivedChange', ({ derivedColumns }) => {
 
 ## Why now
 
-Phase 8 introduced the runtime clone but deferred the type tightening to avoid forcing TS2540 on consumer code under strict mode. With the cumulative consumer base still pre-1.0, Phase 9 lands the type contract before the 1.0 cut. Consumers compiling against `0.1.x` upgrading to `0.2.0` see one `tsc` pass; the fix is mechanical (`.slice()` or `new Set(...)` / `new Map(...)` at the destructuring point).
+Phase 8 introduced the runtime clone but deferred the type tightening to avoid forcing TS2540 on consumer code under strict mode. With the cumulative consumer base still pre-1.0, Phase 9 lands the type contract before the 1.0 cut. Consumers compiling against `0.1.x` upgrading to `0.3.0` see one `tsc` pass; the fix is mechanical (`.slice()` or `new Set(...)` / `new Map(...)` at the destructuring point).
 
 ## Verification
 

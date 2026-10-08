@@ -1,7 +1,8 @@
 # Memory envelope for large Parquet sources
 
 Maintainer notes: the findings of a browser spike run before any further large-dataset work. The
-spike code and raw results are on branch `spike/memory-envelope` (`spike/memory/`).
+spike code and raw results are archived at tag `archive/spike-memory-envelope` (commit `8d521bf`,
+branched from `40eebfc`), in its `spike/memory/` folder.
 
 ## Question and verdict
 

@@ -20,9 +20,10 @@
  *
  * The policy goes on every response. The negative control, the same policy
  * without `'wasm-unsafe-eval'`, shows that it reached DuckDB's worker, which
- * compiles the `.wasm`. Two more tests show which response that takes: the
- * library's worker gets the policy its script arrives with, not the page's,
- * and DuckDB's `blob:` worker inherits the library worker's. The rest cover
+ * compiles the `.wasm`. Three more tests show which response that takes:
+ * the library's worker gets the policy its script arrives with, not the
+ * page's; DuckDB's `blob:` worker inherits the library worker's; and a
+ * library worker started from a `blob:` URL takes the page's. The rest cover
  * what fails, and how fast and how clearly it says so, and the guide's two
  * ways of serving the library's worker script yourself.
  */
@@ -127,6 +128,8 @@ interface Traffic {
   served: string[];
   /** Every request to another host, aborted. */
   foreign: string[];
+  /** Requests the harness could not answer, aborted: an extension it could not fetch, say. */
+  failed: string[];
 }
 
 /** `relative` under `dir`, or null when it would leave it. */
@@ -145,9 +148,12 @@ async function mirrored(route: Route, pathname: string): Promise<Buffer | null> 
   if (!match) return null;
   const file = path.join(EXTENSION_CACHE, match[1]!);
   if (existsSync(file)) return readFile(file);
-  const upstream = await route.fetch({ url: `${EXTENSION_REPOSITORY}/${match[1]}` });
+  const url = `${EXTENSION_REPOSITORY}/${match[1]}`;
+  const upstream = await route.fetch({ url, timeout: 30_000 }).catch((error: Error) => {
+    throw new Error(`could not fetch ${url} for the extension mirror: ${error.message}`);
+  });
   if (upstream.status() !== 200) {
-    throw new Error(`${EXTENSION_REPOSITORY}/${match[1]} answered ${upstream.status()}`);
+    throw new Error(`${url} answered ${upstream.status()}, so the extension mirror lacks it`);
   }
   const body = await upstream.body();
   await mkdir(path.dirname(file), { recursive: true });
@@ -188,7 +194,7 @@ async function serve(
   policyFor: (pathname: string) => string | null,
   typeFor: (pathname: string) => string | undefined = typeOf,
 ): Promise<Traffic> {
-  const traffic: Traffic = { served: [], foreign: [] };
+  const traffic: Traffic = { served: [], foreign: [], failed: [] };
   await context.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== ORIGIN) {
@@ -197,17 +203,23 @@ async function serve(
       return;
     }
     traffic.served.push(url.pathname);
-    const body = await fileFor(route, url.pathname);
-    const type = typeFor(url.pathname);
-    const csp = policyFor(url.pathname);
-    await route.fulfill({
-      status: body === null ? 404 : 200,
-      body: body ?? 'Not found',
-      headers: {
-        'content-type': body === null ? 'text/plain' : (type ?? 'application/octet-stream'),
-        ...(csp === null ? {} : { 'content-security-policy': csp }),
-      },
-    });
+    try {
+      const body = await fileFor(route, url.pathname);
+      const type = typeFor(url.pathname);
+      const csp = policyFor(url.pathname);
+      await route.fulfill({
+        status: body === null ? 404 : 200,
+        body: body ?? 'Not found',
+        headers: {
+          'content-type': body === null ? 'text/plain' : (type ?? 'application/octet-stream'),
+          ...(csp === null ? {} : { 'content-security-policy': csp }),
+        },
+      });
+    } catch (error) {
+      // Answered, so that DuckDB's synchronous XHR does not wait out the test.
+      traffic.failed.push(`${url.pathname}: ${(error as Error).message}`);
+      await route.abort('failed');
+    }
   });
   return traffic;
 }
@@ -218,6 +230,25 @@ function listen(page: Page): string[] {
   page.on('console', (message) => messages.push(`${message.type()}: ${message.text()}`));
   page.on('pageerror', (error) => messages.push(`pageerror: ${error.message}`));
   return messages;
+}
+
+/**
+ * Run `run`, a step in the page, and fail with the harness's own failures
+ * first: when the extension mirror cannot be filled, the page only sees a
+ * load fail.
+ */
+async function step<T>(traffic: Traffic, run: () => Promise<T>): Promise<T> {
+  const check = () =>
+    expect(traffic.failed, 'the harness could not answer these requests').toEqual([]);
+  let result: T;
+  try {
+    result = await run();
+  } catch (error) {
+    check();
+    throw error;
+  }
+  check();
+  return result;
 }
 
 /** Open the page and wait for its module script to load the library. */
@@ -369,29 +400,33 @@ test('loads CSV, Parquet and nested values with every file from the page origin'
   });
 
   // An absolute one, from the page's own URL, serves ICU from the mirror.
-  const csv = await page.evaluate(async () => {
-    const w = window as unknown as InPage;
-    const repository = new URL('/duckdb-ext', document.baseURI).href;
-    await w.__bridge.query(`SET custom_extension_repository = '${repository}'`);
-    await w.__table.loadData('/fixtures/csv/titanic.csv');
-    return w.__table.state.totalRows.get();
-  });
+  const csv = await step(traffic, () =>
+    page.evaluate(async () => {
+      const w = window as unknown as InPage;
+      const repository = new URL('/duckdb-ext', document.baseURI).href;
+      await w.__bridge.query(`SET custom_extension_repository = '${repository}'`);
+      await w.__table.loadData('/fixtures/csv/titanic.csv');
+      return w.__table.state.totalRows.get();
+    }),
+  );
   expect(csv).toBe(891);
   expect(traffic.served).toContain(mirror('icu'));
   expect(traffic.served).not.toContain(mirror('parquet'));
 
   // Parquet, with a JSON column, needs parquet and json; so do exact reads.
-  const parquet = await page.evaluate(async () => {
-    const w = window as unknown as InPage;
-    await w.__table.loadData('/fixtures/parquet/nested-stress-tests.parquet');
-    return {
-      rows: w.__table.state.totalRows.get(),
-      point: await w.__table.actions.getCellValue(10, 'point'),
-      tags: await w.__table.actions.getCellValue(10, 'tags'),
-      renderedRows: document.querySelectorAll('#table [role="row"]').length,
-      violations: w.__violations,
-    };
-  });
+  const parquet = await step(traffic, () =>
+    page.evaluate(async () => {
+      const w = window as unknown as InPage;
+      await w.__table.loadData('/fixtures/parquet/nested-stress-tests.parquet');
+      return {
+        rows: w.__table.state.totalRows.get(),
+        point: await w.__table.actions.getCellValue(10, 'point'),
+        tags: await w.__table.actions.getCellValue(10, 'tags'),
+        renderedRows: document.querySelectorAll('#table [role="row"]').length,
+        violations: w.__violations,
+      };
+    }),
+  );
   expect(parquet.rows).toBe(1000);
   expect(parquet.point).toEqual({ x: 1.5, y: -0.5, tier: 'gold' });
   expect(parquet.tags).toEqual(['red', 'green', 'blue']);
@@ -466,7 +501,7 @@ test("without 'wasm-unsafe-eval', DuckDB's worker cannot compile its module", as
   const messages = listen(page);
   await open(page);
 
-  const start = await startBridge(page, { initializeTimeoutMs: 10_000 });
+  const start = await startBridge(page, { initializeTimeoutMs: 5_000 });
 
   // duckdb-wasm swallows the compile error: the bridge's timeout reports it.
   expect(start).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_INIT_TIMEOUT' });
@@ -497,6 +532,25 @@ test("DuckDB's worker takes the policy sent with the library's worker script", a
   await open(page);
 
   const start = await startBridge(page, { initializeTimeoutMs: 5_000 });
+
+  expect(start).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_INIT_TIMEOUT' });
+  expect(blockedWasm(messages), messages.join('\n')).toBe(true);
+});
+
+test("a library worker started from a blob: URL takes the page's policy", async ({
+  context,
+  page,
+}) => {
+  // The negative control's policy on the page alone: the workerFactory
+  // recipe's blob: worker inherits it, and passes it on to DuckDB's worker.
+  await serve(context, (pathname) => (pathname === '/' ? NO_WASM : null));
+  const messages = listen(page);
+  await open(page);
+
+  const start = await startBridge(page, {
+    worker: { copy: WORKER_COPY, as: 'workerFactory' },
+    initializeTimeoutMs: 5_000,
+  });
 
   expect(start).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_INIT_TIMEOUT' });
   expect(blockedWasm(messages), messages.join('\n')).toBe(true);

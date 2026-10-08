@@ -7,7 +7,7 @@
 > been widened from `prop?: T` to `prop?: T | undefined` so explicit `undefined`
 > remains assignable.
 
-**Released:** 2026-04-26 (`@jeyabbalas/data-table` next patch)
+**Released:** in `@jeyabbalas/data-table` 0.3.0 (first published to npm as 0.3.1, 2026-04-28)
 **Affected versions:** consumers compiling against `@jeyabbalas/data-table`'s emitted `.d.ts`
 **Migration difficulty:** trivial (consumers who simply omit optional properties are unaffected)
 
@@ -138,7 +138,7 @@ This is purely cosmetic — the library accepts both shapes.
 
 ## Verification checklist
 
-- [ ] `npm install @jeyabbalas/data-table@<next-patch>` in the target project.
+- [ ] `npm install @jeyabbalas/data-table@0.3.1` (or later) in the target project.
 - [ ] `npm run build` (or `tsc --noEmit`) passes — no consumer-side fixes needed.
 - [ ] If you maintain a vendored copy of any of the `/advanced` option
       types' shapes, regenerate or update from the new `.d.ts`.

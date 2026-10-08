@@ -7,7 +7,7 @@
 > against the existing collection are skipped and reported on the
 > `errors[]` channel rather than throwing.
 
-**Released:** 2026-04-26 (`@jeyabbalas/data-table` next patch)
+**Released:** in `@jeyabbalas/data-table` 0.3.0 (first published to npm as 0.3.1, 2026-04-28)
 **Affected versions:** consumers calling `FilterPresetManager.save` /
 `.rename` with names they don't pre-check for collisions.
 **Migration difficulty:** trivial — wrap the call in a `try/catch`, or

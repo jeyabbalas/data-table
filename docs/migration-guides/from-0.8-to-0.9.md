@@ -488,10 +488,15 @@ and error handlers can see them.
   drop derived columns, they fire it with `kind: 'updated'`, so a SQL editor
   that refreshes its completions on it stops offering those columns. See
   [Events → Event catalog](../guides/events.md#event-catalog).
+- **`filterChange` fires once the row count lands.** It no longer waits for
+  every column chart to refetch, as `0.8` did, so a handler that reads a
+  chart's stats can run before they update. See
+  [Events → Event catalog](../guides/events.md#event-catalog).
 - **Date-text columns can load with another type.** A text column of ISO
   dates, timestamps or times converts only if every value converts
   unchanged: one stray `N/A` keeps it text, where `0.8` converted it and
-  turned such values into `null`. Text timestamps with a UTC offset load as
+  turned such values into `null`. Text timestamps whose offset differs from
+  the load's time zone (`+05:30` in the default UTC) load as
   `TIMESTAMP WITH TIME ZONE`, not as plain timestamps shifted by the offset.
   See
   [Loading data → Dates and times stored as text](../guides/loading-data.md#dates-and-times-stored-as-text).
@@ -539,7 +544,7 @@ and error handlers can see them.
   `LOAD_PARSE_FAILED`, which a CSV or JSON load that runs out still gets. See
   [Troubleshooting §27](../troubleshooting.md#27-loaderror-with-code-load_memory_exceeded).
 
-### Filters and charts
+### Filters, sorting and charts
 
 - **`setOnFilterRemove` fires on every removal.** It is called once per
   column that loses its filter, by its chip, the filter panel,
@@ -548,6 +553,10 @@ and error handlers can see them.
   brushes, so one registered on `table.actions` replaces it: listen to
   `filterChange` instead. See
   [API reference → Undo / redo](../api-reference.md#undo--redo).
+- **Interval columns sort by duration.** Sorting the grid by an `INTERVAL`
+  column orders its rows by value, as DuckDB compares intervals; `0.8`
+  sorted a shown one by its text, so `100 days` came before `9 days`. See
+  [API reference → Sorting](../api-reference.md#sorting).
 - **`distinctCount` counts finite values only.** In `NumericColumnStats` and
   `HistogramData` it leaves out `NaN`, `Infinity` and `-Infinity`, which the
   new `nonFiniteCount` counts. See
@@ -572,9 +581,10 @@ and error handlers can see them.
   paint, so it matches whatever scrollbar the browser draws. See
   [Theming → Sizing](../guides/theming.md#sizing).
 - **Right-to-left pages get a left-to-right grid.** The grid is laid out
-  left to right whatever the page's direction, and on a page with a `dir`
-  attribute each cell value and column name takes its direction from its own
-  text. Right-to-left layouts are still not supported. See
+  left to right whatever the page's direction, and on a page marked right to
+  left with a `dir` attribute each cell value and column name takes its
+  direction from its own text. Right-to-left layouts are still not supported.
+  See
   [API reference → i18n strings](../api-reference.md#i18n-strings).
 - **Column widths under 50 px draw at 50.** A width under 50 px, which only
   `setColumnWidth` or a restored session can set, is drawn 50 px wide, the
@@ -603,16 +613,20 @@ and error handlers can see them.
 - **Interval cells show their parts, and `infinity` shows as text.** A cell
   shows an interval's parts as DuckDB stores them, `100h 0.5s` for
   `100:00:00.5` and `-1d 1h` for `-1 day -01:00:00`, which `0.8` showed as
-  `0.5s` and `1d 1h`. A `DATE` or `TIMESTAMP` holding `infinity` shows
-  `infinity`, where `0.8` showed a number or failed to load the rows around
-  it. See
+  `0.5s` and `1d 1h`. A date or timestamp holding `infinity` shows
+  `infinity`, where `0.8` showed a number, a date in 2262 (`TIMESTAMP_NS`),
+  or failed to load the rows around it. See
+  [Loading data → Dates and timestamps](../guides/loading-data.md#dates-and-timestamps).
+- **Timestamp cells drop every trailing zero.** A whole second shows as
+  `2020-01-01 00:00:16`, which `0.8` showed as `2020-01-01 00:00:16.00`, and
+  `.100` as `.1`, not `.10`. See
   [Loading data → Dates and timestamps](../guides/loading-data.md#dates-and-timestamps).
 - **The SQL editors are named by their labels.** Screen readers now name the
   expression filter's editor "SQL WHERE condition", and every editor takes
   its name and placeholder from `messages` (`filters.sqlFilter.conditionLabel`,
-  `derived.expressionLabel`, `derived.expressionPlaceholder`), which an
-  `editorFactory` gets as a third argument. `0.8` named all three "SQL
-  Expression", in English. See
+  `filters.sqlFilter.editorPlaceholder`, `derived.expressionLabel`,
+  `derived.expressionPlaceholder`), which an `editorFactory` gets as a third
+  argument. `0.8` named all three "SQL Expression", in English. See
   [i18n → ARIA and screen-reader strings](../guides/i18n.md#aria-and-screen-reader-strings).
 - **`messages` callbacks keep their types.** `DeepPartial<Strings>` no
   longer turns each callback into `{}`, as it has since `messages` was

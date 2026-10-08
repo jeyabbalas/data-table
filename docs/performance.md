@@ -155,7 +155,7 @@ a browser with WebAssembly exception handling, and `mvp` in one without
 it. It picks the multi-threaded `coi` bundle only when your
 `duckdbBundles` list one and the page is cross-origin isolated (COOP/COEP
 headers) with WebAssembly threads and SIMD; see
-[CSP and offline deployments](./guides/csp-and-offline.md#self-hosting-the-wasm-bundles).
+[CSP and offline deployments](./guides/csp-and-offline.md#the-workers).
 
 **Implication:** aggregations over millions of rows are fast (DuckDB is
 column-oriented and vectorized), but by default they run on one CPU core.

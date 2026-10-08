@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as errorsModule from '@/core/errors';
 import {
   DataTableError,
   WorkerInitError,
@@ -93,6 +94,103 @@ describe('DataTableError classes', () => {
     it('honours a caller-provided code', () => {
       const err = new Ctor('x', { code: 'SOMETHING_SPECIFIC' });
       expect(err.code).toBe('SOMETHING_SPECIFIC');
+    });
+  });
+});
+
+// The build renames the classes, so `errors.ts` names each one in a string
+// literal; `tests/api-surface.error-names.test.ts` checks that in `dist/`.
+describe('error names', () => {
+  type ErrorClass = typeof DataTableError;
+
+  // Every class `errors.ts` exports whose instances are errors.
+  const classes = Object.entries(errorsModule).filter(
+    (entry): entry is [string, ErrorClass] =>
+      typeof entry[1] === 'function' && entry[1].prototype instanceof Error,
+  );
+
+  // A class added to `errors.ts` goes in the naming loop after the classes too.
+  it('finds all twelve classes', () => {
+    expect(classes.map(([name]) => name).sort()).toEqual([
+      'AnnotationError',
+      'ConfigurationError',
+      'DataTableError',
+      'DerivedColumnError',
+      'DestroyedError',
+      'ExportError',
+      'LoadError',
+      'PersistenceError',
+      'QueryError',
+      'SQLValidationError',
+      'WorkerInitError',
+      'WorkerTerminatedError',
+    ]);
+  });
+
+  it.each(classes)(
+    '%s: the class, error.name, String(error) and toJSON().name agree',
+    (name, ErrorClass) => {
+      const err = new ErrorClass('m');
+      expect(ErrorClass.name).toBe(name);
+      expect(err.constructor.name).toBe(name);
+      expect(err.name).toBe(name);
+      expect(String(err)).toBe(`${name}: m`);
+      expect(err.toJSON().name).toBe(name);
+      expect(JSON.parse(JSON.stringify(err))).toMatchObject({ name });
+    },
+  );
+
+  it('keeps name an own enumerable property of the error, after code and details', () => {
+    const err = new LoadError('m');
+    expect(Object.getOwnPropertyDescriptor(err, 'name')).toEqual({
+      value: 'LoadError',
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    expect(Object.keys(err)).toEqual(['code', 'details', 'name']);
+  });
+
+  it("leaves the class's own name as a class has it: read-only and not enumerable", () => {
+    expect(Object.getOwnPropertyDescriptor(LoadError, 'name')).toEqual({
+      value: 'LoadError',
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  });
+
+  describe('a subclass the library does not define', () => {
+    class AppError extends DataTableError {}
+    class AppLoadError extends LoadError {}
+    class RenamedError extends DataTableError {
+      override name = 'Renamed';
+    }
+
+    it('is named after its own class', () => {
+      const err = new AppError('m', { code: 'APP_FAILED' });
+      expect(err.name).toBe('AppError');
+      expect(String(err)).toBe('AppError: m');
+      expect(err.toJSON()).toMatchObject({ name: 'AppError', code: 'APP_FAILED' });
+      expect(err).toBeInstanceOf(DataTableError);
+    });
+
+    it("is named after its own class when it extends one of the library's subclasses", () => {
+      const err = new AppLoadError('m');
+      expect(err.name).toBe('AppLoadError');
+      expect(String(err)).toBe('AppLoadError: m');
+      expect(err.code).toBe('PARSE_FAILED');
+      expect(err).toBeInstanceOf(LoadError);
+      expect(err).toBeInstanceOf(DataTableError);
+      // The library's class keeps its own name.
+      expect(new LoadError('m').name).toBe('LoadError');
+    });
+
+    it('can still name its errors itself', () => {
+      const err = new RenamedError('m');
+      expect(err.name).toBe('Renamed');
+      expect(String(err)).toBe('Renamed: m');
+      expect(err.toJSON().name).toBe('Renamed');
     });
   });
 });

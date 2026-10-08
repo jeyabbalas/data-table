@@ -62,7 +62,7 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 
 ## Release info
 
-- [CHANGELOG](../CHANGELOG.md) — per-release notes in Keep-a-Changelog format
+- [CHANGELOG](../CHANGELOG.md) — release notes, newest first, generated from changesets
 - [Migration guides](./migration-guides/README.md) — step-by-step upgrade paths for releases that contain breaking changes
 
 ---

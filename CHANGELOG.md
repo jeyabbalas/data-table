@@ -7,8 +7,8 @@ From 0.3.0 on, each release's entries are generated from its
 the Keep a Changelog format; the changes before 0.3.0, at the end of this
 file, were written by hand. Versions follow
 [Semantic Versioning](https://semver.org/). While the version is 0.x, a minor
-release can carry breaking changes. Releases with breaking changes also get a
-walkthrough in [`docs/migration-guides/`](./docs/migration-guides/).
+release can carry breaking changes. Walkthroughs for breaking changes are in
+[`docs/migration-guides/`](./docs/migration-guides/).
 
 ## 0.8.0
 
@@ -1052,5 +1052,5 @@ new WorkerBridge(); await bridge.initialize();`. Pass the bridge into
 
 ## 0.1.0
 
-The initial version, set at the first commit in December 2025. Never tagged
-or published.
+The initial version, set when the project was created in December 2025. Never
+tagged or published.

@@ -286,10 +286,12 @@ async function startBridge(
     urlObject?: boolean;
     /** The library's worker from `WORKER_COPY`: its URL, or its text in a `blob:` URL. */
     worker?: { copy: string; as: 'workerUrl' | 'workerFactory' };
+    /** Pass the `mvp` bundle alone, as for a browser without WebAssembly exceptions. */
+    mvpOnly?: boolean;
   } = {},
 ): Promise<Start> {
   return page.evaluate(
-    async ({ mainWorker, mainModule, initializeTimeoutMs, urlObject, worker }) => {
+    async ({ mainWorker, mainModule, initializeTimeoutMs, urlObject, worker, mvpOnly }) => {
       const library = (window as unknown as { __dataTable: Library }).__dataTable;
       // The guide's workerFactory: the text first, since the factory runs synchronously.
       const code =
@@ -310,12 +312,16 @@ async function startBridge(
             mainModule: mainModule ?? '/duckdb/duckdb-mvp.wasm',
             mainWorker: mainWorker ?? '/duckdb/duckdb-browser-mvp.worker.js',
           },
-          eh: {
-            mainModule: urlObject
-              ? new URL('/duckdb/duckdb-eh.wasm', document.baseURI)
-              : (mainModule ?? '/duckdb/duckdb-eh.wasm'),
-            mainWorker: mainWorker ?? '/duckdb/duckdb-browser-eh.worker.js',
-          },
+          ...(mvpOnly
+            ? {}
+            : {
+                eh: {
+                  mainModule: urlObject
+                    ? new URL('/duckdb/duckdb-eh.wasm', document.baseURI)
+                    : (mainModule ?? '/duckdb/duckdb-eh.wasm'),
+                  mainWorker: mainWorker ?? '/duckdb/duckdb-browser-eh.worker.js',
+                },
+              }),
         },
       });
       (window as unknown as { __bridge: unknown }).__bridge = bridge;
@@ -486,6 +492,40 @@ test("without a mirror, a CSV load fails on ICU from DuckDB's repository", async
   expect(traffic.foreign).toEqual([]);
 });
 
+test('the mvp bundle runs too, with its extensions under its own platform', async ({
+  context,
+  page,
+}) => {
+  const traffic = await serve(context, () => policy());
+  await open(page);
+  expect(await startBridge(page, { mvpOnly: true })).toEqual({ ok: true, ms: expect.any(Number) });
+
+  const result = await step(traffic, () =>
+    page.evaluate(async () => {
+      const w = window as unknown as InPage;
+      const [platformRow] = await w.__bridge.query<{ platform: string }>('PRAGMA platform');
+      const repository = new URL('/duckdb-ext', document.baseURI).href;
+      await w.__bridge.query(`SET custom_extension_repository = '${repository}'`);
+      w.__table = await w.__dataTable.createDataTable({
+        container: document.getElementById('table')!,
+        bridge: w.__bridge,
+      });
+      await w.__table.loadData('/fixtures/csv/titanic.csv');
+      return { platform: platformRow!.platform, rows: w.__table.state.totalRows.get() };
+    }),
+  );
+
+  expect(result).toEqual({ platform: 'wasm_mvp', rows: 891 });
+  expect(traffic.served).toEqual(
+    expect.arrayContaining([
+      '/duckdb/duckdb-browser-mvp.worker.js',
+      '/duckdb/duckdb-mvp.wasm',
+      expect.stringMatching(/^\/duckdb-ext\/v[\d.]+\/wasm_mvp\/icu\.duckdb_extension\.wasm$/),
+    ]),
+  );
+  expect(traffic.foreign).toEqual([]);
+});
+
 /** The negative control's policy: the guide's, without `'wasm-unsafe-eval'`. */
 const NO_WASM = policy({ 'script-src': "script-src 'self'" });
 
@@ -579,6 +619,7 @@ const WASM_FAILURES: {
   {
     name: 'an origin connect-src leaves out',
     mainModule: 'https://cdn.example.test/duckdb-eh.wasm',
+    console: /Failed to fetch/,
   },
 ];
 

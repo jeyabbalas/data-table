@@ -111,13 +111,15 @@ filter change. On a 50,000-row × 1,000-column Parquet file in Chrome:
 | One filter                | 4.4 s, 2,002 queries                 | 0.5 s, 20 queries    |
 | Hiding a column           | 20.6 s, 3,998 queries, with a filter | 41 ms, 2 queries     |
 
-The hide on the right was measured later, once charts outlived column
-changes: in headless Chromium on 27 September 2026, without a filter
-(`docs/dev/column-virtualization.md:340-341`, in the
-[column virtualization notes](../dev/column-virtualization.md)). A hide
-keeps every other chart and builds only the one for the column the shift
-brings into reach; under a filter, that chart's first fetch runs up to four
-queries.
+The hide on the right comes from a later pass, once charts outlived
+column changes: headless Chromium on 27 September 2026, recorded in the
+[column virtualization notes](../dev/column-virtualization.md). The 41 ms
+is that pass's timing; a hide's synchronous work alone is about 25 ms
+([Performance → Wide tables](../performance.md#wide-tables)). A hide keeps
+every other chart and builds only the one for the column the shift brings
+into reach. The notes do not say whether a filter was in force, but
+2 queries is that one chart built without a filter, its stats and its
+bins; under a filter, its first fetch runs up to four.
 
 What to expect:
 

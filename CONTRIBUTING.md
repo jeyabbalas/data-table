@@ -48,13 +48,14 @@ Use the **Feature request** issue template. Before proposing:
    - `npm run format:check`
    - `npm run typecheck`
    - `npm run build`
-   - `npm run test:coverage` (after the build: three api-surface tests read `dist/`)
+   - `npm run test:coverage` (after the build: four tests read `dist/`)
    - `npm run size` (bundle-size budgets — fails on > 5 % regression)
    - `npm run docs:api:check` (typedoc dry-run; fails on any warning, such as a
      broken JSDoc reference or a type a public signature uses but no entry
      point exports)
-   - `npm run test:browser` (Playwright accessibility suite; first run needs
-     `npx playwright install chromium`)
+   - `npm run test:browser` (Playwright accessibility suite, after the build:
+     `tests/browser/self-hosted-bundles.spec.ts` serves `dist/`; first run
+     needs `npx playwright install chromium`)
 
    `npm run lint:fix` and `npm run format` can fix most mechanical issues.
 

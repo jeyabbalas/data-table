@@ -245,9 +245,11 @@ panels and charts right across a trackpad sweep.
   - **Errors:** no console errors.
   - **Fetches:** a 128-row block takes 7.8 ms with 96 of the 1,000 columns selected, against 76 ms
     with all of them.
-  - **Still to do:** the manual trackpad pass in a desktop Chrome window. The window used was
-    hidden behind others, which stops `requestAnimationFrame` and scroll events, so nothing
-    rendered.
+  - **Trackpad pass:** done 2026-10-08 in a desktop Chrome window on `a5a521de`, with the
+    10K × 1,000 file (W-03 of the 0.9.0 manual test plan). Dragging the horizontal thumb end to
+    end and back, then flicking the trackpad for 10 s, left no cell blank and no value out of line
+    with its row, and nothing froze. The window first used, on 2026-09-27, was hidden behind
+    others, which stops `requestAnimationFrame` and scroll events, so nothing rendered.
 - **Found in review of #141.**
   - Scrolling sideways past what a block was fetched with fetched the whole block again. On a
     sorted or filtered table that repeats the sort and the `OFFSET`, which clipping the
@@ -343,7 +345,8 @@ panels and charts right across a trackpad sweep.
     panel's column stayed mounted while the wheel took it away, and `Escape` gave focus back to its
     filter button.
   - **Errors:** no console errors.
-  - **Still to do:** the manual trackpad pass in a desktop Chrome window.
+  - **Trackpad pass:** done 2026-10-08 in a desktop Chrome window on `a5a521de` (W-03 of the 0.9.0
+    manual test plan; see the 4c pass above).
 - **Found in review of #145.**
   - A load could hang for good. A column change during the first chart fetches carries the charts
     the load waits for into the new wave, and it carried every column of the old wave still

@@ -37,7 +37,18 @@ These changes can break an integration:
 An integration that does none of these upgrades with a version bump. The
 rest of the release, the value inspector and `getCellValue` among it, is new
 API; see the [CHANGELOG](../../CHANGELOG.md) and the
-[loading guide](../guides/loading-data.md#nested-and-json-columns).
+[loading guide](../guides/loading-data.md#nested-and-json-columns). Other
+behaviour that changed, mostly fixes, is listed under
+[Other behaviour changes](#other-behaviour-changes).
+
+**Install note.** The `@duckdb/duckdb-wasm` peer range is now
+`^1.33.1-dev57.0`, up from `^1.33.1-dev45.0`: `1.33.1-dev57.0` is the version
+the library's DuckDB worker is built with. npm moves an app on
+`^1.33.1-dev45.0` to it; an app that pins an older version stops with
+`ERESOLVE` until the pin moves. If you host DuckDB's files yourself, through
+`bridgeOptions.duckdbBundles`, copy them from exactly `1.33.1-dev57.0`, and
+pin that version without `^`. See
+[CSP and offline → Serving DuckDB-WASM yourself](../guides/csp-and-offline.md#serving-duckdb-wasm-yourself).
 
 ## Breaking changes
 
@@ -464,9 +475,197 @@ grep -rlw --null VisualizationFactory src | xargs -0 perl -pi -e 's/\bVisualizat
   with offsets (`'20:00:00+00'`) keeps comparing instants. See
   [Filters → `range`](../guides/filters.md#1-range--numeric-or-date-ranges).
 
+## Other behaviour changes
+
+These need no code change in most integrations, though tests, screenshots
+and error handlers can see them.
+
+### Loading and events
+
+- **A failed initial load tears the table down.** When the load of
+  `createDataTable({ source })` fails, the table removes itself, as
+  `destroy()` would, and the promise then rejects with the load's error;
+  `0.8` left it mounted, with no handle to destroy it. See
+  [API reference → `createDataTable`](../api-reference.md#createdatatable).
+- **A superseded load fires neither `loadComplete` nor `loadError`.** A load
+  that a newer `loadData()` or `clearSession()` overtakes before it ends
+  still resolves its promise, or rejects it if the load failed, and each
+  `loadStart` is followed by at most one of the two. See
+  [Events → Event catalog](../guides/events.md#event-catalog).
+- **`clearSession()` and `resetToInitial()` fire `derivedChange`.** When they
+  drop derived columns, they fire it with `kind: 'updated'`, so a SQL editor
+  that refreshes its completions on it stops offering those columns. See
+  [Events → Event catalog](../guides/events.md#event-catalog).
+- **`filterChange` fires once the row count lands.** It no longer waits for
+  every column chart to refetch, as `0.8` did, so a handler that reads a
+  chart's stats can run before they update. See
+  [Events → Event catalog](../guides/events.md#event-catalog).
+- **Date-text columns can load with another type.** A text column of ISO
+  dates, timestamps or times converts only if every value converts
+  unchanged: one stray `N/A` keeps it text, where `0.8` converted it and
+  turned such values into `null`. Text timestamps whose offset differs from
+  the load's time zone (`+05:30` in the default UTC) load as
+  `TIMESTAMP WITH TIME ZONE`, not as plain timestamps shifted by the offset.
+  See
+  [Loading data → Dates and times stored as text](../guides/loading-data.md#dates-and-times-stored-as-text).
+- **An unreadable saved session no longer fails the load.** A snapshot with
+  malformed fields is skipped with a console warning, and the data loads
+  without it, where `0.8` could reject the load. See
+  [Session persistence → Gotchas](../guides/session-persistence.md#gotchas).
+- **`loadData` waits only for the charts in view.** `loadData` and
+  `await createDataTable({ source })` wait for the charts near the view to
+  draw their first data, not for every column's, and in a hidden tab for
+  none. See
+  [Visualizations → Charts on wide tables](../guides/visualizations.md#charts-on-wide-tables).
+
+### Errors and the worker
+
+- **A worker failure rejects every request.** When the worker fails after
+  init, every pending and later request on its bridge rejects with
+  `WORKER_CRASHED`, which each table reports once, as an `error` event with
+  `source: 'query'`; `0.8` left them waiting for a reply that never came. A
+  message the bridge cannot read rejects the pending requests with
+  `WORKER_PROTOCOL_VIOLATION`, and `terminate()` during `initialize()`
+  rejects it at once with `WORKER_TERMINATED`, not after 30 s. See
+  [Troubleshooting → Error code reference](../troubleshooting.md#error-code-reference).
+- **DuckDB's worker failing to start rejects at once.** A `mainWorker` that
+  does not load (a 404, or a URL the CSP blocks) or a `worker-src` without
+  `blob:` rejects `initialize()`, and so `createDataTable()`, at once with a
+  `WorkerInitError` coded `WORKER_CRASHED`, where `0.8` waited for the 30 s
+  timeout. Any failure of DuckDB's init is a `WorkerInitError`, not a
+  `QueryError` coded `QUERY_RUNTIME`, but a `.wasm` that fails to download
+  or compile still ends in `WORKER_INIT_TIMEOUT`. See
+  [CSP and offline → Error handling](../guides/csp-and-offline.md#error-handling).
+- **A failed `initialize()` can be called again.** After DuckDB fails to
+  start or times out, or the worker cannot be constructed, calling it again
+  starts afresh, where `0.8` returned the same rejection except after a
+  timeout. A request sent while the init ran rejects with the init's error;
+  `0.8` could leave it waiting for good. See
+  [CSP and offline → Error handling](../guides/csp-and-offline.md#error-handling).
+- **`duckdbBundles` takes `URL` objects and relative URLs.** One that does
+  not resolve against the page, or is not a string or a `URL`, rejects
+  `initialize()` before any worker starts, with a `ConfigurationError` coded
+  `OPTIONS_INVALID` and `details.option` naming it. The option's type is no
+  longer duckdb-wasm's `DuckDBBundles`, so code that reads
+  `WorkerBridgeOptions['duckdbBundles']` as one no longer compiles; passing
+  a `DuckDBBundles` in still does. See
+  [CSP and offline → The workers](../guides/csp-and-offline.md#the-workers).
+- **A default worker the browser refuses names `workerFactory`.** When a
+  CSP blocks the library's worker script, or the library is served from
+  another origin than the page, `initialize()` rejects with a
+  `WorkerInitError` coded `WORKER_CRASHED` whose message names
+  `bridgeOptions.workerFactory`, the way around it. `0.8` threw the
+  browser's `SecurityError` for another origin, and said only
+  `Worker error: undefined` for a blocked script. See
+  [CSP and offline → Error handling](../guides/csp-and-offline.md#error-handling).
+- **Errors report their class names.** `error.name`, `String(error)`,
+  `toJSON().name` and `error.constructor.name` give the class name,
+  `LoadError`, where `0.8` gave a minified letter, `a`. `instanceof` and
+  `error.code` are unchanged. See
+  [API reference → Error classes](../api-reference.md#error-classes).
+- **A Parquet load that runs out of memory is `LOAD_MEMORY_EXCEEDED`.** One
+  that will not fit is refused before anything loads, and one that runs out
+  partway rejects with the same code, DuckDB's message in
+  `details.duckdbMessage`. `0.8` failed such loads late, as
+  `LOAD_PARSE_FAILED`, which a CSV or JSON load that runs out still gets. See
+  [Troubleshooting §27](../troubleshooting.md#27-loaderror-with-code-load_memory_exceeded).
+
+### Filters, sorting and charts
+
+- **`setOnFilterRemove` fires on every removal.** It is called once per
+  column that loses its filter, by its chip, the filter panel,
+  `removeFilter`, `clearFilters` or a preset too, not only by undo, redo and
+  reset. It holds one callback, which the table sets to clear its charts'
+  brushes, so one registered on `table.actions` replaces it: listen to
+  `filterChange` instead. See
+  [API reference → Undo / redo](../api-reference.md#undo--redo).
+- **Interval columns sort by duration.** Sorting the grid by an `INTERVAL`
+  column orders its rows by value, as DuckDB compares intervals; `0.8`
+  sorted a shown one by its text, so `100 days` came before `9 days`. See
+  [API reference → Sorting](../api-reference.md#sorting).
+- **`distinctCount` counts finite values only.** In `NumericColumnStats` and
+  `HistogramData` it leaves out `NaN`, `Infinity` and `-Infinity`, which the
+  new `nonFiniteCount` counts. See
+  [Visualizations → Reading the column stats](../guides/visualizations.md#reading-the-column-stats).
+- **An INTERVAL brush runs between its bars' own values.** It filters from
+  the smallest value in its first bar to the largest in its last, written as
+  DuckDB writes them, so it matches the rows its bars count. `0.8` wrote the
+  bars' edges in years and months, which DuckDB counts as 360-day years and
+  30-day months. See
+  [Filters → `range`](../guides/filters.md#1-range--numeric-or-date-ranges).
+
+### Layout
+
+- **Columns are 25 px narrower on pages without a `box-sizing` reset.**
+  Header and body cells are `border-box`, so a column's width includes its
+  padding and border: at the default 16 px root font, a default column takes
+  150 px, where it took 175 px. Pages with a reset, such as Tailwind's or
+  Bootstrap's, look the same. See
+  [Troubleshooting §29](../troubleshooting.md#29-columns-are-narrower-after-upgrading-to-09).
+- **`--dt-scrollbar-width` has no visible effect.** The gap the header
+  leaves for the body's vertical scrollbar is measured before the first
+  paint, so it matches whatever scrollbar the browser draws. See
+  [Theming → Sizing](../guides/theming.md#sizing).
+- **Right-to-left pages get a left-to-right grid.** The grid is laid out
+  left to right whatever the page's direction, and on a page marked right to
+  left with a `dir` attribute each cell value and column name takes its
+  direction from its own text. Right-to-left layouts are still not supported.
+  See
+  [API reference → i18n strings](../api-reference.md#i18n-strings).
+- **Column widths under 50 px draw at 50.** A width under 50 px, which only
+  `setColumnWidth` or a restored session can set, is drawn 50 px wide, the
+  resize minimum; `state.columnWidths` keeps the width as set. See
+  [Theming → Sizing](../guides/theming.md#sizing).
+
+### Selection and export
+
+- **`selectAll()` selects the filtered view.** While a filter is active it
+  selects the view's `filteredRows` rows, not `totalRows` positions, which
+  reached past the end of the view. DuckDB counts them after each filter
+  change, so call it once `filterChange` has fired. See
+  [API reference → Selection](../api-reference.md#selection).
+- **`Ctrl/Cmd+C` copies the visible columns.** It and `copyRowsToClipboard`
+  copy the columns the grid shows, in its order, with `__rowid__` only when
+  shown; `0.8` copied hidden columns too. See
+  [Accessibility → Keyboard map](../guides/accessibility.md#keyboard-map).
+- **The export dialog's Selected count is the selected rows in view.** It
+  leaves out selected positions past the end of the view, which a filter
+  change can leave in a selection, so it counts the rows a Selected export
+  or copy writes. See
+  [API reference → Selection](../api-reference.md#selection).
+
+### Display and `messages`
+
+- **Interval cells show their parts, and `infinity` shows as text.** A cell
+  shows an interval's parts as DuckDB stores them, `100h 0.5s` for
+  `100:00:00.5` and `-1d 1h` for `-1 day -01:00:00`, which `0.8` showed as
+  `0.5s` and `1d 1h`. A date or timestamp holding `infinity` shows
+  `infinity`, where `0.8` showed a number, a date in 2262 (`TIMESTAMP_NS`),
+  or failed to load the rows around it. See
+  [Loading data → Dates and timestamps](../guides/loading-data.md#dates-and-timestamps).
+- **Timestamp cells drop every trailing zero.** A whole second shows as
+  `2020-01-01 00:00:16`, which `0.8` showed as `2020-01-01 00:00:16.00`, and
+  `.100` as `.1`, not `.10`. See
+  [Loading data → Dates and timestamps](../guides/loading-data.md#dates-and-timestamps).
+- **The SQL editors are named by their labels.** Screen readers now name the
+  expression filter's editor "SQL WHERE condition", and every editor takes
+  its name and placeholder from `messages` (`filters.sqlFilter.conditionLabel`,
+  `filters.sqlFilter.editorPlaceholder`, `derived.expressionLabel`,
+  `derived.expressionPlaceholder`), which an `editorFactory` gets as a third
+  argument. `0.8` named all three "SQL Expression", in English. See
+  [i18n → ARIA and screen-reader strings](../guides/i18n.md#aria-and-screen-reader-strings).
+- **`messages` callbacks keep their types.** `DeepPartial<Strings>` no
+  longer turns each callback into `{}`, as it has since `messages` was
+  added: in `statistics: { rowCount: (count) => … }`, `count` is a `number`
+  under strict TypeScript, not an implicit `any` (TS7006). A value of the
+  wrong type, such as `rowCount: 42` or a callback with the wrong parameter
+  type, is now a type error. See
+  [i18n → `DeepPartial<Strings>`](../guides/i18n.md#deeppartialstrings).
+
 ## Verification checklist
 
-- [ ] `npm install @jeyabbalas/data-table@0.9` in the target project.
+- [ ] `npm install @jeyabbalas/data-table@0.9` in the target project, with
+      `@duckdb/duckdb-wasm` at `^1.33.1-dev57.0`.
 - [ ] Every `isApplicable` that accepts `'string'` or is `isCategoricalType`
       checked: text only, or nested columns too.
 - [ ] Every switch over `DataType` or `stats.kind` has a `'nested'` case.

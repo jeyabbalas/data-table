@@ -23,10 +23,10 @@ Start new guides by copying [`_TEMPLATE.md`](./_TEMPLATE.md).
 
 ## Available migrations
 
-| From   | To     | Released      | Guide                                                                                                                                   |
-| ------ | ------ | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `v0.5` | `v0.6` | see CHANGELOG | [`from-0.5-to-0.6.md`](./from-0.5-to-0.6.md) — ARIA grid moves to `.dt-grid`; `role="cell"` → `role="gridcell"`                         |
-| `v0.8` | `v0.9` | see CHANGELOG | [`from-0.8-to-0.9.md`](./from-0.8-to-0.9.md) — nested columns are `'nested'`; new `getColumnValues` forms; replace a self-hosted worker |
+| From   | To     | Released      | Guide                                                                                                                                                                                                                                                                                            |
+| ------ | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `v0.5` | `v0.6` | see CHANGELOG | [`from-0.5-to-0.6.md`](./from-0.5-to-0.6.md) — ARIA grid moves to `.dt-grid`; `role="cell"` → `role="gridcell"`                                                                                                                                                                                  |
+| `v0.8` | `v0.9` | see CHANGELOG | [`from-0.8-to-0.9.md`](./from-0.8-to-0.9.md) — five breaking changes: nested and `TIME_NS` columns get types of their own; new `getColumnValues` forms; replace a self-hosted worker and, offline, serve DuckDB's `json` extension; exports write ISO 8601 dates; `VisualizationFactory` removed |
 
 Pre-`v0.5` breaking changes were tracked per review phase rather than per
 version; those guides are the `phase-*.md` files in this directory.

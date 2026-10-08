@@ -8,7 +8,7 @@
 
 > `const` **dataTableHighlighting**: `Extension`
 
-Defined in: [sql-editor/theme.ts:63](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/theme.ts#L63)
+Defined in: [sql-editor/theme.ts:63](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/theme.ts#L63)
 
 Syntax highlighting style for SQL keywords, strings, numbers, comments,
 function names, operators, type names, null, and boolean literals. Every

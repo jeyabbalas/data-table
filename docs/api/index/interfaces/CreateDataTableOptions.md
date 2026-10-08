@@ -6,7 +6,7 @@
 
 # Interface: CreateDataTableOptions
 
-Defined in: [DataTable.ts:141](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L141)
+Defined in: [DataTable.ts:141](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L141)
 
 Options accepted by [createDataTable](../functions/createDataTable.md). All feature toggles default
 to `true`; pass `false` (or a configuration object) to customize.
@@ -17,7 +17,7 @@ to `true`; pass `false` (or a configuration object) to customize.
 
 > `optional` **bridge?**: [`WorkerBridge`](../classes/WorkerBridge.md)
 
-Defined in: [DataTable.ts:269](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L269)
+Defined in: [DataTable.ts:269](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L269)
 
 Share a WorkerBridge across tables. If omitted, one is created and owned by this table.
 
@@ -27,7 +27,7 @@ Share a WorkerBridge across tables. If omitted, one is created and owned by this
 
 > `optional` **bridgeOptions?**: [`WorkerBridgeOptions`](WorkerBridgeOptions.md)
 
-Defined in: [DataTable.ts:271](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L271)
+Defined in: [DataTable.ts:271](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L271)
 
 Options for the owned WorkerBridge (ignored if `bridge` is supplied).
 
@@ -37,7 +37,7 @@ Options for the owned WorkerBridge (ignored if `bridge` is supplied).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [DataTable.ts:276](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L276)
+Defined in: [DataTable.ts:276](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L276)
 
 CSS class prefix. Default: `'dt'`.
 
@@ -47,7 +47,7 @@ CSS class prefix. Default: `'dt'`.
 
 > `optional` **colorScheme?**: [`ColorScheme`](../type-aliases/ColorScheme.md)
 
-Defined in: [DataTable.ts:350](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L350)
+Defined in: [DataTable.ts:350](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L350)
 
 Initial light/dark theme selector. Defaults to `'auto'` (follows
 `prefers-color-scheme`). Pass `'light'` or `'dark'` to force a theme per
@@ -60,7 +60,7 @@ runtime.
 
 > **container**: `HTMLElement`
 
-Defined in: [DataTable.ts:162](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L162)
+Defined in: [DataTable.ts:162](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L162)
 
 Element that will host the table. The library takes full ownership of its
 contents.
@@ -88,7 +88,7 @@ rows and logs a console warning. See "Sizing the container" in the README.
 
 > `optional` **derivedColumns?**: `boolean`
 
-Defined in: [DataTable.ts:227](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L227)
+Defined in: [DataTable.ts:227](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L227)
 
 Show the derived-column UI: the "+" button at the table's right edge,
 the f(x) edit icon on every derived-column header, and "extract field →
@@ -111,7 +111,7 @@ Default: `true`.
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [DataTable.ts:291](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L291)
+Defined in: [DataTable.ts:291](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L291)
 
 Custom expression editor factory (replaces the CodeMirror-based default).
 
@@ -121,7 +121,7 @@ Custom expression editor factory (replaces the CodeMirror-based default).
 
 > `optional` **exportDialog?**: `boolean`
 
-Defined in: [DataTable.ts:262](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L262)
+Defined in: [DataTable.ts:262](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L262)
 
 Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`.
 
@@ -131,7 +131,7 @@ Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`.
 
 > `optional` **expressionFilter?**: `boolean`
 
-Defined in: [DataTable.ts:209](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L209)
+Defined in: [DataTable.ts:209](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L209)
 
 Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `true`.
 
@@ -141,7 +141,7 @@ Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `tru
 
 > `optional` **fetchBlockSize?**: `number`
 
-Defined in: [DataTable.ts:321](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L321)
+Defined in: [DataTable.ts:321](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L321)
 
 Rows fetched per scroll block. Default: 128. Clamped to [16, 1024].
 
@@ -160,7 +160,7 @@ smaller transfers.
 
 > `optional` **headerHeight?**: `number`
 
-Defined in: [DataTable.ts:308](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L308)
+Defined in: [DataTable.ts:308](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L308)
 
 Header height in pixels. Default: 120. Applied as the header row's
 `min-height` and published as the `--dt-header-height` custom property.
@@ -173,7 +173,7 @@ plots have nowhere to draw.
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [DataTable.ts:289](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L289)
+Defined in: [DataTable.ts:289](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L289)
 
 Identifier mixed into element IDs so multiple tables on the same page
 don't collide on `aria-labelledby` / `aria-activedescendant` targets.
@@ -192,7 +192,7 @@ to predict element IDs.
 
 > `optional` **messages?**: `object`
 
-Defined in: [DataTable.ts:360](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L360)
+Defined in: [DataTable.ts:360](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L360)
 
 Override user-facing strings (button labels, placeholders, aria-live
 announcements, stats templates). Every key is optional; missing leaves
@@ -217,54 +217,154 @@ Word used inside `sortedBy` descriptions and header labels.
 
 ##### a11y.columnLayoutCancelled?
 
-> `optional` **columnLayoutCancelled?**: `object`
+> `optional` **columnLayoutCancelled?**: (`column`) => `string`
 
 Live-region: Escape restored the entry width and position.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnLayoutCommitted?
 
-> `optional` **columnLayoutCommitted?**: `object`
+> `optional` **columnLayoutCommitted?**: (`column`) => `string`
 
 Live-region: Enter (or leaving the grid) committed the gesture.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnLayoutModeEntered?
 
-> `optional` **columnLayoutModeEntered?**: `object`
+> `optional` **columnLayoutModeEntered?**: (`column`) => `string`
 
 Column layout mode (`Shift+F2` on a column header) — the keyboard
 gesture for resize and reorder. The entry announcement is the only
 place the key map is spoken aloud, so it doubles as the mode's
 discoverability affordance; keep the key names in a translation.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnMoveBlockedPinned?
 
-> `optional` **columnMoveBlockedPinned?**: `object`
+> `optional` **columnMoveBlockedPinned?**: (`column`) => `string`
 
 Live-region: a move was refused because the column is pinned.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnMovedAnnouncement?
 
-> `optional` **columnMovedAnnouncement?**: `object`
+> `optional` **columnMovedAnnouncement?**: (`column`, `position`, `total`) => `string`
 
 Live-region: the column's new 1-based position after a move.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### position
+
+`number`
+
+###### total
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnWidthAnnouncement?
 
-> `optional` **columnWidthAnnouncement?**: `object`
+> `optional` **columnWidthAnnouncement?**: (`column`, `px`) => `string`
 
 Live-region: the column's new width after a resize step.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### px
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnWidthAtMaximum?
 
-> `optional` **columnWidthAtMaximum?**: `object`
+> `optional` **columnWidthAtMaximum?**: (`column`, `px`) => `string`
 
 Live-region: resize step landed on the maximum width.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### px
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### a11y.columnWidthAtMinimum?
 
-> `optional` **columnWidthAtMinimum?**: `object`
+> `optional` **columnWidthAtMinimum?**: (`column`, `px`) => `string`
 
 Live-region: resize step landed on the minimum width.
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### px
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### a11y.descending?
 
@@ -272,9 +372,19 @@ Live-region: resize step landed on the minimum width.
 
 ##### a11y.dragHandleLabel?
 
-> `optional` **dragHandleLabel?**: `object`
+> `optional` **dragHandleLabel?**: (`column`) => `string`
 
 Header drag handle.
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.dragHandleTitle?
 
@@ -292,9 +402,19 @@ Derived-column edit icon.
 
 ##### a11y.filterButtonLabel?
 
-> `optional` **filterButtonLabel?**: `object`
+> `optional` **filterButtonLabel?**: (`column`) => `string`
 
 Header filter button.
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.filterColumnTitle?
 
@@ -306,9 +426,27 @@ Header filter button.
 
 ##### a11y.filtersActive?
 
-> `optional` **filtersActive?**: `object`
+> `optional` **filtersActive?**: (`n`, `shown`, `total`) => `string`
 
 Live-region: "3 filters active, showing 1,234 of 5,678 rows".
+
+###### Parameters
+
+###### n
+
+`number`
+
+###### shown
+
+`number`
+
+###### total
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### a11y.gridLabel?
 
@@ -324,9 +462,19 @@ Hidden-columns gutter.
 
 ##### a11y.hideButtonLabel?
 
-> `optional` **hideButtonLabel?**: `object`
+> `optional` **hideButtonLabel?**: (`column`) => `string`
 
 Header hide button.
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.hideColumnTitle?
 
@@ -334,25 +482,65 @@ Header hide button.
 
 ##### a11y.loadingRowLabel?
 
-> `optional` **loadingRowLabel?**: `object`
+> `optional` **loadingRowLabel?**: (`rowNumber`) => `string`
 
 Placeholder text shown for not-yet-fetched rows during fast scroll.
 
+###### Parameters
+
+###### rowNumber
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### a11y.multiFilteredSuffix?
 
-> `optional` **multiFilteredSuffix?**: `object`
+> `optional` **multiFilteredSuffix?**: (`count`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### a11y.noFilters?
 
-> `optional` **noFilters?**: `object`
+> `optional` **noFilters?**: (`total`) => `string`
 
 Live-region: "Showing all 5,678 rows".
 
+###### Parameters
+
+###### total
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### a11y.pinButtonLabel?
 
-> `optional` **pinButtonLabel?**: `object`
+> `optional` **pinButtonLabel?**: (`column`) => `string`
 
 Header pin button.
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.pinColumnTitle?
 
@@ -366,7 +554,17 @@ Aria-label on the column-resize handle (`.dt-col-resize-handle`).
 
 ##### a11y.showColumn?
 
-> `optional` **showColumn?**: `object`
+> `optional` **showColumn?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.sortAscendingTitle?
 
@@ -374,9 +572,19 @@ Aria-label on the column-resize handle (`.dt-col-resize-handle`).
 
 ##### a11y.sortButtonLabel?
 
-> `optional` **sortButtonLabel?**: `object`
+> `optional` **sortButtonLabel?**: (`column`) => `string`
 
 Header sort button.
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.sortDescendingTitle?
 
@@ -384,19 +592,53 @@ Header sort button.
 
 ##### a11y.sortedBy?
 
-> `optional` **sortedBy?**: `object`
+> `optional` **sortedBy?**: (`descriptions`) => `string`
 
 Live-region: "sorted by Price ascending, then Name descending".
 
+###### Parameters
+
+###### descriptions
+
+`string`[]
+
+###### Returns
+
+`string`
+
 ##### a11y.sortedMultiSuffix?
 
-> `optional` **sortedMultiSuffix?**: `object`
+> `optional` **sortedMultiSuffix?**: (`direction`, `priority`) => `string`
+
+###### Parameters
+
+###### direction
+
+`string`
+
+###### priority
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### a11y.sortedSuffix?
 
-> `optional` **sortedSuffix?**: `object`
+> `optional` **sortedSuffix?**: (`direction`) => `string`
 
 Column-header aria-label fragments.
+
+###### Parameters
+
+###### direction
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.sortRemoveTitle?
 
@@ -404,7 +646,17 @@ Column-header aria-label fragments.
 
 ##### a11y.unpinButtonLabel?
 
-> `optional` **unpinButtonLabel?**: `object`
+> `optional` **unpinButtonLabel?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### a11y.unpinColumnTitle?
 
@@ -506,7 +758,17 @@ Prefix shown before the comma-separated column-hint list (DefaultExpressionEdito
 
 ##### derived.deleteFailed?
 
-> `optional` **deleteFailed?**: `object`
+> `optional` **deleteFailed?**: (`message`) => `string`
+
+###### Parameters
+
+###### message
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.editTitle?
 
@@ -516,9 +778,19 @@ Default panel header before a column is selected.
 
 ##### derived.editTitleForColumn?
 
-> `optional` **editTitleForColumn?**: `object`
+> `optional` **editTitleForColumn?**: (`column`) => `string`
 
 Panel header with column name — "Edit: my_col".
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.expressionLabel?
 
@@ -550,7 +822,17 @@ edit panel, and of `DefaultExpressionEditor`'s textarea.
 
 ##### derived.nameDuplicate?
 
-> `optional` **nameDuplicate?**: `object`
+> `optional` **nameDuplicate?**: (`name`) => `string`
+
+###### Parameters
+
+###### name
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.nameLabel?
 
@@ -566,10 +848,20 @@ edit panel, and of `DefaultExpressionEditor`'s textarea.
 
 ##### derived.nameReserved?
 
-> `optional` **nameReserved?**: `object`
+> `optional` **nameReserved?**: (`name`) => `string`
 
 A new column name that spells `__rowid__` in any letter case: the
 synthetic row id's name, which no other column may take.
+
+###### Parameters
+
+###### name
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.newColumnTitle?
 
@@ -583,7 +875,21 @@ Modal: "New Derived Column".
 
 ##### derived.typePreview?
 
-> `optional` **typePreview?**: `object`
+> `optional` **typePreview?**: (`type`, `originalType`) => `string`
+
+###### Parameters
+
+###### type
+
+`string`
+
+###### originalType
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.updateButton?
 
@@ -599,53 +905,217 @@ Modal: "New Derived Column".
 
 ##### derived.vectorCountMismatch?
 
-> `optional` **vectorCountMismatch?**: `object`
+> `optional` **vectorCountMismatch?**: (`expected`, `got`) => `string`
+
+###### Parameters
+
+###### expected
+
+`number`
+
+###### got
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInfo?
 
-> `optional` **vectorInfo?**: `object`
+> `optional` **vectorInfo?**: (`count`, `total`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### total
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInfoText?
 
-> `optional` **vectorInfoText?**: `object`
+> `optional` **vectorInfoText?**: (`vectorType`, `count`) => `string`
 
 "Vector column (integer), 123 values"
 
+###### Parameters
+
+###### vectorType
+
+`string`
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### derived.vectorInvalidBoolean?
 
-> `optional` **vectorInvalidBoolean?**: `object`
+> `optional` **vectorInvalidBoolean?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidDate?
 
-> `optional` **vectorInvalidDate?**: `object`
+> `optional` **vectorInvalidDate?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidDecimal?
 
-> `optional` **vectorInvalidDecimal?**: `object`
+> `optional` **vectorInvalidDecimal?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidFloat?
 
-> `optional` **vectorInvalidFloat?**: `object`
+> `optional` **vectorInvalidFloat?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidInteger?
 
-> `optional` **vectorInvalidInteger?**: `object`
+> `optional` **vectorInvalidInteger?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidInterval?
 
-> `optional` **vectorInvalidInterval?**: `object`
+> `optional` **vectorInvalidInterval?**: (`lineNum`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidTime?
 
-> `optional` **vectorInvalidTime?**: `object`
+> `optional` **vectorInvalidTime?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidTimestamp?
 
-> `optional` **vectorInvalidTimestamp?**: `object`
+> `optional` **vectorInvalidTimestamp?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorInvalidUUID?
 
-> `optional` **vectorInvalidUUID?**: `object`
+> `optional` **vectorInvalidUUID?**: (`lineNum`, `value`) => `string`
+
+###### Parameters
+
+###### lineNum
+
+`number`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### derived.vectorModeLabel?
 
@@ -839,59 +1309,199 @@ aria-labels on the filter field controls.
 
 ##### filters.ariaLabels.dateFilterMode?
 
-> `optional` **dateFilterMode?**: `object`
+> `optional` **dateFilterMode?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.endDate?
 
-> `optional` **endDate?**: `object`
+> `optional` **endDate?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.filterMode?
 
-> `optional` **filterMode?**: `object`
+> `optional` **filterMode?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.filterValue?
 
-> `optional` **filterValue?**: `object`
+> `optional` **filterValue?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.fromTime?
 
-> `optional` **fromTime?**: `object`
+> `optional` **fromTime?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.intervalFilter?
 
-> `optional` **intervalFilter?**: `object`
+> `optional` **intervalFilter?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.maxValue?
 
-> `optional` **maxValue?**: `object`
+> `optional` **maxValue?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.minValue?
 
-> `optional` **minValue?**: `object`
+> `optional` **minValue?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.nullFilter?
 
-> `optional` **nullFilter?**: `object`
+> `optional` **nullFilter?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.removeFilter?
 
-> `optional` **removeFilter?**: `object`
+> `optional` **removeFilter?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.startDate?
 
-> `optional` **startDate?**: `object`
+> `optional` **startDate?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.toTime?
 
-> `optional` **toTime?**: `object`
+> `optional` **toTime?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.uuidFilterMode?
 
-> `optional` **uuidFilterMode?**: `object`
+> `optional` **uuidFilterMode?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.ariaLabels.uuidValue?
 
-> `optional` **uuidValue?**: `object`
+> `optional` **uuidValue?**: (`column`) => `string`
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.booleanOptions?
 
@@ -921,7 +1531,21 @@ Strings used by `formatFilter()` for chip descriptions.
 
 ##### filters.chipDescriptions.inSet?
 
-> `optional` **inSet?**: `object`
+> `optional` **inSet?**: (`list`, `includeNull`) => `string`
+
+###### Parameters
+
+###### list
+
+`string`
+
+###### includeNull
+
+`boolean`
+
+###### Returns
+
+`string`
 
 ##### filters.chipDescriptions.isNotNull?
 
@@ -933,7 +1557,21 @@ Strings used by `formatFilter()` for chip descriptions.
 
 ##### filters.chipDescriptions.notInSet?
 
-> `optional` **notInSet?**: `object`
+> `optional` **notInSet?**: (`list`, `includeNull`) => `string`
+
+###### Parameters
+
+###### list
+
+`string`
+
+###### includeNull
+
+`boolean`
+
+###### Returns
+
+`string`
 
 ##### filters.chipDescriptions.patternModes?
 
@@ -971,7 +1609,17 @@ Column label shown on raw-sql chips.
 
 ##### filters.chipDescriptions.valueListMore?
 
-> `optional` **valueListMore?**: `object`
+> `optional` **valueListMore?**: (`rest`) => `string`
+
+###### Parameters
+
+###### rest
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### filters.clearAllButton?
 
@@ -1095,9 +1743,19 @@ Dropdown text for numeric/date filter modes.
 
 ##### filters.panelTitleForColumn?
 
-> `optional` **panelTitleForColumn?**: `object`
+> `optional` **panelTitleForColumn?**: (`column`) => `string`
 
 Header text once a column has been selected: e.g. "Filter: price".
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### filters.placeholders?
 
@@ -1199,7 +1857,17 @@ Placeholder of the expression filter's SQL editor.
 
 ##### filters.sqlFilter.validationResult?
 
-> `optional` **validationResult?**: `object`
+> `optional` **validationResult?**: (`matchCount`) => `string`
+
+###### Parameters
+
+###### matchCount
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### filters.stringModes?
 
@@ -1301,11 +1969,35 @@ Inline regex/UUID validation messages.
 
 ##### presets.importPartial?
 
-> `optional` **importPartial?**: `object`
+> `optional` **importPartial?**: (`imported`, `errors`) => `string`
+
+###### Parameters
+
+###### imported
+
+`number`
+
+###### errors
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### presets.importSuccess?
 
-> `optional` **importSuccess?**: `object`
+> `optional` **importSuccess?**: (`count`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### presets.loadButton?
 
@@ -1313,7 +2005,21 @@ Inline regex/UUID validation messages.
 
 ##### presets.meta?
 
-> `optional` **meta?**: `object`
+> `optional` **meta?**: (`filterCount`, `dateStr`) => `string`
+
+###### Parameters
+
+###### filterCount
+
+`number`
+
+###### dateStr
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### presets.namePlaceholder?
 
@@ -1341,13 +2047,33 @@ Inline regex/UUID validation messages.
 
 ##### statistics.allUniqueCategory?
 
-> `optional` **allUniqueCategory?**: `object`
+> `optional` **allUniqueCategory?**: (`count`) => `string`
 
 Display value for the all-unique segment (count = distinct values).
 
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### statistics.allValues?
 
-> `optional` **allValues?**: `object`
+> `optional` **allValues?**: (`value`) => `string`
+
+###### Parameters
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### statistics.binLabel?
 
@@ -1369,25 +2095,79 @@ Stats-slot line for a column whose chart's data failed to load.
 
 ##### statistics.filteredRowCount?
 
-> `optional` **filteredRowCount?**: `object`
+> `optional` **filteredRowCount?**: (`filtered`, `total`) => `string`
+
+###### Parameters
+
+###### filtered
+
+`number`
+
+###### total
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.matchCount?
 
-> `optional` **matchCount?**: `object`
+> `optional` **matchCount?**: (`count`) => `string`
 
 Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### statistics.max?
 
-> `optional` **max?**: `object`
+> `optional` **max?**: (`value`) => `string`
+
+###### Parameters
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### statistics.median?
 
-> `optional` **median?**: `object`
+> `optional` **median?**: (`value`) => `string`
+
+###### Parameters
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### statistics.min?
 
-> `optional` **min?**: `object`
+> `optional` **min?**: (`value`) => `string`
+
+###### Parameters
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### statistics.noData?
 
@@ -1398,12 +2178,22 @@ nulls, as an empty table has: "No data".
 
 ##### statistics.nonFiniteCount?
 
-> `optional` **nonFiniteCount?**: `object`
+> `optional` **nonFiniteCount?**: (`count`) => `string`
 
 The end of line 2 for a column holding values its chart leaves out,
 having no place on its axis: a numeric column's `NaN`, `Infinity` and
 `-Infinity`, and a date column's `infinity`, `-infinity` and dates a
 JavaScript `Date` cannot hold. "30 non-finite".
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.nonNullCategory?
 
@@ -1420,13 +2210,33 @@ Display value for the null bin/segment in a selection detail line.
 
 ##### statistics.nullCount?
 
-> `optional` **nullCount?**: `object`
+> `optional` **nullCount?**: (`count`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.otherCategory?
 
-> `optional` **otherCategory?**: `object`
+> `optional` **otherCategory?**: (`count`) => `string`
 
 Display value for the folded "Other" segment (count = folded distinct values).
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.otherSegmentLabel?
 
@@ -1437,15 +2247,45 @@ bar, where it fits; `otherCategory` is its hover text.
 
 ##### statistics.percentTrue?
 
-> `optional` **percentTrue?**: `object`
+> `optional` **percentTrue?**: (`pct`) => `string`
+
+###### Parameters
+
+###### pct
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.rowCount?
 
-> `optional` **rowCount?**: `object`
+> `optional` **rowCount?**: (`count`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.rowWord?
 
-> `optional` **rowWord?**: `object`
+> `optional` **rowWord?**: (`count`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.selectedLabel?
 
@@ -1455,9 +2295,23 @@ Bold label prefix for a multi-category selection detail line.
 
 ##### statistics.selectionRowCount?
 
-> `optional` **selectionRowCount?**: `object`
+> `optional` **selectionRowCount?**: (`count`, `pct`) => `string`
 
 Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### pct
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### statistics.separator?
 
@@ -1467,17 +2321,51 @@ Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
 
 ##### statistics.uniqueCount?
 
-> `optional` **uniqueCount?**: `object`
+> `optional` **uniqueCount?**: (`count`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.uniquePercent?
 
-> `optional` **uniquePercent?**: `object`
+> `optional` **uniquePercent?**: (`count`, `pct`) => `string`
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### pct
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### statistics.valueListSuffix?
 
-> `optional` **valueListSuffix?**: `object`
+> `optional` **valueListSuffix?**: (`total`) => `string`
 
 Truncation suffix for a long multi-select value list (total = selected values).
+
+###### Parameters
+
+###### total
+
+`number`
+
+###### Returns
+
+`string`
 
 #### values?
 
@@ -1523,12 +2411,26 @@ Value inspector button that adds which member a union holds as a column.
 
 ##### values.bucketLabel?
 
-> `optional` **bucketLabel?**: `object`
+> `optional` **bucketLabel?**: (`first`, `last`) => `string`
 
 One bucket of a container too big to list at once, by the numbers of
 its first and last child (1-based for DuckDB values, 0-based inside
 JSON, the same number twice for a bucket of one): "[1 … 100]",
 "[10001 … 10001]".
+
+###### Parameters
+
+###### first
+
+`number`
+
+###### last
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.closeLabel?
 
@@ -1538,9 +2440,19 @@ JSON, the same number twice for a bucket of one): "[1 … 100]",
 
 ##### values.columnAdded?
 
-> `optional` **columnAdded?**: `object`
+> `optional` **columnAdded?**: (`column`) => `string`
 
 Live-region text once a column has been added: "Column point_x added".
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### values.columnNameLabel?
 
@@ -1574,9 +2486,19 @@ The tree's node for a list's or an array's elements, read at a position.
 
 ##### values.entryCount?
 
-> `optional` **entryCount?**: `object`
+> `optional` **entryCount?**: (`count`) => `string`
 
 Entries of a map, in the tree: "600 entries".
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.expressionLabel?
 
@@ -1586,9 +2508,19 @@ Label of the extract panel's preview of the SQL expression the column reads.
 
 ##### values.extractButtonLabel?
 
-> `optional` **extractButtonLabel?**: `object`
+> `optional` **extractButtonLabel?**: (`column`) => `string`
 
 `aria-label` of a nested or JSON column header's extract button: "Extract from point".
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### values.extractButtonTitle?
 
@@ -1604,42 +2536,106 @@ Label of the extract panel's preview of the SQL expression the column reads.
 
 ##### values.extractFailed?
 
-> `optional` **extractFailed?**: `object`
+> `optional` **extractFailed?**: (`error`) => `string`
 
 A column could not be added, with the reason (in English, from the action): "Could not add the column: …".
 
+###### Parameters
+
+###### error
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.extractTitle?
 
-> `optional` **extractTitle?**: `object`
+> `optional` **extractTitle?**: (`column`) => `string`
 
 Title of the extract panel, which names it for assistive technology: "Extract from point".
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.extractTreeLabel?
 
-> `optional` **extractTreeLabel?**: `object`
+> `optional` **extractTreeLabel?**: (`column`) => `string`
 
 Accessible name of the extract panel's tree of the column's type: "Parts of point".
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.fieldCount?
 
-> `optional` **fieldCount?**: `object`
+> `optional` **fieldCount?**: (`count`) => `string`
 
 Fields of a struct, in the tree: "3 fields".
 
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### values.inspectorTitle?
 
-> `optional` **inspectorTitle?**: `object`
+> `optional` **inspectorTitle?**: (`column`, `rowLabel`) => `string`
 
 Title of the value inspector, the panel that shows one nested or JSON
 cell's whole value (F2, a double click, or the cell's inspect icon):
 the column and `rowLabel`'s text, "tags · Row 1,235". It also
 names the panel for assistive technology.
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### rowLabel
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.itemCount?
 
-> `optional` **itemCount?**: `object`
+> `optional` **itemCount?**: (`count`) => `string`
 
 Elements of a list, an array or a JSON array, in the tree: "3 items".
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.jsonPathHint?
 
@@ -1649,9 +2645,19 @@ How to write a JSON path, under the input.
 
 ##### values.jsonPathInvalid?
 
-> `optional` **jsonPathInvalid?**: `object`
+> `optional` **jsonPathInvalid?**: (`character`) => `string`
 
 The JSON path does not parse, by the 1-based character where it goes wrong.
+
+###### Parameters
+
+###### character
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.jsonPathLabel?
 
@@ -1661,15 +2667,35 @@ Label of the extract panel's JSON path input, for a part that is JSON or VARIANT
 
 ##### values.keyCount?
 
-> `optional` **keyCount?**: `object`
+> `optional` **keyCount?**: (`count`) => `string`
 
 Keys of a JSON object, in the tree: "2 keys".
 
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### values.keyLabel?
 
-> `optional` **keyLabel?**: `object`
+> `optional` **keyLabel?**: (`container`) => `string`
 
 Label of the input for a map value's key, by the map: "Key in attrs".
+
+###### Parameters
+
+###### container
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### values.keyRequired?
 
@@ -1703,9 +2729,19 @@ The tree's node for a map's values, read by key.
 
 ##### values.moreCharacters?
 
-> `optional` **moreCharacters?**: `object`
+> `optional` **moreCharacters?**: (`count`) => `string`
 
 After text the tree cut short, by the characters left out: "18,000 more characters".
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.nothingToExtract?
 
@@ -1728,11 +2764,21 @@ The position input holds something other than a whole number from 1 up.
 
 ##### values.positionLabel?
 
-> `optional` **positionLabel?**: `object`
+> `optional` **positionLabel?**: (`container`) => `string`
 
 Label of the input for an element's 1-based position, by the list or
 array it is in: "Position in people". A list inside a list is named
 after the outer one's element: "Position in matrix › element".
+
+###### Parameters
+
+###### container
+
+`string`
+
+###### Returns
+
+`string`
 
 ##### values.readAs?
 
@@ -1775,10 +2821,20 @@ Button that reads the value again after it failed to load.
 
 ##### values.rowLabel?
 
-> `optional` **rowLabel?**: `object`
+> `optional` **rowLabel?**: (`row`) => `string`
 
 The row a value inspector shows, by its 1-based position in the table
 as sorted and filtered (the number a loading row shows): "Row 1,235".
+
+###### Parameters
+
+###### row
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.sizeNode?
 
@@ -1800,23 +2856,61 @@ Value inspector status when the value is too long to copy: over 8 MiB of JSON.
 
 ##### values.treeLabel?
 
-> `optional` **treeLabel?**: `object`
+> `optional` **treeLabel?**: (`column`) => `string`
 
 Accessible name of the value inspector's tree: "Value of tags".
 
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.truncatedNotice?
 
-> `optional` **truncatedNotice?**: `object`
+> `optional` **truncatedNotice?**: (`shownChars`, `totalChars`) => `string`
 
 Value inspector status for a value too long to show whole, by the
 characters shown and the value's length:
 "Showing the first 2,097,152 of 3,000,000 characters".
 
+###### Parameters
+
+###### shownChars
+
+`number`
+
+###### totalChars
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### values.typeArray?
 
-> `optional` **typeArray?**: `object`
+> `optional` **typeArray?**: (`element`, `size`) => `string`
 
 Spoken type of a fixed-size ARRAY: "array of 768 float".
+
+###### Parameters
+
+###### element
+
+`string`
+
+###### size
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.typeJson?
 
@@ -1826,29 +2920,73 @@ Spoken name of the JSON type.
 
 ##### values.typeList?
 
-> `optional` **typeList?**: `object`
+> `optional` **typeList?**: (`element`) => `string`
 
 Spoken type of a LIST, given its element's spoken type: "list of
 integer". A column header's accessible name ends with it ("tags, list
 of integer"); the visible label stays DuckDB's notation (`[integer]`).
 
+###### Parameters
+
+###### element
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.typeMap?
 
-> `optional` **typeMap?**: `object`
+> `optional` **typeMap?**: (`key`, `value`) => `string`
 
 Spoken type of a MAP, given its key's and value's: "map from varchar to integer".
 
+###### Parameters
+
+###### key
+
+`string`
+
+###### value
+
+`string`
+
+###### Returns
+
+`string`
+
 ##### values.typeStruct?
 
-> `optional` **typeStruct?**: `object`
+> `optional` **typeStruct?**: (`fieldCount`) => `string`
 
 Spoken type of a STRUCT, by its number of fields: "struct with 3 fields".
 
+###### Parameters
+
+###### fieldCount
+
+`number`
+
+###### Returns
+
+`string`
+
 ##### values.typeUnion?
 
-> `optional` **typeUnion?**: `object`
+> `optional` **typeUnion?**: (`memberCount`) => `string`
 
 Spoken type of a UNION, by its number of members: "union of 2 types".
+
+###### Parameters
+
+###### memberCount
+
+`number`
+
+###### Returns
+
+`string`
 
 ##### values.typeVariant?
 
@@ -1862,7 +3000,7 @@ Spoken name of the VARIANT type.
 
 > `optional` **persistence?**: `boolean` \| \{ `sessionStore?`: [`SessionStore`](../classes/SessionStore.md); \}
 
-Defined in: [DataTable.ts:197](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L197)
+Defined in: [DataTable.ts:197](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L197)
 
 Persist UI state (filters, sort, columns, derived columns) to IndexedDB
 and auto-restore on next mount. Pass `{ sessionStore }` to reuse an
@@ -1874,7 +3012,7 @@ existing store across tables. Default: `true`.
 
 > `optional` **portalTarget?**: `HTMLElement`
 
-Defined in: [DataTable.ts:267](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L267)
+Defined in: [DataTable.ts:267](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L267)
 
 Where fixed-position modals mount. Default: `document.body`.
 
@@ -1884,7 +3022,7 @@ Where fixed-position modals mount. Default: `document.body`.
 
 > `optional` **prefetch?**: `boolean`
 
-Defined in: [DataTable.ts:342](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L342)
+Defined in: [DataTable.ts:342](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L342)
 
 Speculatively fetch one block beyond the viewport in the current
 scroll direction while the fetch pipeline is idle. Default: `true`.
@@ -1900,7 +3038,7 @@ shares its DuckDB worker with heavier analytical queries).
 
 > `optional` **presets?**: `boolean` \| \{ `manager?`: [`FilterPresetManager`](../classes/FilterPresetManager.md); \}
 
-Defined in: [DataTable.ts:203](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L203)
+Defined in: [DataTable.ts:203](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L203)
 
 Enable the "Presets" button for saving/loading named filter sets.
 Pass `{ manager }` to reuse an existing preset manager. Default: `true`.
@@ -1911,7 +3049,7 @@ Pass `{ manager }` to reuse an existing preset manager. Default: `true`.
 
 > `optional` **rowCacheRows?**: `number`
 
-Defined in: [DataTable.ts:332](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L332)
+Defined in: [DataTable.ts:332](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L332)
 
 Maximum rows held in the in-memory row cache. Default: 2048 (rounded
 up to whole blocks, floor 4 blocks).
@@ -1928,7 +3066,7 @@ how often previously seen blocks are re-fetched.
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [DataTable.ts:301](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L301)
+Defined in: [DataTable.ts:301](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L301)
 
 Row height in pixels. Default: 32.
 
@@ -1944,7 +3082,7 @@ CSS-only change would move the rows and not the scroller.
 
 > `optional` **source?**: `string` \| `File` \| `Blob` \| `ArrayBuffer`
 
-Defined in: [DataTable.ts:168](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L168)
+Defined in: [DataTable.ts:168](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L168)
 
 Optional initial data source. If omitted, call
 `table.loadData(source, { tableName, sourceFormat, sourceOptions })` later.
@@ -1955,7 +3093,7 @@ Optional initial data source. If omitted, call
 
 > `optional` **sourceFormat?**: [`DataFormat`](../type-aliases/DataFormat.md)
 
-Defined in: [DataTable.ts:174](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L174)
+Defined in: [DataTable.ts:174](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L174)
 
 Override the format detected from `source` (e.g., if its URL has no
 extension). Applies to `source` only; pass `sourceFormat` to
@@ -1967,7 +3105,7 @@ extension). Applies to `source` only; pass `sourceFormat` to
 
 > `optional` **sourceOptions?**: [`SourceOptions`](SourceOptions.md)
 
-Defined in: [DataTable.ts:181](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L181)
+Defined in: [DataTable.ts:181](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L181)
 
 How `source` is read, per format: a CSV delimiter, header or null
 strings, the rows sampled to detect types, the Parquet columns to load,
@@ -1980,7 +3118,7 @@ only; pass `sourceOptions` to `table.loadData()` for a later load.
 
 > `optional` **statsPanelRegistry?**: [`StatsPanelRegistry`](../classes/StatsPanelRegistry.md)
 
-Defined in: [DataTable.ts:259](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L259)
+Defined in: [DataTable.ts:259](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L259)
 
 Per-instance stats panel registry. Register a [BaseStatsPanel](../../advanced/classes/BaseStatsPanel.md)
 subclass to replace the library's built-in two-line stats display in
@@ -1999,7 +3137,7 @@ for tables that don't opt in.
 
 > `optional` **strictBrowserCheck?**: `boolean`
 
-Defined in: [DataTable.ts:370](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L370)
+Defined in: [DataTable.ts:370](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L370)
 
 When `true`, probe for required browser APIs before attempting worker
 init. Rejects with [WorkerInitError](../classes/WorkerInitError.md) (`code: 'WORKER_UNSUPPORTED'`,
@@ -2014,7 +3152,7 @@ dedicated "unsupported browser" screen instead of a half-mounted table.
 
 > `optional` **tableName?**: `string`
 
-Defined in: [DataTable.ts:188](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L188)
+Defined in: [DataTable.ts:188](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L188)
 
 Table name used inside DuckDB for `source`, which is also the key its
 saved session is stored under. Auto-generated if omitted. Applies to
@@ -2027,7 +3165,7 @@ loads under a generated name, so no saved session is restored.
 
 > `optional` **undoRedo?**: `boolean`
 
-Defined in: [DataTable.ts:206](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L206)
+Defined in: [DataTable.ts:206](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L206)
 
 Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
 
@@ -2037,7 +3175,7 @@ Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
 
 > `optional` **visualizationRegistry?**: [`VisualizationRegistry`](../classes/VisualizationRegistry.md)
 
-Defined in: [DataTable.ts:245](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L245)
+Defined in: [DataTable.ts:245](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L245)
 
 Per-instance visualization registry. Use this to register custom
 visualizations (or override built-ins) without affecting other tables
@@ -2050,7 +3188,7 @@ is used.
 
 > `optional` **visualizations?**: `boolean`
 
-Defined in: [DataTable.ts:237](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/DataTable.ts#L237)
+Defined in: [DataTable.ts:237](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L237)
 
 Enable auto-attached column header visualizations (histograms, value counts). Default: `true`.
 

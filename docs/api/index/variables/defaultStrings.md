@@ -8,7 +8,7 @@
 
 > `const` **defaultStrings**: [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:676](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L676)
+Defined in: [core/Strings.ts:682](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/Strings.ts#L682)
 
 Default English strings for every user-facing label, placeholder, ARIA
 announcement, and stats template. Pass `messages: DeepPartial<Strings>` to

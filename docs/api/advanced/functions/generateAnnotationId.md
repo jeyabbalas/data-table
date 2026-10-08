@@ -8,7 +8,7 @@
 
 > **generateAnnotationId**(): `string`
 
-Defined in: [annotations/AnnotationId.ts:80](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/annotations/AnnotationId.ts#L80)
+Defined in: [annotations/AnnotationId.ts:80](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/annotations/AnnotationId.ts#L80)
 
 Generate a new annotation id.
 

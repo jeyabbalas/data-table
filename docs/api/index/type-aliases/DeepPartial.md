@@ -8,11 +8,17 @@
 
 > **DeepPartial**\<`T`\> = `T` *extends* (...`args`) => `unknown` ? `T` : `T` *extends* `object` ? `{ [K in keyof T]?: DeepPartial<T[K]> }` : `T`
 
-Defined in: [core/Strings.ts:19](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L19)
+Defined in: [core/Strings.ts:25](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/Strings.ts#L25)
 
 Deep-partial helper for `messages` overrides. Every nested object becomes
 optional; function-typed leaves are replaced wholesale (no partial
-application).
+application) and keep their parameter types.
+
+The leaf test is `(...args: never[]) => unknown`, which every function
+type is assignable to. Under `strictFunctionTypes` parameters compare
+contravariantly, so a test against `(...args: unknown[]) => unknown`
+matches no function with a typed parameter, such as
+`(count: number) => string`, and would turn that leaf into `{}`.
 
 ## Type Parameters
 

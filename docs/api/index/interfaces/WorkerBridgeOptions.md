@@ -6,7 +6,7 @@
 
 # Interface: WorkerBridgeOptions
 
-Defined in: [data/WorkerBridge.ts:84](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/WorkerBridge.ts#L84)
+Defined in: [data/WorkerBridge.ts:84](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/data/WorkerBridge.ts#L84)
 
 Construction options for [WorkerBridge](../classes/WorkerBridge.md).
 
@@ -16,7 +16,7 @@ Construction options for [WorkerBridge](../classes/WorkerBridge.md).
 
 > `optional` **cache?**: `Partial`\<[`QueryCacheOptions`](QueryCacheOptions.md)\>
 
-Defined in: [data/WorkerBridge.ts:86](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/WorkerBridge.ts#L86)
+Defined in: [data/WorkerBridge.ts:86](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/data/WorkerBridge.ts#L86)
 
 Query cache configuration (LRU size, TTL).
 
@@ -24,19 +24,37 @@ Query cache configuration (LRU size, TTL).
 
 ### duckdbBundles?
 
-> `optional` **duckdbBundles?**: `DuckDBBundles`
+> `optional` **duckdbBundles?**: `object`
 
-Defined in: [data/WorkerBridge.ts:127](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/WorkerBridge.ts#L127)
+Defined in: [data/WorkerBridge.ts:145](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/data/WorkerBridge.ts#L145)
 
-DuckDB WASM bundles override for offline / self-hosted deployments.
-Forwarded to the worker on init; when omitted the worker falls back
-to `getJsDelivrBundles()`.
+DuckDB-WASM bundles to load instead of jsDelivr's, for a self-hosted,
+offline or strict-CSP deployment: `@duckdb/duckdb-wasm`'s
+`DuckDBBundles`, whose URLs may also be `URL` objects. When omitted,
+the worker loads `getJsDelivrBundles()`.
 
-**Trust boundary.** The bundle URLs are passed verbatim to
-`@duckdb/duckdb-wasm`'s `selectBundle`, which `fetch`-es them and
-instantiates WASM. Treat as developer-controlled — never derived from
-end-user input. See `docs/integrations/csp-and-offline.md` for the
-recommended self-hosting pattern.
+DuckDB's own worker fetches these files, not the library's: it starts
+from a `blob:` URL, runs `importScripts(mainWorker)`, then fetches
+`mainModule`, and the `coi` bundle starts its threads from
+`pthreadWorker`. A `blob:` URL is no base for a relative URL, so
+`initialize()` resolves each `mainModule`, `mainWorker` and
+`pthreadWorker` against the page, `document.baseURI` (a `<base href>`
+when it has one), before any worker exists, and posts the absolute
+URLs. One that cannot be resolved, or that is not a string or a `URL`,
+rejects `initialize()` with a `ConfigurationError` whose code is
+`OPTIONS_INVALID` and whose `details.option` names it, such as
+`'duckdbBundles.eh.mainWorker'`. Your object is not changed.
+
+Copy every file from one `@duckdb/duckdb-wasm` version, pinned exactly
+to `1.33.1-dev57.0`: the library's worker has DuckDB-WASM's JavaScript
+built in (`1.33.1-dev57.0`), and the library is tested with it. A worker
+script only runs with the `.wasm` files of its own version. See
+`docs/guides/csp-and-offline.md` for the files, the Content Security
+Policy and DuckDB's extensions.
+
+**Trust boundary.** DuckDB runs these scripts and modules in your
+origin. Treat the URLs as developer-controlled, never derived from
+end-user input.
 
 ***
 
@@ -44,7 +62,7 @@ recommended self-hosting pattern.
 
 > `optional` **initializeTimeoutMs?**: `number`
 
-Defined in: [data/WorkerBridge.ts:92](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/WorkerBridge.ts#L92)
+Defined in: [data/WorkerBridge.ts:92](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/data/WorkerBridge.ts#L92)
 
 Maximum time (ms) to wait for the worker to signal ready and for
 DuckDB to initialize. Rejects `initialize()` with a descriptive
@@ -56,7 +74,7 @@ error if exceeded. Default: 30000.
 
 > `optional` **workerFactory?**: () => `Worker`
 
-Defined in: [data/WorkerBridge.ts:104](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/WorkerBridge.ts#L104)
+Defined in: [data/WorkerBridge.ts:104](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/data/WorkerBridge.ts#L104)
 
 Custom worker factory. Takes precedence over [workerUrl](#workerurl) and the
 built-in default. Useful for strict-CSP / bundler-specific deployments
@@ -78,7 +96,7 @@ from end-user input.
 
 > `optional` **workerUrl?**: `string` \| `URL`
 
-Defined in: [data/WorkerBridge.ts:115](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/data/WorkerBridge.ts#L115)
+Defined in: [data/WorkerBridge.ts:115](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/data/WorkerBridge.ts#L115)
 
 Custom URL/path for the worker script. Instantiated via
 `new Worker(workerUrl, { type: 'module' })`. Ignored if

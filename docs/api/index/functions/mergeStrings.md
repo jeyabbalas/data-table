@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:1147](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/Strings.ts#L1147)
+Defined in: [core/Strings.ts:1153](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/Strings.ts#L1153)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -28,7 +28,7 @@ shape rather than the compile-time type.
 
 #### a11y?
 
-\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `columnLayoutCancelled?`: \{ \}; `columnLayoutCommitted?`: \{ \}; `columnLayoutModeEntered?`: \{ \}; `columnMoveBlockedPinned?`: \{ \}; `columnMovedAnnouncement?`: \{ \}; `columnWidthAnnouncement?`: \{ \}; `columnWidthAtMaximum?`: \{ \}; `columnWidthAtMinimum?`: \{ \}; `descending?`: `string`; `dragHandleLabel?`: \{ \}; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: \{ \}; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: \{ \}; `gridLabel?`: `string`; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: \{ \}; `hideColumnTitle?`: `string`; `loadingRowLabel?`: \{ \}; `multiFilteredSuffix?`: \{ \}; `noFilters?`: \{ \}; `pinButtonLabel?`: \{ \}; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: \{ \}; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: \{ \}; `sortDescendingTitle?`: `string`; `sortedBy?`: \{ \}; `sortedMultiSuffix?`: \{ \}; `sortedSuffix?`: \{ \}; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: \{ \}; `unpinColumnTitle?`: `string`; \}
+\{ `ascending?`: `string`; `cannotHideLastColumn?`: `string`; `columnLayoutCancelled?`: (`column`) => `string`; `columnLayoutCommitted?`: (`column`) => `string`; `columnLayoutModeEntered?`: (`column`) => `string`; `columnMoveBlockedPinned?`: (`column`) => `string`; `columnMovedAnnouncement?`: (`column`, `position`, `total`) => `string`; `columnWidthAnnouncement?`: (`column`, `px`) => `string`; `columnWidthAtMaximum?`: (`column`, `px`) => `string`; `columnWidthAtMinimum?`: (`column`, `px`) => `string`; `descending?`: `string`; `dragHandleLabel?`: (`column`) => `string`; `dragHandleTitle?`: `string`; `editDerivedColumnLabel?`: `string`; `editDerivedColumnTitle?`: `string`; `filterButtonLabel?`: (`column`) => `string`; `filterColumnTitle?`: `string`; `filteredSuffix?`: `string`; `filtersActive?`: (`n`, `shown`, `total`) => `string`; `gridLabel?`: `string`; `hiddenColumnsLabel?`: `string`; `hideButtonLabel?`: (`column`) => `string`; `hideColumnTitle?`: `string`; `loadingRowLabel?`: (`rowNumber`) => `string`; `multiFilteredSuffix?`: (`count`) => `string`; `noFilters?`: (`total`) => `string`; `pinButtonLabel?`: (`column`) => `string`; `pinColumnTitle?`: `string`; `resizeHandleLabel?`: `string`; `showColumn?`: (`column`) => `string`; `sortAscendingTitle?`: `string`; `sortButtonLabel?`: (`column`) => `string`; `sortDescendingTitle?`: `string`; `sortedBy?`: (`descriptions`) => `string`; `sortedMultiSuffix?`: (`direction`, `priority`) => `string`; `sortedSuffix?`: (`direction`) => `string`; `sortRemoveTitle?`: `string`; `unpinButtonLabel?`: (`column`) => `string`; `unpinColumnTitle?`: `string`; \}
 
 #### a11y.ascending?
 
@@ -42,19 +42,19 @@ Word used inside `sortedBy` descriptions and header labels.
 
 #### a11y.columnLayoutCancelled?
 
-\{ \}
+(`column`) => `string`
 
 Live-region: Escape restored the entry width and position.
 
 #### a11y.columnLayoutCommitted?
 
-\{ \}
+(`column`) => `string`
 
 Live-region: Enter (or leaving the grid) committed the gesture.
 
 #### a11y.columnLayoutModeEntered?
 
-\{ \}
+(`column`) => `string`
 
 Column layout mode (`Shift+F2` on a column header) — the keyboard
 gesture for resize and reorder. The entry announcement is the only
@@ -63,31 +63,31 @@ discoverability affordance; keep the key names in a translation.
 
 #### a11y.columnMoveBlockedPinned?
 
-\{ \}
+(`column`) => `string`
 
 Live-region: a move was refused because the column is pinned.
 
 #### a11y.columnMovedAnnouncement?
 
-\{ \}
+(`column`, `position`, `total`) => `string`
 
 Live-region: the column's new 1-based position after a move.
 
 #### a11y.columnWidthAnnouncement?
 
-\{ \}
+(`column`, `px`) => `string`
 
 Live-region: the column's new width after a resize step.
 
 #### a11y.columnWidthAtMaximum?
 
-\{ \}
+(`column`, `px`) => `string`
 
 Live-region: resize step landed on the maximum width.
 
 #### a11y.columnWidthAtMinimum?
 
-\{ \}
+(`column`, `px`) => `string`
 
 Live-region: resize step landed on the minimum width.
 
@@ -97,7 +97,7 @@ Live-region: resize step landed on the minimum width.
 
 #### a11y.dragHandleLabel?
 
-\{ \}
+(`column`) => `string`
 
 Header drag handle.
 
@@ -117,7 +117,7 @@ Derived-column edit icon.
 
 #### a11y.filterButtonLabel?
 
-\{ \}
+(`column`) => `string`
 
 Header filter button.
 
@@ -131,7 +131,7 @@ Header filter button.
 
 #### a11y.filtersActive?
 
-\{ \}
+(`n`, `shown`, `total`) => `string`
 
 Live-region: "3 filters active, showing 1,234 of 5,678 rows".
 
@@ -149,7 +149,7 @@ Hidden-columns gutter.
 
 #### a11y.hideButtonLabel?
 
-\{ \}
+(`column`) => `string`
 
 Header hide button.
 
@@ -159,23 +159,23 @@ Header hide button.
 
 #### a11y.loadingRowLabel?
 
-\{ \}
+(`rowNumber`) => `string`
 
 Placeholder text shown for not-yet-fetched rows during fast scroll.
 
 #### a11y.multiFilteredSuffix?
 
-\{ \}
+(`count`) => `string`
 
 #### a11y.noFilters?
 
-\{ \}
+(`total`) => `string`
 
 Live-region: "Showing all 5,678 rows".
 
 #### a11y.pinButtonLabel?
 
-\{ \}
+(`column`) => `string`
 
 Header pin button.
 
@@ -191,7 +191,7 @@ Aria-label on the column-resize handle (`.dt-col-resize-handle`).
 
 #### a11y.showColumn?
 
-\{ \}
+(`column`) => `string`
 
 #### a11y.sortAscendingTitle?
 
@@ -199,7 +199,7 @@ Aria-label on the column-resize handle (`.dt-col-resize-handle`).
 
 #### a11y.sortButtonLabel?
 
-\{ \}
+(`column`) => `string`
 
 Header sort button.
 
@@ -209,17 +209,17 @@ Header sort button.
 
 #### a11y.sortedBy?
 
-\{ \}
+(`descriptions`) => `string`
 
 Live-region: "sorted by Price ascending, then Name descending".
 
 #### a11y.sortedMultiSuffix?
 
-\{ \}
+(`direction`, `priority`) => `string`
 
 #### a11y.sortedSuffix?
 
-\{ \}
+(`direction`) => `string`
 
 Column-header aria-label fragments.
 
@@ -229,7 +229,7 @@ Column-header aria-label fragments.
 
 #### a11y.unpinButtonLabel?
 
-\{ \}
+(`column`) => `string`
 
 #### a11y.unpinColumnTitle?
 
@@ -297,7 +297,7 @@ Column-header aria-label fragments.
 
 #### derived?
 
-\{ `addButtonLabel?`: `string`; `availableColumnsLabel?`: `string`; `closeEditLabel?`: `string`; `closeLabel?`: `string`; `createButton?`: `string`; `createFailed?`: `string`; `deleteButton?`: `string`; `deleteFailed?`: \{ \}; `editTitle?`: `string`; `editTitleForColumn?`: \{ \}; `expressionLabel?`: `string`; `expressionModeLabel?`: `string`; `expressionPlaceholder?`: `string`; `expressionRequired?`: `string`; `infoLabel?`: `string`; `nameDuplicate?`: \{ \}; `nameLabel?`: `string`; `namePlaceholder?`: `string`; `nameRequired?`: `string`; `nameReserved?`: \{ \}; `newColumnTitle?`: `string`; `typeLabel?`: `string`; `typePreview?`: \{ \}; `updateButton?`: `string`; `updateFailed?`: `string`; `validationFailed?`: `string`; `vectorCountMismatch?`: \{ \}; `vectorInfo?`: \{ \}; `vectorInfoText?`: \{ \}; `vectorInvalidBoolean?`: \{ \}; `vectorInvalidDate?`: \{ \}; `vectorInvalidDecimal?`: \{ \}; `vectorInvalidFloat?`: \{ \}; `vectorInvalidInteger?`: \{ \}; `vectorInvalidInterval?`: \{ \}; `vectorInvalidTime?`: \{ \}; `vectorInvalidTimestamp?`: \{ \}; `vectorInvalidUUID?`: \{ \}; `vectorModeLabel?`: `string`; `vectorPlaceholder?`: `string`; `vectorTypeLabel?`: `string`; `vectorValuesLabel?`: `string`; \}
+\{ `addButtonLabel?`: `string`; `availableColumnsLabel?`: `string`; `closeEditLabel?`: `string`; `closeLabel?`: `string`; `createButton?`: `string`; `createFailed?`: `string`; `deleteButton?`: `string`; `deleteFailed?`: (`message`) => `string`; `editTitle?`: `string`; `editTitleForColumn?`: (`column`) => `string`; `expressionLabel?`: `string`; `expressionModeLabel?`: `string`; `expressionPlaceholder?`: `string`; `expressionRequired?`: `string`; `infoLabel?`: `string`; `nameDuplicate?`: (`name`) => `string`; `nameLabel?`: `string`; `namePlaceholder?`: `string`; `nameRequired?`: `string`; `nameReserved?`: (`name`) => `string`; `newColumnTitle?`: `string`; `typeLabel?`: `string`; `typePreview?`: (`type`, `originalType`) => `string`; `updateButton?`: `string`; `updateFailed?`: `string`; `validationFailed?`: `string`; `vectorCountMismatch?`: (`expected`, `got`) => `string`; `vectorInfo?`: (`count`, `total`) => `string`; `vectorInfoText?`: (`vectorType`, `count`) => `string`; `vectorInvalidBoolean?`: (`lineNum`, `value`) => `string`; `vectorInvalidDate?`: (`lineNum`, `value`) => `string`; `vectorInvalidDecimal?`: (`lineNum`, `value`) => `string`; `vectorInvalidFloat?`: (`lineNum`, `value`) => `string`; `vectorInvalidInteger?`: (`lineNum`, `value`) => `string`; `vectorInvalidInterval?`: (`lineNum`) => `string`; `vectorInvalidTime?`: (`lineNum`, `value`) => `string`; `vectorInvalidTimestamp?`: (`lineNum`, `value`) => `string`; `vectorInvalidUUID?`: (`lineNum`, `value`) => `string`; `vectorModeLabel?`: `string`; `vectorPlaceholder?`: `string`; `vectorTypeLabel?`: `string`; `vectorValuesLabel?`: `string`; \}
 
 #### derived.addButtonLabel?
 
@@ -331,7 +331,7 @@ Prefix shown before the comma-separated column-hint list (DefaultExpressionEdito
 
 #### derived.deleteFailed?
 
-\{ \}
+(`message`) => `string`
 
 #### derived.editTitle?
 
@@ -341,7 +341,7 @@ Default panel header before a column is selected.
 
 #### derived.editTitleForColumn?
 
-\{ \}
+(`column`) => `string`
 
 Panel header with column name — "Edit: my_col".
 
@@ -375,7 +375,7 @@ edit panel, and of `DefaultExpressionEditor`'s textarea.
 
 #### derived.nameDuplicate?
 
-\{ \}
+(`name`) => `string`
 
 #### derived.nameLabel?
 
@@ -391,7 +391,7 @@ edit panel, and of `DefaultExpressionEditor`'s textarea.
 
 #### derived.nameReserved?
 
-\{ \}
+(`name`) => `string`
 
 A new column name that spells `__rowid__` in any letter case: the
 synthetic row id's name, which no other column may take.
@@ -408,7 +408,7 @@ Modal: "New Derived Column".
 
 #### derived.typePreview?
 
-\{ \}
+(`type`, `originalType`) => `string`
 
 #### derived.updateButton?
 
@@ -424,53 +424,53 @@ Modal: "New Derived Column".
 
 #### derived.vectorCountMismatch?
 
-\{ \}
+(`expected`, `got`) => `string`
 
 #### derived.vectorInfo?
 
-\{ \}
+(`count`, `total`) => `string`
 
 #### derived.vectorInfoText?
 
-\{ \}
+(`vectorType`, `count`) => `string`
 
 "Vector column (integer), 123 values"
 
 #### derived.vectorInvalidBoolean?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidDate?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidDecimal?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidFloat?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidInteger?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidInterval?
 
-\{ \}
+(`lineNum`) => `string`
 
 #### derived.vectorInvalidTime?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidTimestamp?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorInvalidUUID?
 
-\{ \}
+(`lineNum`, `value`) => `string`
 
 #### derived.vectorModeLabel?
 
@@ -644,7 +644,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 #### filters?
 
-\{ `activeFiltersLabel?`: `string`; `applyButton?`: `string`; `ariaLabels?`: \{ `dateFilterMode?`: \{ \}; `endDate?`: \{ \}; `filterMode?`: \{ \}; `filterValue?`: \{ \}; `fromTime?`: \{ \}; `intervalFilter?`: \{ \}; `maxValue?`: \{ \}; `minValue?`: \{ \}; `nullFilter?`: \{ \}; `removeFilter?`: \{ \}; `startDate?`: \{ \}; `toTime?`: \{ \}; `uuidFilterMode?`: \{ \}; `uuidValue?`: \{ \}; \}; `booleanOptions?`: \{ `false?`: `string`; `null?`: `string`; `true?`: `string`; \}; `chipDescriptions?`: \{ `anyValue?`: `string`; `inSet?`: \{ \}; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: \{ \}; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `sqlColumn?`: `string`; `valueListMore?`: \{ \}; \}; `clearAllButton?`: `string`; `clearButton?`: `string`; `closePanelLabel?`: `string`; `dateOperators?`: \{ `after?`: `string`; `before?`: `string`; `between?`: `string`; `equals?`: `string`; `onOrAfter?`: `string`; `onOrBefore?`: `string`; \}; `expressionFilterLabel?`: `string`; `expressionFilterTooltip?`: `string`; `labels?`: \{ `from?`: `string`; `to?`: `string`; \}; `nullToggle?`: \{ `any?`: `string`; `isNotNull?`: `string`; `isNull?`: `string`; \}; `numericOperators?`: \{ `between?`: `string`; `equals?`: `string`; `greaterThan?`: `string`; `greaterThanOrEqual?`: `string`; `lessThan?`: `string`; `lessThanOrEqual?`: `string`; `notEquals?`: `string`; \}; `panelTitle?`: `string`; `panelTitleForColumn?`: \{ \}; `placeholders?`: \{ `intervalFilter?`: `string`; `max?`: `string`; `min?`: `string`; `stringFilter?`: `string`; `uuidFilter?`: `string`; `value?`: `string`; \}; `presetsButtonLabel?`: `string`; `presetsButtonTooltip?`: `string`; `sqlFilter?`: \{ `applyButton?`: `string`; `closeLabel?`: `string`; `conditionLabel?`: `string`; `createTitle?`: `string`; `editorPlaceholder?`: `string`; `editTitle?`: `string`; `labelFieldLabel?`: `string`; `labelHint?`: `string`; `labelPlaceholder?`: `string`; `removeButton?`: `string`; `removeConfirmText?`: `string`; `updateButton?`: `string`; `validationResult?`: \{ \}; \}; `stringModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `exact?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `uuidModes?`: \{ `contains?`: `string`; `exact?`: `string`; \}; `validation?`: \{ `regexInvalid?`: `string`; `regexTooLong?`: `string`; `regexUnsupported?`: `string`; `uuidInvalid?`: `string`; \}; \}
+\{ `activeFiltersLabel?`: `string`; `applyButton?`: `string`; `ariaLabels?`: \{ `dateFilterMode?`: (`column`) => `string`; `endDate?`: (`column`) => `string`; `filterMode?`: (`column`) => `string`; `filterValue?`: (`column`) => `string`; `fromTime?`: (`column`) => `string`; `intervalFilter?`: (`column`) => `string`; `maxValue?`: (`column`) => `string`; `minValue?`: (`column`) => `string`; `nullFilter?`: (`column`) => `string`; `removeFilter?`: (`column`) => `string`; `startDate?`: (`column`) => `string`; `toTime?`: (`column`) => `string`; `uuidFilterMode?`: (`column`) => `string`; `uuidValue?`: (`column`) => `string`; \}; `booleanOptions?`: \{ `false?`: `string`; `null?`: `string`; `true?`: `string`; \}; `chipDescriptions?`: \{ `anyValue?`: `string`; `inSet?`: (`list`, `includeNull`) => `string`; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: (`list`, `includeNull`) => `string`; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `sqlColumn?`: `string`; `valueListMore?`: (`rest`) => `string`; \}; `clearAllButton?`: `string`; `clearButton?`: `string`; `closePanelLabel?`: `string`; `dateOperators?`: \{ `after?`: `string`; `before?`: `string`; `between?`: `string`; `equals?`: `string`; `onOrAfter?`: `string`; `onOrBefore?`: `string`; \}; `expressionFilterLabel?`: `string`; `expressionFilterTooltip?`: `string`; `labels?`: \{ `from?`: `string`; `to?`: `string`; \}; `nullToggle?`: \{ `any?`: `string`; `isNotNull?`: `string`; `isNull?`: `string`; \}; `numericOperators?`: \{ `between?`: `string`; `equals?`: `string`; `greaterThan?`: `string`; `greaterThanOrEqual?`: `string`; `lessThan?`: `string`; `lessThanOrEqual?`: `string`; `notEquals?`: `string`; \}; `panelTitle?`: `string`; `panelTitleForColumn?`: (`column`) => `string`; `placeholders?`: \{ `intervalFilter?`: `string`; `max?`: `string`; `min?`: `string`; `stringFilter?`: `string`; `uuidFilter?`: `string`; `value?`: `string`; \}; `presetsButtonLabel?`: `string`; `presetsButtonTooltip?`: `string`; `sqlFilter?`: \{ `applyButton?`: `string`; `closeLabel?`: `string`; `conditionLabel?`: `string`; `createTitle?`: `string`; `editorPlaceholder?`: `string`; `editTitle?`: `string`; `labelFieldLabel?`: `string`; `labelHint?`: `string`; `labelPlaceholder?`: `string`; `removeButton?`: `string`; `removeConfirmText?`: `string`; `updateButton?`: `string`; `validationResult?`: (`matchCount`) => `string`; \}; `stringModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `exact?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `uuidModes?`: \{ `contains?`: `string`; `exact?`: `string`; \}; `validation?`: \{ `regexInvalid?`: `string`; `regexTooLong?`: `string`; `regexUnsupported?`: `string`; `uuidInvalid?`: `string`; \}; \}
 
 #### filters.activeFiltersLabel?
 
@@ -658,65 +658,65 @@ Toolbar label on the filter bar itself.
 
 #### filters.ariaLabels?
 
-\{ `dateFilterMode?`: \{ \}; `endDate?`: \{ \}; `filterMode?`: \{ \}; `filterValue?`: \{ \}; `fromTime?`: \{ \}; `intervalFilter?`: \{ \}; `maxValue?`: \{ \}; `minValue?`: \{ \}; `nullFilter?`: \{ \}; `removeFilter?`: \{ \}; `startDate?`: \{ \}; `toTime?`: \{ \}; `uuidFilterMode?`: \{ \}; `uuidValue?`: \{ \}; \}
+\{ `dateFilterMode?`: (`column`) => `string`; `endDate?`: (`column`) => `string`; `filterMode?`: (`column`) => `string`; `filterValue?`: (`column`) => `string`; `fromTime?`: (`column`) => `string`; `intervalFilter?`: (`column`) => `string`; `maxValue?`: (`column`) => `string`; `minValue?`: (`column`) => `string`; `nullFilter?`: (`column`) => `string`; `removeFilter?`: (`column`) => `string`; `startDate?`: (`column`) => `string`; `toTime?`: (`column`) => `string`; `uuidFilterMode?`: (`column`) => `string`; `uuidValue?`: (`column`) => `string`; \}
 
 aria-labels on the filter field controls.
 
 #### filters.ariaLabels.dateFilterMode?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.endDate?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.filterMode?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.filterValue?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.fromTime?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.intervalFilter?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.maxValue?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.minValue?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.nullFilter?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.removeFilter?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.startDate?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.toTime?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.uuidFilterMode?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.ariaLabels.uuidValue?
 
-\{ \}
+(`column`) => `string`
 
 #### filters.booleanOptions?
 
@@ -736,7 +736,7 @@ aria-labels on the filter field controls.
 
 #### filters.chipDescriptions?
 
-\{ `anyValue?`: `string`; `inSet?`: \{ \}; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: \{ \}; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `sqlColumn?`: `string`; `valueListMore?`: \{ \}; \}
+\{ `anyValue?`: `string`; `inSet?`: (`list`, `includeNull`) => `string`; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: (`list`, `includeNull`) => `string`; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `sqlColumn?`: `string`; `valueListMore?`: (`rest`) => `string`; \}
 
 Strings used by `formatFilter()` for chip descriptions.
 
@@ -746,7 +746,7 @@ Strings used by `formatFilter()` for chip descriptions.
 
 #### filters.chipDescriptions.inSet?
 
-\{ \}
+(`list`, `includeNull`) => `string`
 
 #### filters.chipDescriptions.isNotNull?
 
@@ -758,7 +758,7 @@ Strings used by `formatFilter()` for chip descriptions.
 
 #### filters.chipDescriptions.notInSet?
 
-\{ \}
+(`list`, `includeNull`) => `string`
 
 #### filters.chipDescriptions.patternModes?
 
@@ -796,7 +796,7 @@ Column label shown on raw-sql chips.
 
 #### filters.chipDescriptions.valueListMore?
 
-\{ \}
+(`rest`) => `string`
 
 #### filters.clearAllButton?
 
@@ -920,7 +920,7 @@ Dropdown text for numeric/date filter modes.
 
 #### filters.panelTitleForColumn?
 
-\{ \}
+(`column`) => `string`
 
 Header text once a column has been selected: e.g. "Filter: price".
 
@@ -966,7 +966,7 @@ Tooltip/title on the presets button.
 
 #### filters.sqlFilter?
 
-\{ `applyButton?`: `string`; `closeLabel?`: `string`; `conditionLabel?`: `string`; `createTitle?`: `string`; `editorPlaceholder?`: `string`; `editTitle?`: `string`; `labelFieldLabel?`: `string`; `labelHint?`: `string`; `labelPlaceholder?`: `string`; `removeButton?`: `string`; `removeConfirmText?`: `string`; `updateButton?`: `string`; `validationResult?`: \{ \}; \}
+\{ `applyButton?`: `string`; `closeLabel?`: `string`; `conditionLabel?`: `string`; `createTitle?`: `string`; `editorPlaceholder?`: `string`; `editTitle?`: `string`; `labelFieldLabel?`: `string`; `labelHint?`: `string`; `labelPlaceholder?`: `string`; `removeButton?`: `string`; `removeConfirmText?`: `string`; `updateButton?`: `string`; `validationResult?`: (`matchCount`) => `string`; \}
 
 SQL (raw WHERE) filter modal.
 
@@ -1024,7 +1024,7 @@ Placeholder of the expression filter's SQL editor.
 
 #### filters.sqlFilter.validationResult?
 
-\{ \}
+(`matchCount`) => `string`
 
 #### filters.stringModes?
 
@@ -1086,7 +1086,7 @@ Inline regex/UUID validation messages.
 
 #### presets?
 
-\{ `closeLabel?`: `string`; `deleteButton?`: `string`; `deleteConfirmText?`: `string`; `descriptionPlaceholder?`: `string`; `emptyState?`: `string`; `exportButton?`: `string`; `importButton?`: `string`; `importEmpty?`: `string`; `importFailed?`: `string`; `importPartial?`: \{ \}; `importSuccess?`: \{ \}; `loadButton?`: `string`; `meta?`: \{ \}; `namePlaceholder?`: `string`; `saveButton?`: `string`; `title?`: `string`; \}
+\{ `closeLabel?`: `string`; `deleteButton?`: `string`; `deleteConfirmText?`: `string`; `descriptionPlaceholder?`: `string`; `emptyState?`: `string`; `exportButton?`: `string`; `importButton?`: `string`; `importEmpty?`: `string`; `importFailed?`: `string`; `importPartial?`: (`imported`, `errors`) => `string`; `importSuccess?`: (`count`) => `string`; `loadButton?`: `string`; `meta?`: (`filterCount`, `dateStr`) => `string`; `namePlaceholder?`: `string`; `saveButton?`: `string`; `title?`: `string`; \}
 
 #### presets.closeLabel?
 
@@ -1126,11 +1126,11 @@ Inline regex/UUID validation messages.
 
 #### presets.importPartial?
 
-\{ \}
+(`imported`, `errors`) => `string`
 
 #### presets.importSuccess?
 
-\{ \}
+(`count`) => `string`
 
 #### presets.loadButton?
 
@@ -1138,7 +1138,7 @@ Inline regex/UUID validation messages.
 
 #### presets.meta?
 
-\{ \}
+(`filterCount`, `dateStr`) => `string`
 
 #### presets.namePlaceholder?
 
@@ -1154,7 +1154,7 @@ Inline regex/UUID validation messages.
 
 #### statistics?
 
-\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: \{ \}; `allValues?`: \{ \}; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: \{ \}; `matchCount?`: \{ \}; `max?`: \{ \}; `median?`: \{ \}; `min?`: \{ \}; `noData?`: `string`; `nonFiniteCount?`: \{ \}; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: \{ \}; `otherCategory?`: \{ \}; `otherSegmentLabel?`: `string`; `percentTrue?`: \{ \}; `rowCount?`: \{ \}; `rowWord?`: \{ \}; `selectedLabel?`: `string`; `selectionRowCount?`: \{ \}; `separator?`: `string`; `uniqueCount?`: \{ \}; `uniquePercent?`: \{ \}; `valueListSuffix?`: \{ \}; \}
+\{ `allNull?`: `string`; `allUnique?`: `string`; `allUniqueCategory?`: (`count`) => `string`; `allValues?`: (`value`) => `string`; `binLabel?`: `string`; `categoryLabel?`: `string`; `chartFailed?`: `string`; `filteredRowCount?`: (`filtered`, `total`) => `string`; `matchCount?`: (`count`) => `string`; `max?`: (`value`) => `string`; `median?`: (`value`) => `string`; `min?`: (`value`) => `string`; `noData?`: `string`; `nonFiniteCount?`: (`count`) => `string`; `nonNullCategory?`: `string`; `nullBinLabel?`: `string`; `nullCount?`: (`count`) => `string`; `otherCategory?`: (`count`) => `string`; `otherSegmentLabel?`: `string`; `percentTrue?`: (`pct`) => `string`; `rowCount?`: (`count`) => `string`; `rowWord?`: (`count`) => `string`; `selectedLabel?`: `string`; `selectionRowCount?`: (`count`, `pct`) => `string`; `separator?`: `string`; `uniqueCount?`: (`count`) => `string`; `uniquePercent?`: (`count`, `pct`) => `string`; `valueListSuffix?`: (`total`) => `string`; \}
 
 #### statistics.allNull?
 
@@ -1166,13 +1166,13 @@ Inline regex/UUID validation messages.
 
 #### statistics.allUniqueCategory?
 
-\{ \}
+(`count`) => `string`
 
 Display value for the all-unique segment (count = distinct values).
 
 #### statistics.allValues?
 
-\{ \}
+(`value`) => `string`
 
 #### statistics.binLabel?
 
@@ -1194,25 +1194,25 @@ Stats-slot line for a column whose chart's data failed to load.
 
 #### statistics.filteredRowCount?
 
-\{ \}
+(`filtered`, `total`) => `string`
 
 #### statistics.matchCount?
 
-\{ \}
+(`count`) => `string`
 
 Rows of a hovered bin/segment passing all active filters, e.g. "300 match".
 
 #### statistics.max?
 
-\{ \}
+(`value`) => `string`
 
 #### statistics.median?
 
-\{ \}
+(`value`) => `string`
 
 #### statistics.min?
 
-\{ \}
+(`value`) => `string`
 
 #### statistics.noData?
 
@@ -1223,7 +1223,7 @@ nulls, as an empty table has: "No data".
 
 #### statistics.nonFiniteCount?
 
-\{ \}
+(`count`) => `string`
 
 The end of line 2 for a column holding values its chart leaves out,
 having no place on its axis: a numeric column's `NaN`, `Infinity` and
@@ -1245,11 +1245,11 @@ Display value for the null bin/segment in a selection detail line.
 
 #### statistics.nullCount?
 
-\{ \}
+(`count`) => `string`
 
 #### statistics.otherCategory?
 
-\{ \}
+(`count`) => `string`
 
 Display value for the folded "Other" segment (count = folded distinct values).
 
@@ -1262,15 +1262,15 @@ bar, where it fits; `otherCategory` is its hover text.
 
 #### statistics.percentTrue?
 
-\{ \}
+(`pct`) => `string`
 
 #### statistics.rowCount?
 
-\{ \}
+(`count`) => `string`
 
 #### statistics.rowWord?
 
-\{ \}
+(`count`) => `string`
 
 #### statistics.selectedLabel?
 
@@ -1280,7 +1280,7 @@ Bold label prefix for a multi-category selection detail line.
 
 #### statistics.selectionRowCount?
 
-\{ \}
+(`count`, `pct`) => `string`
 
 Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
 
@@ -1292,21 +1292,21 @@ Selection/hover size, e.g. "4,000 rows (40.0%)" — pct arrives pre-formatted.
 
 #### statistics.uniqueCount?
 
-\{ \}
+(`count`) => `string`
 
 #### statistics.uniquePercent?
 
-\{ \}
+(`count`, `pct`) => `string`
 
 #### statistics.valueListSuffix?
 
-\{ \}
+(`total`) => `string`
 
 Truncation suffix for a long multi-select value list (total = selected values).
 
 #### values?
 
-\{ `addAsColumn?`: `string`; `addColumn?`: `string`; `adding?`: `string`; `addLengthAsColumn?`: `string`; `addSizeAsColumn?`: `string`; `addTagAsColumn?`: `string`; `bucketLabel?`: \{ \}; `closeLabel?`: `string`; `columnAdded?`: \{ \}; `columnNameLabel?`: `string`; `copied?`: `string`; `copyFailed?`: `string`; `copyJson?`: `string`; `elementNode?`: `string`; `entryCount?`: \{ \}; `expressionLabel?`: `string`; `extractButtonLabel?`: \{ \}; `extractButtonTitle?`: `string`; `extractCloseLabel?`: `string`; `extractFailed?`: \{ \}; `extractTitle?`: \{ \}; `extractTreeLabel?`: \{ \}; `fieldCount?`: \{ \}; `inspectorTitle?`: \{ \}; `itemCount?`: \{ \}; `jsonPathHint?`: `string`; `jsonPathInvalid?`: \{ \}; `jsonPathLabel?`: `string`; `keyCount?`: \{ \}; `keyLabel?`: \{ \}; `keyRequired?`: `string`; `lengthNode?`: `string`; `loadFailed?`: `string`; `loading?`: `string`; `mapValueNode?`: `string`; `moreCharacters?`: \{ \}; `nothingToExtract?`: `string`; `panelLoadFailed?`: `string`; `positionInvalid?`: `string`; `positionLabel?`: \{ \}; `readAs?`: \{ `boolean?`: `string`; `json?`: `string`; `length?`: `string`; `number?`: `string`; `string?`: `string`; \}; `readAsLabel?`: `string`; `retry?`: `string`; `rowLabel?`: \{ \}; `sizeNode?`: `string`; `tagNode?`: `string`; `tooLargeToCopy?`: `string`; `treeLabel?`: \{ \}; `truncatedNotice?`: \{ \}; `typeArray?`: \{ \}; `typeJson?`: `string`; `typeList?`: \{ \}; `typeMap?`: \{ \}; `typeStruct?`: \{ \}; `typeUnion?`: \{ \}; `typeVariant?`: `string`; \}
+\{ `addAsColumn?`: `string`; `addColumn?`: `string`; `adding?`: `string`; `addLengthAsColumn?`: `string`; `addSizeAsColumn?`: `string`; `addTagAsColumn?`: `string`; `bucketLabel?`: (`first`, `last`) => `string`; `closeLabel?`: `string`; `columnAdded?`: (`column`) => `string`; `columnNameLabel?`: `string`; `copied?`: `string`; `copyFailed?`: `string`; `copyJson?`: `string`; `elementNode?`: `string`; `entryCount?`: (`count`) => `string`; `expressionLabel?`: `string`; `extractButtonLabel?`: (`column`) => `string`; `extractButtonTitle?`: `string`; `extractCloseLabel?`: `string`; `extractFailed?`: (`error`) => `string`; `extractTitle?`: (`column`) => `string`; `extractTreeLabel?`: (`column`) => `string`; `fieldCount?`: (`count`) => `string`; `inspectorTitle?`: (`column`, `rowLabel`) => `string`; `itemCount?`: (`count`) => `string`; `jsonPathHint?`: `string`; `jsonPathInvalid?`: (`character`) => `string`; `jsonPathLabel?`: `string`; `keyCount?`: (`count`) => `string`; `keyLabel?`: (`container`) => `string`; `keyRequired?`: `string`; `lengthNode?`: `string`; `loadFailed?`: `string`; `loading?`: `string`; `mapValueNode?`: `string`; `moreCharacters?`: (`count`) => `string`; `nothingToExtract?`: `string`; `panelLoadFailed?`: `string`; `positionInvalid?`: `string`; `positionLabel?`: (`container`) => `string`; `readAs?`: \{ `boolean?`: `string`; `json?`: `string`; `length?`: `string`; `number?`: `string`; `string?`: `string`; \}; `readAsLabel?`: `string`; `retry?`: `string`; `rowLabel?`: (`row`) => `string`; `sizeNode?`: `string`; `tagNode?`: `string`; `tooLargeToCopy?`: `string`; `treeLabel?`: (`column`) => `string`; `truncatedNotice?`: (`shownChars`, `totalChars`) => `string`; `typeArray?`: (`element`, `size`) => `string`; `typeJson?`: `string`; `typeList?`: (`element`) => `string`; `typeMap?`: (`key`, `value`) => `string`; `typeStruct?`: (`fieldCount`) => `string`; `typeUnion?`: (`memberCount`) => `string`; `typeVariant?`: `string`; \}
 
 #### values.addAsColumn?
 
@@ -1348,7 +1348,7 @@ Value inspector button that adds which member a union holds as a column.
 
 #### values.bucketLabel?
 
-\{ \}
+(`first`, `last`) => `string`
 
 One bucket of a container too big to list at once, by the numbers of
 its first and last child (1-based for DuckDB values, 0-based inside
@@ -1363,7 +1363,7 @@ JSON, the same number twice for a bucket of one): "[1 … 100]",
 
 #### values.columnAdded?
 
-\{ \}
+(`column`) => `string`
 
 Live-region text once a column has been added: "Column point_x added".
 
@@ -1399,7 +1399,7 @@ The tree's node for a list's or an array's elements, read at a position.
 
 #### values.entryCount?
 
-\{ \}
+(`count`) => `string`
 
 Entries of a map, in the tree: "600 entries".
 
@@ -1411,7 +1411,7 @@ Label of the extract panel's preview of the SQL expression the column reads.
 
 #### values.extractButtonLabel?
 
-\{ \}
+(`column`) => `string`
 
 `aria-label` of a nested or JSON column header's extract button: "Extract from point".
 
@@ -1429,31 +1429,31 @@ Label of the extract panel's preview of the SQL expression the column reads.
 
 #### values.extractFailed?
 
-\{ \}
+(`error`) => `string`
 
 A column could not be added, with the reason (in English, from the action): "Could not add the column: …".
 
 #### values.extractTitle?
 
-\{ \}
+(`column`) => `string`
 
 Title of the extract panel, which names it for assistive technology: "Extract from point".
 
 #### values.extractTreeLabel?
 
-\{ \}
+(`column`) => `string`
 
 Accessible name of the extract panel's tree of the column's type: "Parts of point".
 
 #### values.fieldCount?
 
-\{ \}
+(`count`) => `string`
 
 Fields of a struct, in the tree: "3 fields".
 
 #### values.inspectorTitle?
 
-\{ \}
+(`column`, `rowLabel`) => `string`
 
 Title of the value inspector, the panel that shows one nested or JSON
 cell's whole value (F2, a double click, or the cell's inspect icon):
@@ -1462,7 +1462,7 @@ names the panel for assistive technology.
 
 #### values.itemCount?
 
-\{ \}
+(`count`) => `string`
 
 Elements of a list, an array or a JSON array, in the tree: "3 items".
 
@@ -1474,7 +1474,7 @@ How to write a JSON path, under the input.
 
 #### values.jsonPathInvalid?
 
-\{ \}
+(`character`) => `string`
 
 The JSON path does not parse, by the 1-based character where it goes wrong.
 
@@ -1486,13 +1486,13 @@ Label of the extract panel's JSON path input, for a part that is JSON or VARIANT
 
 #### values.keyCount?
 
-\{ \}
+(`count`) => `string`
 
 Keys of a JSON object, in the tree: "2 keys".
 
 #### values.keyLabel?
 
-\{ \}
+(`container`) => `string`
 
 Label of the input for a map value's key, by the map: "Key in attrs".
 
@@ -1528,7 +1528,7 @@ The tree's node for a map's values, read by key.
 
 #### values.moreCharacters?
 
-\{ \}
+(`count`) => `string`
 
 After text the tree cut short, by the characters left out: "18,000 more characters".
 
@@ -1553,7 +1553,7 @@ The position input holds something other than a whole number from 1 up.
 
 #### values.positionLabel?
 
-\{ \}
+(`container`) => `string`
 
 Label of the input for an element's 1-based position, by the list or
 array it is in: "Position in people". A list inside a list is named
@@ -1600,7 +1600,7 @@ Button that reads the value again after it failed to load.
 
 #### values.rowLabel?
 
-\{ \}
+(`row`) => `string`
 
 The row a value inspector shows, by its 1-based position in the table
 as sorted and filtered (the number a loading row shows): "Row 1,235".
@@ -1625,13 +1625,13 @@ Value inspector status when the value is too long to copy: over 8 MiB of JSON.
 
 #### values.treeLabel?
 
-\{ \}
+(`column`) => `string`
 
 Accessible name of the value inspector's tree: "Value of tags".
 
 #### values.truncatedNotice?
 
-\{ \}
+(`shownChars`, `totalChars`) => `string`
 
 Value inspector status for a value too long to show whole, by the
 characters shown and the value's length:
@@ -1639,7 +1639,7 @@ characters shown and the value's length:
 
 #### values.typeArray?
 
-\{ \}
+(`element`, `size`) => `string`
 
 Spoken type of a fixed-size ARRAY: "array of 768 float".
 
@@ -1651,7 +1651,7 @@ Spoken name of the JSON type.
 
 #### values.typeList?
 
-\{ \}
+(`element`) => `string`
 
 Spoken type of a LIST, given its element's spoken type: "list of
 integer". A column header's accessible name ends with it ("tags, list
@@ -1659,19 +1659,19 @@ of integer"); the visible label stays DuckDB's notation (`[integer]`).
 
 #### values.typeMap?
 
-\{ \}
+(`key`, `value`) => `string`
 
 Spoken type of a MAP, given its key's and value's: "map from varchar to integer".
 
 #### values.typeStruct?
 
-\{ \}
+(`fieldCount`) => `string`
 
 Spoken type of a STRUCT, by its number of fields: "struct with 3 fields".
 
 #### values.typeUnion?
 
-\{ \}
+(`memberCount`) => `string`
 
 Spoken type of a UNION, by its number of members: "union of 2 types".
 

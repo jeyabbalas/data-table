@@ -6,7 +6,7 @@
 
 # Interface: DuckDBArrayTypeNode
 
-Defined in: [core/duckdbType.ts:110](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L110)
+Defined in: [core/duckdbType.ts:110](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L110)
 
 A fixed-size ARRAY: `FLOAT[768]`.
 
@@ -28,7 +28,7 @@ if (node.kind === 'array') {
 
 > `readonly` **element**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:114](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L114)
+Defined in: [core/duckdbType.ts:114](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L114)
 
 ***
 
@@ -36,7 +36,7 @@ Defined in: [core/duckdbType.ts:114](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **kind**: `"array"`
 
-Defined in: [core/duckdbType.ts:111](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L111)
+Defined in: [core/duckdbType.ts:111](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L111)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [core/duckdbType.ts:111](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **size**: `number`
 
-Defined in: [core/duckdbType.ts:113](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L113)
+Defined in: [core/duckdbType.ts:113](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L113)
 
 ***
 
@@ -52,4 +52,4 @@ Defined in: [core/duckdbType.ts:113](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:112](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/core/duckdbType.ts#L112)
+Defined in: [core/duckdbType.ts:112](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L112)

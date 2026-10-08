@@ -54,7 +54,8 @@ updates:
       # too: a lockfile-only bump like PR #56, which Dependabot classed as
       # semver-patch, moves the version the worker is built with, so the peer
       # floor and the exact version the docs tell self-hosters to pin must move
-      # with it.
+      # with it; `tests/duckdb-wasm-peer-floor.test.ts` fails CI until the floor
+      # does.
       - dependency-name: '@duckdb/duckdb-wasm'
         update-types:
           - version-update:semver-major

@@ -2,7 +2,7 @@
 '@jeyabbalas/data-table': patch
 ---
 
-### Fixed
+A failed row fetch is retried with backoff instead of at once, and rows are not fetched or counted while a derived-column change can drop the relation they come from.
 
 - A row fetch that fails, or comes back short, is no longer issued again at once.
   - **Before:** the body repeated it as fast as DuckDB answered, for as long as the failure lasted, and logged `Error fetching rows` each time: thousands of failed queries in a browser test that held a derived-column change for a second.

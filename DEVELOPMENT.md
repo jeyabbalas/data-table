@@ -17,7 +17,7 @@ cd data-table
 npm install
 ```
 
-All peer dependencies (`@codemirror/*`, `@duckdb/duckdb-wasm`, `@lezer/highlight`) are also listed under `devDependencies`, so a single `npm install` gives you a complete dev environment. Consumers of the published package install the peers themselves (they're declared `optional` in `peerDependenciesMeta`).
+All peer dependencies (`@codemirror/*`, `@duckdb/duckdb-wasm`, `@lezer/highlight`) are also listed under `devDependencies`, so a single `npm install` gives you a complete dev environment. Consumers of the published package install the peers themselves. `@duckdb/duckdb-wasm` is a required peer; the `@codemirror/*` and `@lezer/highlight` peers are declared `optional` in `peerDependenciesMeta`, since only the SQL editors need them (see [Skipping CodeMirror](./README.md#skipping-codemirror)).
 
 ## Run the demo and examples
 
@@ -75,7 +75,7 @@ entry. Each threshold sits about one point below the measured figure: on
 2026-10-07, statements 91.26, branches 84.17, functions 94.33 and lines 93.01,
 against thresholds of 90, 83, 93 and 92. Raise them as coverage grows.
 
-Two api-surface tests read `dist/`. Locally they skip until `npm run build`
+Three api-surface tests read `dist/`. Locally they skip until `npm run build`
 has run; in CI, which builds first, a missing `dist/` fails them.
 
 Run a single test file:
@@ -291,6 +291,21 @@ you have a clean rollback path.
 
 The 0.6.0 release is the first publish to exercise the trust binding.
 
+### `main` is protected
+
+Since 7 October 2026, branch protection on `main` holds every change,
+release commits included, to these rules:
+
+- It lands through a pull request: a direct push to `main` is refused.
+- The PR merges only once CI's five checks pass: Supply-chain audit;
+  Lint, typecheck, format, docs; Test (Node 22); Browser accessibility
+  suite; and Bundle size budgets.
+- No approving review is needed, and the PR's branch need not be up to
+  date with `main`.
+- Force pushes to `main`, and deleting it, are blocked.
+- Repository admins can bypass these rules, as the
+  [manual fallback](#manual-fallback) needs to.
+
 ### Day-to-day flow
 
 1. As part of every PR, run:
@@ -307,10 +322,11 @@ The 0.6.0 release is the first publish to exercise the trust binding.
 
    Note that a PR opened by `changesets/action` runs **no CI** — GitHub
    does not trigger workflows for events raised with the default
-   `GITHUB_TOKEN`. To get the release commit tested before it publishes,
-   push a commit to the `changeset-release/main` branch yourself, or close
+   `GITHUB_TOKEN` — and `main` requires the five checks, so the version
+   PR cannot merge until they have run on it, short of an admin's bypass.
+   Push a commit to the `changeset-release/main` branch yourself, or close
    and reopen the PR; either fires a `pull_request` event from your
-   account.
+   account, which also tests the release commit before it publishes.
 
 5. Merging the version PR pushes `main`, and the workflow publishes the new
    version to npm with provenance.
@@ -367,6 +383,10 @@ npx changeset version            # bumps package.json, writes CHANGELOG
 npx changeset publish            # publishes and creates the version tag
 git push && git push --tags
 ```
+
+The `git push` writes to `main` directly. With GitHub Actions down, the
+required checks cannot run either, so only an admin, who can bypass
+`main`'s protection, can make that push.
 
 Provenance comes from `publishConfig.provenance` in `package.json`. Outside
 GitHub Actions there is no OIDC token to mint, so this path needs a

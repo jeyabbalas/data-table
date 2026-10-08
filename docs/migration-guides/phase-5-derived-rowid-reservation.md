@@ -6,7 +6,7 @@
 > error before any other validation. The synthetic row id can never be
 > shadowed by a user-added column.
 
-**Released:** 2026-04-26 (`@jeyabbalas/data-table` next patch)
+**Released:** in `@jeyabbalas/data-table` 0.3.0 (first published to npm as 0.3.1, 2026-04-28)
 **Affected versions:** consumers programmatically calling
 `addDerivedColumn` / `updateDerivedColumn` with the literal name
 `__rowid__`. (Practically nobody — `__rowid__` is the library-reserved

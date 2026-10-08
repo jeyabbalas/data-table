@@ -2,7 +2,9 @@
 '@jeyabbalas/data-table': minor
 ---
 
-### Changed
+Row fetches select only the columns near the view, and a sideways scroll reads the newly reached columns for the rows already fetched.
+
+**Changed**
 
 - Row fetches select only the columns near the view.
   - **Which columns:** around the columns rows render, a fetch selects as many again on either side, rounded out to steps of 16 columns, so a short sideways scroll reuses rows already fetched.

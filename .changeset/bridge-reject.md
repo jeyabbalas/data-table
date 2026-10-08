@@ -2,7 +2,7 @@
 '@jeyabbalas/data-table': patch
 ---
 
-### Fixed
+Requests to the DuckDB worker reject with `WORKER_CRASHED`, `WORKER_PROTOCOL_VIOLATION` or `WORKER_TERMINATED` when the worker fails or is terminated, instead of waiting for good, and a table whose worker fails reports it once and stops fetching rows.
 
 - A request to the DuckDB worker no longer waits for good on a reply that will never come:
   - An error the worker does not catch, during init or later, now rejects every pending request with a `WorkerInitError` whose code is `WORKER_CRASHED`, and terminates the worker. Every later call rejects at once with the same code, instead of being posted to a worker that will not answer, until `bridge.initialize()` starts a new one. Tables sharing the bridge all get this error.

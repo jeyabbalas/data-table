@@ -85,10 +85,10 @@ jobs:
         id: install
         run: npm ci
 
-      # Build first: tests/api-surface.private-paths.test.ts and
-      # api-surface.cjs-routing.test.ts read `dist/`, and fail in CI
-      # without it. The tests run even when the build failed, but not
-      # when installing did.
+      # Build first: tests/api-surface.private-paths.test.ts,
+      # api-surface.cjs-routing.test.ts and api-surface.error-names.test.ts
+      # read `dist/`, and fail in CI without it. The tests run even when
+      # the build failed, but not when installing did.
       - name: Build library
         run: npm run build
 

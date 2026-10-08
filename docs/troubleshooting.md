@@ -358,7 +358,7 @@ Cause: `messages` is consumed once at `createDataTable()` time and threaded thro
 Fix: destroy + recreate the table when the locale changes:
 
 ```ts
-function swapLocale(locale: 'en' | 'fr') {
+async function swapLocale(locale: 'en' | 'fr') {
   await table.destroy();
   table = await createDataTable({ container, source, messages: messagesFor(locale) });
 }

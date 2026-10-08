@@ -47,10 +47,14 @@ updates:
           - playwright
           - '@playwright/test'
     ignore:
-      # `@duckdb/duckdb-wasm` is a pre-release peer (`^1.33.1-dev57.0`), whose
-      # floor is the version the library's worker is built with. Major bumps
-      # need to be reviewed manually against the worker bridge (`src/worker/`,
-      # where `openFileFix.ts` patches duckdb-wasm's worker).
+      # `@duckdb/duckdb-wasm` is a pre-release peer whose floor is the version
+      # the library's worker is built with. Major bumps need to be reviewed
+      # manually against the worker (`src/worker/`, where `openFileFix.ts`
+      # patches duckdb-wasm's worker). In-range bumps change the shipped DuckDB
+      # too: a lockfile-only bump like PR #56, which Dependabot classed as
+      # semver-patch, moves the version the worker is built with, so the peer
+      # floor and the exact version the docs tell self-hosters to pin must move
+      # with it.
       - dependency-name: '@duckdb/duckdb-wasm'
         update-types:
           - version-update:semver-major

@@ -147,4 +147,5 @@ This is purely cosmetic — the library accepts both shapes.
 
 - [`tests/api-surface.snapshot.test.ts.snap`](../../tests/__snapshots__/api-surface.snapshot.test.ts.snap)
   for the runtime-key snapshot (unchanged — only `.d.ts` types changed).
-- Review report: [`review/phase-3-report.md`](../../review/phase-3-report.md).
+- Release notes: the `1fdae4a` entry under [0.3.0 in `CHANGELOG.md`](../../CHANGELOG.md#030),
+  which covers the rest of Phase 3.

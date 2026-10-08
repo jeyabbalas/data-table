@@ -13,6 +13,19 @@ let conn: duckdb.AsyncDuckDBConnection | null = null;
  * Initialize DuckDB WASM
  * Loads the appropriate WASM bundle and creates a database connection.
  *
+ * DuckDB runs in a worker of its own, started from a `blob:` URL: it
+ * imports `mainWorker`, then fetches `mainModule` (and the `coi` bundle
+ * starts its threads from `pthreadWorker`). A `blob:` URL is no base for a
+ * relative URL, so each of those must be absolute: `WorkerBridge` resolves
+ * them against the page, and a relative one rejects here.
+ *
+ * DuckDB's worker failing as it starts, its script or `mainWorker` not
+ * loading, rejects at once. duckdb-wasm reports neither: it logs the error
+ * and leaves `instantiate()` waiting for good. A `mainModule` that fails to
+ * download or compile is caught by nothing in duckdb-wasm, and still leaves
+ * it waiting: the bridge's init timeout reports that. A failed init leaves
+ * nothing behind, so a later call starts again.
+ *
  * @param bundles Optional bundle override for self-hosted / offline deployments.
  *                When omitted, falls back to `getJsDelivrBundles()`.
  */
@@ -26,6 +39,7 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
 
   // Select the best bundle for this browser
   const bundle = await duckdb.selectBundle(sourceBundles);
+  requireAbsoluteUrls(bundle);
 
   // Create worker (DuckDB uses its own internal worker for some operations),
   // with duckdb-wasm's runtime fixed for heaps past 2 GiB: see openFileFix.ts.
@@ -35,19 +49,99 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
     }),
   );
 
-  // Instantiate the async DuckDB
-  const worker = new Worker(worker_url);
-  const logger = new duckdb.VoidLogger();
-  db = new duckdb.AsyncDuckDB(logger, worker);
+  let worker: Worker | null = null;
+  let started: WorkerStartWatch | null = null;
+  try {
+    // Instantiate the async DuckDB
+    worker = new Worker(worker_url);
+    started = watchWorkerStart(worker, bundle.mainWorker!);
+    const logger = new duckdb.VoidLogger();
+    db = new duckdb.AsyncDuckDB(logger, worker);
 
-  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-  URL.revokeObjectURL(worker_url);
+    await Promise.race([db.instantiate(bundle.mainModule, bundle.pthreadWorker), started.failed]);
 
-  // Cast DECIMAL to DOUBLE so Arrow returns plain numbers instead of DecimalBigNum objects
-  await db.open({ query: { castDecimalToDouble: true } });
+    // Cast DECIMAL to DOUBLE so Arrow returns plain numbers instead of DecimalBigNum objects
+    await db.open({ query: { castDecimalToDouble: true } });
 
-  // Create a connection
-  conn = await db.connect();
+    // Create a connection
+    conn = await db.connect();
+  } catch (error) {
+    db = null;
+    conn = null;
+    worker?.terminate();
+    throw error;
+  } finally {
+    // From here on, an error in DuckDB's worker reaches the bridge as before.
+    started?.stop();
+    URL.revokeObjectURL(worker_url);
+  }
+}
+
+/** A watch on DuckDB's worker as it starts: see {@link watchWorkerStart}. */
+interface WorkerStartWatch {
+  /** Rejects when the worker fails to start; never resolves. */
+  failed: Promise<never>;
+  /** Stop watching. */
+  stop(): void;
+}
+
+/**
+ * Watch DuckDB's worker for an `error` event while it starts: an exception
+ * it does not catch, such as `importScripts(mainWorker)` failing on a 404 or
+ * a URL the Content Security Policy blocks, or its own `blob:` script not
+ * loading, as when `worker-src` leaves out `blob:`. duckdb-wasm only logs
+ * either, so `failed` rejects with an error that says what to check. The
+ * event is cancelled, so the bridge hears of the failure once, from the
+ * `init` reply, rather than as an error of the library's worker too.
+ */
+function watchWorkerStart(worker: Worker, mainWorker: string): WorkerStartWatch {
+  let onError: ((event: Event) => void) | null = null;
+  const failed = new Promise<never>((_resolve, reject) => {
+    onError = (event: Event) => {
+      event.preventDefault();
+      // A script that fails to load fires a plain Event, with no message.
+      const message = (event as Partial<ErrorEvent>).message?.replace(/\.$/, '');
+      reject(
+        new Error(
+          message
+            ? `DuckDB's worker failed to start: ${message}. Check that ${mainWorker} ` +
+                'loads, and that the Content Security Policy allows it in script-src.'
+            : "DuckDB's worker could not start from its blob: URL: the Content Security " +
+                'Policy must allow blob: in worker-src.',
+        ),
+      );
+    };
+    worker.addEventListener('error', onError);
+  });
+  // Nothing awaits `failed` once the race is over.
+  failed.catch(() => undefined);
+  return {
+    failed,
+    stop: () => {
+      if (onError) worker.removeEventListener('error', onError);
+    },
+  };
+}
+
+/**
+ * Reject a bundle whose `mainModule`, `mainWorker` or `pthreadWorker` is not
+ * an absolute URL: DuckDB's worker runs from a `blob:` URL, against which a
+ * relative one does not resolve, or resolves somewhere else.
+ */
+function requireAbsoluteUrls(bundle: duckdb.DuckDBBundle): void {
+  for (const field of ['mainModule', 'mainWorker', 'pthreadWorker'] as const) {
+    const url = bundle[field];
+    if (field === 'pthreadWorker' && url === null) continue;
+    try {
+      new URL(url as string);
+    } catch {
+      throw new Error(
+        `DuckDB bundle ${field} ${JSON.stringify(url)} is not an absolute URL. DuckDB's ` +
+          'worker runs from a blob: URL, where a relative URL does not resolve: pass absolute ' +
+          'URLs (WorkerBridge resolves duckdbBundles against the page).',
+      );
+    }
+  }
 }
 
 /**

@@ -85,10 +85,10 @@ jobs:
         id: install
         run: npm ci
 
-      # Build first: tests/api-surface.private-paths.test.ts and
-      # api-surface.cjs-routing.test.ts read `dist/`, and fail in CI
-      # without it. The tests run even when the build failed, but not
-      # when installing did.
+      # Build first: tests/api-surface.private-paths.test.ts,
+      # api-surface.cjs-routing.test.ts, api-surface.error-names.test.ts and
+      # dist.worker-chunk.test.ts read `dist/`, and fail in CI without it.
+      # The tests run even when the build failed, but not when installing did.
       - name: Build library
         run: npm run build
 
@@ -117,6 +117,11 @@ jobs:
       # and none of which need a second engine to be meaningful.
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
+      # tests/browser/self-hosted-bundles.spec.ts serves the built library,
+      # as a deployment does, rather than the dev server's source.
+      - name: Build library
+        run: npm run build
 
       - name: Browser accessibility tests
         run: npm run test:browser

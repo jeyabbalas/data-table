@@ -13,7 +13,7 @@ npm run dev
 
 - [`DataTable.on / .off`](../../docs/api-reference.md#datatable-interface) — returns an unsubscribe function
 - [`filterChange`, `sortChange`, `selectionChange`](../../docs/api-reference.md#event-catalog)
-- [`actions.addFilter`, `.clearFilters`, `.setSort`, `.clearSelection`](../../docs/api-reference.md#state-actions)
+- [`actions.addFilter`, `.clearFilters`, `.setSort`, `.clearSelection`](../../docs/api-reference.md#actions-methods)
 - [`state.selectedRows`](../../docs/api-reference.md#state-signals) — direct signal write
 
 ## Data

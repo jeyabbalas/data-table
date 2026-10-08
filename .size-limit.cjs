@@ -21,7 +21,7 @@
  * fixes, RT-16 – RT-21, under Vite 8.3.0 / rolldown 1.2.10, which, like
  * rolldown 1.0.1 before it, inlines the shared ModalHost code into each
  * modal consumer):
- *   root entry · ESM               11.05 kB   →  11.4 kB cap (3.2 %)
+ *   root entry · ESM               11.53 kB   →  12.1 kB cap (4.9 %)
  *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
  *   lazy ExportDialog chunk       100.88 kB   → 104 kB   cap (3.1 %)
@@ -60,7 +60,9 @@
  * time, a failed initial load torn down, loads that report the tables they
  * replace), it measured 10.85 kB, and the cap moved to 11.4 kB. The
  * nested-type work left it at 10.93 kB, and the 0.9.0 "nice to have" fixes
- * at 11.05 kB.
+ * at 11.05 kB. Resolving self-hosted bundle URLs, with errors naming the
+ * option, and the default worker's typed failures (RT-07) took it from
+ * 11.05 to 11.53 kB, and the cap to 12.1 kB.
  *
  * Advanced entry history. Removing the deprecated `VisualizationFactory`
  * took it from 2.50 to 2.32 kB, and the cap from 2.6 to 2.45 kB. The rest of
@@ -165,7 +167,7 @@ module.exports = [
   {
     name: 'root entry · ESM (dist/data-table.js)',
     path: 'dist/data-table.js',
-    limit: '11.4 kB',
+    limit: '12.1 kB',
   },
   {
     name: 'advanced entry · ESM (dist/advanced.js)',

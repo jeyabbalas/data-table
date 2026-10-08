@@ -11,8 +11,8 @@ npm run dev
 
 ## API surface
 
-- [`BaseStatsPanel`](../../docs/api-reference.md#stats-panel-internals) — abstract class to subclass; lifecycle is `update(stats) → updateFilters(filters) → setHoverStats(text) → destroy()`
-- [`StatsPanelOptions`](../../docs/api-reference.md#stats-panel-internals) — the `{ tableName, bridge, filters, messages, onError }` passed to the constructor and refreshed on every filter change
+- [`BaseStatsPanel`](../../docs/api-reference.md#panel-constructor-and-lifecycle) — abstract class to subclass; lifecycle is `update(stats) → updateFilters(filters) → setHoverStats(text) → destroy()`
+- [`StatsPanelOptions`](../../docs/api-reference.md#options-and-error-surface) — the `{ tableName, bridge, filters, messages, onError }` passed to the constructor and refreshed on every filter change
 - [`StatsPanelRegistry`](../../docs/api-reference.md#stats-panel-registry) — per-instance registry; same shape (`name`, `isApplicable`, `constructor`, `priority`) as `VisualizationRegistry` but starts empty (no library built-ins)
 
 ## Data

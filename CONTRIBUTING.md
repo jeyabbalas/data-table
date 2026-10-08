@@ -48,13 +48,14 @@ Use the **Feature request** issue template. Before proposing:
    - `npm run format:check`
    - `npm run typecheck`
    - `npm run build`
-   - `npm run test:coverage` (after the build: two api-surface tests read `dist/`)
+   - `npm run test:coverage` (after the build: four tests read `dist/`)
    - `npm run size` (bundle-size budgets — fails on > 5 % regression)
    - `npm run docs:api:check` (typedoc dry-run; fails on any warning, such as a
      broken JSDoc reference or a type a public signature uses but no entry
      point exports)
-   - `npm run test:browser` (Playwright accessibility suite; first run needs
-     `npx playwright install chromium`)
+   - `npm run test:browser` (Playwright accessibility suite, after the build:
+     `tests/browser/self-hosted-bundles.spec.ts` serves `dist/`; first run
+     needs `npx playwright install chromium`)
 
    `npm run lint:fix` and `npm run format` can fix most mechanical issues.
 
@@ -70,15 +71,48 @@ Use the **Feature request** issue template. Before proposing:
    manual runs — not required per PR.
 
 5. Add a changeset describing the change:
+
    ```bash
    npx changeset
    ```
+
    The CLI prompts for the bump (`patch` / `minor` / `major`) and writes a
    markdown file under `.changeset/`. Commit it alongside your code; the
    release workflow rolls it forward into [`CHANGELOG.md`](./CHANGELOG.md)
-   on version. Match the existing
-   [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) headings
-   (`Added` / `Changed` / `Fixed` / `Changed (breaking)` / `Migration`).
+   on version. There each changeset becomes one list item: the first line
+   after its front matter follows the commit hash, and the lines after it
+   are indented beneath. So write the changeset in this form:
+   - **Summary first.** The first line after the front matter is a
+     one-sentence summary of the user-visible change.
+   - **Then the details, under bold labels.** Each label goes on a line of
+     its own, with a blank line before and after it: `**Added**`,
+     `**Changed**`, `**Fixed**`, `**Changed (breaking)**` and
+     `**Migration**`. Use the ones the change needs. A lone `**Fixed**` can go when the summary already says what
+     was fixed.
+   - **No headings.** Don't start a line with `#` outside a code block. As
+     the first line, `### Fixed` shows in the changelog as literal text;
+     further down, it puts a heading inside a list item.
+   - **Breaking changes** need a `**Changed (breaking)**` and a
+     `**Migration**` section, and the migration section links to the
+     change's section of the version's guide in
+     [`docs/migration-guides/`](./docs/migration-guides/README.md).
+
+   ```md
+   ---
+   '@jeyabbalas/data-table': minor
+   ---
+
+   A header chart whose data fails to load says "Failed to load" instead of looking as if it were still loading.
+
+   **Added**
+
+   - `messages.statistics.chartFailed`, the text its stats slot shows beneath the row count.
+
+   **Fixed**
+
+   - The chart no longer keeps the stats it showed for the filters before the failure.
+   ```
+
 6. Update documentation that is affected:
    - Public-API changes → [`docs/api-reference.md`](./docs/api-reference.md), and [`AGENTS.md`](./AGENTS.md) if the change alters agent-facing guidance.
    - User-visible behavior changes → the relevant guide under [`docs/guides/`](./docs/guides/).

@@ -257,7 +257,17 @@ async function runTask(entry: QueueEntry): Promise<void> {
     switch (entry.type) {
       case 'init': {
         const { bundles } = (payload as InitPayload) ?? {};
-        await initializeDuckDB(bundles);
+        try {
+          await initializeDuckDB(bundles);
+        } catch (error) {
+          // DuckDB did not start, whatever the error says: the bridge rejects
+          // initialize() with a WorkerInitError, not a query's QueryError.
+          respond(id, 'error', {
+            ...toErrorPayload(error, 'DuckDB failed to initialize'),
+            code: 'WORKER_CRASHED',
+          });
+          break;
+        }
         respond(id, 'result', { initialized: true });
         break;
       }

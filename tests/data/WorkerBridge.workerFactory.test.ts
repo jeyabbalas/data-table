@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { WorkerBridge } from '@/data/WorkerBridge';
 import { WorkerInitError } from '@/core/errors';
 
+import { createMockWorker } from '../helpers/mockWorker';
+
 /**
  * Phase 3: WorkerBridge supports a custom workerFactory and workerUrl so
  * consumers on strict-CSP / bundler-specific deployments can override the
@@ -124,53 +126,177 @@ describe('WorkerBridge — workerFactory / workerUrl (Phase 3)', () => {
 });
 
 /**
- * Phase 3: `duckdbBundles` is forwarded in the init postMessage payload so
- * the worker can call `selectBundle(bundles)` instead of the jsdelivr CDN.
+ * The default worker, `new Worker(new URL('../worker/worker.ts',
+ * import.meta.url))`, fails when the library is served from another origin
+ * than the page (a synchronous `SecurityError`) or when the page's CSP
+ * blocks its script (an `error` event). Both reject `initialize()` with a
+ * `WorkerInitError` that says `workerFactory` is the way out.
  */
-describe('WorkerBridge — duckdbBundles forwarding (Phase 3)', () => {
-  function primeBridge(options?: Parameters<typeof WorkerBridge>[0]) {
-    const bridge = new WorkerBridge(options);
-    const postMessage = vi.fn();
-    const fakeWorker = {
-      postMessage,
-      terminate: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+describe('WorkerBridge — the default worker', () => {
+  it('a constructor that throws becomes a WorkerInitError naming workerFactory and CSP', async () => {
+    const originalWorker = globalThis.Worker;
+    const securityError = new DOMException(
+      "Failed to construct 'Worker': Script at 'https://cdn.example/assets/worker.js' " +
+        "cannot be accessed from origin 'https://app.example'.",
+      'SecurityError',
+    );
+    (globalThis as any).Worker = function () {
+      throw securityError;
     };
+    try {
+      const bridge = new WorkerBridge();
+      const error = await bridge.initialize().then(
+        () => null,
+        (reason: unknown) => reason,
+      );
 
-    (bridge as any).worker = fakeWorker;
-    return { bridge, postMessage };
-  }
-
-  function extractInitPayload(postMessage: ReturnType<typeof vi.fn>): unknown {
-    // Find the init message (by type === 'init') among posted messages.
-    const call = postMessage.mock.calls.find((args) => {
-      const msg = args[0] as { type?: string };
-      return msg?.type === 'init';
-    });
-    expect(call).toBeDefined();
-    return (call![0] as { payload: unknown }).payload;
-  }
-
-  it('sends empty init payload when duckdbBundles is not configured', () => {
-    const { bridge, postMessage } = primeBridge();
-
-    (bridge as any).sendMessage('init', {});
-    const payload = extractInitPayload(postMessage);
-    expect(payload).toEqual({});
+      expect(error).toBeInstanceOf(WorkerInitError);
+      expect(error).toMatchObject({ code: 'WORKER_CRASHED', details: { source: 'default' } });
+      expect((error as WorkerInitError).cause).toBe(securityError);
+      const message = (error as Error).message;
+      expect(message).toContain('cannot be accessed from origin');
+      expect(message).toContain('workerFactory');
+      expect(message).toContain('Content Security Policy');
+      expect(message).not.toMatch(/\.\./);
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
   });
 
-  it('forwards duckdbBundles in the init payload when configured', () => {
+  it('a script that fails to load says why and names workerFactory', async () => {
+    const originalWorker = globalThis.Worker;
+    let created: { onerror: ((event: unknown) => void) | null } | undefined;
+    (globalThis as any).Worker = function (this: Record<string, unknown>) {
+      Object.assign(this, {
+        postMessage: vi.fn(),
+        terminate: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        onmessage: null,
+        onerror: null,
+        onmessageerror: null,
+      });
+      created = this as unknown as { onerror: ((event: unknown) => void) | null };
+    };
+    try {
+      const bridge = new WorkerBridge();
+      const init = bridge.initialize();
+
+      // What a CSP-blocked or missing worker script fires: a plain Event.
+      created!.onerror!({ type: 'error' });
+
+      const error = await init.then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(WorkerInitError);
+      expect(error).toMatchObject({ code: 'WORKER_CRASHED' });
+      expect((error as Error).message).toMatch(
+        /^The worker script failed to load: assets\/worker-\*\.js is missing \(a 404/,
+      );
+      expect((error as Error).message).toContain('Content Security Policy');
+      expect((error as Error).message).toContain('workerFactory');
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
+  });
+});
+
+/**
+ * A worker that cannot be constructed leaves nothing behind: the next
+ * `initialize()` constructs it again, rather than return the rejection.
+ */
+describe('WorkerBridge — retrying a worker that failed to construct', () => {
+  it('runs a throwing workerFactory again', async () => {
+    const mock = createMockWorker();
+    const factory = vi
+      .fn<() => Worker>()
+      .mockImplementationOnce(() => {
+        throw new Error('not yet');
+      })
+      .mockImplementation(() => mock.worker);
+    const bridge = new WorkerBridge({ workerFactory: factory });
+
+    await expect(bridge.initialize()).rejects.toMatchObject({
+      code: 'WORKER_CRASHED',
+      details: { source: 'workerFactory' },
+    });
+    expect(bridge.isInitialized()).toBe(false);
+    await expect(bridge.initialize()).resolves.toBeUndefined();
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(bridge.isInitialized()).toBe(true);
+  });
+
+  it('constructs the default worker again after it threw', async () => {
+    const originalWorker = globalThis.Worker;
+    const mock = createMockWorker();
+    let calls = 0;
+    (globalThis as any).Worker = function () {
+      calls += 1;
+      if (calls === 1) throw new DOMException('Script cannot be accessed', 'SecurityError');
+      return mock.worker;
+    };
+    try {
+      const bridge = new WorkerBridge();
+      await expect(bridge.initialize()).rejects.toMatchObject({
+        code: 'WORKER_CRASHED',
+        details: { source: 'default' },
+      });
+      await expect(bridge.initialize()).resolves.toBeUndefined();
+      expect(calls).toBe(2);
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
+  });
+
+  it('names no CSP or origin when there is no Worker to construct', async () => {
+    const originalWorker = globalThis.Worker;
+    delete (globalThis as any).Worker;
+    try {
+      const error = await new WorkerBridge().initialize().then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(WorkerInitError);
+      expect((error as Error).message).toMatch(/^Failed to construct the library's worker \(/);
+      expect((error as Error).message).not.toMatch(/Content Security Policy|workerFactory/);
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
+  });
+});
+
+/**
+ * Phase 3: `duckdbBundles` is forwarded in the init postMessage payload so
+ * the worker can call `selectBundle(bundles)` instead of the jsdelivr CDN.
+ * Through `initialize()`, which resolves the URLs against the page first.
+ */
+describe('WorkerBridge — duckdbBundles forwarding (Phase 3)', () => {
+  async function initPayload(options?: Parameters<typeof WorkerBridge>[0]): Promise<unknown> {
+    const mock = createMockWorker();
+    const bridge = new WorkerBridge({ ...options, workerFactory: () => mock.worker });
+    await bridge.initialize();
+    const init = mock.posted.find((msg) => msg.type === 'init');
+    expect(init).toBeDefined();
+    return init!.payload;
+  }
+
+  it('sends empty init payload when duckdbBundles is not configured', async () => {
+    expect(await initPayload()).toEqual({});
+  });
+
+  it('forwards duckdbBundles in the init payload when configured', async () => {
     const bundles = {
       mvp: { mainModule: 'a.wasm', mainWorker: 'a.js' },
       eh: { mainModule: 'b.wasm', mainWorker: 'b.js' },
-    } as any;
-    const { bridge, postMessage } = primeBridge({ duckdbBundles: bundles });
-    // Synthesize the exact init call the real `initialize()` flow makes.
+    };
+    const page = (path: string) => new URL(path, document.baseURI).href;
 
-    const b: any = bridge;
-    b.sendMessage('init', b.duckdbBundles ? { bundles: b.duckdbBundles } : {});
-    const payload = extractInitPayload(postMessage);
-    expect(payload).toEqual({ bundles });
+    expect(await initPayload({ duckdbBundles: bundles })).toEqual({
+      bundles: {
+        mvp: { mainModule: page('a.wasm'), mainWorker: page('a.js') },
+        eh: { mainModule: page('b.wasm'), mainWorker: page('b.js') },
+      },
+    });
   });
 });

@@ -149,7 +149,7 @@ Types for the [`table.annotations`](#tableannotations-namespace) namespace and t
 | `WorkerBridge`        | class     | DuckDB worker bridge; owns the worker and query cache; `query(sql, signal?, options?)` accepts per-query `QueryOptions` (cache bypass, priority); exposes `dropTable()` for ad-hoc table cleanup.                                                                      |
 | `LoadOptions`         | interface | `WorkerBridge.loadData` options: `format`, `tableName`, and the fields of `SourceOptions`.                                                                                                                                                                             |
 | `SourceOptions`       | interface | How a source is read, per format: `timezone`, and the entries `csv` (`CSVSourceOptions`), `json` (`JSONSourceOptions`) and `parquet` (`ParquetSourceOptions`). A load reads its format's entry. See [loading data](./guides/loading-data.md#how-a-source-is-read).     |
-| `WorkerBridgeOptions` | interface | `workerFactory`, `workerUrl`, `duckdbBundles`, `initializeTimeoutMs`.                                                                                                                                                                                                  |
+| `WorkerBridgeOptions` | interface | `workerFactory`, `workerUrl`, `duckdbBundles`, `initializeTimeoutMs`. `initialize()` resolves `duckdbBundles` URLs against the page; copy the files from `@duckdb/duckdb-wasm` `1.33.1-dev57.0`, pinned exactly ([CSP and offline](./guides/csp-and-offline.md)).      |
 | `QueryOptions`        | interface | Per-query options for `WorkerBridge.query` — `{ cache?: boolean; priority?: 'high' \| 'elevated' \| 'normal' }`. `cache: false` bypasses both the read and the write of the SQL result cache; `priority` is the query's place in the worker's queue (below the table). |
 | `DataFormat`          | type      | `'csv' \| 'json' \| 'parquet'`.                                                                                                                                                                                                                                        |
 | `LoadResult`          | interface | `{ tableName, rowCount, schema }` returned by the bridge.                                                                                                                                                                                                              |
@@ -516,10 +516,10 @@ There is no `height`, `maxHeight`, or `autoHeight` option; sizing the element is
 
 ### Worker
 
-| Field           | Type                  | Required? | Default         | Description                                                                                                                       |
-| --------------- | --------------------- | --------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `bridge`        | `WorkerBridge`        | no        | new one created | Share a worker across tables.                                                                                                     |
-| `bridgeOptions` | `WorkerBridgeOptions` | no        | `{}`            | Options for the owned bridge (`workerFactory`, `workerUrl`, `duckdbBundles`, `initializeTimeoutMs`). Unused if `bridge` is given. |
+| Field           | Type                  | Required? | Default         | Description                                                                                                                                                                                                     |
+| --------------- | --------------------- | --------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bridge`        | `WorkerBridge`        | no        | new one created | Share a worker across tables.                                                                                                                                                                                   |
+| `bridgeOptions` | `WorkerBridgeOptions` | no        | `{}`            | Options for the owned bridge (`workerFactory`, `workerUrl`, `duckdbBundles`, `initializeTimeoutMs`). Unused if `bridge` is given. To self-host DuckDB-WASM, see [CSP and offline](./guides/csp-and-offline.md). |
 
 ### UI
 

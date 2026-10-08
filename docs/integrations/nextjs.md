@@ -125,9 +125,12 @@ everything under `public/` at the site root.
 If you need offline / strict-CSP deployments with self-hosted DuckDB
 bundles (see [CSP and offline](../guides/csp-and-offline.md)):
 
-1. Copy the DuckDB-WASM `dist/` directory from `@duckdb/duckdb-wasm` into
-   `public/duckdb/`.
-2. Point `bridgeOptions.duckdbBundles` at those URLs:
+1. Pin `@duckdb/duckdb-wasm` to exactly `1.33.1-dev57.0`, and copy
+   `duckdb-browser-eh.worker.js`, `duckdb-eh.wasm`,
+   `duckdb-browser-mvp.worker.js` and `duckdb-mvp.wasm` from its `dist/`
+   into `public/duckdb/`.
+2. Point `bridgeOptions.duckdbBundles` at those URLs. Relative URLs resolve
+   against the page:
 
 ```tsx
 'use client';
@@ -150,17 +153,24 @@ await createDataTable({
 });
 ```
 
+3. Offline or under a strict CSP, mirror DuckDB's `icu`, `parquet` and
+   `json` extensions too: see
+   [CSP and offline → DuckDB's extensions](../guides/csp-and-offline.md#duckdbs-extensions).
+
 ## CSP
 
-Next.js sets permissive CSP by default. If you override it:
+Next.js sets permissive CSP by default. If you override it, send one policy
+with every response, the worker scripts' too:
 
 ```
-script-src 'self';
-worker-src 'self';
+default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self'
 ```
 
-Plus whatever your app needs. Avoid `'unsafe-inline'` and `'unsafe-eval'`
-— the library doesn't need either.
+Plus whatever your app needs. The table needs neither `'unsafe-inline'` nor
+`'unsafe-eval'`. It does need `'wasm-unsafe-eval'`, for DuckDB to compile its
+`.wasm`, and `blob:` in `worker-src`, for DuckDB's worker. Size the table's
+container in a stylesheet: the policy drops `style` attributes. See
+[CSP and offline](../guides/csp-and-offline.md#the-content-security-policy).
 
 ## Route-change cleanup
 

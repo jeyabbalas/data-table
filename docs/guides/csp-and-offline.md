@@ -1,238 +1,316 @@
 # CSP and offline deployments
 
-By default, `@jeyabbalas/data-table` loads the DuckDB WASM worker via a
-`new Worker(new URL('../worker/worker.ts', import.meta.url), { type:
-'module' })` pattern and fetches DuckDB's WASM bundles from the jsDelivr
-CDN. For many apps that's fine. For apps behind a strict Content Security
-Policy (CSP) or in an air-gapped environment, both behaviors are
-configurable — you can supply your own worker factory, a custom worker URL,
-and a self-hosted WASM bundle map.
+By default the library starts its worker from the script your bundler emits,
+DuckDB-WASM loads its worker script and `.wasm` file from jsDelivr, and
+DuckDB fetches the extensions it needs from `extensions.duckdb.org`. A page
+behind a strict Content Security Policy (CSP), or one that cannot reach those
+hosts, serves all of them from its own origin. This guide covers what to
+serve, how to point the library at it, and the policy that lets it run.
+
+The setup it describes runs in the library's browser test,
+[`tests/browser/self-hosted-bundles.spec.ts`](../../tests/browser/self-hosted-bundles.spec.ts):
+the built package, under the policy below, with every file from the page's
+own origin. What the test does not cover, the guide marks as untested.
 
 ## You'll learn how to
 
-- Run the library under a strict `script-src` CSP
-- Self-host the DuckDB WASM bundles (no CDN calls)
-- Customize the worker construction for non-standard bundlers
-- Extend the worker init timeout for slow WASM loads
+- Serve DuckDB-WASM's files from your own origin
+- Mirror the three DuckDB extensions the library loads
+- Write a Content Security Policy that lets both workers run, and send it where they read it
+- Serve the library's worker script yourself
+- Tell the failures apart
 
 ## Prerequisites
 
 - Read: [API reference — `bridgeOptions`, `WorkerBridgeOptions`](../api-reference.md#createdatatable)
-- Helpful background: [MDN — Worker construction](https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker)
-- No dedicated runnable example; strict-CSP depends on your build setup. See the recipes below.
+- Helpful background: [MDN — Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
 
-## How WASM / worker loading works by default
+## The workers
+
+DuckDB does not run in the library's worker but in one of its own, started
+from inside it:
 
 ```
-createDataTable()
-  └── WorkerBridge constructor
-       ├── creates a Web Worker from the default module URL
-       └── worker boots DuckDB-WASM
-            └── DuckDB fetches WASM bundle from getJsDelivrBundles() unless overridden
+page (main thread)
+└── the library's worker     a module worker: dist/assets/worker-*.js, which your
+    │                        bundler emits (or bridgeOptions.workerUrl / workerFactory)
+    └── DuckDB's worker      a classic worker the library starts from a blob: URL.
+        │                    It runs importScripts(mainWorker), fetches mainModule,
+        │                    and loads each extension with a synchronous XMLHttpRequest
+        └── pthread workers  the coi bundle only, started from pthreadWorker
 ```
 
-Three extension points are exposed via `bridgeOptions` (forwarded to
-`WorkerBridge`):
+DuckDB-WASM ships three bundles, in `node_modules/@duckdb/duckdb-wasm/dist/`,
+and picks one as it starts:
 
-| Option                         | Purpose                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------ |
-| `workerFactory: () => Worker`  | Take full control of Worker construction. Used for blob-URL workers under strict CSP |
-| `workerUrl: string \| URL`     | Supply a URL/path for the worker script (bundler-emitted, static file)               |
-| `duckdbBundles: DuckDBBundles` | Supply custom WASM bundle URLs — crucial for self-hosted / offline setups            |
-| `initializeTimeoutMs: number`  | Raise the init timeout (default 30 s) for slow networks                              |
+| Bundle | `mainWorker`                   | `mainModule`      | `pthreadWorker`                        | Picked when                                                                                             |
+| ------ | ------------------------------ | ----------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `eh`   | `duckdb-browser-eh.worker.js`  | `duckdb-eh.wasm`  | —                                      | The browser has WebAssembly exceptions, as current browsers do.                                         |
+| `mvp`  | `duckdb-browser-mvp.worker.js` | `duckdb-mvp.wasm` | —                                      | It has not. `mvp` is the one bundle `DuckDBBundles` requires.                                           |
+| `coi`  | `duckdb-browser-coi.worker.js` | `duckdb-coi.wasm` | `duckdb-browser-coi.pthread.worker.js` | You pass it, and the page is cross-origin isolated, in a browser with WebAssembly threads and SIMD too. |
 
-Priority: `workerFactory` > `workerUrl` > built-in default.
+DuckDB's worker fetches these files, not the page or the library's worker,
+and its `blob:` URL is no base for a relative URL. So `WorkerBridge`
+resolves each `mainModule`, `mainWorker` and `pthreadWorker` against the
+page's `document.baseURI` (a `<base href>` when it has one) when
+`initialize()` starts, before any worker exists. Root-relative, relative
+and absolute URLs all work, and so do `URL` objects. One that does not
+resolve, or is not a string or a `URL`, rejects `initialize()` with a
+`ConfigurationError` whose code is `OPTIONS_INVALID` and whose
+`details.option` names it, such as `'duckdbBundles.eh.mainWorker'`.
 
-## Strict-CSP setup
+## Serving DuckDB-WASM yourself
 
-If your page sends `script-src 'self'` (no CDN, no blobs, no unsafe-inline),
-the default worker construction may fail depending on your bundler. The
-cleanest workaround is to bundle the worker as a static asset at a known URL
-and pass that URL in:
+1. **Pin `@duckdb/duckdb-wasm` exactly.**
+
+   ```sh
+   npm install --save-exact @duckdb/duckdb-wasm@1.33.1-dev57.0
+   ```
+
+   `1.33.1-dev57.0` is the version whose runtime the library's worker
+   bundles, and the one the library's tests run. Take every file from that
+   one version: DuckDB's worker scripts and `.wasm` files are built
+   together.
+
+2. **Copy the `eh` and `mvp` files** to a directory your server serves,
+   here `public/duckdb/`:
+
+   ```sh
+   mkdir -p public/duckdb
+   for file in duckdb-browser-eh.worker.js duckdb-eh.wasm \
+               duckdb-browser-mvp.worker.js duckdb-mvp.wasm; do
+     cp "node_modules/@duckdb/duckdb-wasm/dist/$file" public/duckdb/
+   done
+   ```
+
+   Serve the `.wasm` files as `application/wasm`: DuckDB compiles its module
+   with `WebAssembly.instantiateStreaming`, which takes no other type. A
+   browser downloads one of them, the bulk of the download: `duckdb-eh.wasm`
+   is 35.9 MB, 8.1 MB gzipped and 5.5 MB as brotli, and `duckdb-mvp.wasm`
+   41.3 MB, 9.2 MB and 6.2 MB. Serve them compressed, and cache them.
+
+3. **Pass them** as `bridgeOptions.duckdbBundles`:
+
+   ```ts
+   import { createDataTable } from '@jeyabbalas/data-table';
+
+   const duckdbBundles = {
+     mvp: {
+       mainModule: '/duckdb/duckdb-mvp.wasm',
+       mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
+     },
+     eh: {
+       mainModule: '/duckdb/duckdb-eh.wasm',
+       mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
+     },
+   };
+
+   await createDataTable({ container, source, bridgeOptions: { duckdbBundles } });
+   ```
+
+A cross-origin-isolated page can also pass the `coi` bundle, whose threads
+need `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`
+headers. The library's tests do not run it, and its pthread workers go
+without one of the library's fixes (see [Gotchas](#gotchas)).
+
+## DuckDB's extensions
+
+DuckDB-WASM fetches three extensions the library uses from DuckDB's
+extension repository, `extensions.duckdb.org` unless told otherwise, the
+first time a query needs each, not from the bundle:
+
+- `icu`, on every load. A load sets DuckDB's time zone
+  (`sourceOptions.timezone`, `UTC` by default), which needs ICU. Where ICU
+  cannot load, every load fails, a CSV's too, with a `LoadError` whose code
+  is `LOAD_PARSE_FAILED` and whose message is the browser's `XMLHttpRequest`
+  error, such as `Failed to load
+'https://extensions.duckdb.org/v1.5.4/wasm_eh/icu.duckdb_extension.wasm'`.
+- `parquet`, for a Parquet source or export.
+- `json`, for
+  - a JSON source;
+  - a Parquet source with a JSON column, or with JSON inside a list, array,
+    struct, map or union, which loads it with the table, so cells and
+    filters read the same from the first query;
+  - exact reads of nested values: `actions.getCellValue`,
+    `actions.getColumnValues` on a nested column, the value inspector, and
+    CSV, JSON and clipboard exports of nested values;
+  - extracting a value from JSON or VARIANT, whether a column of its own or
+    inside a nested column.
+
+Where `parquet` or `json` cannot load, what needs it fails with DuckDB's
+error, and a Parquet source does not load at all. The one exception is the
+Parquet loader's own load of `json`, which is best effort: the table loads,
+and its JSON reads as plain text, with JSON inside a list or struct shown as
+quoted strings (`[1, NULL, 'null']`).
+
+To serve them yourself, mirror the repository's layout,
+`<repository>/<version>/<platform>/<name>.duckdb_extension.wasm`. For the
+`eh` bundle of `1.33.1-dev57.0` that is `v1.5.4/wasm_eh/`, as
+`PRAGMA version` (its `library_version`) and `PRAGMA platform` report:
+DuckDB asks for the directory of the version and the bundle it runs, so
+mirror one for each bundle you serve. With `bridge` a started
+`WorkerBridge`, as in the next example:
 
 ```ts
-await createDataTable({
-  container,
-  source,
-  bridgeOptions: {
-    workerUrl: '/static/data-table-worker.js',
-    duckdbBundles: {
-      // Self-hosted WASM; see next section
-      mvp: { mainModule: '/static/duckdb-mvp.wasm', mainWorker: '/static/duckdb-mvp.worker.js' },
-      eh: { mainModule: '/static/duckdb-eh.wasm', mainWorker: '/static/duckdb-eh.worker.js' },
-    },
-  },
-});
+const [{ library_version }] = await bridge.query('PRAGMA version'); // 'v1.5.4'
+const [{ platform }] = await bridge.query('PRAGMA platform'); // 'wasm_eh'
 ```
 
-Your CSP then needs:
+Then copy the files from DuckDB's repository:
 
-```
-script-src 'self';
-worker-src 'self';
-```
-
-(Plus whatever your app already requires.)
-
-If you must use a blob-URL worker (e.g., SSR-emitted inline code), pass a
-factory:
-
-```ts
-const workerSource = fetch('/worker-code.js').then((r) => r.text());
-
-const bridge = {
-  workerFactory: () => {
-    const blob = new Blob([WORKER_CODE], { type: 'application/javascript' });
-    return new Worker(URL.createObjectURL(blob), { type: 'module' });
-  },
-};
-
-await createDataTable({ container, source, bridgeOptions: bridge });
+```sh
+for name in icu parquet json; do
+  curl -fsSL --create-dirs -o "public/duckdb-ext/v1.5.4/wasm_eh/$name.duckdb_extension.wasm" \
+    "https://extensions.duckdb.org/v1.5.4/wasm_eh/$name.duckdb_extension.wasm"
+done
 ```
 
-For that to work, your CSP needs `worker-src blob:`.
-
-## Self-hosting the WASM bundles
-
-DuckDB-WASM ships several bundles (MVP, exception-handling, with-coi) so
-the runtime can pick the best fit for the browser. `getJsDelivrBundles()`
-returns pointers to the jsDelivr CDN by default. Override:
-
-```ts
-import type { DuckDBBundles } from '@duckdb/duckdb-wasm';
-
-const duckdbBundles: DuckDBBundles = {
-  mvp: {
-    mainModule: '/assets/duckdb/duckdb-mvp.wasm',
-    mainWorker: '/assets/duckdb/duckdb-mvp.worker.js',
-  },
-  eh: {
-    mainModule: '/assets/duckdb/duckdb-eh.wasm',
-    mainWorker: '/assets/duckdb/duckdb-eh.worker.js',
-  },
-  coi: {
-    mainModule: '/assets/duckdb/duckdb-coi.wasm',
-    mainWorker: '/assets/duckdb/duckdb-coi.worker.js',
-    pthreadWorker: '/assets/duckdb/duckdb-coi.pthread.worker.js',
-  },
-};
-
-await createDataTable({
-  container,
-  source,
-  bridgeOptions: { duckdbBundles },
-});
-```
-
-Download the WASM artifacts from the `@duckdb/duckdb-wasm` NPM package and
-serve them from your own origin. Keep version alignment: the bundles must
-match the peer-dependency version declared in your `package.json`.
-
-### Bundle size
-
-The combined DuckDB-WASM bundle is roughly:
-
-- ~30 MB uncompressed
-- ~10 MB gzipped
-- ~7 MB brotli-compressed
-
-Serve with aggressive caching and content-encoding. A fresh page load on a
-cold browser takes a few seconds; cached loads are near-instant.
-
-### Same-origin requirement
-
-WASM must be served from the same origin as the page that instantiates the
-worker, unless CORS headers allow cross-origin WASM instantiation. If you
-have to serve from a CDN, make sure it sends
-`Access-Control-Allow-Origin: *` (or your origin) and
-`Cross-Origin-Resource-Policy: cross-origin`.
-
-For COOP/COEP setups (required by `coi` bundles, which use SharedArrayBuffer),
-see [the DuckDB-WASM docs on cross-origin isolation](https://duckdb.org/docs/api/wasm/overview).
-
-### DuckDB extensions: Parquet and JSON
-
-The bundles are not quite everything. DuckDB-WASM loads two extensions the
-library uses when a query first needs them, from DuckDB's extension
-repository (`extensions.duckdb.org` unless told otherwise) rather than from
-the bundle: `parquet`, for a Parquet source or export, and `json`, for
-
-- a JSON source;
-- a Parquet source with a JSON column, or with JSON inside a list, array,
-  struct, map or union, which loads it with the table, so cells and filters
-  read the same from the first query;
-- exact reads of nested values: `actions.getCellValue`,
-  `actions.getColumnValues` on a nested column, the value inspector, and
-  CSV, JSON and clipboard exports of nested values;
-- extracting a value from JSON or VARIANT, whether a column of its own or
-  inside a nested column.
-
-Under a strict CSP, allow that origin in `connect-src`. Offline, mirror the
-extension files for your DuckDB version and platform on a host you control,
-and point DuckDB at it once the bridge is up:
+And point DuckDB at the mirror with an absolute URL, once the bridge is up
+and before anything loads:
 
 ```ts
 import { WorkerBridge, createDataTable } from '@jeyabbalas/data-table';
 
 const bridge = new WorkerBridge({ duckdbBundles });
 await bridge.initialize();
-await bridge.query(
-  "SET custom_extension_repository = 'https://intranet.example/duckdb-extensions'",
-);
-const table = await createDataTable({ container, source, bridge });
+const repository = new URL('/duckdb-ext', document.baseURI).href;
+await bridge.query(`SET custom_extension_repository = '${repository}'`);
+
+const table = await createDataTable({ container, source: '/data/trips.csv', bridge });
+
+// Later: a bridge you create is yours to terminate, after its tables.
+await table.destroy();
+bridge.terminate();
 ```
 
-Where an extension cannot load, what needs it fails with DuckDB's error,
-and a Parquet source does not load at all. The one exception is the Parquet
-loader's own load of `json`, which is best effort: the table loads, and its
-JSON reads as plain text, with JSON inside a list or struct shown as quoted
-strings (`[1, NULL, 'null']`). CSV sources, the grid, filters, sorting and
-the charts need neither.
+Absolute, because DuckDB's worker fetches the extensions from its `blob:`
+URL: with a relative repository URL, the next load fails with
+`LOAD_PARSE_FAILED` and the message `Failed to execute 'open' on
+'XMLHttpRequest': Invalid URL`.
 
-## Extending the init timeout
+## The Content Security Policy
 
-Slow connections can exceed the default 30-second worker init budget:
+One policy, sent with every response:
+
+```
+default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self'
+```
+
+| Directive                              | Why                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `script-src 'self' 'wasm-unsafe-eval'` | The library's modules, and DuckDB's `mainWorker`, which its worker imports. `'wasm-unsafe-eval'` lets DuckDB's worker compile its `.wasm`: without it, DuckDB never starts. No `'unsafe-eval'`: `icu`, `parquet` and `json` load without it. DuckDB-WASM runs any JavaScript an extension carries with `eval`, so an extension you load yourself may need it. |
+| `worker-src 'self' blob:`              | `'self'` for the library's worker script, `blob:` for DuckDB's worker, which the library starts from a `blob:` URL.                                                                                                                                                                                                                                           |
+| `connect-src 'self'`                   | DuckDB's worker fetches its `.wasm` and the extensions, and the library a URL source. Add any other origin you load data or these files from.                                                                                                                                                                                                                 |
+| `style-src 'self'`                     | The library's stylesheet. The table needs no `'unsafe-inline'`; the SQL editors, which CodeMirror draws, are untested under this policy.                                                                                                                                                                                                                      |
+| `default-src 'self'`                   | Everything else.                                                                                                                                                                                                                                                                                                                                              |
+
+### Send it with every response
+
+Each worker takes the policy that arrives with its own script, not the
+page's: the library's worker takes the one sent with
+`assets/worker-*.js`, and DuckDB's `blob:` worker inherits the library
+worker's. A policy sent only with the page leaves both workers without one,
+and a different policy on your scripts' responses governs them instead. So
+send the same policy with every response: the page, its scripts, the
+library's worker script, and the rest.
+
+### Size the container in a stylesheet
+
+`style-src 'self'` drops `style` attributes, so
+`<div id="table" style="height: 600px">` comes out unsized. Without a
+bounded height the table defeats its own virtualization and puts every row
+in the DOM, without an error
+([Sizing the container](../../README.md#sizing-the-container)). Size it in
+your stylesheet instead:
+
+```css
+#table {
+  height: 600px;
+}
+```
+
+## Serving the library's worker script yourself
+
+By default your bundler emits the library's worker,
+`dist/assets/worker-*.js`, with your own scripts, and `worker-src 'self'`
+covers it. Where it cannot, serve a copy: the built worker imports nothing,
+so the file runs on its own (a test checks every build for it). Copy it
+again on every upgrade: it belongs to its version.
+
+- **At a URL of your own**, with `bridgeOptions.workerUrl`:
+
+  ```ts
+  await createDataTable({
+    container,
+    source,
+    bridgeOptions: { workerUrl: '/static/data-table-worker.js', duckdbBundles },
+  });
+  ```
+
+- **As text in a `blob:` URL**, with `bridgeOptions.workerFactory`. The
+  factory runs synchronously, so fetch the text first:
+
+  ```ts
+  const workerCode = await fetch('/static/data-table-worker.js').then((r) => r.text());
+
+  await createDataTable({
+    container,
+    source,
+    bridgeOptions: {
+      duckdbBundles,
+      workerFactory: () =>
+        new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'text/javascript' })), {
+          type: 'module',
+        }),
+    },
+  });
+  ```
+
+  `worker-src` needs `blob:` for this, as the policy above has.
+
+## Error handling
+
+A setup that cannot start DuckDB rejects `initialize()`, and so
+`createDataTable()`, at once, with an error that says what to fix, except
+for one case: a `.wasm` file that does not load or compile, which times out.
+
+| What is wrong                                                                                                                                                    | What `initialize()` does                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A bundle URL that is not a URL, or does not resolve against the page                                                                                             | Rejects at once, before any worker starts: `ConfigurationError`, `OPTIONS_INVALID`, `details.option` naming it.                                                        |
+| `mainWorker` does not load: a 404, or an origin `script-src` leaves out                                                                                          | Rejects at once: `WorkerInitError`, `WORKER_CRASHED`, its message naming the URL.                                                                                      |
+| `worker-src` without `blob:`                                                                                                                                     | Rejects at once: `WORKER_CRASHED`, "DuckDB's worker could not start from its blob: URL".                                                                               |
+| The page's policy blocks the library's worker script, or the library is served from another origin than the page                                                 | Rejects at once: `WORKER_CRASHED`, its message naming `bridgeOptions.workerFactory`.                                                                                   |
+| `mainModule`, the `.wasm`, does not load or compile: a 404, a type other than `application/wasm`, an origin `connect-src` leaves out, or no `'wasm-unsafe-eval'` | Nothing, until `initializeTimeoutMs` (30 s by default): then `WorkerInitError`, `WORKER_INIT_TIMEOUT`. DuckDB-WASM leaves the error unhandled, and the console has it. |
+| An extension that does not load                                                                                                                                  | Succeeds. The load or query that needs it fails: for `icu`, every load, with `LOAD_PARSE_FAILED`.                                                                      |
+
+After `WORKER_CRASHED` or `WORKER_INIT_TIMEOUT` the worker is gone, and
+calling `initialize()` again starts a new one. A slow network can need a
+longer timeout:
 
 ```ts
 await createDataTable({
   container,
   source,
-  bridgeOptions: { initializeTimeoutMs: 60_000 },
+  bridgeOptions: { duckdbBundles, initializeTimeoutMs: 60_000 },
 });
 ```
 
-If `initialize()` times out, it rejects with a
-`WorkerInitError` (code `WORKER_INIT_TIMEOUT`). The internal worker is
-terminated so a subsequent retry can rebuild cleanly.
-
-## Error handling
-
-Strict-CSP and offline setups are the most common sources of worker-init
-failures. Listen for them:
+[Troubleshooting §4](../troubleshooting.md#4-duckdb-does-not-start-under-a-csp-or-offline)
+goes through each cause. To report them in the app:
 
 ```ts
-import { WorkerInitError } from '@jeyabbalas/data-table';
+import { ConfigurationError, WorkerInitError, createDataTable } from '@jeyabbalas/data-table';
 
-table.on('error', ({ error }) => {
-  if (error instanceof WorkerInitError) {
-    switch (error.code) {
-      case 'WORKER_INIT_TIMEOUT':
-        showToast('The library is taking longer than expected to load. Retry?');
-        break;
-      case 'WORKER_CRASHED':
-        showToast(`Library worker crashed during init: ${error.message}`);
-        break;
-      case 'WORKER_UNSUPPORTED':
-        showToast('This browser lacks a required feature (WASM, Worker, IndexedDB).');
-        break;
-    }
+try {
+  await createDataTable({ container, source, bridgeOptions: { duckdbBundles } });
+} catch (error) {
+  if (error instanceof ConfigurationError && error.code === 'OPTIONS_INVALID') {
+    showError(`Check ${String(error.details?.option)}.`);
+  } else if (error instanceof WorkerInitError) {
+    showError(`DuckDB did not start (${error.code}): ${error.message}`);
   }
-});
+}
 ```
-
-If your custom `workerFactory` throws, the library wraps it in
-`WorkerInitError` with `details.source: 'workerFactory'` so you can
-discriminate.
 
 ## Strict browser-support check
 
@@ -246,70 +324,62 @@ await createDataTable({
 });
 ```
 
-Rejects before any worker init if `WebAssembly`, `Worker`, `IndexedDB`, or
-other probed APIs are unavailable — letting you render a dedicated
-"unsupported browser" message instead of a half-mounted table.
+It rejects before any worker starts if `WebAssembly`, `Worker`, `IndexedDB`,
+or another probed API is missing, so you can render an "unsupported
+browser" message instead of a half-mounted table.
 
-## Recipes
+## Other setups
 
-### Vite + SPA with strict CSP
+### Another origin for DuckDB's files
 
-1. Add a Vite plugin to emit the worker as a static asset:
+Untested: the library's test serves every file from the page's origin. From
+another origin, DuckDB's worker fetches the `.wasm` and the extensions with
+CORS, so that origin must send `Access-Control-Allow-Origin`, and the policy
+must list it in `script-src` and `connect-src`. `Cross-Origin-Resource-Policy`
+matters only on a cross-origin-isolated page, one sent with
+`Cross-Origin-Embedder-Policy`, as the `coi` bundle needs.
 
-```ts
-// vite.config.ts
-import { defineConfig } from 'vite';
+### Electron and other packaged apps
 
-export default defineConfig({
-  optimizeDeps: {
-    exclude: ['@duckdb/duckdb-wasm'],
-  },
-});
-```
+Untested: the library's tests do not run Electron. A `file://` page has no
+origin for `'self'` to name, so rather than `file://` URLs, serve the app
+and DuckDB's files from a privileged custom scheme (Electron's
+`protocol.registerSchemesAsPrivileged`), and follow this guide on it.
 
-2. Copy the DuckDB WASM bundles into `public/duckdb/` during build.
-3. Pass custom `workerUrl` and `duckdbBundles` as shown above.
-4. CSP: `script-src 'self'; worker-src 'self';`.
+### An intranet without the CDN
 
-See [integrations/vite.md](../integrations/vite.md) for a fuller walkthrough.
-
-### Electron / packaged desktop app
-
-Electron's `file://` protocol disables cross-origin checks within your app
-bundle. Ship the WASM bundles inside your packaged app and point
-`duckdbBundles` at `file:///…` URLs (or use the renderer's local resource
-protocol).
-
-Electron's default CSP is permissive but production apps should lock it
-down. `script-src 'self'` + `worker-src 'self'` works with bundler-emitted
-workers.
-
-### Corporate intranet, no CDN access
-
-1. Mirror the DuckDB-WASM NPM package's `dist/` directory to your intranet
-   static host.
-2. Pass a `duckdbBundles` map pointing there.
-3. If your intranet proxies block jsDelivr, the default behavior will fail
-   loudly with a fetch error — the explicit override avoids this.
-4. Mirror the `parquet` and `json` extensions too, and set
-   `custom_extension_repository` (see
-   [DuckDB extensions](#duckdb-extensions-parquet-and-json)).
+1. Serve DuckDB-WASM's files and mirror the extensions as above.
+2. Pass `duckdbBundles`, and set `custom_extension_repository` on the bridge
+   before anything loads.
+3. Without the mirror, the first load fails with `LOAD_PARSE_FAILED` on
+   `icu`; without `duckdbBundles`, DuckDB never starts.
 
 ## Gotchas
 
-- **`workerUrl` must be loadable from the page origin.** Cross-origin worker scripts need CORS headers or a blob-URL wrapper.
-- **`duckdbBundles` keys are case-sensitive** and match the `DuckDBBundles` interface from `@duckdb/duckdb-wasm`. Typos become runtime 404s during init.
-- **Worker init timeout kills the bridge.** A 30-second failure is permanent for that instance. After `WORKER_INIT_TIMEOUT`, destroy the table and try again (possibly with a larger timeout).
-- **CSP `worker-src 'self'` must include your worker origin.** If your worker is cross-origin, `worker-src` needs that origin too.
-- **`coi` bundle requires COOP/COEP.** The cross-origin-isolated bundle uses `SharedArrayBuffer`, which requires specific response headers. If you don't set them, DuckDB falls back to `mvp`/`eh` automatically — but you get slower queries.
-- **`coi` bundle's pthread workers go without one of the library's fixes.** Once DuckDB's memory passes 2 GiB, duckdb-wasm can lose the size of a file it opens; the library corrects this in DuckDB's main worker, but not in the pthread workers, which load their own script. See [Troubleshooting FAQ §32](../troubleshooting.md#32-too-small-to-be-a-parquet-file-or-prefetch-registered-for-bytes-outside-file--file-size-0).
-- **Don't mix bundler-emitted and CDN-served WASM.** The versions must match. Use one or the other; the library doesn't cross-check.
+- **Every file from one DuckDB-WASM version.** Pin `@duckdb/duckdb-wasm` to
+  `1.33.1-dev57.0` exactly, and copy its worker scripts and `.wasm` files
+  together, again whenever the library's pinned version changes. The
+  extensions' directory follows the version DuckDB reports.
+- **The policy on the page alone reaches neither worker.** Send it with the
+  library's worker script too: see
+  [Send it with every response](#send-it-with-every-response).
+- **`duckdbBundles` keys are case-sensitive**, and match the `DuckDBBundles`
+  interface from `@duckdb/duckdb-wasm`: `mvp`, `eh`, `coi`, each with
+  `mainModule` and `mainWorker`, and `pthreadWorker` for `coi`.
+- **`coi` needs cross-origin isolation.** Without `Cross-Origin-Opener-Policy`
+  and `Cross-Origin-Embedder-Policy`, DuckDB picks `eh` or `mvp` instead.
+- **`coi` bundle's pthread workers go without one of the library's fixes.**
+  Once DuckDB's memory passes 2 GiB, duckdb-wasm can lose the size of a file
+  it opens; the library corrects this in DuckDB's main worker, but not in the
+  pthread workers, which load their own script. See
+  [Troubleshooting FAQ §32](../troubleshooting.md#32-too-small-to-be-a-parquet-file-or-prefetch-registered-for-bytes-outside-file--file-size-0).
 
 ## Related
 
 - Vite integration: [Vite](../integrations/vite.md)
 - Webpack integration: [Webpack](../integrations/webpack.md)
 - CDN / no-build: [CDN](../integrations/cdn.md)
-- Troubleshooting: [WASM 404 in production](../troubleshooting.md), [CSP blocking](../troubleshooting.md)
+- Troubleshooting: [DuckDB does not start under a CSP or offline](../troubleshooting.md#4-duckdb-does-not-start-under-a-csp-or-offline), [WASM 404 in production](../troubleshooting.md#6-wasm-404-in-production-dev-worked-fine)
 - API reference: [`bridgeOptions`, `WorkerBridgeOptions`](../api-reference.md#createdatatable), [`strictBrowserCheck`](../api-reference.md#createdatatable)
-- Source: `src/data/WorkerBridge.ts:81-233`, `src/worker/duckdb.ts`
+- Source: `src/data/WorkerBridge.ts` (`WorkerBridgeOptions.duckdbBundles`, `initialize`), `src/worker/duckdb.ts` (`initializeDuckDB`)
+- Test: [`tests/browser/self-hosted-bundles.spec.ts`](../../tests/browser/self-hosted-bundles.spec.ts)

@@ -27,12 +27,12 @@ Source: `src/core/errors.ts` + error sites across `src/`.
 
 | Code                                                                                                      | Class                   | Cause                                                                                                                                                                                                                                   | Fix                                                                                                                                                                                                              |
 | --------------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPTIONS_INVALID`                                                                                         | `ConfigurationError`    | Invalid option passed to `createDataTable()` or a preset call.                                                                                                                                                                          | Check `error.details` for the bad value; align with [`CreateDataTableOptions`](./api-reference.md#createdatatableoptions).                                                                                       |
+| `OPTIONS_INVALID`                                                                                         | `ConfigurationError`    | Invalid option passed to `createDataTable()` or a preset call, or a `bridgeOptions.duckdbBundles` URL that does not resolve against the page: `initialize()` rejects before it starts a worker.                                         | Check `error.details` for the bad value; align with [`CreateDataTableOptions`](./api-reference.md#createdatatableoptions).                                                                                       |
 | `PRESET_DUPLICATE_NAME`                                                                                   | `ConfigurationError`    | `FilterPresetManager.save` / `.rename` was called with a name another preset already uses (case- and whitespace-sensitive).                                                                                                             | Read `presetManager.getPresets()` first and either pick a unique name or call `update(id, …)` to overwrite the existing preset. `error.details.name` echoes the conflicting name.                                |
 | `CHUNK_LOAD_FAILED`                                                                                       | `ConfigurationError`    | A panel that loads on first use, the value inspector or the extract-field panel, failed to download.                                                                                                                                    | Check that the library's chunk files are served beside its entry file and that your CSP's `script-src` allows them. After a redeploy, reload the page. The table keeps working.                                  |
 | `WORKER_UNSUPPORTED`                                                                                      | `WorkerInitError`       | `strictBrowserCheck: true` detected a missing required API.                                                                                                                                                                             | Render an "unsupported browser" screen. `error.details.missing` lists the APIs.                                                                                                                                  |
-| `WORKER_CRASHED`                                                                                          | `WorkerInitError`       | The DuckDB worker failed, at init or later. Each table on the bridge emits one `error` event with this code (`source: 'query'`) and stops fetching rows; every request on the bridge rejects with it from then on.                      | Check DevTools → Console for the worker-side stack; at init, often a broken WASM asset path. Later, the data is gone: destroy the tables and create them again, which starts a new worker.                       |
-| `WORKER_INIT_TIMEOUT`                                                                                     | `WorkerInitError`       | Init exceeded `bridgeOptions.initializeTimeoutMs` (default 30 s).                                                                                                                                                                       | Increase the timeout, verify `duckdbBundles` is reachable, or pre-warm the WASM asset.                                                                                                                           |
+| `WORKER_CRASHED`                                                                                          | `WorkerInitError`       | The DuckDB worker failed, at init or later. Each table on the bridge emits one `error` event with this code (`source: 'query'`) and stops fetching rows; every request on the bridge rejects with it from then on.                      | At init, a worker script that did not load, or DuckDB's own worker failing to start: the message says which (FAQ §4). Later, the data is gone: destroy the tables and create them again.                         |
+| `WORKER_INIT_TIMEOUT`                                                                                     | `WorkerInitError`       | Init exceeded `bridgeOptions.initializeTimeoutMs` (default 30 s): a slow network, or a `.wasm` that did not load or compile, which DuckDB-WASM does not report.                                                                         | Check DevTools → Console for a WebAssembly error (FAQ §4). If there is none, increase the timeout.                                                                                                               |
 | `WORKER_TERMINATED`                                                                                       | `WorkerTerminatedError` | Worker was terminated mid-operation.                                                                                                                                                                                                    | Usually a race with `destroy()`; check `isDestroyed()` guards.                                                                                                                                                   |
 | `BRIDGE_NOT_READY`                                                                                        | `ConfigurationError`    | A bridge method was called before init.                                                                                                                                                                                                 | `await createDataTable(...)` before issuing queries.                                                                                                                                                             |
 | `QUERY_RUNTIME`                                                                                           | `QueryError`            | DuckDB returned an error at query time.                                                                                                                                                                                                 | Check `error.details.sql` (when present); common causes: referenced a column that was since removed, or a derived-column VIEW is stale.                                                                          |
@@ -182,33 +182,31 @@ Use `table.isPersistenceActive()` to branch UI on availability.
 
 ---
 
-### 4. DuckDB CDN blocked by CSP
+### 4. DuckDB does not start under a CSP or offline
 
-Symptom: worker fails to init (`WORKER_CRASHED`) because `https://cdn.jsdelivr.net/...` is blocked.
+Symptom: `createDataTable()` or `bridge.initialize()` rejects, hangs until it times out, or the first load fails, on a page that cannot reach jsDelivr or `extensions.duckdb.org`, or that sends a strict Content Security Policy.
 
-Fix: self-host the worker and WASM bundles, then point the bridge at them via `bridgeOptions`:
+Two workers are involved. The library's worker is a module worker, the `assets/worker-*.js` your bundler emits. DuckDB runs in a worker of its own, which the library starts from a `blob:` URL, and which loads the bundle's `mainWorker`, then its `mainModule` (the `.wasm`), then the extensions. The error says which one failed:
 
-```ts
-await createDataTable({
-  container,
-  source,
-  bridgeOptions: {
-    workerUrl: new URL('./duckdb-worker.js', import.meta.url).href,
-    duckdbBundles: {
-      mvp: {
-        mainModule: '/duckdb/duckdb-mvp.wasm',
-        mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
-      },
-      eh: {
-        mainModule: '/duckdb/duckdb-eh.wasm',
-        mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
-      },
-    },
-  },
-});
-```
+| Error                                                                                                             | Cause                                                                                                                                | Fix                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConfigurationError`, `OPTIONS_INVALID`, `details.option` such as `'duckdbBundles.eh.mainWorker'`                 | That `duckdbBundles` URL is not a URL.                                                                                               | Fix it. A relative URL is fine: it resolves against the page.                                                                            |
+| `WorkerInitError`, `WORKER_CRASHED`: "The worker script failed to load. A Content Security Policy (worker-src) …" | The library's worker did not load: its file is missing, or the page's `worker-src` leaves it out.                                    | Serve it, and allow it (`worker-src 'self' blob:`), or construct it with `bridgeOptions.workerFactory`.                                  |
+| `WORKER_CRASHED`: "DuckDB's worker failed to start: … importScripts …"                                            | DuckDB's `mainWorker` did not load: a 404, or a `script-src` without its origin.                                                     | Check the URL the message names.                                                                                                         |
+| `WORKER_CRASHED`: "DuckDB's worker could not start from its blob: URL"                                            | `worker-src` leaves out `blob:`.                                                                                                     | Add `blob:` to `worker-src`.                                                                                                             |
+| `WORKER_INIT_TIMEOUT`, after `initializeTimeoutMs` (30 s by default)                                              | DuckDB's `mainModule`, the `.wasm`, did not load or compile. See below.                                                              | Fix the cause the console names.                                                                                                         |
+| `LoadError`, `LOAD_PARSE_FAILED`, on every load, a CSV's too, about an `XMLHttpRequest`                           | DuckDB cannot fetch its ICU extension, which every load needs: `extensions.duckdb.org` is out of reach, or blocked by `connect-src`. | Mirror the extensions, and set an absolute `custom_extension_repository` before anything loads. A relative one fails with `Invalid URL`. |
 
-Copy the `@duckdb/duckdb-wasm/dist/*.wasm` and worker files into your static assets at build time.
+A `.wasm` that does not load or compile times out instead of failing at once: DuckDB-WASM leaves that error unhandled, in DuckDB's worker, so nothing reports it but the timeout. DevTools' console has it. The causes:
+
+- a 404: `HTTP status code is not ok`;
+- a `Content-Type` other than `application/wasm`: `Incorrect response MIME type. Expected 'application/wasm'.`;
+- an origin that `connect-src` leaves out;
+- a `script-src` without `'wasm-unsafe-eval'`: `Compiling or instantiating WebAssembly module violates the following Content Security policy directive`.
+
+A policy sent only with the page reaches neither worker: the library's worker takes the policy sent with its own script, and DuckDB's worker inherits that one. Send the same policy with every response.
+
+Fix: serve DuckDB-WASM's files and the extensions from your origin, and send one policy with every response, as [CSP and offline deployments](./guides/csp-and-offline.md) describes.
 
 ---
 
@@ -238,15 +236,15 @@ const unsub = table.on('loadComplete', () => {
 
 ### 6. WASM 404 in production (dev worked fine)
 
-Cause: your bundler didn't copy the DuckDB WASM assets into the production build.
+Cause: the app serves DuckDB-WASM itself (`bridgeOptions.duckdbBundles`), and the production build does not have the files, or has them at other URLs. A `mainWorker` that 404s rejects at once with `WORKER_CRASHED` and its URL in the message; a `mainModule` that 404s times out (`WORKER_INIT_TIMEOUT`), with `HTTP status code is not ok` in the console. See §4.
 
-Fix depends on the bundler:
+Fix: copy `duckdb-browser-eh.worker.js`, `duckdb-eh.wasm`, `duckdb-browser-mvp.worker.js` and `duckdb-mvp.wasm` from `node_modules/@duckdb/duckdb-wasm/dist/`, with `@duckdb/duckdb-wasm` pinned to exactly `1.33.1-dev57.0`, into what your build serves:
 
-- **Vite**: add a `vite-plugin-static-copy` entry, or vendor the WASM files into `public/` and set `bridgeOptions.duckdbBundles` to absolute paths.
-- **Webpack**: use `copy-webpack-plugin` to copy `node_modules/@duckdb/duckdb-wasm/dist/*.wasm` into the output.
-- **Next.js**: place the files in `public/duckdb/` and reference them with absolute paths in `bridgeOptions`.
+- **Vite**: `public/duckdb/`, which Vite serves at `/duckdb/`.
+- **Webpack**: copy them into the output with `copy-webpack-plugin`.
+- **Next.js / Nuxt**: `public/duckdb/`.
 
-Verify in DevTools → Network that the `.wasm` file resolves with a 200 before creating the table.
+Then point `duckdbBundles` at them. Relative URLs resolve against the page. Verify in DevTools → Network that each file answers 200, the `.wasm` with `Content-Type: application/wasm`.
 
 ---
 

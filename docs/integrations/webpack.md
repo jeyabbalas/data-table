@@ -65,8 +65,13 @@ an unbounded one silently defeats virtualization. See
 
 ## Self-hosted WASM
 
-Like the [Vite guide](./vite.md#self-hosted-wasm-offline--strict-csp),
-place DuckDB bundles under your static asset directory and pass them in:
+As in the [Vite guide](./vite.md#self-hosted-wasm-offline--strict-csp),
+pin `@duckdb/duckdb-wasm` to exactly `1.33.1-dev57.0`, copy
+`duckdb-browser-eh.worker.js`, `duckdb-eh.wasm`,
+`duckdb-browser-mvp.worker.js` and `duckdb-mvp.wasm` from
+`node_modules/@duckdb/duckdb-wasm/dist/` into your static assets (with
+`copy-webpack-plugin`, say), and pass them in. Relative URLs resolve
+against the page:
 
 ```ts
 const bundles = {
@@ -86,6 +91,10 @@ await createDataTable({
   bridgeOptions: { duckdbBundles: bundles },
 });
 ```
+
+Serve the `.wasm` files as `application/wasm`, and mirror DuckDB's `icu`,
+`parquet` and `json` extensions: see
+[CSP and offline](../guides/csp-and-offline.md#duckdbs-extensions).
 
 ## CodeMirror chunk splitting
 
@@ -123,55 +132,46 @@ npm install @jeyabbalas/data-table \
   @codemirror/language @codemirror/state @codemirror/view @lezer/highlight
 ```
 
+If you serve DuckDB-WASM's files yourself, install `@duckdb/duckdb-wasm`
+at exactly `1.33.1-dev57.0` (`--save-exact`).
+
 The CodeMirror packages are marked `optional: true` in the library's
 `peerDependenciesMeta`, so npm won't error if you omit them. Webpack
 will, though, if your code ends up importing them — so either install
 them or keep them out of your dependency graph.
 
-## Fallback — `worker-loader`
+## Fallback — serve the worker script yourself
 
-On older webpack setups (webpack 4) or when the native `new Worker(new
-URL(...))` pattern doesn't work, use `worker-loader`:
+If your setup does not emit the library's worker, serve a copy of it. The
+package does not export it by path: it is `dist/assets/worker-<hash>.js`
+inside `node_modules/@jeyabbalas/data-table/`, and its name changes with
+every release. Copy it to a fixed URL in your build (with
+`copy-webpack-plugin`, say), again on every upgrade, and pass that URL:
 
 ```ts
-// Inline
 await createDataTable({
   container,
   source,
-  bridgeOptions: {
-    workerFactory: () =>
-      new Worker(new URL('@jeyabbalas/data-table/dist/worker/worker.js', import.meta.url), {
-        type: 'module',
-      }),
-  },
+  bridgeOptions: { workerUrl: '/static/data-table-worker.js' },
 });
 ```
 
-Or with `worker-loader`'s import syntax (if installed):
-
-```ts
-// worker-loader import:
-import MyWorker from 'worker-loader!@jeyabbalas/data-table/dist/worker/worker.js';
-
-await createDataTable({
-  container,
-  source,
-  bridgeOptions: { workerFactory: () => new MyWorker() },
-});
-```
-
-Prefer the native pattern where possible; `worker-loader` is unmaintained
-and webpack 5's built-in support is preferred.
+The file imports nothing, so the copy runs on its own. `workerFactory`
+takes its text in a `blob:` URL instead: see
+[CSP and offline → Serving the library's worker script yourself](../guides/csp-and-offline.md#serving-the-librarys-worker-script-yourself).
 
 ## CSP
 
+Send one policy with every response, the worker scripts' too:
+
 ```
-script-src 'self';
-worker-src 'self';
+default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self'
 ```
 
-Plus whatever your app already requires. Match your worker output path —
-e.g., if webpack emits to `/static/js/`, that's allowed by `'self'`.
+Plus whatever your app already requires. `'self'` covers the worker chunk
+wherever webpack emits it under your origin, `/static/js/` say;
+`'wasm-unsafe-eval'` lets DuckDB compile its `.wasm`, and `blob:` lets it
+start its worker. See [CSP and offline](../guides/csp-and-offline.md#the-content-security-policy).
 
 ## Dev server proxying
 

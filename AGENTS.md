@@ -45,7 +45,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - WCAG-oriented accessibility (ARIA grid on `.dt-grid`, `aria-activedescendant` cursor, keyboard nav, live region). A loaded table is a constant five tab stops — filter bar, grid, header scroller, body scroller, hidden-columns gutter — regardless of column count, hidden columns or active filters; a nested cell's inspect icon adds none, and `F2` on such a cell opens the value inspector, a `role="dialog"` holding a WAI-ARIA tree; a nested or JSON column header's extract button is one more control in its `F2` cycle, not a tab stop (src/table/KeyboardNavigator.ts, src/core/RovingTabindex.ts, src/table/TreeView.ts).
 - **Keyboard column resize and reorder** via `Shift+F2` from the header cursor — column layout mode: `←`/`→` resize by 16px (clamped 50–500), `Shift`+`←`/`→` move the column, `Home`/`End` hit the width bounds, `Backspace` resets, `Enter` commits, `Escape` restores both width and position. The whole gesture is one undo entry. Nothing becomes focusable, so the tab-stop census is unchanged; the resize handle (`role="separator"`) and the drag handle stay out of `ColumnHeader.getControls()` and the `F2` cycle on purpose (src/table/KeyboardNavigator.ts, src/table/ColumnHeader.ts).
 - Multi-table on one page with shared `WorkerBridge`, `SessionStore`, `FilterPresetManager`.
-- CSP/offline deployment — self-host the WASM bundles via `bridgeOptions`.
+- CSP/offline deployment — DuckDB-WASM's files served from your own origin (`bridgeOptions.duckdbBundles`, relative URLs resolved against the page; copied from `@duckdb/duckdb-wasm` pinned to exactly `1.33.1-dev57.0`), DuckDB's `icu`, `parquet` and `json` extensions mirrored (`custom_extension_repository`), under a policy with `'wasm-unsafe-eval'` and `worker-src 'self' blob:` and no `'unsafe-eval'` (src/data/WorkerBridge.ts, src/worker/duckdb.ts; run by tests/browser/self-hosted-bundles.spec.ts; [`docs/guides/csp-and-offline.md`](./docs/guides/csp-and-offline.md)).
 
 ### DOES NOT SUPPORT
 
@@ -79,7 +79,7 @@ Ask these **before writing integration code**, in order. The first answer often 
 8. **Theme / brand.** CSS-variable overrides? Light-only, dark-only, or auto? See [`docs/api-reference.md#i18n-strings`](./docs/api-reference.md) + CSS variable list in `README.md`.
 9. **i18n.** Which locale(s)? `messages` is captured at `createDataTable()` time — runtime swap requires rebuild.
 10. **Accessibility target.** Keyboard-only + screen reader support is default-on. Is there a stricter compliance bar (axe CI, WCAG 2.2)?
-11. **Offline / self-hosted WASM.** Air-gapped, Electron, or strict CSP? Use `bridgeOptions.duckdbBundles` + `workerUrl`.
+11. **Offline / self-hosted WASM.** Air-gapped, Electron, or strict CSP? Serve DuckDB-WASM's files yourself through `bridgeOptions.duckdbBundles`, copied from `@duckdb/duckdb-wasm` pinned to exactly `1.33.1-dev57.0`; mirror the `icu`, `parquet` and `json` extensions; and send one policy with every response, the library's worker script included. See [`docs/guides/csp-and-offline.md`](./docs/guides/csp-and-offline.md) and [pitfall 12](#5-common-pitfalls).
 
 ---
 
@@ -648,7 +648,13 @@ All values source `src/DataTable.ts:137-371`.
 
 11. **Expecting synchronous completion after `loadData()`.** `loadData()` returns a promise. Await it (or subscribe to `loadComplete`) before reading `state.schema.get()` / `state.totalRows.get()`.
 
-12. **Blocking network for the WASM bundle.** DuckDB fetches from a CDN by default. On a strict CSP, supply `bridgeOptions.duckdbBundles` with self-hosted paths.
+12. **Blocking DuckDB's network without serving its files.** By default DuckDB-WASM loads its worker script and `.wasm` from jsDelivr, and DuckDB fetches the `icu` extension (every load sets the time zone), `parquet` and `json` from `extensions.duckdb.org`. Behind a strict CSP or offline, serve all of them, as [`docs/guides/csp-and-offline.md`](./docs/guides/csp-and-offline.md) describes:
+
+    - `bridgeOptions.duckdbBundles` with the files of `@duckdb/duckdb-wasm` `1.33.1-dev57.0`, pinned exactly. Relative URLs resolve against the page when `initialize()` starts; one that does not resolve rejects with a `ConfigurationError` (`OPTIONS_INVALID`) naming it.
+    - The extensions mirrored as `<repository>/<version>/<platform>/<name>.duckdb_extension.wasm` (`PRAGMA version`, `PRAGMA platform`: `v1.5.4/wasm_eh` for the `eh` bundle), and `bridge.query("SET custom_extension_repository = '<absolute URL>'")` after `bridge.initialize()`, before anything loads. Without them, every load, a CSV's too, fails with `LOAD_PARSE_FAILED`; a relative repository URL fails with `Invalid URL`.
+    - One policy sent with every response, the library's worker script included, since each worker takes the policy sent with its own script, not the page's: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self'`. `'unsafe-eval'` is not needed. Size the container in a stylesheet: the policy drops `style` attributes, and an unbounded container defeats virtualization (pitfall 1).
+
+    A `mainWorker` that does not load, or a `worker-src` without `blob:`, rejects at once with `WorkerInitError` `WORKER_CRASHED`; a `.wasm` that does not load or compile (a 404, a type other than `application/wasm`, `connect-src`, no `'wasm-unsafe-eval'`) leaves DuckDB waiting until `WORKER_INIT_TIMEOUT`.
 
 13. **Expecting list or struct columns in a `'string'` registration.** LIST, ARRAY, STRUCT, MAP, UNION and VARIANT columns are `type: 'nested'` (src/core/types.ts:19-30), so a custom visualization or stats panel whose `isApplicable` accepts `'string'` never sees them. Accept `'nested'` too, or test with `isNestedType` from `/advanced`; read `originalType` with `parseDuckDBType` to tell the kinds apart. JSON columns are still `'string'`.
 

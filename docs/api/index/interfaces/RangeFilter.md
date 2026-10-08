@@ -6,7 +6,7 @@
 
 # Interface: RangeFilter
 
-Defined in: [filters/FilterTypes.ts:14](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L14)
+Defined in: [filters/FilterTypes.ts:14](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L14)
 
 Range (`min` ≤ x ≤ `max` by default) filter on a numeric, date, time or
 interval column. Bounds may be widened to strict comparisons via `maxInclusive` /
@@ -19,7 +19,7 @@ interval column. Bounds may be widened to strict comparisons via `maxInclusive` 
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:16](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L16)
+Defined in: [filters/FilterTypes.ts:16](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L16)
 
 ***
 
@@ -27,7 +27,7 @@ Defined in: [filters/FilterTypes.ts:16](https://github.com/jeyabbalas/data-table
 
 > **max**: `string` \| `number` \| `Date`
 
-Defined in: [filters/FilterTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L18)
+Defined in: [filters/FilterTypes.ts:18](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L18)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [filters/FilterTypes.ts:18](https://github.com/jeyabbalas/data-table
 
 > `optional` **maxInclusive?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L20)
+Defined in: [filters/FilterTypes.ts:20](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L20)
 
 When true, upper bound uses <= instead of <. Used for last histogram bin.
 
@@ -45,7 +45,7 @@ When true, upper bound uses <= instead of <. Used for last histogram bin.
 
 > **min**: `string` \| `number` \| `Date`
 
-Defined in: [filters/FilterTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L17)
+Defined in: [filters/FilterTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L17)
 
 ***
 
@@ -53,7 +53,7 @@ Defined in: [filters/FilterTypes.ts:17](https://github.com/jeyabbalas/data-table
 
 > `optional` **minExclusive?**: `boolean`
 
-Defined in: [filters/FilterTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L22)
+Defined in: [filters/FilterTypes.ts:22](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L22)
 
 When true, lower bound uses > instead of >=. Used for strict greater-than filters.
 
@@ -63,7 +63,7 @@ When true, lower bound uses > instead of >=. Used for strict greater-than filter
 
 > **type**: `"range"`
 
-Defined in: [filters/FilterTypes.ts:15](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L15)
+Defined in: [filters/FilterTypes.ts:15](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L15)
 
 ***
 
@@ -71,7 +71,7 @@ Defined in: [filters/FilterTypes.ts:15](https://github.com/jeyabbalas/data-table
 
 > `optional` **valueType?**: `"time"` \| `"interval"`
 
-Defined in: [filters/FilterTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/filters/FilterTypes.ts#L49)
+Defined in: [filters/FilterTypes.ts:49](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/filters/FilterTypes.ts#L49)
 
 How the bounds are compared. Left out, they are compared with the
 column's value: `"col" >= '…'`.

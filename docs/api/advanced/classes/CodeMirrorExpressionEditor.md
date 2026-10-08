@@ -6,7 +6,7 @@
 
 # Class: CodeMirrorExpressionEditor
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:38](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L38)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:38](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L38)
 
 Default `ExpressionEditor` implementation built on CodeMirror 6 with
 DuckDB SQL grammar, schema-aware autocompletion, and light/dark theming.
@@ -49,7 +49,7 @@ DUCKDB_FUNCTIONS — the built-in function list surfaced by autocomplete.
 
 > **new CodeMirrorExpressionEditor**(`container`, `context`, `classPrefix?`, `config?`): `CodeMirrorExpressionEditor`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:45](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L45)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:45](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L45)
 
 #### Parameters
 
@@ -79,7 +79,7 @@ Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:45](https://github.com/jey
 
 > `readonly` **element**: `HTMLElement`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:39](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L39)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:39](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L39)
 
 The root DOM element to mount in the panel/modal
 
@@ -93,7 +93,7 @@ The root DOM element to mount in the panel/modal
 
 > **destroy**(): `void`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:149](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L149)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:149](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L149)
 
 Clean up resources
 
@@ -111,7 +111,7 @@ Clean up resources
 
 > **focus**(): `void`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:127](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L127)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:127](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L127)
 
 Focus the editor
 
@@ -129,7 +129,7 @@ Focus the editor
 
 > **getValue**(): `string`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:117](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L117)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:117](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L117)
 
 Get current editor content
 
@@ -147,7 +147,7 @@ Get current editor content
 
 > **setError**(`error`): `void`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:131](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L131)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:131](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L131)
 
 Display an error message inline (null clears the error)
 
@@ -171,7 +171,7 @@ Display an error message inline (null clears the error)
 
 > **setValue**(`value`): `void`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:121](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L121)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:121](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L121)
 
 Set editor content (for editing existing columns)
 
@@ -195,7 +195,7 @@ Set editor content (for editing existing columns)
 
 > **updateCompletionContext**(`context`): `void`
 
-Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:143](https://github.com/jeyabbalas/data-table/blob/d5b613fd5482b1cf0f46a12770739e8b8cb300f2/src/sql-editor/CodeMirrorExpressionEditor.ts#L143)
+Defined in: [sql-editor/CodeMirrorExpressionEditor.ts:143](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/sql-editor/CodeMirrorExpressionEditor.ts#L143)
 
 Update completion context when schema changes
 

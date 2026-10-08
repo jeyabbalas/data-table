@@ -561,16 +561,36 @@ for (const failure of WASM_FAILURES) {
   });
 }
 
-test('a 404 bundle URL rejects at once, naming it', async ({ context, page }) => {
-  await serve(context, () => policy());
-  await open(page);
+/** A `mainWorker` DuckDB's worker cannot import: its error event rejects init at once. */
+const MAIN_WORKER_FAILURES = [
+  {
+    name: 'a 404',
+    url: '/duckdb/missing.worker.js',
+    named: 'https://app.test/duckdb/missing.worker.js',
+  },
+  {
+    name: 'an origin script-src leaves out',
+    url: 'https://cdn.example.test/duckdb-browser-eh.worker.js',
+    named: 'https://cdn.example.test/duckdb-browser-eh.worker.js',
+  },
+];
 
-  const start = await startBridge(page, { mainWorker: '/duckdb/missing.worker.js' });
+for (const failure of MAIN_WORKER_FAILURES) {
+  test(`a mainWorker with ${failure.name} rejects at once, naming it`, async ({
+    context,
+    page,
+  }) => {
+    const traffic = await serve(context, () => policy());
+    await open(page);
 
-  expect(start).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_CRASHED' });
-  expect(start.ms).toBeLessThan(5_000);
-  expect(start.message).toContain('https://app.test/duckdb/missing.worker.js');
-});
+    const start = await startBridge(page, { mainWorker: failure.url });
+
+    expect(start).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_CRASHED' });
+    expect(start.ms).toBeLessThan(5_000);
+    expect(start.message).toContain(failure.named);
+    expect(traffic.foreign).toEqual([]);
+  });
+}
 
 test("a worker-src without blob: rejects at once, saying DuckDB's worker needs it", async ({
   context,

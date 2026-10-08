@@ -46,7 +46,7 @@ and picks one as it starts:
 | Bundle | `mainWorker`                   | `mainModule`      | `pthreadWorker`                        | Picked when                                                                                             |
 | ------ | ------------------------------ | ----------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `eh`   | `duckdb-browser-eh.worker.js`  | `duckdb-eh.wasm`  | —                                      | The browser has WebAssembly exceptions, as current browsers do.                                         |
-| `mvp`  | `duckdb-browser-mvp.worker.js` | `duckdb-mvp.wasm` | —                                      | It has not. `mvp` is the one bundle `DuckDBBundles` requires.                                           |
+| `mvp`  | `duckdb-browser-mvp.worker.js` | `duckdb-mvp.wasm` | —                                      | Otherwise. `mvp` is the one bundle `DuckDBBundles` requires.                                            |
 | `coi`  | `duckdb-browser-coi.worker.js` | `duckdb-coi.wasm` | `duckdb-browser-coi.pthread.worker.js` | You pass it, and the page is cross-origin isolated, in a browser with WebAssembly threads and SIMD too. |
 
 DuckDB's worker fetches these files, not the page or the library's worker,

@@ -221,9 +221,10 @@ worker's. A policy sent only with the page then leaves both workers without
 one, and a different policy on your scripts' responses governs them
 instead. A worker started from a `blob:` URL inherits the policy of what
 starts it: a library worker from the `workerFactory` recipe below, or from a
-CDN page's trampoline, takes the page's policy and passes it on to DuckDB's
-worker. Either way, send the same policy with every response: the page, its
-scripts, the library's worker script, and the rest.
+[CDN page's trampoline](../integrations/cdn.md#the-worker), takes the page's
+policy and passes it on to DuckDB's worker. Either way, send the same policy
+with every response: the page, its scripts, the library's worker script, and
+the rest.
 
 ### Size the container in a stylesheet
 
@@ -278,7 +279,9 @@ again on every upgrade: it belongs to its version.
   ```
 
   `worker-src` needs `blob:` for this, as the policy above has. A worker
-  started this way takes the page's policy, and so does DuckDB's.
+  started this way takes the page's policy, and so does DuckDB's. A
+  [CDN page](../integrations/cdn.md#the-worker) starts its worker the same
+  way, from a `blob:` URL whose one line imports the CDN's copy.
 
 ## Error handling
 
@@ -286,14 +289,14 @@ A setup that cannot start DuckDB rejects `initialize()`, and so
 `createDataTable()`, at once, with an error that says what to fix, except
 for one case: a `.wasm` file that does not load or compile, which times out.
 
-| What is wrong                                                                                                                                                    | What `initialize()` does                                                                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A bundle URL that is not a URL, or does not resolve against the page                                                                                             | Rejects at once, before any worker starts: `ConfigurationError`, `OPTIONS_INVALID`, `details.option` naming it.                                                        |
-| `mainWorker` does not load: a 404, or an origin `script-src` leaves out                                                                                          | Rejects at once: `WorkerInitError`, `WORKER_CRASHED`, its message naming the URL.                                                                                      |
-| `worker-src` without `blob:`                                                                                                                                     | Rejects at once: `WORKER_CRASHED`, "DuckDB's worker could not start from its blob: URL".                                                                               |
-| The page's policy blocks the library's worker script, or (untested) the library is served from another origin than the page                                      | Rejects at once: `WORKER_CRASHED`, its message naming `bridgeOptions.workerFactory`.                                                                                   |
-| `mainModule`, the `.wasm`, does not load or compile: a 404, a type other than `application/wasm`, an origin `connect-src` leaves out, or no `'wasm-unsafe-eval'` | Nothing, until `initializeTimeoutMs` (30 s by default): then `WorkerInitError`, `WORKER_INIT_TIMEOUT`. DuckDB-WASM leaves the error unhandled, and the console has it. |
-| An extension that does not load                                                                                                                                  | Succeeds. The load or query that needs it fails: for `icu`, every load, with `LOAD_PARSE_FAILED`.                                                                      |
+| What is wrong                                                                                                                                                                                                   | What `initialize()` does                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A bundle URL that is not a URL, or does not resolve against the page                                                                                                                                            | Rejects at once, before any worker starts: `ConfigurationError`, `OPTIONS_INVALID`, `details.option` naming it.                                                        |
+| `mainWorker` does not load: a 404, or an origin `script-src` leaves out                                                                                                                                         | Rejects at once: `WorkerInitError`, `WORKER_CRASHED`, its message naming the URL.                                                                                      |
+| `worker-src` without `blob:`                                                                                                                                                                                    | Rejects at once: `WORKER_CRASHED`, "DuckDB's worker could not start from its blob: URL".                                                                               |
+| The page's policy blocks the library's worker script, or the library is served from another origin than the page, as from a CDN without a `workerFactory` ([CDN (no-build)](../integrations/cdn.md#the-worker)) | Rejects at once: `WORKER_CRASHED`, its message naming `bridgeOptions.workerFactory`.                                                                                   |
+| `mainModule`, the `.wasm`, does not load or compile: a 404, a type other than `application/wasm`, an origin `connect-src` leaves out, or no `'wasm-unsafe-eval'`                                                | Nothing, until `initializeTimeoutMs` (30 s by default): then `WorkerInitError`, `WORKER_INIT_TIMEOUT`. DuckDB-WASM leaves the error unhandled, and the console has it. |
+| An extension that does not load                                                                                                                                                                                 | Succeeds. The load or query that needs it fails: for `icu`, every load, with `LOAD_PARSE_FAILED`.                                                                      |
 
 After `WORKER_CRASHED` or `WORKER_INIT_TIMEOUT` the worker is gone, a
 request sent while it started rejects too, and calling `initialize()` again

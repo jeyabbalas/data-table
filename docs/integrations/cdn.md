@@ -3,11 +3,10 @@
 You can load `@jeyabbalas/data-table` straight from a CDN, with no npm
 install, bundler or build step. That suits demos, single-file pages,
 notebooks and CMS pages that cannot run a build. The page below is
-complete except for two values you fill in, listed after it. The sections
-after it explain the parts a bundler would
-otherwise handle: which CDN files to load, how the worker starts, and the
-import map for the SQL editors. Then comes the Content Security Policy the
-page needs.
+complete except for one value, your data's URL. The sections after it
+explain the parts a bundler would otherwise handle: which CDN files to
+load, how the worker starts, and the import map for the SQL editors. Then
+comes the Content Security Policy the page needs.
 
 ## The page
 
@@ -60,10 +59,10 @@ page needs.
     <script type="module">
       import { createDataTable } from '@jeyabbalas/data-table';
 
-      // The library's worker script, from the same version. <hash> is a
-      // placeholder: copy the file's name from the version's listing (see "The worker").
+      // The library's worker script, from the same version. Its name changes when its
+      // code does: for another version, copy it from that version's listing (see "The worker").
       const WORKER_URL =
-        'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-<hash>.js';
+        'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-BpxbYHX2.js';
 
       // A browser starts no worker from another origin's script. A blob: URL
       // belongs to this page, and a module worker started from one can import it.
@@ -83,12 +82,10 @@ page needs.
 </html>
 ```
 
-The two values to fill in:
-
-- **The worker's name.** Replace `worker-<hash>.js` with the file's real
-  name; [The worker](#the-worker) says where to find it.
-- **The data.** Point `source` at your CSV, JSON or Parquet file. A file on
-  another origin must send CORS headers (`Access-Control-Allow-Origin`).
+Before it runs, point `source` at your CSV, JSON or Parquet file. A file on
+another origin must send CORS headers (`Access-Control-Allow-Origin`). The
+rest is set for 0.9.0, the worker's file name included; for another version,
+see [The worker](#the-worker).
 
 The stylesheet goes in a `<link>`. A bundler applies
 `import '@jeyabbalas/data-table/styles'`, but a browser applies no CSS from an
@@ -122,8 +119,9 @@ unpkg serves the same files at
 `https://unpkg.com/@jeyabbalas/data-table@0.9.0/dist/…`. To use it, change
 the host in every library URL: the stylesheet, the import map and the
 worker. In the policy, put `https://unpkg.com` wherever the library comes
-from jsDelivr. DuckDB's own files still come from jsDelivr, so keep
-`https://cdn.jsdelivr.net` in `script-src` and `connect-src`.
+from jsDelivr, and swap in the edited import map's hash. DuckDB's own files
+still come from jsDelivr, so keep `https://cdn.jsdelivr.net` in `script-src`
+and `connect-src`.
 
 Use the raw files. Services that rebuild the package serve their own
 modules: jsDelivr's `/+esm` bundles each lazily loaded part separately and
@@ -140,13 +138,16 @@ and mix files from two versions in it.
 The library finds its worker script next to its own modules, at
 `dist/assets/worker-<hash>.js`, and starts it with
 `new Worker(url, { type: 'module' })`. A browser refuses that for a script on
-another origin. Without a `workerFactory`, `createDataTable()` rejects with
-this error, in Chrome's words:
+another origin. Without a `workerFactory`, `createDataTable()` rejects with a
+`WorkerInitError` whose code is `WORKER_CRASHED`, with Chrome's own error in
+its message:
 
 ```text
-SecurityError: Failed to construct 'Worker': Script at
-'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-<hash>.js'
-cannot be accessed from origin 'https://your-site.example'.
+Failed to construct the library's worker (Failed to construct 'Worker': Script at
+'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-BpxbYHX2.js'
+cannot be accessed from origin 'https://your-site.example'.). A Content Security Policy
+(worker-src) or another origin can block it: see bridgeOptions.workerFactory in
+docs/guides/csp-and-offline.md.
 ```
 
 The page's `startWorker` gets around this. A `blob:` URL belongs to the
@@ -158,21 +159,22 @@ pass the factory to `new WorkerBridge({ workerFactory: startWorker })`, and
 give each table that `bridge` and a `tableName` of its own. A table ignores
 `bridgeOptions` when it is given a bridge.
 
-The `<hash>` in the file's name is a hash of the file's content, set when
-the package is built, so the name changes when the worker's code changes.
-Copy it from the version's file listing:
+The part after `worker-` is a hash of the file's content, set when the
+package is built, so the name changes when the worker's code changes. For
+0.9.0 the file is `worker-BpxbYHX2.js`. For another version, copy the name
+from that version's file listing; for 0.9.0 these are:
 
 - jsDelivr:
   [cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/](https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/)
 - unpkg:
   [app.unpkg.com/@jeyabbalas/data-table@0.9.0/files/dist/assets](https://app.unpkg.com/@jeyabbalas/data-table@0.9.0/files/dist/assets)
 
-The folder holds two files, `worker-<hash>.js` and its source map,
-`worker-<hash>.js.map`. For a given version the name never changes. npm
-does not let a published version's files change, and both CDNs serve those
-files as they are, cached for a year. The URL you copy keeps working for as
-long as you stay on that version. Look the name up again whenever you change
-the version. A name that is not in this version's folder fails: the worker's
+The folder holds two files, the worker and its source map: for 0.9.0,
+`worker-BpxbYHX2.js` and `worker-BpxbYHX2.js.map`. For a given version the
+name never changes. npm does not let a published version's files change, and
+both CDNs serve those files as they are, cached for a year. The URL you copy
+keeps working for as long as you stay on that version. Look the name up
+again whenever you change the version. A name that is not in this version's folder fails: the worker's
 import gets a 404, and `createDataTable()` rejects with a `WorkerInitError`
 whose code is `WORKER_CRASHED`, "The worker script failed to load".
 
@@ -215,30 +217,33 @@ that extract a field of a nested or JSON column into a column of its own.
 ## DuckDB's files
 
 The library's worker has DuckDB-WASM's JavaScript built in (1.33.1-dev57.0
-in 0.9.0), so the page imports nothing from `@duckdb/duckdb-wasm`. When the
-worker starts, it fetches DuckDB's own worker script and the matching
-WebAssembly from jsDelivr. DuckDB then downloads extensions from
-`extensions.duckdb.org` as it needs them: `icu` on every load, `parquet` for
-a Parquet file, and `json` for JSON and nested values. To serve these from
-your own host, see [CSP and offline deployments](../guides/csp-and-offline.md).
+in 0.9.0), so the page imports nothing from `@duckdb/duckdb-wasm`. DuckDB
+runs in a worker of its own, which the library's worker starts from a
+`blob:` URL. That worker loads DuckDB's worker script with `importScripts`
+and fetches the matching `.wasm`, both from jsDelivr. DuckDB then downloads
+extensions from `extensions.duckdb.org` as it needs them: `icu` on every
+load, `parquet` for a Parquet file, and `json` for JSON and nested values.
+To serve these from your own host, see
+[CSP and offline deployments](../guides/csp-and-offline.md).
 
 ## Content Security Policy
 
 A page without a policy needs nothing more. If your site sends a
-`Content-Security-Policy` header, the page needs at least these sources. The
-header is shown here on several lines, but you send it as one. A host that
-cannot set headers can put the same policy in a
-`<meta http-equiv="Content-Security-Policy" content="…">` element at the top
-of `<head>`; it reaches the page's `blob:` workers too.
+`Content-Security-Policy` header, the page needs at least these sources: the
+policy from [CSP and offline deployments](../guides/csp-and-offline.md#the-content-security-policy),
+plus the CDNs and the editors' styles. The header is shown here on several
+lines, but you send it as one. A host that cannot set headers can put the
+same policy in a `<meta http-equiv="Content-Security-Policy" content="…">`
+element at the top of `<head>`; it reaches the page's `blob:` workers too.
 
 ```http
 Content-Security-Policy: default-src 'self';
-  script-src 'self' https://cdn.jsdelivr.net https://esm.sh 'wasm-unsafe-eval'
-    'sha256-<hash of the import map>' 'sha256-<hash of the module script>';
+  script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh
+    'sha256-ML6UIHXAYwqiuGgMethV9xznPRACNUDXwEmKzNaGR7w=' 'sha256-<hash of the module script>';
+  worker-src 'self' blob: https://cdn.jsdelivr.net;
+  connect-src 'self' https://cdn.jsdelivr.net https://extensions.duckdb.org;
   style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
-  style-src-attr 'none';
-  worker-src blob: https://cdn.jsdelivr.net;
-  connect-src 'self' https://cdn.jsdelivr.net https://extensions.duckdb.org
+  style-src-attr 'none'
 ```
 
 What each directive allows:
@@ -247,6 +252,15 @@ What each directive allows:
   from `https://cdn.jsdelivr.net`, and CodeMirror from `https://esm.sh`. The
   two hashes allow the page's inline scripts. `'wasm-unsafe-eval'` lets
   DuckDB compile its WebAssembly. Nothing on the page needs `'unsafe-eval'`.
+- **`worker-src`** allows `blob:`, for the page's worker and for DuckDB's
+  own worker, which the library also starts from a `blob:` URL. The worker's
+  import of the library's worker script counts as a worker load, not a script
+  load, so `https://cdn.jsdelivr.net` goes here as well. `'self'` covers
+  workers of your own.
+- **`connect-src`** allows your data, DuckDB's `.wasm` on
+  `https://cdn.jsdelivr.net`, and its extensions on
+  `https://extensions.duckdb.org`. `'self'` covers data on your own origin.
+  For data on another host, add that host.
 - **`style-src`** allows the library's stylesheet. Its `'unsafe-inline'`
   allows the page's `<style>` block, and the `<style>` element CodeMirror
   writes its styles into when an editor opens. Put no hash or nonce in this
@@ -256,43 +270,42 @@ What each directive allows:
   never writes them; it styles elements through `element.style`, which a
   policy does not restrict. So the container's height belongs in a
   stylesheet: a refused `style="height: …"` leaves the container unbounded.
-- **`worker-src`** allows `blob:`, for the page's worker and for DuckDB's
-  own worker, which the library also starts from a `blob:` URL. The worker's
-  import of the library's worker script counts as a worker load, not a script
-  load, so `https://cdn.jsdelivr.net` goes here as well.
-- **`connect-src`** allows your data, DuckDB's WebAssembly on
-  `https://cdn.jsdelivr.net`, and its extensions on
-  `https://extensions.duckdb.org`. `'self'` covers data on your own origin.
-  For data on another host, add that host.
+
+The page's policy reaches both workers. The page's worker starts from a
+`blob:` URL, so it inherits the page's policy, and DuckDB's `blob:` worker
+inherits it in turn.
 
 **The inline scripts.** The import map and the module script are inline, so
 the policy allows them by hash. A hash covers a script's exact text, every
-space and line break included, so any edit changes it. To get the hashes,
-open the page with the policy in place: the console names the hash each
-refused script needs ("Either the 'unsafe-inline' keyword, a hash
-('sha256-…'), or a nonce ('nonce-...') is required"). A page your server
-renders can use a nonce instead: a fresh random value for each response, sent
-as `'nonce-<value>'` in the policy and set as `nonce="<value>"` on both
-`<script>` elements. You can also move the module script into a file of its
-own, which `'self'` covers. The import map has to stay inline.
+space and line break included, so any edit changes it. The import map's hash
+is filled in, for the map exactly as printed above. The module script's
+depends on your `source`, so get it from the browser: open the page with the
+policy in place, and the console names the hash each refused script needs
+("Either the 'unsafe-inline' keyword, a hash ('sha256-…'), or a nonce
+('nonce-...') is required"). A page your server renders can use a nonce
+instead: a fresh random value for each response, sent as `'nonce-<value>'`
+in the policy and set as `nonce="<value>"` on both `<script>` elements. You
+can also move the module script into a file of its own, which `'self'`
+covers. The import map has to stay inline.
 
 **Without the editors.** On a page that turns the editors off
 ([The SQL editors](#the-sql-editors)), drop `https://esm.sh` from
-`script-src`. In `style-src`, replace `'unsafe-inline'` with the hash of the
-page's `<style>` block, which the console names the same way.
+`script-src`, and swap the import map's hash for the shorter map's. In
+`style-src`, replace `'unsafe-inline'` with the hash of the page's `<style>`
+block. The console names both hashes, the same way.
 
 When a source is missing, the page fails in one of these ways, quoted as
 Chrome reports them:
 
-| Missing from the policy                          | What happens                                                                                                                                                                                       |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `blob:` in `worker-src`                          | The console reports "Creating a worker from 'blob:…' violates the following Content Security Policy directive", and `createDataTable()` rejects: "The worker script failed to load".               |
-| `https://cdn.jsdelivr.net` in `worker-src`       | The worker's import is refused, and `createDataTable()` rejects: "The worker script failed to load".                                                                                               |
-| `'wasm-unsafe-eval'` in `script-src`             | "CompileError: WebAssembly.instantiateStreaming(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive"; 30 s later, `WORKER_INIT_TIMEOUT`.     |
-| `https://cdn.jsdelivr.net` in `connect-src`      | DuckDB's WebAssembly fails to download ("Failed to fetch"); 30 s later, `WORKER_INIT_TIMEOUT`.                                                                                                     |
-| `https://extensions.duckdb.org` in `connect-src` | The load fails: "Failed to load 'https://extensions.duckdb.org/…/icu.duckdb_extension.wasm'".                                                                                                      |
-| `https://esm.sh` in `script-src`                 | The editors' dialogs never open, and the console reports each refused CodeMirror module.                                                                                                           |
-| `'unsafe-inline'` in `style-src`                 | The page's `<style>` block is refused too, so the container has no bounded height and the table renders every row. The editors work but show unstyled, and the console reports each refused style. |
+| Missing from the policy                          | What happens                                                                                                                                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blob:` in `worker-src`                          | The console reports "Creating a worker from 'blob:…' violates the following Content Security Policy directive", and `createDataTable()` rejects at once, `WORKER_CRASHED`: "The worker script failed to load". |
+| `https://cdn.jsdelivr.net` in `worker-src`       | The worker's import is refused, and `createDataTable()` rejects at once, `WORKER_CRASHED`: "The worker script failed to load".                                                                                 |
+| `'wasm-unsafe-eval'` in `script-src`             | "CompileError: WebAssembly.instantiateStreaming(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive"; 30 s later, `WORKER_INIT_TIMEOUT`.                 |
+| `https://cdn.jsdelivr.net` in `connect-src`      | DuckDB's `.wasm` fails to download ("Failed to fetch"); 30 s later, `WORKER_INIT_TIMEOUT`.                                                                                                                     |
+| `https://extensions.duckdb.org` in `connect-src` | Every load fails, a CSV's too, with a `LoadError` whose code is `LOAD_PARSE_FAILED`: "Failed to load 'https://extensions.duckdb.org/…/icu.duckdb_extension.wasm'".                                             |
+| `https://esm.sh` in `script-src`                 | The editors' dialogs never open, and the console reports each refused CodeMirror module.                                                                                                                       |
+| `'unsafe-inline'` in `style-src`                 | The page's `<style>` block is refused too, so the container has no bounded height and the table renders every row. The editors work but show unstyled, and the console reports each refused style.             |
 
 ## Serving the files yourself
 
@@ -304,14 +317,14 @@ from the package's tarball,
 `node_modules/@jeyabbalas/data-table/dist/` from any project that installs
 the package. Point the stylesheet and the import map at those files. The
 worker is then on the page's own origin, and `createDataTable()` starts it
-itself, so leave out `bridgeOptions`. In the policy, the library's sources
-become `'self'`, with `worker-src 'self' blob:`. Send that policy on every
-response, the worker script's included. A worker started from a URL takes
-its policy from that file's response, not from the page, unlike the CDN
-page's `blob:` worker, which inherits the page's. DuckDB's files, its
-extensions and CodeMirror still come from their CDNs unless you host those
-too; [CSP and offline deployments](../guides/csp-and-offline.md) covers
-DuckDB's.
+itself, so leave out `bridgeOptions`. In the policy, drop
+`https://cdn.jsdelivr.net` from `worker-src` and `style-src`, and swap in the
+edited import map's hash. Send that policy on every response, the worker
+script's included. A worker started from a URL takes its policy from that
+file's response, not from the page, unlike the CDN page's `blob:` worker,
+which inherits the page's. DuckDB's files, its extensions and CodeMirror
+still come from their CDNs unless you host those too;
+[CSP and offline deployments](../guides/csp-and-offline.md) covers DuckDB's.
 
 ## When to choose a CDN over a bundler
 

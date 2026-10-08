@@ -47,9 +47,10 @@ updates:
           - playwright
           - '@playwright/test'
     ignore:
-      # `@duckdb/duckdb-wasm` is a pre-release peer (`^1.33.1-dev42.0`).
-      # Major bumps need to be reviewed manually against the worker bridge
-      # (see review-plan.md §7 risk register).
+      # `@duckdb/duckdb-wasm` is a pre-release peer (`^1.33.1-dev57.0`), whose
+      # floor is the version the library's worker is built with. Major bumps
+      # need to be reviewed manually against the worker bridge (`src/worker/`,
+      # where `openFileFix.ts` patches duckdb-wasm's worker).
       - dependency-name: '@duckdb/duckdb-wasm'
         update-types:
           - version-update:semver-major

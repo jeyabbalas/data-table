@@ -2,8 +2,9 @@
 
 You can load `@jeyabbalas/data-table` straight from a CDN, with no npm
 install, bundler or build step. That suits demos, single-file pages,
-notebooks and CMS pages that cannot run a build. The page below works as
-it stands. The sections after it explain the parts a bundler would
+notebooks and CMS pages that cannot run a build. The page below is
+complete except for two values you fill in, listed after it. The sections
+after it explain the parts a bundler would
 otherwise handle: which CDN files to load, how the worker starts, and the
 import map for the SQL editors. Then comes the Content Security Policy the
 page needs.
@@ -82,7 +83,7 @@ page needs.
 </html>
 ```
 
-Two things to change before it runs:
+The two values to fill in:
 
 - **The worker's name.** Replace `worker-<hash>.js` with the file's real
   name; [The worker](#the-worker) says where to find it.
@@ -124,22 +125,23 @@ worker. In the policy, put `https://unpkg.com` wherever the library comes
 from jsDelivr. DuckDB's own files still come from jsDelivr, so keep
 `https://cdn.jsdelivr.net` in `script-src` and `connect-src`.
 
-Services that rebuild a package into modules of their own do not work, such
-as esm.sh and jsDelivr's `/+esm`. The worker file is not among the modules
-they build, so the URL the library works out for it returns a 404. Skypack
-no longer builds new packages and returns a 404 for this one, and unpkg now
-ignores `?module` and serves the raw file.
+Use the raw files. Services that rebuild the package serve their own
+modules: jsDelivr's `/+esm` bundles each lazily loaded part separately and
+the SQL editors fail; unpkg's `?module` points every import at a version
+range and loads a second `@codemirror/state`; esm.sh picks CodeMirror
+itself, at the newest versions, so nothing stays pinned. Skypack returns a 404.
 
 Pin an exact version in every URL. An unversioned URL follows the latest
-release, so the next release changes the worker's name under the page, and
-can mix files from two versions in it.
+release, so a later release can change the worker's name under the page,
+and mix files from two versions in it.
 
 ## The worker
 
 The library finds its worker script next to its own modules, at
 `dist/assets/worker-<hash>.js`, and starts it with
 `new Worker(url, { type: 'module' })`. A browser refuses that for a script on
-another origin. Without a `workerFactory`, `createDataTable()` rejects with:
+another origin. Without a `workerFactory`, `createDataTable()` rejects with
+this error, in Chrome's words:
 
 ```text
 SecurityError: Failed to construct 'Worker': Script at
@@ -157,8 +159,8 @@ give each table that `bridge` and a `tableName` of its own. A table ignores
 `bridgeOptions` when it is given a bridge.
 
 The `<hash>` in the file's name is a hash of the file's content, set when
-the package is built, so it changes from one release to the next. Copy it
-from the version's file listing:
+the package is built, so the name changes when the worker's code changes.
+Copy it from the version's file listing:
 
 - jsDelivr:
   [cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/](https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/)
@@ -170,9 +172,9 @@ The folder holds two files, `worker-<hash>.js` and its source map,
 does not let a published version's files change, and both CDNs serve those
 files as they are, cached for a year. The URL you copy keeps working for as
 long as you stay on that version. Look the name up again whenever you change
-the version. A name from another version fails: the worker's import gets a
-404, and `createDataTable()` rejects with a `WorkerInitError` whose code is
-`WORKER_CRASHED`, "The worker script failed to load".
+the version. A name that is not in this version's folder fails: the worker's
+import gets a 404, and `createDataTable()` rejects with a `WorkerInitError`
+whose code is `WORKER_CRASHED`, "The worker script failed to load".
 
 ## The SQL editors
 
@@ -200,8 +202,9 @@ extension set … multiple instances of @codemirror/state are loaded". That is
 why the map lists thirteen packages rather than the seven the editor
 imports. The `*` builds import six more: `@lezer/common`, `@lezer/lr`,
 `@marijn/find-cluster-break`, `crelt`, `style-mod` and `w3c-keyname`. When
-you upgrade CodeMirror, upgrade all of them together, within the ranges in
-the library's `peerDependencies`.
+you upgrade CodeMirror, upgrade all thirteen together: the seven within the
+ranges in the library's `peerDependencies`, and the other six within the
+ranges those seven declare.
 
 A page that needs no editors can leave CodeMirror out. Pass
 `expressionFilter: false` and `derivedColumns: false` to `createDataTable()`
@@ -223,7 +226,10 @@ your own host, see [CSP and offline deployments](../guides/csp-and-offline.md).
 
 A page without a policy needs nothing more. If your site sends a
 `Content-Security-Policy` header, the page needs at least these sources. The
-header is shown here on several lines, but you send it as one:
+header is shown here on several lines, but you send it as one. A host that
+cannot set headers can put the same policy in a
+`<meta http-equiv="Content-Security-Policy" content="…">` element at the top
+of `<head>`; it reaches the page's `blob:` workers too.
 
 ```http
 Content-Security-Policy: default-src 'self';
@@ -246,9 +252,10 @@ What each directive allows:
   writes its styles into when an editor opens. Put no hash or nonce in this
   directive: a browser that finds one ignores `'unsafe-inline'`, and the
   editors then show unstyled.
-- **`style-src-attr 'none'`** refuses inline `style` attributes, which the
-  table never sets. So the container's height belongs in a stylesheet: a
-  refused `style="height: …"` leaves the container unbounded.
+- **`style-src-attr 'none'`** refuses inline `style` attributes. The table
+  never writes them; it styles elements through `element.style`, which a
+  policy does not restrict. So the container's height belongs in a
+  stylesheet: a refused `style="height: …"` leaves the container unbounded.
 - **`worker-src`** allows `blob:`, for the page's worker and for DuckDB's
   own worker, which the library also starts from a `blob:` URL. The worker's
   import of the library's worker script counts as a worker load, not a script
@@ -274,7 +281,8 @@ own, which `'self'` covers. The import map has to stay inline.
 `script-src`. In `style-src`, replace `'unsafe-inline'` with the hash of the
 page's `<style>` block, which the console names the same way.
 
-When a source is missing, the page fails in one of these ways:
+When a source is missing, the page fails in one of these ways, quoted as
+Chrome reports them:
 
 | Missing from the policy                          | What happens                                                                                                                                                                                       |
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -297,7 +305,10 @@ from the package's tarball,
 the package. Point the stylesheet and the import map at those files. The
 worker is then on the page's own origin, and `createDataTable()` starts it
 itself, so leave out `bridgeOptions`. In the policy, the library's sources
-become `'self'`, with `worker-src 'self' blob:`. DuckDB's files, its
+become `'self'`, with `worker-src 'self' blob:`. Send that policy on every
+response, the worker script's included. A worker started from a URL takes
+its policy from that file's response, not from the page, unlike the CDN
+page's `blob:` worker, which inherits the page's. DuckDB's files, its
 extensions and CodeMirror still come from their CDNs unless you host those
 too; [CSP and offline deployments](../guides/csp-and-offline.md) covers
 DuckDB's.
@@ -329,9 +340,10 @@ DuckDB's.
   the page and the worker, for one, are internal and change between
   releases.
 - **esm.sh's first build.** esm.sh builds a package version the first time
-  anyone asks for it, which can take several seconds; later requests come
-  from its cache. Only the editors wait on it, since CodeMirror loads when
-  an editor first opens.
+  anyone asks for it. That can take several seconds, and the first request
+  can fail outright, with a CORS error; later requests come from its cache.
+  Only the editors depend on it, since CodeMirror loads when an editor first
+  opens.
 
 ## Related
 

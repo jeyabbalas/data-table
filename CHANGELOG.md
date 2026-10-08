@@ -1,5 +1,15 @@
 # Changelog
 
+All notable changes to `@jeyabbalas/data-table`, newest release first.
+
+From 0.3.0 on, each release's entries are generated from its
+[changesets](https://github.com/changesets/changesets), so they do not follow
+the Keep a Changelog format; the changes before 0.3.0, at the end of this
+file, were written by hand. Versions follow
+[Semantic Versioning](https://semver.org/). While the version is 0.x, a minor
+release can carry breaking changes. Releases with breaking changes also get a
+walkthrough in [`docs/migration-guides/`](./docs/migration-guides/).
+
 ## 0.8.0
 
 ### Minor Changes
@@ -691,16 +701,14 @@ import.meta.url), { type: 'module' })`) was rewritten by Vite's library
 - 1a228a8: Surface `AnnotationError` in the `MUST_EXIST_AT_ROOT` API gate (`tests/api-surface.exports.test.ts`). The class was already exported from `src/index.ts` and tracked by `tests/api-surface.snapshot.test.ts`; this aligns the explicit gate manifest with the runtime exports so future drift surfaces immediately.
 - 1a228a8: Phase 9 — performance, memory, release readiness. Tightened coverage thresholds (76 / 63 / 81 / 77 — actuals minus 1 pp) and bundle-size budgets (root ESM 7.7 kB, lazy ExportDialog 81 kB ESM, etc. — actuals + ~5 % headroom). Added an opt-in perf suite (`npm run test:perf`, `RUN_DUCKDB_PERF=1` / `RUN_LIFECYCLE_STRESS=1`) covering 1 M-row filter latency, 10 k annotation insert / lookup, scroll-handler frame budget, 1000-cycle create / destroy stress, and shared-bridge / 1k-mutation autosave memory leak gates. Wired `npm run size` into the CI matrix as a third job. Added high-contrast + forced-colors CSS for `prefers-contrast: more` and `forced-colors: active`. Removed the dead-code `splitCrossfilterFilters` (was never exported). Coalesced duplicate `columnChange` emit on column re-pinning via `queueMicrotask`. Defensive shallow-clone of `loadComplete.schema`. New `warning` event with `code: 'PERSISTENCE_VERSION_REJECTED'` when `SessionStore.load()` rejects a stored snapshot whose version is outside `[1, SNAPSHOT_VERSION]`. Documented OIDC trusted publishing in `DEVELOPMENT.md`. Refreshed `docs/performance.md` with a 0.2.0 benchmark snapshot.
 
-All notable changes to `@jeyabbalas/data-table` are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
-the project adheres to [Semantic Versioning](https://semver.org/).
+## Before 0.3.0
 
-Planned work and discussion lives in GitHub Issues under the
-[`roadmap`](https://github.com/jeyabbalas/data-table/issues?q=is%3Aissue+label%3Aroadmap)
-label. Releases with breaking changes also get a dedicated walkthrough under
-[`docs/migration-guides/`](./docs/migration-guides/) alongside the entry below.
-
-## [Unreleased]
+Changes made after 0.1.0 and before the project moved to changesets in April
+2026, written by hand. No version was released for them alone: they are part
+of 0.3.0, the first version cut with changesets, whose entry above lists only
+its changesets. 0.3.0 was never published; 0.3.1 is the first version on npm.
+There was no 0.2.0 release: `package.json` was bumped to 0.2.0 by hand just
+before that first changesets release, whose minor bump then made it 0.3.0.
 
 ### Added
 
@@ -1042,6 +1050,7 @@ new WorkerBridge(); await bridge.initialize();`. Pass the bridge into
   `if (!table.isDestroyed()) await table.destroy()` in the unmount handler
   (React `useEffect` return, Vue `onBeforeUnmount`).
 
-## [0.1.0]
+## 0.1.0
 
-Initial prerelease.
+The initial version, set at the first commit in December 2025. Never tagged
+or published.

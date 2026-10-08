@@ -75,7 +75,7 @@ entry. Each threshold sits about one point below the measured figure: on
 2026-10-07, statements 91.26, branches 84.17, functions 94.33 and lines 93.01,
 against thresholds of 90, 83, 93 and 92. Raise them as coverage grows.
 
-Two api-surface tests read `dist/`. Locally they skip until `npm run build`
+Three api-surface tests read `dist/`. Locally they skip until `npm run build`
 has run; in CI, which builds first, a missing `dist/` fails them.
 
 Run a single test file:

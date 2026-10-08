@@ -281,6 +281,29 @@ export class DestroyedError extends DataTableError {
   }
 }
 
+// Name each class in a string literal, which no minifier renames. The build
+// emits `var a = class extends e {…}`, and an app's bundler can rename the
+// classes again, so a class would take its name from its binding (`a`), and
+// `DataTableError` gives each error `new.target.name` as its `name`: what
+// `String(error)`, `toJSON()` and the stack header show. A subclass the
+// library does not define keeps its own name.
+for (const [errorClass, name] of [
+  [DataTableError, 'DataTableError'],
+  [WorkerInitError, 'WorkerInitError'],
+  [WorkerTerminatedError, 'WorkerTerminatedError'],
+  [QueryError, 'QueryError'],
+  [LoadError, 'LoadError'],
+  [SQLValidationError, 'SQLValidationError'],
+  [DerivedColumnError, 'DerivedColumnError'],
+  [PersistenceError, 'PersistenceError'],
+  [AnnotationError, 'AnnotationError'],
+  [ExportError, 'ExportError'],
+  [ConfigurationError, 'ConfigurationError'],
+  [DestroyedError, 'DestroyedError'],
+] as const) {
+  Object.defineProperty(errorClass, 'name', { value: name });
+}
+
 /** `value` as an error message: a string as is, nothing as `''`. */
 function errorText(value: unknown): string {
   if (typeof value === 'string') return value;

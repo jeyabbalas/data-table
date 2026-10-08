@@ -191,9 +191,75 @@ describe('WorkerBridge — the default worker', () => {
       );
       expect(error).toBeInstanceOf(WorkerInitError);
       expect(error).toMatchObject({ code: 'WORKER_CRASHED' });
-      expect((error as Error).message).toMatch(/^The worker script failed to load\. /);
+      expect((error as Error).message).toMatch(
+        /^The worker script failed to load: assets\/worker-\*\.js is missing \(a 404/,
+      );
       expect((error as Error).message).toContain('Content Security Policy');
       expect((error as Error).message).toContain('workerFactory');
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
+  });
+});
+
+/**
+ * A worker that cannot be constructed leaves nothing behind: the next
+ * `initialize()` constructs it again, rather than return the rejection.
+ */
+describe('WorkerBridge — retrying a worker that failed to construct', () => {
+  it('runs a throwing workerFactory again', async () => {
+    const mock = createMockWorker();
+    const factory = vi
+      .fn<() => Worker>()
+      .mockImplementationOnce(() => {
+        throw new Error('not yet');
+      })
+      .mockImplementation(() => mock.worker);
+    const bridge = new WorkerBridge({ workerFactory: factory });
+
+    await expect(bridge.initialize()).rejects.toMatchObject({
+      code: 'WORKER_CRASHED',
+      details: { source: 'workerFactory' },
+    });
+    expect(bridge.isInitialized()).toBe(false);
+    await expect(bridge.initialize()).resolves.toBeUndefined();
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(bridge.isInitialized()).toBe(true);
+  });
+
+  it('constructs the default worker again after it threw', async () => {
+    const originalWorker = globalThis.Worker;
+    const mock = createMockWorker();
+    let calls = 0;
+    (globalThis as any).Worker = function () {
+      calls += 1;
+      if (calls === 1) throw new DOMException('Script cannot be accessed', 'SecurityError');
+      return mock.worker;
+    };
+    try {
+      const bridge = new WorkerBridge();
+      await expect(bridge.initialize()).rejects.toMatchObject({
+        code: 'WORKER_CRASHED',
+        details: { source: 'default' },
+      });
+      await expect(bridge.initialize()).resolves.toBeUndefined();
+      expect(calls).toBe(2);
+    } finally {
+      (globalThis as any).Worker = originalWorker;
+    }
+  });
+
+  it('names no CSP or origin when there is no Worker to construct', async () => {
+    const originalWorker = globalThis.Worker;
+    delete (globalThis as any).Worker;
+    try {
+      const error = await new WorkerBridge().initialize().then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(error).toBeInstanceOf(WorkerInitError);
+      expect((error as Error).message).toMatch(/^Failed to construct the library's worker \(/);
+      expect((error as Error).message).not.toMatch(/Content Security Policy|workerFactory/);
     } finally {
       (globalThis as any).Worker = originalWorker;
     }

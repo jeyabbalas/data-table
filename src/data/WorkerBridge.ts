@@ -132,9 +132,9 @@ export interface WorkerBridgeOptions {
    * `'duckdbBundles.eh.mainWorker'`. Your object is not changed.
    *
    * Copy every file from one `@duckdb/duckdb-wasm` version, pinned exactly
-   * to `1.33.1-dev57.0`: the version whose runtime the library's worker
-   * bundles, and the one the library is tested with. A worker script only
-   * runs with the `.wasm` files of its own version. See
+   * to `1.33.1-dev57.0`: the library's worker has DuckDB-WASM's JavaScript
+   * built in (`1.33.1-dev57.0`), and the library is tested with it. A worker
+   * script only runs with the `.wasm` files of its own version. See
    * `docs/guides/csp-and-offline.md` for the files, the Content Security
    * Policy and DuckDB's extensions.
    *
@@ -161,10 +161,8 @@ interface PendingRequest {
 
 const DEFAULT_INIT_TIMEOUT_MS = 30_000;
 
-/** What a default worker that cannot start is told with: see `createWorker` and `initialize`. */
-const DEFAULT_WORKER_HINT =
-  'A Content Security Policy (worker-src) or another origin can block it: see ' +
-  'bridgeOptions.workerFactory in docs/guides/csp-and-offline.md.';
+/** Where to go when the default worker cannot start: see `createWorker` and `initialize`. */
+const WORKER_FACTORY_HINT = 'see bridgeOptions.workerFactory in docs/guides/csp-and-offline.md.';
 
 /**
  * A copy of `bundles` whose URLs are absolute strings: each `mainModule`,
@@ -204,7 +202,7 @@ function resolveBundleUrls(
         const option = `duckdbBundles.${name}.${field}`;
         const shown = typeof value === 'string' ? JSON.stringify(value) : typeof value;
         throw new ConfigurationError(
-          `${option} (${shown}) is not a URL that resolves against the page (${base}).`,
+          `${option} (${shown}) is not a URL that resolves against the page${base ? ` (${base})` : ', which has no URL'}.`,
           { code: 'OPTIONS_INVALID', details: { option } },
         );
       }
@@ -313,9 +311,13 @@ export class WorkerBridge {
       });
     } catch (err) {
       // A worker script on another origin than the page, as when the library
-      // is imported from a CDN, or one the page's CSP blocks.
+      // is imported from a CDN, or one the page's CSP blocks. Without a
+      // Worker at all (SSR, jsdom) neither applies.
       throw new WorkerInitError(
-        `Failed to construct the library's worker (${err instanceof Error ? err.message : String(err)}). ${DEFAULT_WORKER_HINT}`,
+        `Failed to construct the library's worker (${err instanceof Error ? err.message : String(err)})` +
+          (typeof Worker === 'function'
+            ? `. A Content Security Policy (worker-src) or another origin can block it: ${WORKER_FACTORY_HINT}`
+            : ''),
         {
           code: 'WORKER_CRASHED',
           cause: err,
@@ -333,15 +335,15 @@ export class WorkerBridge {
    * cannot be resolved rejects with a `ConfigurationError`
    * (`OPTIONS_INVALID`).
    *
-   * Rejects with a `WorkerInitError` whose code is `WORKER_CRASHED` when the
-   * worker or DuckDB fails to start in a way the browser reports: a worker
-   * script that does not load (a missing file, or one the page's Content
-   * Security Policy blocks), or DuckDB's own worker failing to start. Such
-   * a failure rejects at once. One the browser does not report, such as a
-   * `.wasm` file that fails to download or compile, rejects with
-   * `WORKER_INIT_TIMEOUT` after `initializeTimeoutMs` (default 30 s). After
-   * either, the worker is gone, and calling `initialize()` again starts a
-   * new one.
+   * Rejects at once with a `WorkerInitError` whose code is `WORKER_CRASHED`
+   * when the worker cannot be constructed, or the worker or DuckDB fails to
+   * start: a worker script that does not load (a missing file, or one the
+   * page's Content Security Policy blocks), or DuckDB's own worker failing
+   * to start. A `.wasm` file that fails to download or compile is left
+   * unhandled by duckdb-wasm, which only the console shows: that rejects
+   * with `WORKER_INIT_TIMEOUT` after `initializeTimeoutMs` (default 30 s).
+   * After either, the worker is gone, a request sent meanwhile rejects too,
+   * and calling `initialize()` again starts a new one.
    *
    * If the worker fails later, with an error it does not catch, every
    * pending request rejects with a `WorkerInitError` whose code is
@@ -357,7 +359,8 @@ export class WorkerBridge {
     // base for a relative one. A bad URL throws here, before any worker.
     const bundles = this.duckdbBundles && resolveBundleUrls(this.duckdbBundles);
 
-    this.initPromise = new Promise((resolve, reject) => {
+    let constructed = true;
+    const started = new Promise<void>((resolve, reject) => {
       let settled = false;
       const settle = (fn: () => void) => {
         if (settled) return;
@@ -377,12 +380,18 @@ export class WorkerBridge {
       const isCurrent = (): boolean => worker !== null && this.worker === worker;
       // DuckDB did not start: tear down the half-initialized worker, so a
       // later initialize() starts a new one.
+      // A request sent meanwhile would wait for good: its reply dies with it.
       const giveUp = (error: unknown) =>
         settle(() => {
           if (isCurrent()) {
             worker!.terminate();
             this.worker = null;
             this.initPromise = null;
+            const failure =
+              error instanceof Error
+                ? error
+                : new WorkerInitError(String(error), { code: 'WORKER_CRASHED', cause: error });
+            this.rejectPending(() => failure);
           }
           reject(error);
         });
@@ -390,9 +399,9 @@ export class WorkerBridge {
       const timeoutHandle = setTimeout(() => {
         giveUp(
           new WorkerInitError(
-            `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms ` +
-              `(worker did not reach ready state or DuckDB failed to init). ` +
-              `If your app bundles the worker separately, verify it can import @duckdb/duckdb-wasm.`,
+            `WorkerBridge.initialize() timed out after ${this.initializeTimeoutMs}ms. A mainModule ` +
+              '.wasm that fails to load or compile ends here: serve it as application/wasm, and ' +
+              "allow it in connect-src, with 'wasm-unsafe-eval' in script-src.",
             {
               code: 'WORKER_INIT_TIMEOUT',
               details: { timeoutMs: this.initializeTimeoutMs },
@@ -418,7 +427,9 @@ export class WorkerBridge {
                   ? ''
                   : this.workerUrl !== undefined
                     ? ` (${String(this.workerUrl)})`
-                    : `. ${DEFAULT_WORKER_HINT}`
+                    : ': assets/worker-*.js is missing (a 404, or HTML served in its place), or a ' +
+                      'Content Security Policy (worker-src) or another origin blocks it; ' +
+                      WORKER_FACTORY_HINT
               }`;
           const error = new WorkerInitError(message, {
             code: 'WORKER_CRASHED',
@@ -447,11 +458,15 @@ export class WorkerBridge {
         };
         worker.addEventListener('message', readyHandler);
       } catch (error) {
+        constructed = false;
         settle(() => reject(error));
       }
     });
 
-    return this.initPromise;
+    // A worker that could not be constructed leaves nothing to wait for: a
+    // later initialize() tries again, as after any other failed start.
+    this.initPromise = constructed ? started : null;
+    return started;
   }
 
   /**

@@ -119,4 +119,48 @@ describe('worker dispatcher — init', () => {
     });
     expect(bridge.isInitialized()).toBe(false);
   });
+
+  it('rejects a request sent while init runs, rather than leave it waiting', async () => {
+    let failInit: (error: Error) => void = () => undefined;
+    vi.mocked(initializeDuckDB).mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        failInit = reject;
+      }),
+    );
+    let mock: MockWorkerHandle | null = null;
+    mock = createMockWorker({
+      autoInit: false,
+      onMessage: (msg) => {
+        // Each reply a task later, as a worker's postMessage arrives.
+        void handleMessage(msg, (id, type, payload) => {
+          const reply = { id, type, payload: structuredClone(payload) };
+          setTimeout(() => mock!.sendFromWorker(reply), 0);
+        });
+        return null;
+      },
+    });
+    const bridge = new WorkerBridge({ workerFactory: () => mock!.worker });
+    const init = bridge.initialize();
+    await mock.waitForPosts(1);
+    // Queued in the worker behind the init, whose failure ends the worker,
+    // and with it this request's reply.
+    const query = bridge.query('SELECT 1', undefined, { cache: false });
+    await mock.waitForPosts(2);
+
+    failInit(new Error("DuckDB's worker failed to start"));
+
+    await expect(init).rejects.toMatchObject({ code: 'WORKER_CRASHED' });
+    const settled = await Promise.race([
+      query.then(
+        () => 'resolved',
+        (error: unknown) => error,
+      ),
+      new Promise((resolve) => setTimeout(() => resolve('pending'), 50)),
+    ]);
+    expect(settled).toBeInstanceOf(WorkerInitError);
+    expect(settled).toMatchObject({
+      code: 'WORKER_CRASHED',
+      message: "DuckDB's worker failed to start",
+    });
+  });
 });

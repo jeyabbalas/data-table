@@ -1,180 +1,367 @@
 # CDN (no-build)
 
-You can use `@jeyabbalas/data-table` from a CDN without a bundler — no
-npm, no webpack, no Vite. Useful for quick demos, Observable notebooks,
-blog post embeds, or pages where adding a build step isn't worth it.
+You can load `@jeyabbalas/data-table` straight from a CDN, with no npm
+install, bundler or build step. That suits demos, single-file pages,
+notebooks and CMS pages that cannot run a build. The page below is
+complete except for one value, your data's URL. The sections after it
+explain the parts a bundler would otherwise handle: which CDN files to
+load, how the worker starts, and the import map for the SQL editors. Then
+comes the Content Security Policy the page needs.
 
-## Minimal example
+## The page
 
 ```html
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <title>Data table — no-build</title>
-    <link rel="stylesheet" href="https://esm.sh/@jeyabbalas/data-table/styles" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Data table from a CDN</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.css"
+    />
     <style>
       html,
       body {
+        height: 100%;
         margin: 0;
-        padding: 0;
+      }
+      /* The table needs a bounded height: it renders only the rows that fit. */
+      #table {
         height: 100%;
       }
-      #my-table {
-        height: 100vh;
-      }
     </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "@jeyabbalas/data-table": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.js",
+          "@jeyabbalas/data-table/advanced": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/advanced.js",
+          "@codemirror/autocomplete": "https://esm.sh/*@codemirror/autocomplete@6.20.3",
+          "@codemirror/commands": "https://esm.sh/*@codemirror/commands@6.11.1",
+          "@codemirror/lang-sql": "https://esm.sh/*@codemirror/lang-sql@6.10.0",
+          "@codemirror/language": "https://esm.sh/*@codemirror/language@6.12.4",
+          "@codemirror/state": "https://esm.sh/*@codemirror/state@6.7.6",
+          "@codemirror/view": "https://esm.sh/*@codemirror/view@6.43.13",
+          "@lezer/common": "https://esm.sh/*@lezer/common@1.5.2",
+          "@lezer/highlight": "https://esm.sh/*@lezer/highlight@1.2.5",
+          "@lezer/lr": "https://esm.sh/*@lezer/lr@1.4.10",
+          "@marijn/find-cluster-break": "https://esm.sh/*@marijn/find-cluster-break@1.0.2",
+          "crelt": "https://esm.sh/*crelt@1.0.6",
+          "style-mod": "https://esm.sh/*style-mod@4.1.3",
+          "w3c-keyname": "https://esm.sh/*w3c-keyname@2.2.8"
+        }
+      }
+    </script>
   </head>
   <body>
-    <div id="my-table"></div>
+    <div id="table"></div>
     <script type="module">
-      import { createDataTable } from 'https://esm.sh/@jeyabbalas/data-table';
+      import { createDataTable } from '@jeyabbalas/data-table';
+
+      // The library's worker script, from the same version. Its name changes when its
+      // code does: for another version, copy it from that version's listing (see "The worker").
+      const WORKER_URL =
+        'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-BpxbYHX2.js';
+
+      // A browser starts no worker from another origin's script. A blob: URL
+      // belongs to this page, and a module worker started from one can import it.
+      function startWorker() {
+        const code = `import ${JSON.stringify(WORKER_URL)};`;
+        const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+        return new Worker(url, { type: 'module' });
+      }
 
       const table = await createDataTable({
-        container: document.getElementById('my-table'),
-        source: 'https://example.com/data.csv',
+        container: document.getElementById('table'),
+        source: '/data/sales.csv',
+        bridgeOptions: { workerFactory: startWorker },
       });
     </script>
   </body>
 </html>
 ```
 
-That's it. esm.sh bundles the library plus its peer deps (DuckDB-WASM,
-CodeMirror) and serves them as ESM.
+Before it runs, point `source` at your CSV, JSON or Parquet file. A file on
+another origin must send CORS headers (`Access-Control-Allow-Origin`). The
+rest is set for 0.9.0, the worker's file name included; for another version,
+see [The worker](#the-worker).
 
-The `height: 100vh` on `#my-table` is load-bearing, not cosmetic. The table
-virtualizes against the container's measured height and renders only the
-rows that fit; with an unbounded container virtualization is silently
-defeated — the render window saturates at the scroller's 15,000,000 px
-height cap, hundreds of thousands of rows — and it neither errors nor
-warns. Any bounded height works
-(`600px`, `100vh`, a flex child with `min-height: 0`); none at all does
-not. See
+The stylesheet goes in a `<link>`. A bundler applies
+`import '@jeyabbalas/data-table/styles'`, but a browser applies no CSS from an
+`import`.
+
+The container's height is load-bearing, not cosmetic. The table virtualizes
+against the container's measured height and renders only the rows that fit.
+In an unbounded container it renders every row, up to hundreds of thousands,
+and nothing errors or warns. Any bounded height works: `600px`, `100vh`, or
+a flex child with `min-height: 0`. The page sets it in the `<style>` block
+rather than a `style` attribute, which a strict policy refuses
+([Content Security Policy](#content-security-policy)). See
 [Sizing the container](../../README.md#sizing-the-container).
 
-## CDN options
+## Which CDNs work
 
-Any CDN that serves npm packages as ES modules works:
+Use a CDN that serves the package's files exactly as they were published,
+such as jsDelivr's `/npm/` paths or unpkg. The library's modules load each
+other by relative URL. They find the worker by a URL relative to their own,
+`new URL('assets/worker-<hash>.js', import.meta.url)`. They also load the
+dialogs, the value inspector and other parts from sibling files when first
+used. On a raw-file CDN, all of those URLs resolve.
 
-- **esm.sh** — `https://esm.sh/@jeyabbalas/data-table` — most permissive; bundles deps
-- **jsDelivr** — `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table/+esm` — reliable, but you may need to resolve peer deps manually
-- **unpkg** — `https://unpkg.com/@jeyabbalas/data-table?module` — works but slower
-- **Skypack** (deprecated but functional) — `https://cdn.skypack.dev/@jeyabbalas/data-table`
+| Entry point                       | File                  | jsDelivr URL                                                                    |
+| --------------------------------- | --------------------- | ------------------------------------------------------------------------------- |
+| `@jeyabbalas/data-table`          | `dist/data-table.js`  | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.js`  |
+| `@jeyabbalas/data-table/advanced` | `dist/advanced.js`    | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/advanced.js`    |
+| `@jeyabbalas/data-table/styles`   | `dist/data-table.css` | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.css` |
 
-For production, pin to a specific version:
+unpkg serves the same files at
+`https://unpkg.com/@jeyabbalas/data-table@0.9.0/dist/…`. To use it, change
+the host in every library URL: the stylesheet, the import map and the
+worker. In the policy, put `https://unpkg.com` wherever the library comes
+from jsDelivr, and swap in the edited import map's hash. DuckDB's own files
+still come from jsDelivr, so keep `https://cdn.jsdelivr.net` in `script-src`
+and `connect-src`.
 
-```html
-<script type="module">
-  import { createDataTable } from 'https://esm.sh/@jeyabbalas/data-table@0.1.0';
-</script>
+Use the raw files. Services that rebuild the package serve their own
+modules: jsDelivr's `/+esm` bundles each lazily loaded part separately and
+the SQL editors fail; unpkg's `?module` points every import at a version
+range and loads a second `@codemirror/state`; esm.sh picks CodeMirror
+itself, at the newest versions, so nothing stays pinned. Skypack returns a 404.
+
+Pin an exact version in every URL. An unversioned URL follows the latest
+release, so a later release can change the worker's name under the page,
+and mix files from two versions in it.
+
+## The worker
+
+The library finds its worker script next to its own modules, at
+`dist/assets/worker-<hash>.js`, and starts it with
+`new Worker(url, { type: 'module' })`. A browser refuses that for a script on
+another origin. Without a `workerFactory`, `createDataTable()` rejects with a
+`WorkerInitError` whose code is `WORKER_CRASHED`, with Chrome's own error in
+its message:
+
+```text
+Failed to construct the library's worker (Failed to construct 'Worker': Script at
+'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-BpxbYHX2.js'
+cannot be accessed from origin 'https://your-site.example'.). A Content Security Policy
+(worker-src) or another origin can block it: see bridgeOptions.workerFactory in
+docs/guides/csp-and-offline.md.
 ```
 
-Unpinned URLs resolve to "latest" — fine for demos, risky for anything
-durable.
+The page's `startWorker` gets around this. A `blob:` URL belongs to the
+page that made it, so the browser starts a module worker from one. That
+worker's one line imports the CDN script, and an import may cross origins
+when the server allows it: jsDelivr and unpkg send
+`Access-Control-Allow-Origin: *`. To share one worker among several tables,
+pass the factory to `new WorkerBridge({ workerFactory: startWorker })`, and
+give each table that `bridge` and a `tableName` of its own. A table ignores
+`bridgeOptions` when it is given a bridge.
 
-## Import maps (cleaner imports)
+The part after `worker-` is a hash of the file's content, set when the
+package is built, so the name changes when the worker's code changes. For
+0.9.0 the file is `worker-BpxbYHX2.js`. For another version, copy the name
+from that version's file listing; for 0.9.0 these are:
 
-For readability, declare an import map:
+- jsDelivr:
+  [cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/](https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/)
+- unpkg:
+  [app.unpkg.com/@jeyabbalas/data-table@0.9.0/files/dist/assets](https://app.unpkg.com/@jeyabbalas/data-table@0.9.0/files/dist/assets)
 
-```html
-<script type="importmap">
-  {
-    "imports": {
-      "@jeyabbalas/data-table": "https://esm.sh/@jeyabbalas/data-table@0.1.0",
-      "@jeyabbalas/data-table/advanced": "https://esm.sh/@jeyabbalas/data-table@0.1.0/advanced",
-      "@jeyabbalas/data-table/styles": "https://esm.sh/@jeyabbalas/data-table@0.1.0/styles"
-    }
-  }
-</script>
+The folder holds two files, the worker and its source map: for 0.9.0,
+`worker-BpxbYHX2.js` and `worker-BpxbYHX2.js.map`. For a given version the
+name never changes. npm does not let a published version's files change, and
+both CDNs serve those files as they are, cached for a year. The URL you copy
+keeps working for as long as you stay on that version. Look the name up
+again whenever you change the version. A name that is not in this version's folder fails: the worker's
+import gets a 404, and `createDataTable()` rejects with a `WorkerInitError`
+whose code is `WORKER_CRASHED`, "The worker script failed to load".
 
-<script type="module">
-  import { createDataTable } from '@jeyabbalas/data-table';
-  import '@jeyabbalas/data-table/styles';
+## The SQL editors
 
-  const table = await createDataTable({/* … */});
-</script>
+The **Expression** filter dialog, the add-column (**+**) dialog and a
+derived column's edit panel each hold a CodeMirror editor. The library loads
+it only when one of them first opens. Its code imports CodeMirror by package
+name (`@codemirror/state`), and a browser resolves a package name only
+through an import map. Without the map, those buttons do nothing, and the
+console shows `Failed to resolve module specifier "@codemirror/autocomplete"`.
+An `editorFactory` does not change this, since the dialogs' code imports the
+CodeMirror editor whether or not it is used. `@jeyabbalas/data-table/advanced`
+imports the editor directly, so importing it fails the same way, at once.
+
+The page's map sends each name to esm.sh, which builds npm packages into
+browser modules. The versions are the ones the library is tested with,
+pinned exactly. The `*` before each package name tells esm.sh to leave that
+package's own imports as names too. Those names then come back through the
+map, so every module that imports `@codemirror/state` or `@codemirror/view`
+gets the same copy. Without the `*`, esm.sh resolves each package's
+dependencies itself, to the newest matching version. In testing, a map
+without the `*` loaded a second, newer `@codemirror/view` and
+`@codemirror/language`, and autocomplete stopped working, with no error. A
+second `@codemirror/state` fails louder: "Unrecognized extension value in
+extension set … multiple instances of @codemirror/state are loaded". That is
+why the map lists thirteen packages rather than the seven the editor
+imports. The `*` builds import six more: `@lezer/common`, `@lezer/lr`,
+`@marijn/find-cluster-break`, `crelt`, `style-mod` and `w3c-keyname`. When
+you upgrade CodeMirror, upgrade all thirteen together: the seven within the
+ranges in the library's `peerDependencies`, and the other six within the
+ranges those seven declare.
+
+A page that needs no editors can leave CodeMirror out. Pass
+`expressionFilter: false` and `derivedColumns: false` to `createDataTable()`
+and no editor ever loads. The map then needs only the library's entries, and
+the policy needs no esm.sh. `derivedColumns: false` also removes the buttons
+that extract a field of a nested or JSON column into a column of its own.
+
+## DuckDB's files
+
+The library's worker has DuckDB-WASM's JavaScript built in (1.33.1-dev57.0
+in 0.9.0), so the page imports nothing from `@duckdb/duckdb-wasm`. DuckDB
+runs in a worker of its own, which the library's worker starts from a
+`blob:` URL. That worker loads DuckDB's worker script with `importScripts`
+and fetches the matching `.wasm`, both from jsDelivr. DuckDB then downloads
+extensions from `extensions.duckdb.org` as it needs them: `icu` on every
+load, `parquet` for a Parquet file, and `json` for JSON and nested values.
+To serve these from your own host, see
+[CSP and offline deployments](../guides/csp-and-offline.md).
+
+## Content Security Policy
+
+A page without a policy needs nothing more. If your site sends a
+`Content-Security-Policy` header, the page needs at least these sources: the
+policy from [CSP and offline deployments](../guides/csp-and-offline.md#the-content-security-policy),
+plus the CDNs and the editors' styles. The header is shown here on several
+lines, but you send it as one. A host that cannot set headers can put the
+same policy in a `<meta http-equiv="Content-Security-Policy" content="…">`
+element at the top of `<head>`; it reaches the page's `blob:` workers too.
+
+```http
+Content-Security-Policy: default-src 'self';
+  script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh
+    'sha256-ML6UIHXAYwqiuGgMethV9xznPRACNUDXwEmKzNaGR7w=' 'sha256-<hash of the module script>';
+  worker-src 'self' blob: https://cdn.jsdelivr.net;
+  connect-src 'self' https://cdn.jsdelivr.net https://extensions.duckdb.org;
+  style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+  style-src-attr 'none'
 ```
 
-The import map must precede the first `<script type="module">` that uses
-those bare specifiers. Modern Chrome, Firefox, and Safari all support
-import maps natively — no polyfill needed for recent browsers.
+What each directive allows:
 
-## Loading CSS
+- **`script-src`** allows the library's modules and DuckDB's worker script
+  from `https://cdn.jsdelivr.net`, and CodeMirror from `https://esm.sh`. The
+  two hashes allow the page's inline scripts. `'wasm-unsafe-eval'` lets
+  DuckDB compile its WebAssembly. Nothing on the page needs `'unsafe-eval'`.
+- **`worker-src`** allows `blob:`, for the page's worker and for DuckDB's
+  own worker, which the library also starts from a `blob:` URL. The worker's
+  import of the library's worker script counts as a worker load, not a script
+  load, so `https://cdn.jsdelivr.net` goes here as well. `'self'` covers
+  workers of your own.
+- **`connect-src`** allows your data, DuckDB's `.wasm` on
+  `https://cdn.jsdelivr.net`, and its extensions on
+  `https://extensions.duckdb.org`. `'self'` covers data on your own origin.
+  For data on another host, add that host.
+- **`style-src`** allows the library's stylesheet. Its `'unsafe-inline'`
+  allows the page's `<style>` block, and the `<style>` element CodeMirror
+  writes its styles into when an editor opens. Put no hash or nonce in this
+  directive: a browser that finds one ignores `'unsafe-inline'`, and the
+  editors then show unstyled.
+- **`style-src-attr 'none'`** refuses inline `style` attributes. The table
+  never writes them; it styles elements through `element.style`, which a
+  policy does not restrict. So the container's height belongs in a
+  stylesheet: a refused `style="height: …"` leaves the container unbounded.
 
-Two options:
+The page's policy reaches both workers. The page's worker starts from a
+`blob:` URL, so it inherits the page's policy, and DuckDB's `blob:` worker
+inherits it in turn.
 
-```html
-<!-- Option 1: <link> tag -->
-<link rel="stylesheet" href="https://esm.sh/@jeyabbalas/data-table@0.1.0/styles" />
+**The inline scripts.** The import map and the module script are inline, so
+the policy allows them by hash. A hash covers a script's exact text, every
+space and line break included, so any edit changes it. The import map's hash
+is filled in, for the map exactly as printed above. The module script's
+depends on your `source`, so get it from the browser: open the page with the
+policy in place, and the console names the hash each refused script needs
+("Either the 'unsafe-inline' keyword, a hash ('sha256-…'), or a nonce
+('nonce-...') is required"). A page your server renders can use a nonce
+instead: a fresh random value for each response, sent as `'nonce-<value>'`
+in the policy and set as `nonce="<value>"` on both `<script>` elements. You
+can also move the module script into a file of its own, which `'self'`
+covers. The import map has to stay inline.
 
-<!-- Option 2: ESM side-effect import -->
-<script type="module">
-  import '@jeyabbalas/data-table/styles';
-</script>
-```
+**Without the editors.** On a page that turns the editors off
+([The SQL editors](#the-sql-editors)), drop `https://esm.sh` from
+`script-src`, and swap the import map's hash for the shorter map's. In
+`style-src`, replace `'unsafe-inline'` with the hash of the page's `<style>`
+block. The console names both hashes, the same way.
 
-The second option requires your CDN to recognize the side-effect and
-inject the stylesheet. esm.sh does; jsDelivr's `+esm` shortcut may not.
-The `<link>` tag is the more reliable path.
+When a source is missing, the page fails in one of these ways, quoted as
+Chrome reports them:
 
-## Self-hosted single-file bundle
+| Missing from the policy                          | What happens                                                                                                                                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blob:` in `worker-src`                          | The console reports "Creating a worker from 'blob:…' violates the following Content Security Policy directive", and `createDataTable()` rejects at once, `WORKER_CRASHED`: "The worker script failed to load". |
+| `https://cdn.jsdelivr.net` in `worker-src`       | The worker's import is refused, and `createDataTable()` rejects at once, `WORKER_CRASHED`: "The worker script failed to load".                                                                                 |
+| `'wasm-unsafe-eval'` in `script-src`             | "CompileError: WebAssembly.instantiateStreaming(): Compiling or instantiating WebAssembly module violates the following Content Security policy directive"; 30 s later, `WORKER_INIT_TIMEOUT`.                 |
+| `https://cdn.jsdelivr.net` in `connect-src`      | DuckDB's `.wasm` fails to download ("Failed to fetch"); 30 s later, `WORKER_INIT_TIMEOUT`.                                                                                                                     |
+| `https://extensions.duckdb.org` in `connect-src` | Every load fails, a CSV's too, with a `LoadError` whose code is `LOAD_PARSE_FAILED`: "Failed to load 'https://extensions.duckdb.org/…/icu.duckdb_extension.wasm'".                                             |
+| `https://esm.sh` in `script-src`                 | The editors' dialogs never open, and the console reports each refused CodeMirror module.                                                                                                                       |
+| `'unsafe-inline'` in `style-src`                 | The page's `<style>` block is refused too, so the container has no bounded height and the table renders every row. The editors work but show unstyled, and the console reports each refused style.             |
 
-If you want zero CDN dependency but still no build step, pre-build once:
+## Serving the files yourself
 
-```sh
-npm install @jeyabbalas/data-table @duckdb/duckdb-wasm
-npx esbuild --bundle --format=esm --outfile=data-table.bundle.js \
-  <(echo 'export * from "@jeyabbalas/data-table"')
-```
+To load nothing of the library from a CDN, serve the package's `dist/`
+folder from your own origin, at `/vendor/data-table/` for example. Get it
+from the package's tarball,
+`https://registry.npmjs.org/@jeyabbalas/data-table/-/data-table-0.9.0.tgz`
+(its `package/dist/` folder), or copy
+`node_modules/@jeyabbalas/data-table/dist/` from any project that installs
+the package. Point the stylesheet and the import map at those files. The
+worker is then on the page's own origin, and `createDataTable()` starts it
+itself, so leave out `bridgeOptions`. In the policy, drop
+`https://cdn.jsdelivr.net` from `worker-src` and `style-src`, and swap in the
+edited import map's hash. Send that policy on every response, the worker
+script's included. A worker started from a URL takes its policy from that
+file's response, not from the page, unlike the CDN page's `blob:` worker,
+which inherits the page's. DuckDB's files, its extensions and CodeMirror
+still come from their CDNs unless you host those too;
+[CSP and offline deployments](../guides/csp-and-offline.md) covers DuckDB's.
 
-Then serve `data-table.bundle.js` from your own origin and `import` it
-from your HTML.
+## When to choose a CDN over a bundler
 
-## DuckDB bundles from CDN
+**A CDN is good for:**
 
-By default, DuckDB-WASM fetches its `.wasm` files from jsDelivr (via
-`getJsDelivrBundles()`). That works from a CDN-loaded page because the
-library's JS doesn't care where the WASM comes from — it just needs the
-URLs to resolve. You only need `duckdbBundles` overrides if you want to
-avoid the jsDelivr dependency.
-
-## CSP
-
-If your site sends a CSP:
-
-```
-script-src 'self' https://esm.sh https://cdn.jsdelivr.net;
-worker-src 'self' https://esm.sh https://cdn.jsdelivr.net;
-connect-src 'self' https://cdn.jsdelivr.net;
-```
-
-Adjust the CDN hosts to match what you use. The `connect-src` entry
-covers the WASM fetch.
-
-## When to choose CDN over a bundler
-
-**CDN is good for:**
-
-- Prototypes, one-off demos, single-file HTML pages
-- Observable notebooks, Quarto documents, embedded analytics
-- Pages that can't have a build step (legacy CMS)
-- Education and workshops
+- Prototypes, one-off demos and single-file HTML pages
+- Notebooks, Quarto documents and embedded analytics
+- Pages that cannot have a build step, such as a legacy CMS
+- Teaching and workshops
 
 **A bundler is better for:**
 
-- Production apps with version pinning and CI
-- Offline / intranet deployments (no CDN access)
-- Fine-grained tree-shaking and bundle-size control
-- TypeScript integration (CDNs don't deliver types)
+- Production apps with locked dependencies and CI
+- Offline and intranet deployments with no CDN access
+- Control over bundle size and code splitting
+- TypeScript, since a CDN page gets no type checking
 
 ## Gotchas
 
-- **TypeScript types.** CDN-loaded libraries don't come with `.d.ts` files. Your editor won't autocomplete unless you also install the npm package locally for types-only use.
-- **esm.sh cold starts.** The first request to `esm.sh/<package>@<version>` compiles the ESM bundle on the server; subsequent requests are cached. Occasional 10-second delays happen on first hit.
-- **Mixed CDN + pinned version.** If you use `https://esm.sh/@jeyabbalas/data-table` _and_ `https://esm.sh/@jeyabbalas/data-table/advanced@0.1.0`, you may end up with two versions of the library in the same page — duplicate signals, state isolation surprises. Always pin to the same version across entry points.
-- **CORS and cross-origin DuckDB WASM.** When the library fetches WASM cross-origin, the host must send permissive CORS headers. jsDelivr does; most CDNs do. Your own self-hosted WASM must match.
-- **No hot reload.** Every edit requires a hard refresh. That's the nature of no-build delivery.
+- **TypeScript types.** A page that loads the library from a CDN gets no
+  `.d.ts` files. Install the package locally if you want your editor's
+  autocompletion and type checking.
+- **One version everywhere.** The stylesheet, the import map and the
+  worker must all name the same version. The library's files are built to
+  work with each other, not with another release's: the messages between
+  the page and the worker, for one, are internal and change between
+  releases.
+- **esm.sh's first build.** esm.sh builds a package version the first time
+  anyone asks for it. That can take several seconds, and the first request
+  can fail outright, with a CORS error; later requests come from its cache.
+  Only the editors depend on it, since CodeMirror loads when an editor first
+  opens.
 
 ## Related
 
-- CSP / offline: [CSP and offline guide](../guides/csp-and-offline.md) for self-hosted WASM
-- Vite: [Vite integration](./vite.md) for a bundled-app comparison
+- [CSP and offline deployments](../guides/csp-and-offline.md): hosting
+  DuckDB's files and extensions yourself
+- [Vite](./vite.md): the same table in a bundled app
+- [Sizing the container](../../README.md#sizing-the-container): why the
+  container needs a bounded height

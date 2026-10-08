@@ -26,8 +26,15 @@
  * library worker started from a `blob:` URL takes the page's. The rest cover
  * what fails, and how fast and how clearly it says so, and the guide's two
  * ways of serving the library's worker script yourself.
+ *
+ * The last tests run docs/integrations/cdn.md's page under its policy, both
+ * read from the guide's fenced blocks, so they fail when the guide drifts.
+ * The CDNs it names come from disk: the library from `dist/`, DuckDB-WASM
+ * and the esm.sh builds of CodeMirror from `node_modules`, the extensions
+ * from the mirror's cache.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -739,3 +746,332 @@ for (const as of ['workerUrl', 'workerFactory'] as const) {
     expect(traffic.served.filter((p) => p.startsWith('/dist/assets/'))).toEqual([]);
   });
 }
+
+// ---------------------------------------------------------------------------
+// The CDN page of docs/integrations/cdn.md
+// ---------------------------------------------------------------------------
+
+const CDN_GUIDE = path.join(ROOT, 'docs/integrations/cdn.md');
+
+/** The guide's page and its policy header's value, verbatim from its fenced blocks. */
+async function cdnGuide(): Promise<{ page: string; policy: string }> {
+  const markdown = await readFile(CDN_GUIDE, 'utf8');
+  const page = /^```html\n(<!doctype html>\n[\s\S]*?)^```$/m.exec(markdown)?.[1];
+  const header = /^```http\nContent-Security-Policy:([\s\S]*?)^```$/m.exec(markdown)?.[1];
+  if (!page || !header) throw new Error('docs/integrations/cdn.md has lost its page or its policy');
+  // Shown on several lines, sent as one.
+  return { page, policy: header.replace(/\s+/g, ' ').trim() };
+}
+
+/** The text of the page's inline `<script type="…">`, which a hash covers. */
+function inlineScript(page: string, type: 'importmap' | 'module'): string {
+  const text = new RegExp(`<script type="${type}">([\\s\\S]*?)</script>`).exec(page)?.[1];
+  if (text === undefined) throw new Error(`the guide's page has no inline ${type} script`);
+  return text;
+}
+
+/** The page's import map. */
+const importsOf = (page: string): Record<string, string> =>
+  (JSON.parse(inlineScript(page, 'importmap')) as { imports: Record<string, string> }).imports;
+
+/** A policy's source for an inline script's text. */
+const hashOf = (text: string): string =>
+  `'sha256-${createHash('sha256').update(text).digest('base64')}'`;
+
+/** Where the guide's policy leaves the module script's hash, which depends on `source`. */
+const MODULE_HASH = "'sha256-<hash of the module script>'";
+
+/** The module script's `source`, the one value the guide leaves to the reader. */
+function sourceOf(page: string): string {
+  const source = /source: '([^']+)'/.exec(page)?.[1];
+  if (!source) throw new Error("the guide's module script has no source: '…'");
+  return source;
+}
+
+/** A package's version and module entry, as installed in node_modules. */
+async function installed(name: string): Promise<{ version: string; entry: string | null }> {
+  const dir = path.join(ROOT, 'node_modules', name);
+  const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8')) as {
+    version: string;
+    exports?: { import?: unknown; '.'?: { import?: unknown } };
+    module?: unknown;
+  };
+  const entry = pkg.exports?.import ?? pkg.exports?.['.']?.import ?? pkg.module;
+  return { version: pkg.version, entry: typeof entry === 'string' ? path.join(dir, entry) : null };
+}
+
+/** What the CDN page took from the CDNs, and the violations it reported. */
+interface Cdn {
+  /** The CDN URLs answered from disk, in order. */
+  served: string[];
+  /** Each violation the page or a worker reported, as `<directive> <blocked URI>`. */
+  violations: string[];
+}
+
+/**
+ * Serve `html`, the guide's CDN page, at `https://app.test/` under `policy`,
+ * with violations reported to `/csp-report`, and answer the CDNs it names
+ * from disk, for any origin, as a CDN does:
+ *
+ * - the library, under its import map's URL, from `dist/`, and the worker URL
+ *   the page names from the built worker, whatever the guide calls it;
+ * - DuckDB-WASM's files, from `node_modules`, at the installed version only;
+ * - each esm.sh `*` build the import map pins, from the package's own module
+ *   file in `node_modules`, at the installed version only: like the `*`
+ *   build, it leaves its imports bare, for the map;
+ * - DuckDB's extensions, from the mirror (`mirrored`).
+ *
+ * `serve`, run first, answers the rest: the fixtures, and every other host,
+ * aborted and recorded in `traffic.foreign`, as is a CDN URL the page should
+ * not ask for.
+ */
+async function serveCdnPage(
+  context: BrowserContext,
+  traffic: Traffic,
+  html: string,
+  policy: string,
+): Promise<Cdn> {
+  const cdn: Cdn = { served: [], violations: [] };
+  const library = new URL('.', importsOf(html)['@jeyabbalas/data-table']).href;
+  const workerUrl = /const WORKER_URL =\s*'([^']+)'/.exec(html)?.[1];
+  if (!workerUrl?.startsWith(`${library}assets/worker-`)) {
+    throw new Error(`the guide's worker URL is not the library's worker: ${String(workerUrl)}`);
+  }
+  const { version: duckdbVersion } = await installed('@duckdb/duckdb-wasm');
+  const duckdb = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${duckdbVersion}/dist/`;
+
+  /** Answer from disk, or record the request and abort it. */
+  async function answer(route: Route, file: () => Promise<string | Buffer | null>, type?: string) {
+    const url = route.request().url();
+    try {
+      const body = await file();
+      if (body === null) {
+        traffic.foreign.push(url);
+        await route.abort('blockedbyclient');
+        return;
+      }
+      cdn.served.push(url);
+      await route.fulfill({
+        body,
+        headers: {
+          'content-type': type ?? 'application/octet-stream',
+          'access-control-allow-origin': '*',
+        },
+      });
+    } catch (error) {
+      traffic.failed.push(`${url}: ${(error as Error).message}`);
+      await route.abort('failed');
+    }
+  }
+
+  await context.route(`${ORIGIN}/`, (route) =>
+    route.fulfill({
+      body: html,
+      headers: {
+        'content-type': 'text/html',
+        'content-security-policy': `${policy}; report-uri ${ORIGIN}/csp-report`,
+      },
+    }),
+  );
+  await context.route(`${ORIGIN}/csp-report`, async (route) => {
+    const report = (
+      JSON.parse(route.request().postData() ?? '{}') as {
+        'csp-report'?: Record<string, string>;
+      }
+    )['csp-report'];
+    cdn.violations.push(
+      `${report?.['effective-directive'] ?? report?.['violated-directive']} ${report?.['blocked-uri']}`,
+    );
+    await route.fulfill({ status: 204 });
+  });
+
+  await context.route('https://cdn.jsdelivr.net/**', (route) => {
+    const url = route.request().url();
+    const file =
+      url === workerUrl
+        ? path.join(DIST, 'assets', builtWorker())
+        : url.startsWith(library)
+          ? under(DIST, decodeURIComponent(url.slice(library.length)))
+          : url.startsWith(duckdb)
+            ? under(DUCKDB_DIST, decodeURIComponent(url.slice(duckdb.length)))
+            : null;
+    return answer(
+      route,
+      async () => (file && existsSync(file) ? readFile(file) : null),
+      file ? TYPES[path.extname(file)] : undefined,
+    );
+  });
+
+  await context.route('https://esm.sh/**', (route) =>
+    answer(
+      route,
+      async () => {
+        const url = route.request().url();
+        const pin = /^https:\/\/esm\.sh\/\*((?:@[^/]+\/)?[^/@]+)@([^/?#]+)$/.exec(url);
+        if (!pin) return null;
+        const { version, entry } = await installed(pin[1]!);
+        if (version !== pin[2] || !entry) {
+          throw new Error(`the import map pins ${pin[1]}@${pin[2]}, node_modules has ${version}`);
+        }
+        return readFile(entry);
+      },
+      'text/javascript',
+    ),
+  );
+
+  await context.route('https://extensions.duckdb.org/**', (route) =>
+    answer(
+      route,
+      () => mirrored(route, `/duckdb-ext${new URL(route.request().url()).pathname}`),
+      'application/wasm',
+    ),
+  );
+  return cdn;
+}
+
+/** An extension's URL on DuckDB's repository, for any version and platform. */
+const extension = (name: string) =>
+  expect.stringMatching(
+    new RegExp(
+      `^https://extensions\\.duckdb\\.org/v[\\d.]+/wasm_\\w+/${name}\\.duckdb_extension\\.wasm$`,
+    ),
+  );
+
+/**
+ * Fail on any violation the page or its workers reported: the recorder must
+ * hear the one the test causes, a style attribute, which the policy refuses,
+ * and only that.
+ */
+async function expectNoViolations(page: Page, cdn: Cdn): Promise<void> {
+  await page.evaluate(() => document.body.setAttribute('style', 'outline: none'));
+  await expect.poll(() => cdn.violations).toEqual(['style-src-attr inline']);
+}
+
+test("the CDN guide's page runs as the guide gives it, under the guide's policy", async ({
+  context,
+  page,
+}) => {
+  const guide = await cdnGuide();
+  // The policy names the import map by the hash of its text as printed.
+  expect(guide.policy).toContain(hashOf(inlineScript(guide.page, 'importmap')));
+  // The module script's depends on `source`: the reader works it out, as here.
+  expect(guide.policy).toContain(MODULE_HASH);
+  const policy = guide.policy.replace(MODULE_HASH, hashOf(inlineScript(guide.page, 'module')));
+
+  const traffic = await serve(context, () => null);
+  const cdn = await serveCdnPage(context, traffic, guide.page, policy);
+  // The reader's data, at the page's own `source`: the test's CSV.
+  await context.route(`${ORIGIN}${sourceOf(guide.page)}`, async (route) =>
+    route.fulfill({
+      body: await readFile(path.join(FIXTURES, 'csv/titanic.csv')),
+      headers: { 'content-type': 'text/csv' },
+    }),
+  );
+
+  await step(traffic, async () => {
+    await page.goto(`${ORIGIN}/`);
+    await expect(page.getByText('Braund, Mr. Owen Harris').first()).toBeVisible({
+      timeout: 60_000,
+    });
+  });
+  // The stylesheet bounds the container: a few rows in the DOM, not 891.
+  const rendered = await page.locator('#table [role="row"]').count();
+  expect(rendered).toBeGreaterThan(1);
+  expect(rendered).toBeLessThan(60);
+
+  // The SQL filter editor, CodeMirror through the import map.
+  await page.locator('.dt-filter-expression-btn').click();
+  const sqlDialog = page.locator('.dt-sql-filter-modal-backdrop--open');
+  await sqlDialog.locator('.cm-content').click();
+  await page.keyboard.type('"Age" > 60');
+  await expect(sqlDialog.locator('.cm-content')).toHaveText('"Age" > 60');
+  await sqlDialog.locator('.dt-sql-filter-modal-close').click();
+  await expect(sqlDialog).toHaveCount(0);
+
+  // The derived column's expression editor. Its autocomplete offers a column:
+  // one copy of each CodeMirror package, as the map's `*` builds keep it.
+  await page.locator('.dt-add-column-btn').click();
+  const derivedDialog = page.locator('.dt-derived-modal-backdrop--open');
+  await derivedDialog.locator('.cm-content').click();
+  await page.keyboard.type('"Fare" * "Si');
+  await expect(page.locator('.cm-tooltip-autocomplete')).toContainText('SibSp');
+  await derivedDialog.locator('.dt-derived-modal-close').click();
+  await expect(derivedDialog).toHaveCount(0);
+
+  // Without the trampoline, the library's worker is another origin's script:
+  // initialize() rejects at once, and says where to look.
+  const unaided: { ok: boolean; error?: string; code?: string; message?: string } =
+    await page.evaluate(async (url) => {
+      const library = (await import(url)) as Library;
+      const bridge = new library.WorkerBridge();
+      try {
+        await bridge.initialize();
+        return { ok: true };
+      } catch (error) {
+        const { code, message } = error as { code: string; message: string };
+        const kind =
+          error instanceof library.WorkerInitError
+            ? 'WorkerInitError'
+            : `${(error as Error).name} (not a WorkerInitError)`;
+        return { ok: false, error: kind, code, message };
+      }
+    }, importsOf(guide.page)['@jeyabbalas/data-table']!);
+  expect(unaided).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_CRASHED' });
+  expect(unaided.message).toMatch(/cannot be accessed from origin 'https:\/\/app\.test'/);
+  expect(unaided.message).toMatch(/bridgeOptions\.workerFactory/);
+
+  await expectNoViolations(page, cdn);
+  expect(traffic.foreign).toEqual([]);
+  expect(traffic.failed).toEqual([]);
+  // What the page took from the CDNs: DuckDB, ICU for the load's time zone,
+  // and each CodeMirror package the map pins, once.
+  const pinned = Object.values(importsOf(guide.page)).filter((url) =>
+    url.startsWith('https://esm.sh/'),
+  );
+  expect(cdn.served.filter((url) => url.startsWith('https://esm.sh/')).sort()).toEqual(
+    pinned.sort(),
+  );
+  expect(cdn.served).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/\/duckdb-wasm@[^/]+\/dist\/duckdb-browser-eh\.worker\.js$/),
+      expect.stringMatching(/\/duckdb-wasm@[^/]+\/dist\/duckdb-eh\.wasm$/),
+      extension('icu'),
+    ]),
+  );
+});
+
+test("the CDN guide's page loads nested Parquet and inspects a value, under its policy", async ({
+  context,
+  page,
+}) => {
+  const guide = await cdnGuide();
+  // The reader's one edit, `source`: here the nested Parquet fixture.
+  const html = guide.page.replace(
+    `source: '${sourceOf(guide.page)}'`,
+    "source: '/fixtures/parquet/nested-stress-tests.parquet'",
+  );
+  expect(html).not.toBe(guide.page);
+  const policy = guide.policy.replace(MODULE_HASH, hashOf(inlineScript(html, 'module')));
+
+  const traffic = await serve(context, () => null);
+  const cdn = await serveCdnPage(context, traffic, html, policy);
+
+  await step(traffic, async () => {
+    await page.goto(`${ORIGIN}/`);
+    // The value inspector: two more of the library's lazy files, and json.
+    await page.locator('.dt-cell--inspectable').first().dblclick({ timeout: 60_000 });
+    await expect(page.getByRole('tree')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+
+  await expectNoViolations(page, cdn);
+  expect(traffic.foreign).toEqual([]);
+  expect(traffic.failed).toEqual([]);
+  expect(traffic.served).toContain('/fixtures/parquet/nested-stress-tests.parquet');
+  expect(cdn.served).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/\/ValueInspector-[\w-]+\.js$/),
+      ...['icu', 'parquet', 'json'].map(extension),
+    ]),
+  );
+});

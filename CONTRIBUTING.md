@@ -78,11 +78,11 @@ Use the **Feature request** issue template. Before proposing:
    The CLI prompts for the bump (`patch` / `minor` / `major`) and writes a
    markdown file under `.changeset/`. Commit it alongside your code; the
    release workflow rolls it forward into [`CHANGELOG.md`](./CHANGELOG.md)
-   on version. There each changeset becomes one list item: its first line
-   follows the commit hash, and the lines after it are indented beneath. So
-   write the changeset in this form:
-   - **Summary first.** The first line is a one-sentence summary of the
-     user-visible change.
+   on version. There each changeset becomes one list item: the first line
+   after its front matter follows the commit hash, and the lines after it
+   are indented beneath. So write the changeset in this form:
+   - **Summary first.** The first line after the front matter is a
+     one-sentence summary of the user-visible change.
    - **Then the details, under bold labels.** Each label goes on a line of
      its own: `**Added**`, `**Changed**`, `**Fixed**`,
      `**Changed (breaking)**` and `**Migration**`. Use the ones the change

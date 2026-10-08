@@ -23,8 +23,10 @@ let conn: duckdb.AsyncDuckDBConnection | null = null;
  * loading, rejects at once. duckdb-wasm reports neither: it logs the error
  * and leaves `instantiate()` waiting for good. A `mainModule` that fails to
  * download or compile is caught by nothing in duckdb-wasm, and still leaves
- * it waiting: the bridge's init timeout reports that. A failed init leaves
- * nothing behind, so a later call starts again.
+ * it waiting: the bridge's init timeout reports that. Once `instantiate()`
+ * is done, an error of DuckDB's worker is left to reach the bridge, as any
+ * later one does. A failed init leaves nothing behind, so a later call
+ * starts again.
  *
  * @param bundles Optional bundle override for self-hosted / offline deployments.
  *                When omitted, falls back to `getJsDelivrBundles()`.
@@ -59,6 +61,9 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
     db = new duckdb.AsyncDuckDB(logger, worker);
 
     await Promise.race([db.instantiate(bundle.mainModule, bundle.pthreadWorker), started.failed]);
+    // DuckDB's worker is up. An error from here on, in open() or connect()
+    // too, reaches the bridge at once as an error of the library's worker.
+    started.stop();
 
     // Cast DECIMAL to DOUBLE so Arrow returns plain numbers instead of DecimalBigNum objects
     await db.open({ query: { castDecimalToDouble: true } });
@@ -71,7 +76,6 @@ export async function initializeDuckDB(bundles?: duckdb.DuckDBBundles): Promise<
     worker?.terminate();
     throw error;
   } finally {
-    // From here on, an error in DuckDB's worker reaches the bridge as before.
     started?.stop();
     URL.revokeObjectURL(worker_url);
   }
@@ -86,7 +90,7 @@ interface WorkerStartWatch {
 }
 
 /**
- * Watch DuckDB's worker for an `error` event while it starts: an exception
+ * Watch DuckDB's worker for an `error` event while it instantiates: an exception
  * it does not catch, such as `importScripts(mainWorker)` failing on a 404 or
  * a URL the Content Security Policy blocks, or its own `blob:` script not
  * loading, as when `worker-src` leaves out `blob:`. duckdb-wasm only logs
@@ -131,7 +135,7 @@ function watchWorkerStart(worker: Worker, mainWorker: string): WorkerStartWatch 
 function requireAbsoluteUrls(bundle: duckdb.DuckDBBundle): void {
   for (const field of ['mainModule', 'mainWorker', 'pthreadWorker'] as const) {
     const url = bundle[field];
-    if (field === 'pthreadWorker' && url === null) continue;
+    if (field === 'pthreadWorker' && url == null) continue;
     try {
       new URL(url as string);
     } catch {

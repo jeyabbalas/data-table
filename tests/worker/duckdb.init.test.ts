@@ -14,7 +14,7 @@ import { closeDuckDB, initializeDuckDB, isInitialized } from '@/worker/duckdb';
 
 const duck = vi.hoisted(() => ({
   instantiate: vi.fn<(mainModule: string, pthreadWorker: string | null) => Promise<null>>(),
-  open: vi.fn(() => Promise.resolve()),
+  open: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   connect: vi.fn(() => Promise.resolve({ close: () => Promise.resolve() })),
 }));
 
@@ -31,11 +31,13 @@ vi.mock('@duckdb/duckdb-wasm', () => ({
     connect = duck.connect;
     terminate = () => Promise.resolve();
   },
-  selectBundle: (bundles: { eh: { mainModule: string; mainWorker: string } }) =>
+  selectBundle: (bundles: {
+    eh: { mainModule: string; mainWorker: string; pthreadWorker?: string | null };
+  }) =>
     Promise.resolve({
       mainModule: bundles.eh.mainModule,
       mainWorker: bundles.eh.mainWorker,
-      pthreadWorker: null,
+      pthreadWorker: 'pthreadWorker' in bundles.eh ? bundles.eh.pthreadWorker : null,
     }),
   getJsDelivrBundles: () => {
     throw new Error('these tests pass their own bundles');
@@ -85,6 +87,8 @@ async function outcome(promise: Promise<unknown>): Promise<unknown> {
 beforeEach(() => {
   workers = [];
   duck.instantiate.mockReset();
+  duck.open.mockReset();
+  duck.open.mockImplementation(() => Promise.resolve());
   (globalThis as { Worker: unknown }).Worker = FakeWorker;
 });
 
@@ -188,5 +192,31 @@ describe('initializeDuckDB', () => {
     expect(event.defaultPrevented).toBe(false);
     expect(isInitialized()).toBe(true);
     expect(duck.instantiate).toHaveBeenCalledWith(BUNDLES.eh.mainModule, null);
+  });
+
+  it('once DuckDB has instantiated, leaves an error in open() to reach the bridge', async () => {
+    duck.instantiate.mockResolvedValueOnce(null);
+    duck.open.mockReturnValueOnce(new Promise(() => undefined));
+    const init = initializeDuckDB(BUNDLES);
+    await vi.waitFor(() => expect(duck.open).toHaveBeenCalledTimes(1));
+    const event = errorEvent('Uncaught RuntimeError: memory access out of bounds');
+
+    workers[0]!.dispatchEvent(event);
+
+    // Not cancelled: it reaches the library's worker, and the bridge, at once.
+    expect(event.defaultPrevented).toBe(false);
+    expect(await outcome(init)).toBe('pending');
+  });
+
+  it('takes a pthreadWorker that is undefined for none', async () => {
+    duck.instantiate.mockResolvedValueOnce(null);
+
+    await initializeDuckDB({
+      mvp: BUNDLES.mvp,
+      eh: { ...BUNDLES.eh, pthreadWorker: undefined } as typeof BUNDLES.eh,
+    });
+
+    expect(isInitialized()).toBe(true);
+    expect(duck.instantiate).toHaveBeenCalledWith(BUNDLES.eh.mainModule, undefined);
   });
 });

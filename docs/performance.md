@@ -18,12 +18,45 @@ other tuning lever here, and it is by far the most common cause of a
 "slow" table. See [The virtual scroller](#the-virtual-scroller) below and
 [Sizing the container](../README.md#sizing-the-container) in the README.
 
-**Status of numeric benchmarks.** A reference-machine benchmark harness
-is not yet in place for v0.1.x. This doc is methodology-first: it
-explains the observable performance thresholds drawn from the
-architecture, and shows you how to measure your own scenario. Concrete
-numbers against a reference workload are on the roadmap for a follow-up
-release.
+**Where the numbers come from.** This doc explains the limits from the
+architecture and shows how to measure your own workload. Its numbers were
+measured: [Reference numbers](#reference-numbers) collects the main ones,
+each with where and when it was taken. What measures performance in this
+repository:
+
+- **`npm run test:perf`** runs the seven files in `tests/performance/`
+  with `RUN_DUCKDB_PERF=1` and `RUN_LIFECYCLE_STRESS=1` set
+  (`vitest.perf.config.ts`): 47 tests, in about 7 seconds on an Apple M1
+  Pro. Three files run only there. `benchmarks.duckdb.test.ts` times real
+  DuckDB, duckdb-wasm's Node build in `worker_threads`: its start-up,
+  loading the 100,000-row `nyc_taxi` fixtures from Parquet and CSV, cached
+  and uncached queries, range, set and pattern filters over 1M rows, and
+  200 `__rowid__`-range block fetches over 1.6M rows.
+  `nestedCells.bench.duckdb.test.ts` times the grid's reads of nested
+  columns over 200,000 rows, and `lifecycle-stress.test.ts` runs 1,000
+  create/destroy cycles. The other four files run in every `npm test` as
+  well: `memory-leaks.test.ts` (subscriptions, cache and row-cache bounds,
+  a shared bridge outliving one of its tables, 1,000 filter changes with
+  autosave, 100 create/destroy cycles), `annotations.bench.test.ts`
+  (`AnnotationStore` at 10,000 annotations), `scroll-handler.bench.test.ts`
+  (the scroll handler's per-event budget at 1M and 50M rows) and
+  `benchmarks.test.ts` (query-cache, SQL-generation and signal
+  micro-benchmarks).
+- **`npm run test:browser`** runs the Playwright suite: 32 spec files in
+  Chromium, served by the demo's dev server. Besides keyboard and contrast
+  checks, its large-table specs work at full scale in a real browser
+  engine (scroll extents at 1.6M and 2M rows, a fetch storm at 200,000
+  rows, a sweep of 1,000 columns, charts across 300 columns, 200,000 rows
+  of nested values, Parquet `File` loads) and assert counts more than
+  times: header elements, mounted columns, live charts, the queries a
+  column change runs.
+- **`npm run size`** checks the brotli size of each built file against its
+  cap in `.size-limit.cjs`; see [Bundle-size budgets](#bundle-size-budgets).
+- **CI** runs, on every pull request and every push to `main`,
+  `npm run test:coverage` (the whole unit suite, those four files
+  included), the browser suite and the size budgets. No CI job runs
+  `npm run test:perf`; see
+  [How performance is tracked](#how-performance-is-tracked).
 
 ## Architectural characteristics
 
@@ -110,14 +143,22 @@ gets the rows its new height shows without a scroll.
 
 ### DuckDB in WASM
 
-DuckDB runs in a Web Worker. By default it uses the single-thread bundle
-(`mvp`); cross-origin-isolated pages (COOP/COEP headers) can use `coi`
-with `SharedArrayBuffer` for multi-thread execution.
+DuckDB runs in a Web Worker, on one thread by default. Unless you pass
+`bridgeOptions.duckdbBundles`, the library hands duckdb-wasm's
+`selectBundle` the jsDelivr bundles, which list `mvp` and `eh` only
+(`initializeDuckDB`, `src/worker/duckdb.ts`). `selectBundle` picks `eh` in
+a browser with WebAssembly exception handling, and `mvp` in one without
+it. It picks the multi-threaded `coi` bundle only when your
+`duckdbBundles` list one and the page is cross-origin isolated (COOP/COEP
+headers) with WebAssembly threads and SIMD; see
+[CSP and offline deployments](./guides/csp-and-offline.md#self-hosting-the-wasm-bundles).
 
 **Implication:** aggregations over millions of rows are fast (DuckDB is
-column-oriented and vectorized), but not CPU-parallel in the default
-setup. The `coi` bundle is the big lever if you're consistently seeing
-10M+ row queries.
+column-oriented and vectorized), but by default they run on one CPU core.
+A `coi` bundle is the way to more threads. Nothing in this repository
+measures it, and its pthread workers go without the library's fix for
+files opened once DuckDB's memory passes 2 GiB
+([Troubleshooting §32](./troubleshooting.md#32-too-small-to-be-a-parquet-file-or-prefetch-registered-for-bytes-outside-file--file-size-0)).
 
 The worker builds a result's rows from its column vectors, by position,
 rather than through the proxy Arrow makes for each row: 100,000 rows of 20
@@ -335,15 +376,19 @@ adding annotations to toggle visibility.
 
 ## Observable thresholds
 
-Approximate ranges from architectural reasoning — not measured. Scrolling
-is not the axis being graded here: virtualization and the scrollbar stay
-correct throughout (the scroller is exact at 50M+ rows), and unsorted,
-unfiltered scrolling fetches blocks by `__rowid__` range — a
-zonemap-pruned scan that takes milliseconds at any scroll depth. What
-grows with scale is query latency: filter and sort cost, and deep scrolls
-_while sorted or filtered_, which still page with `LIMIT … OFFSET` and
-get slower the further down you are. That, plus the memory holding the
-loaded data, is what the tiers grade:
+Approximate ranges, reasoned from the architecture: the tiers have not
+been measured one by one, and the points that have been are in
+[Reference numbers](#reference-numbers). Scrolling is not the axis being
+graded here: virtualization and the scrollbar stay correct throughout (the
+scroller is exact at 50M+ rows), and unsorted, unfiltered scrolling reads
+each block by a `__rowid__` range — a zonemap-pruned scan that takes
+milliseconds at any scroll depth. What grows with scale is query latency:
+filter and sort cost, and deep scrolls _while sorted or filtered_. Those
+find a block's rows with `LIMIT … OFFSET` over the sort keys and
+`__rowid__` alone, then read the columns of just those rows
+(`buildRowQuery`, `src/table/rowQuery.ts`), so they get slower the further
+down you are. That, plus the memory holding the loaded data, is what the
+tiers grade:
 
 | Dataset scale     | Expected experience                                                                                                                                  |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -352,6 +397,10 @@ loaded data, is what the tiers grade:
 | 1 M – 10 M rows   | Filter/sort latency becomes noticeable (300 ms – 2 s). Initial load takes seconds. Still workable for analytics, not for live dashboards             |
 | 10 M – 100 M rows | Scrolling stays correct; filter/sort latency and load-time memory dominate. Consider server-side aggregation; use this library for the summary layer |
 | > 100 M rows      | Don't — the loaded data outgrows browser memory long before the scroller cares                                                                       |
+
+The tiers count rows, and a wide table pays more for each step. On 1,000
+columns, a filter change took 0.5 s at 50,000 rows and 0.77 s at 200,000,
+with 20 queries each, most of them the charts in view refetching.
 
 Memory usage grows roughly linearly with row count × column count: DuckDB
 takes 5–20 bytes per value for numbers, dates, and booleans, about 4
@@ -613,55 +662,196 @@ Don't manually remove the container's children before `destroy()` — the
 library expects to do that itself. Call `destroy()`, await it, and then
 remove the container if you need to.
 
-## Known slow paths (as of v0.2.0)
+## Known slow paths
 
-- **Initial schema detection on very wide tables.** Tables with hundreds of columns spend measurable time in `DESCRIBE` queries during load.
-- **First-run WASM compilation.** A cold browser takes a few seconds to compile DuckDB's WASM. Subsequent loads hit the HTTP cache.
-- **Filter changes that shrink the dataset to near-zero.** Some visualizations (e.g., date histogram) recalculate bins, which has a fixed cost that dominates when the result set is tiny. Usually < 300 ms total; on 10M-row datasets it can approach 1 s.
+As of 0.9.0, with the source of each:
 
-## Phase-9 benchmark snapshot (2026-04-26, 0.2.0 baseline)
+- **Deep pages of a sorted or filtered table.** Each block of a sorted or
+  filtered view finds its rows with `LIMIT … OFFSET` over the sort keys and
+  `__rowid__` (`buildRowQuery`, `src/table/rowQuery.ts`), so the cost grows
+  with depth. A block halfway down a sorted 5M-row × 40-column table took
+  about 0.9 s in the [memory spike](./dev/memory-envelope.md), and a block
+  at row 150,000 of 200,000, sorted by a `FLOAT[64]` embedding, about 0.4 s
+  (`tests/performance/nestedCells.bench.duckdb.test.ts`). Unsorted,
+  unfiltered blocks take milliseconds at any depth.
+- **Exact and pattern filters on nested columns.** A pattern filter, and
+  an exact filter with `valueType: 'text'` as the filter panel makes on a
+  nested column, compare `CAST(col AS VARCHAR)` (`src/filters/FilterSQL.ts`),
+  so DuckDB formats every row's whole value in each query the filter is in:
+  about 1.7 s a query on 20,000 rows of `FLOAT[768]` embeddings in
+  duckdb-wasm under Node, and 2.3 s with a pattern filter. Filter on a part
+  of the value added as a column instead; see
+  [Nested columns](#nested-columns).
+- **Charts on wide, deep tables.** A column's chart is built when its
+  header comes within 200 px of the view, four charts at a time
+  (`src/visualizations/LazyVizController.ts`), and its two to four queries
+  wait behind the row fetches in DuckDB's one queue. `loadData` waits for
+  the charts in view: on the [wide Parquet file](#loading-a-wide-parquet-file)
+  below, those charts, the first rows and the session lookup took about
+  0.3 s together. A sideways scroll builds the charts of each screen it
+  stops on, and at 200,000 rows they took seconds to arrive while their
+  queries queued. A filter change refetches every live chart: 0.77 s and
+  20 queries at 200,000 rows × 1,000 columns.
+- **Large CSV and JSON exports.** They read the rows in batches of 10,000,
+  each found with `LIMIT … OFFSET` over the view
+  (`src/export/ExportQuery.ts`), and build the file as one string on the
+  main thread. Chrome caps a string at about 537 million characters, some
+  36,000 rows of a 768-float embedding
+  ([Troubleshooting §34](./troubleshooting.md#34-exporting-an-embedding-column-to-csv-or-json-fails)).
+  A Parquet export runs as one `COPY … TO` in DuckDB's worker and builds no
+  text.
+- **A horizontal scroll right after a filter change.** For a second after a
+  filter change, the table puts the body's horizontal position back every
+  frame (`FILTER_HOLD_MS`, `src/table/ColumnWindowController.ts`), against
+  the clamps that filter changes used to cause. A wheel, key, pointer press
+  or touch in the table ends the hold, but a scroll your page makes in code
+  during that second is undone.
+- **Parquet `ArrayBuffer` sources, and CSV and JSON files.** A Parquet
+  `File`, `Blob` or URL is read from disk as the table is built. An
+  `ArrayBuffer` is first copied into DuckDB's memory whole
+  (`src/worker/loaders/parquet.ts`), so the file and the table share the
+  4 GiB: in the memory spike, 200,000 rows × 1,000 columns of random data
+  ran out of memory that way where a `File` loaded 250,000, and copying a
+  file in took 0.4–2.4 s. CSV and JSON files are read as text, then copied
+  in the same way (`src/data/DataLoader.ts`).
+- **Parquet files near the memory limit.** When the table's estimated peak
+  leaves no room for a whole row group, DuckDB reads one column chunk at a
+  time (`fitParquetRead`, `src/worker/loaders/memoryBudget.ts`), two to four
+  times slower: see [What fits in memory](#what-fits-in-memory).
+- **The first load in a new browser profile.** `createDataTable()`
+  downloads the 36 MB `duckdb-eh.wasm` from jsDelivr, and the first load
+  downloads DuckDB's `icu` extension and, for Parquet, its `parquet`
+  extension, one after the other. The first load of the wide Parquet file
+  took 12.9 s against 11.2 s warm, about 0.9 s of it those two downloads.
+  The browser caches all three afterwards; to serve them yourself, see
+  [CSP and offline deployments](./guides/csp-and-offline.md).
 
-These numbers were captured locally on an M1 MacBook Pro running Node 20 +
-DuckDB-WASM 1.33.x. Treat them as an order-of-magnitude reference, not a
-precise SLA — they vary 2-3× between hardware classes and 4-5× under CI
-runners. The opt-in `npm run test:perf` (`RUN_DUCKDB_PERF=1
-RUN_LIFECYCLE_STRESS=1`) re-runs the full perf suite locally.
+## Reference numbers
 
-### Real-DuckDB load + filter (fixtures shipped with the test suite)
+Measured for 0.9.0, or during the work that went into it, each with where
+and when. They describe those runs, not guarantees. The maintainer
+notes [Memory envelope](./dev/memory-envelope.md) and
+[Column virtualization](./dev/column-virtualization.md) keep the full
+records.
 
-| Scenario                                         | Local median | Per-test budget | Notes                                          |
-| ------------------------------------------------ | ------------ | --------------- | ---------------------------------------------- |
-| `createNodeDuckDB()` boot                        | 600–800 ms   | 4000 ms         | Node `worker_threads`; browser cold-start TBD  |
-| `nyc_taxi.parquet` load (100 k × 19 cols)        | ~600 ms      | 8000 ms         | The recommended fixture for first-load testing |
-| `nyc_taxi.csv` load (100 k × 19 cols)            | ~3500 ms     | 15 000 ms       | CSV parse is ~6× the Parquet path              |
-| 100 cached `SELECT` round-trips                  | ~25 ms       | 150 ms          | Pure cache hit                                 |
-| 100 uncached `COUNT(*)` queries                  | ~700 ms      | 3000 ms         | Distinct WHERE clause each iteration           |
-| 1 M-row range filter `COUNT(*) WHERE BETWEEN`    | ~300 ms      | 1500 ms         | Synthetic `range(1_000_000)` table             |
-| 1 M-row set filter `COUNT(*) WHERE col IN (10)`  | ~400 ms      | 2000 ms         | Same synthetic table                           |
-| 1 M-row pattern filter `COUNT(*) WHERE LIKE 'x'` | ~800 ms      | 4000 ms         | Same synthetic table                           |
+### Loading a wide Parquet file
 
-### Pure-JS micro-benchmarks (run on every `npm test`)
+A 1.1 GB Parquet file (1,127,189,255 bytes) of 200,000 rows × 1,000
+columns: 740 numeric, 62 date, 10 time, 183 categorical and 5 nested, in 4
+row groups of 50,000 rows, Snappy-compressed. It was picked as a `File` in
+the demo's production build, and the time is the demo's own, taken around
+`await table.loadData(file)`:
 
-| Scenario                                  | Local median | Per-test budget | Notes                                                     |
-| ----------------------------------------- | ------------ | --------------- | --------------------------------------------------------- |
-| `AnnotationStore.addMany(10_000)`         | ~50 ms       | 250 ms          | Mixed row/column/cell scope                               |
-| 1000 random `getByCell` against 10 k anns | ~120 ms      | 500 ms          | ~150 column-anns per col; sort by severity rank dominates |
-| `VirtualScroller` scroll handler (median) | ~0.05 ms     | 1 ms            | `setTotalRows(1_000_000)` then 1000 synthetic dispatches  |
-| `VirtualScroller` scroll handler (p99)    | ~0.2 ms      | 16.6 ms         | Synthetic 60 fps frame budget                             |
+| Load                                                                                                   | Time                 |
+| ------------------------------------------------------------------------------------------------------ | -------------------- |
+| Warm, the median of three runs                                                                         | 11.2 s (11.1–11.4 s) |
+| Cold, the first in a new browser profile, which also downloads DuckDB's `icu` and `parquet` extensions | 12.9 s               |
 
-### Memory-leak gates (run on every `npm test`)
+- **What it covers.** The worker builds the table, then `loadData` waits
+  for the first rows and the first data of the 8 header charts in view.
+  About 97 % of the time is DuckDB building the table, at about 100 MB of
+  Parquet a second; the session lookup, the rows and the charts take the
+  last 0.3 s. Starting DuckDB, in `createDataTable()`, came before the
+  timer and took 0.8–1.0 s more, including a fresh download of
+  `duckdb-eh.wasm`, which the browser's temporary profile did not cache.
+- **Read mode.** The loader estimates a 2,174 MiB table, and the load's
+  peak, with the largest row group (269 MiB) read ahead, at 3,154 MiB of
+  the 4,096, so DuckDB reads whole row groups: the fast path of
+  [Large Parquet files](./guides/loading-data.md#large-parquet-files).
+- **Where.** Google Chrome 154 in a 1,280 × 720 window, driven by
+  Playwright, on an Apple M1 Pro with 16 GB running macOS 26.7, with the
+  desktop's other applications open; `main` at `6b784f43`
+  (`0.9.0-next.0`), DuckDB-WASM 1.33.1-dev57.0 with the `eh` bundle from
+  jsDelivr; 7 October 2026.
 
-The default `tests/performance/memory-leaks.test.ts` covers signal sub/unsub
-cleanup, TableState baseline subscriber counts, QueryCache bounds, DOM
-pooling, shared-bridge ownership semantics, 1k-mutation autosave coalescing,
-and 100 create/destroy cycles. The deeper 1000-cycle stress lives at
-`tests/performance/lifecycle-stress.test.ts` (`RUN_LIFECYCLE_STRESS=1`).
+### What fits in memory
+
+WebAssembly memory stops at 4 GiB, and DuckDB's own `memory_limit`
+defaults to 3.1 GiB. DuckDB does not compress a table in memory: the
+spike below measured 10.6 to 11.6 bytes a cell for its mix of mostly
+doubles, 2,208 MiB for 200,000 rows × 1,000 columns and 2,031 MiB for
+5,000,000 × 40. Before a Parquet load, the loader estimates the table from
+the file's footer and a sample of its rows, and picks how to read it
+(`fitParquetRead`, `src/worker/loaders/memoryBudget.ts`):
+
+- whole row groups read ahead, when the estimated peak plus the largest row
+  group fits in 4 GiB;
+- one column chunk at a time, when only the peak fits;
+- neither: the load rejects with `LOAD_MEMORY_EXCEEDED` before anything is
+  built, when the table would take more than 95 % of DuckDB's free memory
+  or the peak would not fit.
+
+Peak WebAssembly memory for 1,000 columns of random data, from the memory
+spike: DuckDB alone, in headless Chromium 151 on macOS with 16 GiB,
+DuckDB-WASM 1.33.1-dev57, recorded on 26 September 2026.
+
+| Rows | File size | `File`, a column chunk at a time | `ArrayBuffer`, copied in |
+| ---: | --------: | -------------------------------: | -----------------------: |
+| 100K |   732 MiB |                        1,960 MiB |                2,764 MiB |
+| 150K | 1,102 MiB |                        2,536 MiB |                3,709 MiB |
+| 200K | 1,464 MiB |                        3,114 MiB |            out of memory |
+| 250K | 1,837 MiB |                        3,692 MiB |            out of memory |
+| 300K | 2,196 MiB |                    out of memory |  cannot be read into one |
+
+At 200,000 rows, reading whole row groups (with DuckDB's external file
+cache off, as the loader sets it) took 9.9 s and peaked at 3,642 MiB, and a
+column chunk at a time took 34 s. Through `loadData`, with charts off, the
+library reads that 1.5 GB file a column chunk at a time, since its first
+row group alone is 898 MiB: in 28 to 40 s in Chromium, 26 September 2026.
+
+### Wide tables in the browser
+
+A 50,000-row × 1,000-column Parquet file (370 MB). The load, DOM, fetch and
+column-change figures are from headless Chromium on 27 September 2026, the
+chart figures from Chrome on 26 September 2026; the records name the
+browser, not the machine.
+
+- **Load:** `loadData` took 5.4 s and 24 queries. In Chrome the day
+  before, 0.8, which built a chart for every column, took 20.4 s and 2,004
+  queries.
+- **DOM:** 11,088 elements under `.dt-root`: 1,000 header shells, 19 of
+  them with their controls, and 475 body cells, 19 a row. A whole header
+  for every column made 36,600 elements, and a cell for every column
+  25,000 cells.
+- **Row fetches:** a 128-row block took 7.8 ms with the 96 columns near
+  the view selected, and 76 ms with all 1,000 (the median of nine blocks).
+- **Column changes:** a hide took 41 ms and 2 queries, a show 55 ms and 2,
+  a move 34 ms and none, a pin 82 ms and 2. Rebuilding the header row, as
+  the table did before, a hide took 182 ms of script and 24 queries.
+- **Filters:** a filter took 0.5 s and 20 queries, where 0.8 took 4.4 s and
+  2,002 queries. At 200,000 rows it took 0.77 s and 20 queries.
+
+### The timed tests
+
+One run of `npm run test:perf`, on an Apple M1 Pro with 16 GB, Node 22,
+`main` at `6b784f43`, 7 October 2026. Each time covers the load or the
+queries alone, in Node, without a table around them: a filter change in
+the table also fetches rows and refetches charts.
+
+| Test                                                        | Budget    | Time   |
+| ----------------------------------------------------------- | --------- | ------ |
+| Start DuckDB (`createNodeDuckDB()`)                         | 4,000 ms  | 638 ms |
+| Load `nyc_taxi.parquet`, 100,000 rows × 19 columns          | 8,000 ms  | 505 ms |
+| Load `nyc_taxi.csv`, 100,000 rows × 19 columns              | 15,000 ms | 383 ms |
+| 100 uncached `COUNT(*)` queries, each with its own `WHERE`  | 3,000 ms  | 79 ms  |
+| `COUNT(*)` under a range filter, 1M rows                    | 1,500 ms  | 3.6 ms |
+| `COUNT(*)` under a set filter of 10 values, 1M rows         | 2,000 ms  | 21 ms  |
+| `COUNT(*)` under a starts-with pattern filter, 1M rows      | 4,000 ms  | 81 ms  |
+| 200 blocks of 128 rows by `__rowid__` range, over 1.6M rows | 5,000 ms  | 185 ms |
+| `AnnotationStore.addMany` of 10,000 annotations             | 250 ms    | 44 ms  |
+| 1,000 `getByCell` lookups among 10,000 annotations          | 500 ms    | 162 ms |
+
+The range filter's rows sit together at the start of its table, so DuckDB
+skips almost all of it. Each scroll-handler test ran 1,000 events in 5 to
+18 ms, setup included, against a budget of 1 ms an event at the median. The
+nested-cell medians are under [Nested columns](#nested-columns).
 
 ### Bundle-size budgets
 
-`npm run size` enforces brotli-compressed caps with ~5 % headroom
-(`.size-limit.cjs`). Unlike the rest of this snapshot, these sizes are
-current: measured after the 0.9.0 "nice to have" fixes.
+`npm run size` checks each built file's brotli-compressed size against its
+cap in `.size-limit.cjs`, and fails when one passes it. The sizes below are
+the ones CI measured on `main` at `6b784f43` on 7 October 2026, after the
+0.9.0 "nice to have" fixes; each cap is 0.4–6.4 % above its size.
 
 | Budget                                                             | Size      | Cap     |
 | ------------------------------------------------------------------ | --------- | ------- |
@@ -688,25 +878,43 @@ own. ESM only: the CJS bundles were dropped in 0.4.0.
 
 ### Tarball composition
 
-`npm pack --dry-run` shows 250 files, 1.4 MB tarball, 6.1 MB unpacked.
-Sourcemaps account for ~4 MB of the unpacked size; the library deliberately
-ships them so consumers can debug into library source frames in DevTools.
-Trimming sourcemaps is a deferred consumer-DX trade-off — open an issue if
-your environment requires it.
+`npm pack --dry-run` at `6b784f43` (`0.9.0-next.0`, 8 October 2026) lists
+316 files: a 1.52 MB tarball that unpacks to 6.09 MB. Source maps are
+4.09 MB of that, 67.3 %: the JavaScript maps 3.86 MB (63.4 %) and the
+declaration maps 0.23 MB (3.9 %). The JavaScript itself is 1.00 MB
+(16.4 %), the declarations 0.83 MB (13.6 %) and the stylesheet 0.14 MB
+(2.3 %). The library deliberately ships its source maps so consumers can
+debug into library source frames in DevTools. Trimming them is a deferred
+consumer-DX trade-off — open an issue if your environment requires it.
 
-## Future benchmark tracking
+## How performance is tracked
 
-Planned for a follow-up release:
+| Command                 | When it runs                                                      | What it guards                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `npm run test:coverage` | CI's Test (Node 22) job, on every pull request and push to `main` | The four files of `tests/performance/` that need no flag: leaks, annotation budgets, the scroll handler, micro-benchmarks |
+| `npm run test:browser`  | CI's Browser accessibility suite job, on the same events          | Behaviour at scale in Chromium, and counts: header elements, mounted columns, live charts, queries per column change      |
+| `npm run size`          | CI's Bundle size budgets job, once the tests pass                 | Each built file's brotli size against its cap                                                                             |
+| `npm run test:perf`     | By hand; no CI job runs it, and a pull request does not need it   | The DuckDB timing budgets and the 1,000-cycle create/destroy stress                                                       |
 
-- A reference-machine configuration so numbers are comparable across releases
-- A Playwright nightly job for real-browser frame timing and WASM cold-start
-- 10 M-row scaling profiles for filter/sort latency (the scroller is
-  already exact at that scale; the query-latency tiers above are the part
-  still reasoned rather than measured)
+The timing budgets are several times the local medians, so that slower
+machines pass: they catch a step change, such as a query whose cost starts
+to grow with depth, rather than a slowdown of a few percent. The
+[Reference numbers](#reference-numbers) were measured by hand, in the
+conditions each states; to compare two releases, repeat a measurement in
+the same conditions.
 
-Until that's in place, this doc stays methodology-first. If you
-measure something interesting about your workload, share it in an issue
-— it helps calibrate the thresholds here.
+Not automated:
+
+- a scheduled run of `npm run test:perf`;
+- timing in a real browser: frame times, DuckDB's start-up and the large
+  Parquet load are measured by hand, and the browser suite holds one
+  bound on time: at 200,000 rows, the nested columns' charts draw within a
+  second of a jump to them;
+- filter and sort latency at 10M rows: the deepest table measured is
+  5M rows × 40 columns, so the tiers above that stay reasoned.
+
+If you measure something interesting about your workload, share it in an
+issue — it helps calibrate the thresholds here.
 
 ## Related
 

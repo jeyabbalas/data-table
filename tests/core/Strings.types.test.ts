@@ -18,8 +18,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
  * `(...args: unknown[]) => unknown` again. Under `strictFunctionTypes`
  * parameters compare contravariantly, so no `(count: number) => string` is
  * assignable to that, and every callback leaf became `{}`: a leaf written
- * `(count) => …` failed with TS7006 (implicit any), and a value of any
- * type was accepted where a callback goes.
+ * `(count) => …` failed with TS7006 (implicit any), and a value of the
+ * wrong type was accepted where a callback goes.
  */
 
 const REPO = resolve(__dirname, '..', '..');
@@ -167,6 +167,10 @@ beforeAll(() => {
     options,
     host,
   });
+  // The checker binds every file of the program when it is created, the
+  // slow part: create it here, under this hook's timeout, not in the first
+  // test, under the 5 s test timeout.
+  program.getTypeChecker();
 }, 60_000);
 
 interface Reported {

@@ -2,7 +2,9 @@
 '@jeyabbalas/data-table': minor
 ---
 
-### Changed
+Hiding, showing, moving or pinning a column keeps every other column's chart and custom stats panel, and custom stats panels exist only for the columns near the view.
+
+**Changed**
 
 - Hiding, showing, moving or pinning a column keeps every other column's chart and custom stats panel. Only the column shown gets new ones.
   - **What it saves:** a change queries only for the charts and panels of the columns it brings near the view, such as the column shown. Before, every change rebuilt every chart and panel near the view, about 20 queries at 1,000 columns.

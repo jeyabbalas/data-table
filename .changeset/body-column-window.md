@@ -2,7 +2,9 @@
 '@jeyabbalas/data-table': minor
 ---
 
-### Changed
+Body rows render cells only for the columns near the view, not for every column.
+
+**Changed**
 
 - Body rows render only the columns near the view. That is the pinned columns, the columns in view and a viewport's width either side, and the columns holding the keyboard cursor or DOM focus. A spacer stands in for the rest, so the scroll width and every column's position stay the same.
   - **Fewer cells:** at 1,000 columns in a 1,200 px view, a row holds about two dozen cells instead of 1,000.

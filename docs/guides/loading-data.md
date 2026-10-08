@@ -267,10 +267,14 @@ the loader estimates the table's size from the file's footer and a sample
 of its text columns and list lengths, and picks how to read the file:
 
 - When there is room, DuckDB reads a whole row group at a time, which is
-  as fast as loading from memory.
+  as fast as loading from memory. A 1.1 GB file of 200,000 rows × 1,000
+  columns, in four row groups, loads this way in about 11 seconds as a
+  `File` in Chrome on an Apple M1 Pro
+  ([Performance → Loading a wide Parquet file](../performance.md#loading-a-wide-parquet-file)).
 - Near the limit, it reads one column chunk at a time, two to four times
   slower but with the smallest peak. A 1.5 GB file of 200,000 rows × 1,000
-  columns of random doubles loads this way in about 35 seconds.
+  columns of random data, whose first row group alone is 898 MiB, loads
+  this way in 28 to 40 seconds in Chromium.
 
 Loading only the columns you use, with `sourceOptions.parquet.columns`,
 shrinks the table and the estimate alike: the columns left out are never

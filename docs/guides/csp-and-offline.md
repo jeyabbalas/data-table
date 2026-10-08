@@ -10,7 +10,8 @@ serve, how to point the library at it, and the policy that lets it run.
 The setup it describes runs in the library's browser test,
 [`tests/browser/self-hosted-bundles.spec.ts`](../../tests/browser/self-hosted-bundles.spec.ts):
 the built package, under the policy below, with every file from the page's
-own origin. What the test does not cover, the guide marks as untested.
+own origin, in Chromium, whose messages the guide quotes. What the test
+does not cover, the guide marks as untested.
 
 ## You'll learn how to
 
@@ -67,9 +68,9 @@ resolve, or is not a string or a `URL`, rejects `initialize()` with a
    npm install --save-exact @duckdb/duckdb-wasm@1.33.1-dev57.0
    ```
 
-   `1.33.1-dev57.0` is the version whose runtime the library's worker
-   bundles, and the one the library's tests run. Take every file from that
-   one version: DuckDB's worker scripts and `.wasm` files are built
+   The library's worker has DuckDB-WASM's JavaScript built in
+   (`1.33.1-dev57.0`), and the library's tests run that version. Take every
+   file from it: DuckDB's worker scripts and `.wasm` files are built
    together.
 
 2. **Copy the `eh` and `mvp` files** to a directory your server serves,
@@ -113,6 +114,11 @@ need `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`
 headers. The library's tests do not run it, and its pthread workers go
 without one of the library's fixes (see [Gotchas](#gotchas)).
 
+The paths here, `/duckdb/…` and, below, `new URL('/duckdb-ext',
+document.baseURI)`, start at the site's root. On an app served under a
+sub-path (Vite's `base`, Next.js's `basePath`, Nuxt's `app.baseURL`),
+prefix them with it.
+
 ## DuckDB's extensions
 
 DuckDB-WASM fetches three extensions the library uses from DuckDB's
@@ -144,24 +150,26 @@ and its JSON reads as plain text, with JSON inside a list or struct shown as
 quoted strings (`[1, NULL, 'null']`).
 
 To serve them yourself, mirror the repository's layout,
-`<repository>/<version>/<platform>/<name>.duckdb_extension.wasm`. For the
-`eh` bundle of `1.33.1-dev57.0` that is `v1.5.4/wasm_eh/`, as
-`PRAGMA version` (its `library_version`) and `PRAGMA platform` report:
-DuckDB asks for the directory of the version and the bundle it runs, so
-mirror one for each bundle you serve. With `bridge` a started
-`WorkerBridge`, as in the next example:
+`<repository>/<version>/<platform>/<name>.duckdb_extension.wasm`. For
+`1.33.1-dev57.0` that is `v1.5.4/wasm_eh/` for the `eh` bundle and
+`v1.5.4/wasm_mvp/` for `mvp`, as `PRAGMA version` (its `library_version`)
+and `PRAGMA platform` report: DuckDB asks for the directory of the version
+and the bundle it runs, so mirror one for each bundle you serve. With
+`bridge` a started `WorkerBridge`, as in the next example:
 
 ```ts
 const [{ library_version }] = await bridge.query('PRAGMA version'); // 'v1.5.4'
-const [{ platform }] = await bridge.query('PRAGMA platform'); // 'wasm_eh'
+const [{ platform }] = await bridge.query('PRAGMA platform'); // 'wasm_eh', or 'wasm_mvp'
 ```
 
-Then copy the files from DuckDB's repository:
+Then copy the files from DuckDB's repository, for both bundles:
 
 ```sh
-for name in icu parquet json; do
-  curl -fsSL --create-dirs -o "public/duckdb-ext/v1.5.4/wasm_eh/$name.duckdb_extension.wasm" \
-    "https://extensions.duckdb.org/v1.5.4/wasm_eh/$name.duckdb_extension.wasm"
+for platform in wasm_eh wasm_mvp; do
+  for name in icu parquet json; do
+    file="v1.5.4/$platform/$name.duckdb_extension.wasm"
+    curl -fsSL --create-dirs -o "public/duckdb-ext/$file" "https://extensions.duckdb.org/$file"
+  done
 done
 ```
 
@@ -206,13 +214,16 @@ default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob
 
 ### Send it with every response
 
-Each worker takes the policy that arrives with its own script, not the
-page's: the library's worker takes the one sent with
+A worker started from a URL takes the policy that arrives with its own
+script, not the page's: the library's worker takes the one sent with
 `assets/worker-*.js`, and DuckDB's `blob:` worker inherits the library
-worker's. A policy sent only with the page leaves both workers without one,
-and a different policy on your scripts' responses governs them instead. So
-send the same policy with every response: the page, its scripts, the
-library's worker script, and the rest.
+worker's. A policy sent only with the page then leaves both workers without
+one, and a different policy on your scripts' responses governs them
+instead. A worker started from a `blob:` URL inherits the policy of what
+starts it: a library worker from the `workerFactory` recipe below, or from a
+CDN page's trampoline, takes the page's policy and passes it on to DuckDB's
+worker. Either way, send the same policy with every response: the page, its
+scripts, the library's worker script, and the rest.
 
 ### Size the container in a stylesheet
 
@@ -266,7 +277,8 @@ again on every upgrade: it belongs to its version.
   });
   ```
 
-  `worker-src` needs `blob:` for this, as the policy above has.
+  `worker-src` needs `blob:` for this, as the policy above has. A worker
+  started this way takes the page's policy, and so does DuckDB's.
 
 ## Error handling
 
@@ -279,13 +291,13 @@ for one case: a `.wasm` file that does not load or compile, which times out.
 | A bundle URL that is not a URL, or does not resolve against the page                                                                                             | Rejects at once, before any worker starts: `ConfigurationError`, `OPTIONS_INVALID`, `details.option` naming it.                                                        |
 | `mainWorker` does not load: a 404, or an origin `script-src` leaves out                                                                                          | Rejects at once: `WorkerInitError`, `WORKER_CRASHED`, its message naming the URL.                                                                                      |
 | `worker-src` without `blob:`                                                                                                                                     | Rejects at once: `WORKER_CRASHED`, "DuckDB's worker could not start from its blob: URL".                                                                               |
-| The page's policy blocks the library's worker script, or the library is served from another origin than the page                                                 | Rejects at once: `WORKER_CRASHED`, its message naming `bridgeOptions.workerFactory`.                                                                                   |
+| The page's policy blocks the library's worker script, or (untested) the library is served from another origin than the page                                      | Rejects at once: `WORKER_CRASHED`, its message naming `bridgeOptions.workerFactory`.                                                                                   |
 | `mainModule`, the `.wasm`, does not load or compile: a 404, a type other than `application/wasm`, an origin `connect-src` leaves out, or no `'wasm-unsafe-eval'` | Nothing, until `initializeTimeoutMs` (30 s by default): then `WorkerInitError`, `WORKER_INIT_TIMEOUT`. DuckDB-WASM leaves the error unhandled, and the console has it. |
 | An extension that does not load                                                                                                                                  | Succeeds. The load or query that needs it fails: for `icu`, every load, with `LOAD_PARSE_FAILED`.                                                                      |
 
-After `WORKER_CRASHED` or `WORKER_INIT_TIMEOUT` the worker is gone, and
-calling `initialize()` again starts a new one. A slow network can need a
-longer timeout:
+After `WORKER_CRASHED` or `WORKER_INIT_TIMEOUT` the worker is gone, a
+request sent while it started rejects too, and calling `initialize()` again
+starts a new one. A slow network can need a longer timeout:
 
 ```ts
 await createDataTable({
@@ -335,9 +347,10 @@ browser" message instead of a half-mounted table.
 Untested: the library's test serves every file from the page's origin. From
 another origin, DuckDB's worker fetches the `.wasm` and the extensions with
 CORS, so that origin must send `Access-Control-Allow-Origin`, and the policy
-must list it in `script-src` and `connect-src`. `Cross-Origin-Resource-Policy`
-matters only on a cross-origin-isolated page, one sent with
-`Cross-Origin-Embedder-Policy`, as the `coi` bundle needs.
+must list it in `script-src` and `connect-src`. A
+`Cross-Origin-Resource-Policy: same-origin` or `same-site` header on that
+origin's `mainWorker` blocks the `importScripts` that loads it, even without
+`Cross-Origin-Embedder-Policy`.
 
 ### Electron and other packaged apps
 
@@ -360,8 +373,9 @@ and DuckDB's files from a privileged custom scheme (Electron's
   `1.33.1-dev57.0` exactly, and copy its worker scripts and `.wasm` files
   together, again whenever the library's pinned version changes. The
   extensions' directory follows the version DuckDB reports.
-- **The policy on the page alone reaches neither worker.** Send it with the
-  library's worker script too: see
+- **The policy on the page alone reaches the workers only through a
+  `blob:` URL.** A library worker started from a URL takes the policy sent
+  with its script. Send it with every response: see
   [Send it with every response](#send-it-with-every-response).
 - **`duckdbBundles` keys are case-sensitive**, and match the `DuckDBBundles`
   interface from `@duckdb/duckdb-wasm`: `mvp`, `eh`, `coi`, each with

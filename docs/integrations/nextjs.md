@@ -166,10 +166,14 @@ with every response, the worker scripts' too:
 default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; style-src 'self'
 ```
 
-Plus whatever your app needs. The table needs neither `'unsafe-inline'` nor
-`'unsafe-eval'`. It does need `'wasm-unsafe-eval'`, for DuckDB to compile its
-`.wasm`, and `blob:` in `worker-src`, for DuckDB's worker. Size the table's
-container in a stylesheet: the policy drops `style` attributes. See
+This policy is only the table's part, and as it stands it blocks Next.js
+itself: its inline `self.__next_f.push` scripts, `next/font` and inline
+styles need a nonce or hash setup of their own (Next.js's middleware
+nonces), and this combination is untested. The table needs neither
+`'unsafe-inline'` nor `'unsafe-eval'`. It does need `'wasm-unsafe-eval'`,
+for DuckDB to compile its `.wasm`, and `blob:` in `worker-src`, for DuckDB's
+worker. Size the table's container in a stylesheet: the policy drops
+`style` attributes. See
 [CSP and offline](../guides/csp-and-offline.md#the-content-security-policy).
 
 ## Route-change cleanup

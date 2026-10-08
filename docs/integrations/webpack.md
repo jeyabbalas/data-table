@@ -69,9 +69,33 @@ As in the [Vite guide](./vite.md#self-hosted-wasm-offline--strict-csp),
 pin `@duckdb/duckdb-wasm` to exactly `1.33.1-dev57.0`, copy
 `duckdb-browser-eh.worker.js`, `duckdb-eh.wasm`,
 `duckdb-browser-mvp.worker.js` and `duckdb-mvp.wasm` from
-`node_modules/@duckdb/duckdb-wasm/dist/` into your static assets (with
-`copy-webpack-plugin`, say), and pass them in. Relative URLs resolve
-against the page:
+`node_modules/@duckdb/duckdb-wasm/dist/` into your static assets, and pass
+them in. With `copy-webpack-plugin`, for an output served at `/` (untested,
+like the rest of this page's recipes):
+
+```js
+// webpack.config.js
+const CopyPlugin = require('copy-webpack-plugin');
+
+module.exports = {
+  plugins: [
+    new CopyPlugin({
+      patterns: [
+        'duckdb-browser-eh.worker.js',
+        'duckdb-eh.wasm',
+        'duckdb-browser-mvp.worker.js',
+        'duckdb-mvp.wasm',
+      ].map((file) => ({
+        from: `node_modules/@duckdb/duckdb-wasm/dist/${file}`,
+        to: 'static/duckdb/',
+      })),
+    }),
+  ],
+  // …
+};
+```
+
+Relative URLs resolve against the page:
 
 ```ts
 const bundles = {
@@ -172,6 +196,12 @@ Plus whatever your app already requires. `'self'` covers the worker chunk
 wherever webpack emits it under your origin, `/static/js/` say;
 `'wasm-unsafe-eval'` lets DuckDB compile its `.wasm`, and `blob:` lets it
 start its worker. See [CSP and offline](../guides/csp-and-offline.md#the-content-security-policy).
+
+`style-loader` injects `<style>` elements, which `style-src 'self'` blocks:
+the library's styles, and your container's height with them if your own
+CSS goes through it too, so the table renders every row. Under this
+policy, extract the CSS into files with `MiniCssExtractPlugin`, or give
+`style-loader` a nonce the policy allows (untested).
 
 ## Dev server proxying
 

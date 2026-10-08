@@ -166,9 +166,12 @@ export default defineNuxtConfig({
 });
 ```
 
-Adjust to match your app's other CSP requirements, and check that the header
-reaches every response, the library's worker script among them: each worker
-takes the policy sent with its own script, not the page's. See
+This policy is only the table's part. Nuxt itself needs more: its inline
+`window.__NUXT__` script and inline styles need a nonce or hash setup of
+their own (the `nuxt-security` module, say), and this combination is
+untested. Check that the header reaches every response, the library's
+worker script among them: a library worker started from a URL takes the
+policy sent with its script, not the page's. See
 [CSP and offline](../guides/csp-and-offline.md#send-it-with-every-response).
 
 ## Gotchas

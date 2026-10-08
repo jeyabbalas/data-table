@@ -212,12 +212,12 @@ Types for the [Stats panels](#stats-panels) extension point. Source: `src/visual
 
 ### i18n
 
-| Symbol                    | Kind      | Purpose                                             |
-| ------------------------- | --------- | --------------------------------------------------- |
-| `defaultStrings`          | const     | English strings catalog.                            |
-| `mergeStrings(overrides)` | function  | Deep-merge partial overrides into `defaultStrings`. |
-| `Strings`                 | interface | Full i18n shape.                                    |
-| `DeepPartial<T>`          | type      | Helper used for partial overrides.                  |
+| Symbol                           | Kind      | Purpose                                                                       |
+| -------------------------------- | --------- | ----------------------------------------------------------------------------- |
+| `defaultStrings`                 | const     | English strings catalog.                                                      |
+| `mergeStrings(base, overrides?)` | function  | Deep-merge partial overrides into a copy of `base`, usually `defaultStrings`. |
+| `Strings`                        | interface | Full i18n shape.                                                              |
+| `DeepPartial<T>`                 | type      | Helper used for partial overrides.                                            |
 
 ### Utilities
 

@@ -614,10 +614,12 @@ and error handlers can see them.
   `editorFactory` gets as a third argument. `0.8` named all three "SQL
   Expression", in English. See
   [i18n → ARIA and screen-reader strings](../guides/i18n.md#aria-and-screen-reader-strings).
-- **`messages` callbacks are type-checked.** `DeepPartial` keeps the type of
-  each function in `Strings`, so in `statistics: { rowCount: (count) => … }`
-  under strict TypeScript `count` is a `number`, not an implicit `any`. A
-  callback of the wrong type, which `0.8` accepted, no longer compiles. See
+- **`messages` callbacks keep their types.** `DeepPartial<Strings>` no
+  longer turns each callback into `{}`, as it has since `messages` was
+  added: in `statistics: { rowCount: (count) => … }`, `count` is a `number`
+  under strict TypeScript, not an implicit `any` (TS7006). A value of the
+  wrong type, such as `rowCount: 42` or a callback with the wrong parameter
+  type, is now a type error. See
   [i18n → `DeepPartial<Strings>`](../guides/i18n.md#deeppartialstrings).
 
 ## Verification checklist

@@ -67,9 +67,11 @@ function moveTheFloor(field: string): string {
 /**
  * A duckdb-wasm version in the exact form a self-hoster pins, such as
  * `1.33.1-dev57.0`. A record of what was measured names one too, but is not a
- * pin: `docs/performance.md` and `docs/dev/` keep theirs through a bump.
+ * pin: `docs/performance.md` and `docs/dev/` keep theirs through a bump. A
+ * caret range such as `^1.33.1-dev45.0` is a range, not a pin; package.json's
+ * peer range is checked by the tests below.
  */
-const EXACT_VERSION = /\b\d+\.\d+\.\d+-dev\d+\.\d+\b/g;
+const EXACT_VERSION = /(?<!\^)\b\d+\.\d+\.\d+-dev\d+\.\d+\b/g;
 const RECORDS = /^docs\/(?:performance\.md$|dev\/)/;
 
 /** The files under `dir`, as paths from the repository root. */

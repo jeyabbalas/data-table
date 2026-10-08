@@ -271,6 +271,14 @@ test.beforeAll(() => {
   if (!BUILT) throw new Error('dist/ is missing: run `npm run build` first');
 });
 
+/** What the page keeps on `window` from one step of a test to the next. */
+type InPage = {
+  __dataTable: Library;
+  __bridge: import('../../src/index').WorkerBridge;
+  __table: import('../../src/index').DataTable;
+  __violations: string[];
+};
+
 test('loads CSV, Parquet and nested values with every file from the page origin', async ({
   context,
   page,
@@ -287,55 +295,67 @@ test('loads CSV, Parquet and nested values with every file from the page origin'
     ok: true,
     ms: expect.any(Number),
   });
-  const result = await page.evaluate(async () => {
-    const w = window as unknown as {
-      __dataTable: Library;
-      __bridge: import('../../src/index').WorkerBridge;
-    };
-    const bridge = w.__bridge;
-    const [{ library_version: version }] = await bridge.query<{ library_version: string }>(
-      'PRAGMA version',
-    );
-    const [{ platform }] = await bridge.query<{ platform: string }>('PRAGMA platform');
-
-    // DuckDB's worker, which loads extensions, cannot resolve a relative
-    // repository: ICU, which every load needs for its time zone, fails.
-    await bridge.query("SET custom_extension_repository = '/duckdb-ext'");
-    const relative = await bridge.query("SET TimeZone = 'UTC'").then(
-      () => 'loaded',
-      (error: Error) => error.message,
-    );
-    const repository = new URL('/duckdb-ext', document.baseURI).href;
-    await bridge.query(`SET custom_extension_repository = '${repository}'`);
-
-    const table = await w.__dataTable.createDataTable({
+  const { version, platform } = await page.evaluate(async () => {
+    const w = window as unknown as InPage;
+    const [versionRow] = await w.__bridge.query<{ library_version: string }>('PRAGMA version');
+    const [platformRow] = await w.__bridge.query<{ platform: string }>('PRAGMA platform');
+    w.__table = await w.__dataTable.createDataTable({
       container: document.getElementById('table')!,
-      bridge,
+      bridge: w.__bridge,
     });
-    await table.loadData('/fixtures/csv/titanic.csv');
-    const csvRows = table.state.totalRows.get();
-    await table.loadData('/fixtures/parquet/nested-stress-tests.parquet');
-    return {
-      version: version!,
-      platform: platform!,
-      relative,
-      csvRows,
-      parquetRows: table.state.totalRows.get(),
-      point: await table.actions.getCellValue(10, 'point'),
-      tags: await table.actions.getCellValue(10, 'tags'),
-      renderedRows: document.querySelectorAll('#table [role="row"]').length,
-      violations: (window as unknown as { __violations: string[] }).__violations,
-    };
+    return { version: versionRow!.library_version, platform: platformRow!.platform };
+  });
+  const mirror = (name: string) =>
+    `/duckdb-ext/${version}/${platform}/${name}.duckdb_extension.wasm`;
+
+  // DuckDB's worker, which loads extensions, cannot resolve a relative
+  // repository URL. A CSV load needs ICU, for its time zone, and fails.
+  const relative = await page.evaluate(async () => {
+    const w = window as unknown as InPage;
+    await w.__bridge.query("SET custom_extension_repository = '/duckdb-ext'");
+    return w.__table.loadData('/fixtures/csv/titanic.csv').then(
+      () => 'loaded',
+      (error: { code?: string; message?: string }) => ({
+        code: error.code,
+        message: error.message,
+      }),
+    );
+  });
+  expect(relative).toEqual({
+    code: 'LOAD_PARSE_FAILED',
+    message: expect.stringMatching(/Invalid URL/),
   });
 
-  expect(result.relative).toMatch(/Invalid URL/);
-  expect(result.csvRows).toBe(891);
-  expect(result.parquetRows).toBe(1000);
-  expect(result.point).toEqual({ x: 1.5, y: -0.5, tier: 'gold' });
-  expect(result.tags).toEqual(['red', 'green', 'blue']);
+  // An absolute one, from the page's own URL, serves ICU from the mirror.
+  const csv = await page.evaluate(async () => {
+    const w = window as unknown as InPage;
+    const repository = new URL('/duckdb-ext', document.baseURI).href;
+    await w.__bridge.query(`SET custom_extension_repository = '${repository}'`);
+    await w.__table.loadData('/fixtures/csv/titanic.csv');
+    return w.__table.state.totalRows.get();
+  });
+  expect(csv).toBe(891);
+  expect(traffic.served).toContain(mirror('icu'));
+  expect(traffic.served).not.toContain(mirror('parquet'));
+
+  // Parquet, with a JSON column, needs parquet and json; so do exact reads.
+  const parquet = await page.evaluate(async () => {
+    const w = window as unknown as InPage;
+    await w.__table.loadData('/fixtures/parquet/nested-stress-tests.parquet');
+    return {
+      rows: w.__table.state.totalRows.get(),
+      point: await w.__table.actions.getCellValue(10, 'point'),
+      tags: await w.__table.actions.getCellValue(10, 'tags'),
+      renderedRows: document.querySelectorAll('#table [role="row"]').length,
+      violations: w.__violations,
+    };
+  });
+  expect(parquet.rows).toBe(1000);
+  expect(parquet.point).toEqual({ x: 1.5, y: -0.5, tier: 'gold' });
+  expect(parquet.tags).toEqual(['red', 'green', 'blue']);
   // The bounded container keeps the grid virtualized: 1,000 rows, a few in the DOM.
-  expect(result.renderedRows).toBeGreaterThan(0);
-  expect(result.renderedRows).toBeLessThan(60);
+  expect(parquet.renderedRows).toBeGreaterThan(0);
+  expect(parquet.renderedRows).toBeLessThan(60);
 
   // DuckDB came from the page's origin, and so did the three extensions the
   // library needs, under PRAGMA version and PRAGMA platform.
@@ -343,19 +363,50 @@ test('loads CSV, Parquet and nested values with every file from the page origin'
     expect.arrayContaining([
       '/duckdb/duckdb-browser-eh.worker.js',
       '/duckdb/duckdb-eh.wasm',
-      ...['icu', 'parquet', 'json'].map(
-        (name) => `/duckdb-ext/${result.version}/${result.platform}/${name}.duckdb_extension.wasm`,
-      ),
+      ...['icu', 'parquet', 'json'].map(mirror),
     ]),
   );
   expect(traffic.foreign).toEqual([]);
   expect(messages.filter((m) => /jsdelivr|extensions\.duckdb\.org/i.test(m))).toEqual([]);
 
   // The one violation is the inline style; no worker reported one.
-  expect(result.violations).toEqual(['style-src-attr inline']);
+  expect(parquet.violations).toEqual(['style-src-attr inline']);
   expect(
     messages.filter((m) => /Content Security Policy/i.test(m) && !/inline style/i.test(m)),
   ).toEqual([]);
+});
+
+test("without a mirror, a CSV load fails on ICU from DuckDB's repository", async ({
+  context,
+  page,
+}) => {
+  const traffic = await serve(context, () => policy());
+  await open(page);
+  expect(await startBridge(page)).toEqual({ ok: true, ms: expect.any(Number) });
+
+  const load = await page.evaluate(async () => {
+    const w = window as unknown as InPage;
+    w.__table = await w.__dataTable.createDataTable({
+      container: document.getElementById('table')!,
+      bridge: w.__bridge,
+    });
+    return w.__table.loadData('/fixtures/csv/titanic.csv').then(
+      () => 'loaded',
+      (error: { code?: string; message?: string }) => ({
+        code: error.code,
+        message: error.message,
+      }),
+    );
+  });
+
+  // connect-src stops the request in the browser: it never reaches the network.
+  expect(load).toEqual({
+    code: 'LOAD_PARSE_FAILED',
+    message: expect.stringMatching(
+      /https:\/\/extensions\.duckdb\.org\/v[\d.]+\/wasm_\w+\/icu\.duckdb_extension\.wasm/,
+    ),
+  });
+  expect(traffic.foreign).toEqual([]);
 });
 
 /** The negative control's policy: the guide's, without `'wasm-unsafe-eval'`. */

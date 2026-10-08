@@ -48,7 +48,7 @@ the library's DuckDB worker is built with. npm moves an app on
 `ERESOLVE` until the pin moves. If you host DuckDB's files yourself, through
 `bridgeOptions.duckdbBundles`, copy them from exactly `1.33.1-dev57.0`, and
 pin that version without `^`. See
-[CSP and offline → Self-hosting the WASM bundles](../guides/csp-and-offline.md#self-hosting-the-wasm-bundles).
+[CSP and offline → Serving DuckDB-WASM yourself](../guides/csp-and-offline.md#serving-duckdb-wasm-yourself).
 
 ## Breaking changes
 
@@ -528,23 +528,41 @@ and error handlers can see them.
   `WORKER_PROTOCOL_VIOLATION`, and `terminate()` during `initialize()`
   rejects it at once with `WORKER_TERMINATED`, not after 30 s. See
   [Troubleshooting → Error code reference](../troubleshooting.md#error-code-reference).
-- **DuckDB init failures reject at once.** A bad bundle URL, or a DuckDB
-  worker script the page blocks, rejects `initialize()`, and so
-  `createDataTable()`, with a `WorkerInitError` coded `WORKER_CRASHED`. It
-  surfaced as a `QueryError` coded `QUERY_RUNTIME`, or as
-  `WORKER_INIT_TIMEOUT` after 30 s. See
+- **DuckDB's worker failing to start rejects at once.** A `mainWorker` that
+  does not load (a 404, or a URL the CSP blocks) or a `worker-src` without
+  `blob:` rejects `initialize()`, and so `createDataTable()`, at once with a
+  `WorkerInitError` coded `WORKER_CRASHED`, where `0.8` waited for the 30 s
+  timeout. Any failure of DuckDB's init is a `WorkerInitError`, not a
+  `QueryError` coded `QUERY_RUNTIME`, but a `.wasm` that fails to download
+  or compile still ends in `WORKER_INIT_TIMEOUT`. See
   [CSP and offline → Error handling](../guides/csp-and-offline.md#error-handling).
-- **Self-hosted bundle URLs resolve against the page.** The URLs in
-  `bridgeOptions.duckdbBundles`, strings or `URL` objects, are resolved
-  against `document.baseURI` before DuckDB's `blob:` worker sees them, so
-  root-relative paths such as `/assets/duckdb/duckdb-eh.wasm` work. See
-  [CSP and offline → Self-hosting the WASM bundles](../guides/csp-and-offline.md#self-hosting-the-wasm-bundles).
-- **A default worker the browser refuses is a typed error.** When the
-  browser refuses to construct the default worker, because its script is
-  cross-origin or a CSP blocks it, `initialize()` rejects with a
-  `WorkerInitError` whose message names `workerFactory`, the way around it.
-  See
+- **A failed `initialize()` can be called again.** After DuckDB fails to
+  start or times out, or the worker cannot be constructed, calling it again
+  starts afresh, where `0.8` returned the same rejection except after a
+  timeout. A request sent while the init ran rejects with the init's error;
+  `0.8` could leave it waiting for good. See
   [CSP and offline → Error handling](../guides/csp-and-offline.md#error-handling).
+- **`duckdbBundles` takes `URL` objects and relative URLs.** One that does
+  not resolve against the page, or is not a string or a `URL`, rejects
+  `initialize()` before any worker starts, with a `ConfigurationError` coded
+  `OPTIONS_INVALID` and `details.option` naming it. The option's type is no
+  longer duckdb-wasm's `DuckDBBundles`, so code that reads
+  `WorkerBridgeOptions['duckdbBundles']` as one no longer compiles; passing
+  a `DuckDBBundles` in still does. See
+  [CSP and offline → The workers](../guides/csp-and-offline.md#the-workers).
+- **A default worker the browser refuses names `workerFactory`.** When a
+  CSP blocks the library's worker script, or the library is served from
+  another origin than the page, `initialize()` rejects with a
+  `WorkerInitError` coded `WORKER_CRASHED` whose message names
+  `bridgeOptions.workerFactory`, the way around it. `0.8` threw the
+  browser's `SecurityError` for another origin, and said only
+  `Worker error: undefined` for a blocked script. See
+  [CSP and offline → Error handling](../guides/csp-and-offline.md#error-handling).
+- **Errors report their class names.** `error.name`, `String(error)`,
+  `toJSON().name` and `error.constructor.name` give the class name,
+  `LoadError`, where `0.8` gave a minified letter, `a`. `instanceof` and
+  `error.code` are unchanged. See
+  [API reference → Error classes](../api-reference.md#error-classes).
 - **A Parquet load that runs out of memory is `LOAD_MEMORY_EXCEEDED`.** One
   that will not fit is refused before anything loads, and one that runs out
   partway rejects with the same code, DuckDB's message in
@@ -647,8 +665,7 @@ and error handlers can see them.
 ## Verification checklist
 
 - [ ] `npm install @jeyabbalas/data-table@0.9` in the target project, with
-      `@duckdb/duckdb-wasm` at `^1.33.1-dev57.0`, or pinned to exactly
-      `1.33.1-dev57.0` where you host DuckDB's files yourself.
+      `@duckdb/duckdb-wasm` at `^1.33.1-dev57.0`.
 - [ ] Every `isApplicable` that accepts `'string'` or is `isCategoricalType`
       checked: text only, or nested columns too.
 - [ ] Every switch over `DataType` or `stats.kind` has a `'nested'` case.

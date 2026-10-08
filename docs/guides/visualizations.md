@@ -104,12 +104,20 @@ This ties the cost of charts to the viewport, not the column count. Each
 chart runs two to four queries when it is built and about two on every
 filter change. On a 50,000-row × 1,000-column Parquet file in Chrome:
 
-|                           | Chart for every column (0.8) | Charts near the view |
-| ------------------------- | ---------------------------- | -------------------- |
-| `loadData`                | 20.4 s                       | 6.2 s                |
-| Queries during `loadData` | 2,004                        | 22                   |
-| One filter                | 4.4 s, 2,002 queries         | 0.5 s, 20 queries    |
-| Hiding a column, filtered | 20.6 s, 3,998 queries        | 2.2 s, 38 queries    |
+|                           | Chart for every column (0.8)         | Charts near the view |
+| ------------------------- | ------------------------------------ | -------------------- |
+| `loadData`                | 20.4 s                               | 6.2 s                |
+| Queries during `loadData` | 2,004                                | 22                   |
+| One filter                | 4.4 s, 2,002 queries                 | 0.5 s, 20 queries    |
+| Hiding a column           | 20.6 s, 3,998 queries, with a filter | 41 ms, 2 queries     |
+
+The hide on the right was measured later, once charts outlived column
+changes: in headless Chromium on 27 September 2026, without a filter
+(`docs/dev/column-virtualization.md:340-341`, in the
+[column virtualization notes](../dev/column-virtualization.md)). A hide
+keeps every other chart and builds only the one for the column the shift
+brings into reach; under a filter, that chart's first fetch runs up to four
+queries.
 
 What to expect:
 

@@ -102,6 +102,10 @@ const TYPES: Record<string, string> = {
   '.parquet': 'application/vnd.apache.parquet',
 };
 
+/** The type a path is served as. */
+const typeOf = (pathname: string): string | undefined =>
+  pathname === '/' ? 'text/html' : TYPES[path.extname(pathname)];
+
 const BUILT = existsSync(path.join(DIST, 'data-table.js'));
 
 /** Where the page serves its own copy of the library's worker script. */
@@ -176,12 +180,13 @@ async function fileFor(route: Route, pathname: string): Promise<Buffer | string 
 
 /**
  * Serve `https://app.test` from disk, each response with the policy
- * `policyFor` returns for its path, or none for `null`, and abort every
- * other host.
+ * `policyFor` returns for its path, or none for `null`, and the type
+ * `typeFor` returns, and abort every other host.
  */
 async function serve(
   context: BrowserContext,
   policyFor: (pathname: string) => string | null,
+  typeFor: (pathname: string) => string | undefined = typeOf,
 ): Promise<Traffic> {
   const traffic: Traffic = { served: [], foreign: [] };
   await context.route('**/*', async (route) => {
@@ -193,7 +198,7 @@ async function serve(
     }
     traffic.served.push(url.pathname);
     const body = await fileFor(route, url.pathname);
-    const type = url.pathname === '/' ? 'text/html' : TYPES[path.extname(url.pathname)];
+    const type = typeFor(url.pathname);
     const csp = policyFor(url.pathname);
     await route.fulfill({
       status: body === null ? 404 : 200,
@@ -238,64 +243,68 @@ interface Start {
 
 /**
  * Initialize a `WorkerBridge` in the page with root-relative bundle URLs
- * under `/duckdb/`, `mainWorker` as given, and with `urlObject`, the `eh`
- * bundle's `mainModule` as a `URL` object.
+ * under `/duckdb/`, `mainWorker` and `mainModule` as given, and with
+ * `urlObject`, the `eh` bundle's `mainModule` as a `URL` object.
  */
 async function startBridge(
   page: Page,
   options: {
     mainWorker?: string;
+    mainModule?: string;
     initializeTimeoutMs?: number;
     urlObject?: boolean;
     /** The library's worker from `WORKER_COPY`: its URL, or its text in a `blob:` URL. */
     worker?: { copy: string; as: 'workerUrl' | 'workerFactory' };
   } = {},
 ): Promise<Start> {
-  return page.evaluate(async ({ mainWorker, initializeTimeoutMs, urlObject, worker }) => {
-    const library = (window as unknown as { __dataTable: Library }).__dataTable;
-    // The guide's workerFactory: the text first, since the factory runs synchronously.
-    const code =
-      worker?.as === 'workerFactory' ? await fetch(worker.copy).then((r) => r.text()) : '';
-    const bridge = new library.WorkerBridge({
-      ...(worker?.as === 'workerUrl' ? { workerUrl: worker.copy } : {}),
-      ...(worker?.as === 'workerFactory'
-        ? {
-            workerFactory: () =>
-              new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), {
-                type: 'module',
-              }),
-          }
-        : {}),
-      initializeTimeoutMs,
-      duckdbBundles: {
-        mvp: {
-          mainModule: '/duckdb/duckdb-mvp.wasm',
-          mainWorker: mainWorker ?? '/duckdb/duckdb-browser-mvp.worker.js',
+  return page.evaluate(
+    async ({ mainWorker, mainModule, initializeTimeoutMs, urlObject, worker }) => {
+      const library = (window as unknown as { __dataTable: Library }).__dataTable;
+      // The guide's workerFactory: the text first, since the factory runs synchronously.
+      const code =
+        worker?.as === 'workerFactory' ? await fetch(worker.copy).then((r) => r.text()) : '';
+      const bridge = new library.WorkerBridge({
+        ...(worker?.as === 'workerUrl' ? { workerUrl: worker.copy } : {}),
+        ...(worker?.as === 'workerFactory'
+          ? {
+              workerFactory: () =>
+                new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })), {
+                  type: 'module',
+                }),
+            }
+          : {}),
+        initializeTimeoutMs,
+        duckdbBundles: {
+          mvp: {
+            mainModule: mainModule ?? '/duckdb/duckdb-mvp.wasm',
+            mainWorker: mainWorker ?? '/duckdb/duckdb-browser-mvp.worker.js',
+          },
+          eh: {
+            mainModule: urlObject
+              ? new URL('/duckdb/duckdb-eh.wasm', document.baseURI)
+              : (mainModule ?? '/duckdb/duckdb-eh.wasm'),
+            mainWorker: mainWorker ?? '/duckdb/duckdb-browser-eh.worker.js',
+          },
         },
-        eh: {
-          mainModule: urlObject
-            ? new URL('/duckdb/duckdb-eh.wasm', document.baseURI)
-            : '/duckdb/duckdb-eh.wasm',
-          mainWorker: mainWorker ?? '/duckdb/duckdb-browser-eh.worker.js',
-        },
-      },
-    });
-    (window as unknown as { __bridge: unknown }).__bridge = bridge;
-    const started = performance.now();
-    try {
-      await bridge.initialize();
-      return { ok: true, ms: performance.now() - started };
-    } catch (error) {
-      const { code, message } = error as { code: string; message: string };
-      const kind =
-        error instanceof library.WorkerInitError
-          ? 'WorkerInitError'
-          : error instanceof library.ConfigurationError
-            ? 'ConfigurationError'
-            : `${(error as Error).name} (not a DataTableError)`;
-      return { ok: false, ms: performance.now() - started, error: kind, code, message };
-    }
-  }, options);
+      });
+      (window as unknown as { __bridge: unknown }).__bridge = bridge;
+      const started = performance.now();
+      try {
+        await bridge.initialize();
+        return { ok: true, ms: performance.now() - started };
+      } catch (error) {
+        const { code, message } = error as { code: string; message: string };
+        const kind =
+          error instanceof library.WorkerInitError
+            ? 'WorkerInitError'
+            : error instanceof library.ConfigurationError
+              ? 'ConfigurationError'
+              : `${(error as Error).name} (not a DataTableError)`;
+        return { ok: false, ms: performance.now() - started, error: kind, code, message };
+      }
+    },
+    options,
+  );
 }
 
 test.skip(!BUILT && !CI, 'dist/ is not built: run `npm run build` first');
@@ -492,6 +501,65 @@ test("DuckDB's worker takes the policy sent with the library's worker script", a
   expect(start).toMatchObject({ ok: false, error: 'WorkerInitError', code: 'WORKER_INIT_TIMEOUT' });
   expect(blockedWasm(messages), messages.join('\n')).toBe(true);
 });
+
+/**
+ * Ways a `.wasm` file fails to load or compile, each under the guide's
+ * policy but for the one difference. duckdb-wasm leaves the rejection of
+ * `WebAssembly.instantiateStreaming` unhandled, so DuckDB never starts and
+ * the bridge's timeout is all that reports it; the console says why.
+ */
+const WASM_FAILURES: {
+  name: string;
+  mainModule: string;
+  typeFor?: (pathname: string) => string | undefined;
+  console?: RegExp;
+}[] = [
+  { name: 'a 404', mainModule: '/duckdb/missing.wasm', console: /HTTP status code is not ok/ },
+  {
+    name: 'a type other than application/wasm',
+    mainModule: '/duckdb/duckdb-eh.wasm',
+    typeFor: (pathname) => (pathname.endsWith('.wasm') ? 'application/octet-stream' : undefined),
+    console: /Incorrect response MIME type/,
+  },
+  // connect-src stops the fetch in the browser: it never reaches the network.
+  {
+    name: 'an origin connect-src leaves out',
+    mainModule: 'https://cdn.example.test/duckdb-eh.wasm',
+  },
+];
+
+for (const failure of WASM_FAILURES) {
+  test(`a .wasm with ${failure.name} leaves DuckDB waiting until the timeout`, async ({
+    context,
+    page,
+  }) => {
+    const traffic = await serve(
+      context,
+      () => policy(),
+      (pathname) => failure.typeFor?.(pathname) ?? typeOf(pathname),
+    );
+    const messages = listen(page);
+    await open(page);
+
+    const start = await startBridge(page, {
+      mainModule: failure.mainModule,
+      initializeTimeoutMs: 3_000,
+    });
+
+    expect(start).toMatchObject({
+      ok: false,
+      error: 'WorkerInitError',
+      code: 'WORKER_INIT_TIMEOUT',
+    });
+    if (failure.console) {
+      expect(
+        messages.some((m) => failure.console!.test(m)),
+        messages.join('\n'),
+      ).toBe(true);
+    }
+    expect(traffic.foreign).toEqual([]);
+  });
+}
 
 test('a 404 bundle URL rejects at once, naming it', async ({ context, page }) => {
   await serve(context, () => policy());

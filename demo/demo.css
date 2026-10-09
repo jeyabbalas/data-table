@@ -1062,6 +1062,101 @@ kbd {
   font-weight: 600;
 }
 
+/* The examples index: a card per example. */
+.doc-intro code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.example-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.example-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-table);
+  transform: translateY(-1px);
+}
+
+.example-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.example-num {
+  color: var(--text-subtle);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.example-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.example-text {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.example-text code,
+.example-api code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+.example-api {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.example-api code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .example-card {
+    transition: none;
+  }
+
+  .example-card:hover {
+    transform: none;
+  }
+}
+
 /* ===========================================
    Narrow screens
    =========================================== */

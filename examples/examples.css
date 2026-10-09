@@ -1,0 +1,347 @@
+/*
+ * Page styles shared by the examples: the header, the side panel, buttons
+ * and code. Not the table's (that is `@jeyabbalas/data-table/styles`), and
+ * not load-bearing: each example sizes its table in its own <style>, where
+ * the height chain the table needs is in plain sight. Leave this file out
+ * of a copy and the example still works; it only looks plainer.
+ *
+ * Light and dark follow the table: the system's preference, or the theme
+ * picked in the demo, which each page's <head> puts on <html> as
+ * `data-dt-color-scheme`, the attribute the library's stylesheet reads.
+ */
+
+:root {
+  --ex-bg: #f7f8fa;
+  --ex-surface: #ffffff;
+  --ex-hover: #f3f4f6;
+  --ex-pressed: #e5e7eb;
+  --ex-border: #e5e7eb;
+  --ex-border-strong: #d1d5db;
+  --ex-text: #111827;
+  --ex-muted: #4b5563;
+  --ex-accent: #2563eb;
+  --ex-accent-hover: #1d4ed8;
+  --ex-accent-text: #ffffff;
+  --ex-code: #f3f4f6;
+  --ex-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ex-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root[data-dt-color-scheme='dark'] {
+  --ex-bg: #0b0f17;
+  --ex-surface: #111827;
+  --ex-hover: #1f2937;
+  --ex-pressed: #283244;
+  --ex-border: #1f2937;
+  --ex-border-strong: #374151;
+  --ex-text: #f3f4f6;
+  --ex-muted: #9ca3af;
+  --ex-accent: #60a5fa;
+  --ex-accent-hover: #93c5fd;
+  --ex-accent-text: #0b0f17;
+  --ex-code: #1f2937;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-dt-color-scheme='light']) {
+    --ex-bg: #0b0f17;
+    --ex-surface: #111827;
+    --ex-hover: #1f2937;
+    --ex-pressed: #283244;
+    --ex-border: #1f2937;
+    --ex-border-strong: #374151;
+    --ex-text: #f3f4f6;
+    --ex-muted: #9ca3af;
+    --ex-accent: #60a5fa;
+    --ex-accent-hover: #93c5fd;
+    --ex-accent-text: #0b0f17;
+    --ex-code: #1f2937;
+  }
+}
+
+body {
+  background: var(--ex-bg);
+  color: var(--ex-text);
+  font-family: var(--ex-font);
+}
+
+/* Type for the page's own parts. Not on <body>: the table would inherit the
+   line height, and its headers grow with it. */
+.ex-header,
+aside {
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ----- Header ----- */
+
+.ex-header {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ex-border);
+}
+
+.ex-back,
+.ex-source {
+  color: var(--ex-muted);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ex-back:hover,
+.ex-source:hover {
+  color: var(--ex-text);
+}
+
+.ex-source {
+  margin-left: auto;
+}
+
+.ex-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ex-num {
+  padding: 1px 6px;
+  border: 1px solid var(--ex-border);
+  border-radius: 6px;
+  color: var(--ex-muted);
+  font-family: var(--ex-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* A sentence or two on what the example shows, on a line of its own under
+   the title row: as wide as the header, its text kept to 900px. */
+.ex-lede {
+  box-sizing: border-box;
+  flex: 0 0 100%;
+  margin: 0;
+  padding-right: max(0px, calc(100% - 900px));
+  color: var(--ex-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ex-lede details {
+  margin-top: 4px;
+}
+
+.ex-lede summary {
+  cursor: pointer;
+}
+
+/* Buttons that drive the example, beside the title. */
+.ex-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ex-actions button,
+aside button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--ex-border-strong);
+  border-radius: 8px;
+  background: var(--ex-surface);
+  color: var(--ex-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ex-actions button:hover:not(:disabled),
+aside button:hover:not(:disabled) {
+  background: var(--ex-hover);
+}
+
+.ex-actions button:active:not(:disabled),
+aside button:active:not(:disabled) {
+  background: var(--ex-pressed);
+}
+
+.ex-actions button:disabled,
+aside button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ex-actions button:focus-visible,
+aside button:focus-visible,
+.ex-back:focus-visible,
+.ex-source:focus-visible {
+  outline: 2px solid var(--ex-accent);
+  outline-offset: 2px;
+}
+
+/* ----- Code ----- */
+
+.ex-header code,
+aside code,
+aside pre {
+  font-family: var(--ex-mono);
+}
+
+.ex-header code,
+aside code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ex-code);
+  font-size: 0.88em;
+}
+
+kbd {
+  padding: 0 5px;
+  border: 1px solid var(--ex-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 500 11.5px/18px var(--ex-font);
+}
+
+/* ----- Side panel ----- */
+
+aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px 16px 4px;
+  overflow: auto;
+  font-size: 13.5px;
+}
+
+aside section {
+  padding: 14px 16px;
+  border: 1px solid var(--ex-border);
+  border-radius: 10px;
+  background: var(--ex-surface);
+}
+
+aside h2 {
+  margin: 0 0 10px;
+  color: var(--ex-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+aside h2 code {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+aside p {
+  margin: 0 0 10px;
+}
+
+aside ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+aside ol li {
+  margin: 4px 0;
+}
+
+/* The panels' buttons are a list of actions, one per line. */
+aside button {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+aside button:last-child {
+  margin-bottom: 0;
+}
+
+aside pre {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid var(--ex-border);
+  border-radius: 8px;
+  background: var(--ex-bg);
+  font-size: 12px;
+}
+
+aside label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+aside select,
+aside input[type='number'],
+aside input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--ex-border-strong);
+  border-radius: 6px;
+  background: var(--ex-surface);
+  color: var(--ex-text);
+  font: inherit;
+  font-size: 13px;
+}
+
+aside select:focus-visible,
+aside input:focus-visible {
+  outline: 2px solid var(--ex-accent);
+  outline-offset: 0;
+  border-color: transparent;
+}
+
+aside input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--ex-accent);
+}
+
+/* A note under a group of buttons. */
+.counter,
+.note {
+  margin: 8px 0 0;
+  color: var(--ex-muted);
+  font-size: 12.5px;
+}
+
+/* ----- The table's place ----- */
+
+/* Room around the table, so its border and rounded corners show. Each
+   example sizes the table in its own <style>. */
+#table {
+  margin: 12px 16px 16px;
+}
+
+.split > #table {
+  margin-right: 12px;
+}
+
+aside label + button {
+  margin-top: 10px;
+}

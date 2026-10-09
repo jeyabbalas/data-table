@@ -16,6 +16,8 @@ No pre-build needed — Vite serves the library from source via aliases (see `vi
 
 The same examples are also browsable on the deployed demo under [`/data-table/examples/`](https://jeyabbalas.github.io/data-table/examples/).
 
+The page around each table (its header, side panel and buttons) takes its look from [`examples.css`](./examples.css), shared by all fourteen. It is decoration: leave it out of a copy and the example works the same. Each page follows the light or dark theme last picked in the demo, else the system's, by setting `data-dt-color-scheme` on `<html>` before the first paint, except `06-custom-theme`, which has its own switch.
+
 ## Sizing the mount container
 
 Every example gives its mount container a bounded height through an unbroken chain from the viewport down. That CSS is load-bearing, not decorative. The table is virtualized and measures the container to decide how many rows to render (about `⌈containerHeight / rowHeight⌉ + 10`); with no bounded height the container becomes content-sized, the visible range becomes the entire dataset, and you get one `LIMIT <totalRows>` query and a DOM row for every row. Nothing errors — virtualization is silently defeated. A zero-height container renders nothing and logs a one-shot console warning at mount.

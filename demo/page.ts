@@ -1,6 +1,7 @@
 /**
- * The Shortcuts page: the theme switch, the library version, and the
- * Ctrl/Cmd keys labelled as the reader's keyboard labels them.
+ * The demo's documentation pages, Shortcuts and Examples: the theme
+ * switch, the library version, and the Ctrl/Cmd keys labelled as the
+ * reader's keyboard labels them.
  */
 
 import { initThemeSwitch } from './theme';

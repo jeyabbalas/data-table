@@ -258,7 +258,7 @@ The filter's unique id
 
 Defined in: [core/Actions.ts:1436](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/Actions.ts#L1436)
 
-Add column to multi-sort (Shift+click behavior)
+Add column to multi-sort (Cmd/Ctrl+click on a sort button, Shift+Enter on a header)
 
 If column is already in sort, toggles its direction or removes it.
 

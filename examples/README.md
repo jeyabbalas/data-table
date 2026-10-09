@@ -10,7 +10,7 @@ From the repo root:
 npm run dev
 ```
 
-Then open `http://localhost:5173/data-table/` and click **fourteen focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
+Then open `http://localhost:5173/data-table/` and click **Examples** in the top bar to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
 
 No pre-build needed — Vite serves the library from source via aliases (see `vite.demo.config.ts`).
 

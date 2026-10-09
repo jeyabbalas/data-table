@@ -99,9 +99,9 @@
    Base
    =========================================== */
 
-*,
-*::before,
-*::after {
+/* Elements only, as the demo has always had it: the table's pseudo-elements
+   keep the sizing its stylesheet gives them. */
+* {
   box-sizing: border-box;
 }
 
@@ -149,10 +149,6 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-svg {
-  flex: none;
 }
 
 /* ===========================================

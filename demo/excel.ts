@@ -28,8 +28,8 @@ export function extensionOf(name: string): string {
 /**
  * Whether a file is a workbook: by its extension, else by its media type,
  * else by its first bytes, a ZIP (xlsx, xlsm, xlsb, ods) or an OLE2 compound
- * file (xls). The bytes are read only for a name with no extension the
- * demo knows.
+ * file (xls). `knownExtension` says the name ends in a dataset's extension,
+ * which settles it: Windows gives a .csv file Excel's media type.
  */
 export async function isWorkbook(
   blob: Blob,
@@ -38,8 +38,8 @@ export async function isWorkbook(
   knownExtension = false,
 ): Promise<boolean> {
   if (WORKBOOK_EXTENSIONS.has(extensionOf(name))) return true;
-  if (WORKBOOK_TYPES.some((type) => contentType.toLowerCase().startsWith(type))) return true;
   if (knownExtension) return false;
+  if (WORKBOOK_TYPES.some((type) => contentType.toLowerCase().startsWith(type))) return true;
   const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
   const zip = head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04;
   const ole = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every((b, i) => head[i] === b);

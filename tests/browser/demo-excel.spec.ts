@@ -257,6 +257,22 @@ test('keeps the table it has when the sheet picker is dismissed', async ({ page 
   expect((await contents(page)).rows).toHaveLength(2);
 });
 
+test('loads a .csv file as CSV, though its media type is Excel’s, as Windows gives it', async ({
+  page,
+}) => {
+  await openDemo(page);
+  await page.setInputFiles('#file-input', {
+    name: 'ids.csv',
+    mimeType: 'application/vnd.ms-excel',
+    buffer: Buffer.from('id,label\n1,one\n2,two\n'),
+  });
+  await expectRows(page, '2 rows');
+  // Read as a CSV, not converted as a workbook's sheet.
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem('dt-last-session')!) as unknown),
+  ).toMatchObject({ type: 'file', source: 'ids.csv' });
+});
+
 test('says why a workbook it cannot read did not load', async ({ page }) => {
   await openDemo(page);
   await pickFile(page, 'broken.xlsx', Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]));

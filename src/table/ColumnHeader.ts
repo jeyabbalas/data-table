@@ -80,6 +80,16 @@ export interface ColumnHeaderOptions {
   messages?: Strings | undefined;
   /** Shared annotation store for column-scope annotation classes + popover. */
   annotations?: AnnotationStore | undefined;
+  /**
+   * Who keeps the header in step with `annotations`: the header, through a
+   * `change` subscription of its own (`'self'`, the default), or its owner,
+   * which calls {@link ColumnHeader.syncAnnotations} for the changes that
+   * touch its column (`'owner'`). `TableContainer` passes `'owner'`: one
+   * subscription for the grid rather than one per column.
+   *
+   * @internal
+   */
+  annotationSync?: 'self' | 'owner' | undefined;
   /** Shared popover singleton used to display column-scope annotations on hover / focus. */
   annotationPopover?: AnnotationPopover | undefined;
   /** Shared singleton used to display the app-controlled column-name tooltip popover. */
@@ -545,7 +555,8 @@ export class ColumnHeader {
    * summary from the store, compared with what the header shows: nothing is
    * written when they match, and only what differs otherwise.
    *
-   * The header's own subscription calls it on every change.
+   * The header's own subscription calls it (`annotationSync: 'self'`), or
+   * else its owner does, for the changes that touch its column.
    *
    * @internal
    */
@@ -775,9 +786,9 @@ export class ColumnHeader {
     // Set initial hide button state
     this.updateHideButtonState(this.state.visibleColumns.get());
 
-    // Annotation store: one O(1) summary per change, and a write only where
-    // the header differs.
-    if (this.options.annotations) {
+    // Annotation store, unless an owner hears it for the whole grid: one
+    // O(1) summary per change, and a write only where the header differs.
+    if (this.options.annotations && this.options.annotationSync !== 'owner') {
       const unsubAnn = this.options.annotations.on('change', () => {
         if (this.destroyed) return;
         this.syncAnnotations();

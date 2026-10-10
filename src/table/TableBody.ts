@@ -85,9 +85,20 @@ export interface TableBodyOptions {
   /**
    * Shared annotation store. When provided, the body applies
    * `dt-row--annotated` / `dt-cell--annotated` classes at render time and
-   * keeps the rendered rows in step with its `change` events.
+   * keeps the rendered rows in step with its `change` events (see
+   * `annotationSync`).
    */
   annotations?: AnnotationStore | undefined;
+  /**
+   * Who keeps the rendered rows in step with `annotations`: the body, through
+   * a `change` subscription of its own (`'self'`, the default), or its owner,
+   * which calls {@link TableBody.syncAnnotations} for each change
+   * (`'owner'`). `TableContainer` passes `'owner'`: its `AnnotationOverlay`
+   * is the grid's one subscriber, for the body and every header.
+   *
+   * @internal
+   */
+  annotationSync?: 'self' | 'owner' | undefined;
   /**
    * Shared popover singleton used to display cell-scope annotations on
    * hover / focus of an annotated cell.
@@ -404,6 +415,7 @@ export class TableBody {
   private readonly container: HTMLElement;
   private readonly annotations: AnnotationStore | null;
   private readonly annotationPopover: AnnotationPopover | null;
+  private readonly annotationSync: 'self' | 'owner';
   private readonly annotationClasses: AnnotationClasses;
   // What each rendered row and cell shows of the annotations: the row's code,
   // and the cell's packed state (see annotationRender.ts). No entry means it
@@ -449,6 +461,7 @@ export class TableBody {
     this.mountedColumns = options.mountedColumns ?? null;
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
+    this.annotationSync = options.annotationSync ?? 'self';
     this.annotationClasses = annotationClasses(this.classPrefix);
     this.annotatedCellSelector = [
       this.annotationClasses.cell[0],
@@ -689,7 +702,8 @@ export class TableBody {
 
     // Bring the rendered rows up to date whenever the store changes: the
     // rows and columns the change touched, from the cache, with no fetch.
-    if (this.annotations) {
+    // An owner that hears the store for the whole grid does this instead.
+    if (this.annotations && this.annotationSync === 'self') {
       this.unsubAnnotations = this.annotations.on('change', (payload) => {
         if (this.destroyed) return;
         this.syncAnnotations(annotationChangeOf(payload));
@@ -2206,7 +2220,8 @@ export class TableBody {
    * rendered.
    *
    * Synchronous, so the rows are current once the store's `change` event
-   * has run. The body's own subscription calls it.
+   * has run. The body's own subscription calls it (`annotationSync:
+   * 'self'`), or else its owner does.
    *
    * @internal
    */

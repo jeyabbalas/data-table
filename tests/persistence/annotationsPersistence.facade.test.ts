@@ -9,6 +9,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDataTable, type DataTable } from '@/index';
+import { LoadError } from '@/core/errors';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { SessionStore } from '@/persistence/SessionStore';
@@ -201,6 +202,46 @@ describe('annotations persistence — facade', () => {
       },
     });
     expect(table.state.sortColumns.get()).toEqual([{ column: 'name', direction: 'desc' }]);
+  });
+
+  it('puts the annotations back after a load turned away for its source options, without writing them again', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const bridge = makeBridge();
+    const table = await mount({
+      container: container(),
+      bridge,
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    table.annotations.addMany([
+      { scope: 'row', rowId: 0, severity: 'error', message: 'kept' },
+      { scope: 'cell', rowId: 1, column: 'name', severity: 'info', message: 'kept too' },
+    ]);
+    const puts = countPuts();
+    vi.mocked(bridge.loadData).mockRejectedValueOnce(
+      new LoadError('bad delimiter', { code: 'LOAD_INVALID_OPTIONS' }),
+    );
+
+    // The load flushes the pending save first: both records.
+    await expect(table.loadData('a\n1\n', { tableName: 'A' })).rejects.toMatchObject({
+      code: 'LOAD_INVALID_OPTIONS',
+    });
+    expect(puts('sessions')).toBe(1);
+    expect(puts('annotations')).toBe(1);
+    expect(table.annotations.count()).toBe(2);
+
+    // A sort after the put-back saves the session record alone.
+    table.actions.toggleSort('id');
+    await table.destroy();
+    expect(puts('sessions')).toBe(2);
+    expect(puts('annotations')).toBe(1);
+    const reader = new SessionStore();
+    expect((await reader.load('A'))?.annotations?.annotations).toHaveLength(2);
+    reader.close();
+    sessionStore.close();
   });
 
   it('a reload restores the annotations and does not write them again', async () => {

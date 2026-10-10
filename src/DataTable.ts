@@ -67,6 +67,7 @@ import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
 import { FilterPresetManager } from './filters/FilterPresets';
+import { adoptAnnotationFile, currentAnnotationFile } from './persistence/annotationPersistence';
 import { AutoSave } from './persistence/AutoSave';
 import { SessionStore } from './persistence/SessionStore';
 import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
@@ -1620,17 +1621,22 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     let failed = false;
     // The presets and annotations cleared below, to put back if the worker
     // rejects the load for its source options, as `actions` puts back the
-    // rest: such a load keeps the data it had.
+    // rest: such a load keeps the data it had. The annotations are the file
+    // saves use, taken once per change, and the store adopts it again when
+    // they are put back, so that no save writes them again.
     let restoreCleared: (() => void) | null = null;
     try {
       // A bad source option fails the load here, as loadError, and leaves
       // the table as it was: everything below clears it for the new data.
       validateSourceOptions(loadOpts?.sourceOptions);
       const ownPresets = ownsPresetManager ? presetManager?.presets.get() : undefined;
-      const annotationFile = annotationStore.count() > 0 ? annotationStore.toJSON() : null;
+      const annotationFile = currentAnnotationFile(annotationStore);
       restoreCleared = () => {
         if (ownPresets) presetManager?.presets.set(ownPresets);
-        if (annotationFile) annotationStore.loadJSON(annotationFile, 'replace');
+        if (annotationFile) {
+          annotationStore.loadJSON(annotationFile, 'replace');
+          adoptAnnotationFile(annotationStore, annotationFile);
+        }
       };
       // Clear per-dataset state before loading the new dataset. AutoSave
       // is disabled here, so these mutations don't fire spurious saves.

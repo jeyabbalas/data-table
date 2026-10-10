@@ -10,24 +10,60 @@ file, were written by hand. Versions follow
 release can carry breaking changes. Walkthroughs for breaking changes are in
 [`docs/migration-guides/`](./docs/migration-guides/).
 
-## 0.9.1
+## 0.10.0
+
+### Highlights
+
+- **Gutters that scroll.** Hidden columns sit in one row of chips that scrolls sideways, as active filters do, so hiding hundreds of columns no longer takes the table's height. Both rows glide to the chips a change adds.
+- **A new demo.** The [demo](https://jeyabbalas.github.io/data-table/) opens on the table, reads Excel workbooks, and lists every key and gesture on a [Shortcuts](https://jeyabbalas.github.io/data-table/shortcuts/) page; the [examples](https://jeyabbalas.github.io/data-table/examples/) share its look.
+- **Upgrading:** nothing to change, unless a stylesheet styles the filter bar or the hidden-columns gutter by their structure: their buttons moved into the rows' new scrollers, `.dt-filter-scroll` and `.dt-hidden-scroll`.
+
+### Minor Changes
+
+- ac5bb53: The hidden-columns gutter keeps its chips in one row that scrolls sideways, as the filter bar does, and both bars scroll to the chips a change adds.
+
+  **Changed**
+
+  - The hidden-columns gutter lays its chips out in one row that scrolls sideways once it is wider than the table, however many columns are hidden. It wrapped them onto rows, up to 200px of the table's height, so hiding a few dozen columns left the grid a row or two.
+  - Hiding a column whose chip lands out of view scrolls the gutter to it, smoothly. Columns hidden together, as code that hides them in a loop does, make one scroll, to the right-most of their chips. A filter added does the same in the filter bar. Under `prefers-reduced-motion: reduce` the row jumps instead.
+  - The filter bar scrolls only for a chip a filter adds. It glided to its end on every filter change, so changing or removing a filter took the bar away from the chip in hand.
+  - Both bars keep their buttons ("Show all"; "Clear all", "Expression" and "Presets") pinned at the end of the row, which scrolls beneath them. The buttons moved into the row's new scroller, `.dt-hidden-scroll` or `.dt-filter-scroll`, in a group, `.dt-hidden-actions` or `.dt-filter-actions`. `.dt-hidden-chips` and `.dt-filter-chips` still hold the chips alone, but no longer scroll: a stylesheet that styled the bars by their structure, or the chips' scrollbar, may need its selectors updated.
+  - `←` and `→` move the gutter's keyboard stop, as in the filter bar; `↑` and `↓` no longer do, now that the chips sit in one row.
+
+  **Fixed**
+
+  - With its chips overflowing, the filter bar failed axe's `scrollable-region-focusable` (WCAG 2.1.1) whenever its one tab stop rested beside the chips, on "Expression", "Presets" or "Clear all", as it does by default. Its buttons are inside the row that scrolls now, so its tab stop always is.
+  - Removing a filter, or restoring a column, with its chip's own button hands focus to the chip after it, or before it at the end of the row. Focus went to the first chip, which scrolled the row back to its start.
+  - Tab and the arrow keys show the whole chip they move to, clear of the pinned buttons. Only the chip's button was brought into view, which could leave the chip's name cut off or under the buttons.
+  - The bars' labels, "Active filters" and "Hidden columns", line up with the chips' text when a scrollbar shows under the chips.
+  - The filter bar no longer clips the scrollbar under its chips at a root font size above 16px.
 
 ### Patch Changes
 
 - 9fbd242: The demo and the examples have a new look, and the demo opens Excel workbooks. The library itself is unchanged.
-  
+
   **Changed**
-  
+
   - The [demo](https://jeyabbalas.github.io/data-table/) opens on the file picker and the table: a compact top bar, one row to open a file, paste a link or try an example, and the table filling the rest of the window above a status bar. Its theme switch now themes the whole page, not only the table, and is remembered.
   - The demo's instructions moved to a [Shortcuts](https://jeyabbalas.github.io/data-table/shortcuts/) page, which lists every keyboard shortcut and mouse gesture of the table.
   - The [examples](https://jeyabbalas.github.io/data-table/examples/) share the demo's look and follow its theme, and their index is a grid of cards.
   - The README links to the demo, the examples and the shortcuts.
-  
+
   **Added**
-  
+
   - A load that takes a moment shows an overlay over the table: the step it is on, a download's progress and the seconds spent.
   - A file dropped anywhere on the demo loads.
   - The demo opens Excel workbooks (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`, `.ods`), asking which sheet to load when a workbook has several. The demo reads them with SheetJS and converts the sheet to JSON, keeping each column's type; the library still loads CSV, JSON and Parquet.
+- d7c028f: The docs describe the table's keys, sort gestures and tab stops as the source has them.
+
+  **Fixed**
+
+  - Sorting: `actions.addToSort`'s JSDoc said Shift+click adds a column to a multi-column sort. Cmd/Ctrl+click on the column's sort button does, and from the keyboard Shift, Ctrl or Cmd with Enter or Space on its header. The accessibility guide's manual test plan and example 01's README said clicking a column header sorts; only its sort button does.
+  - SQL autocomplete opens on Ctrl+Space, the Control key on a Mac too, where Option+I also works. The SQL editor guide and troubleshooting entry 23 said Ctrl/Cmd+Space.
+  - Tab stops: with the `derivedColumns` UI on (the default), the "+" add-column button after `.dt-root` is a tab stop, so `Tab` crosses six stops, not five. The accessibility guide, AGENTS.md and the 0.5 → 0.6 migration guide counted only the five inside `.dt-root`, and said six presses step from the control before a table to the one after it, where it takes seven.
+  - Undo and redo: Cmd/Ctrl+Z undoes, and Cmd/Ctrl+Shift+Z or Ctrl+Y redoes. The README left out Cmd/Ctrl+Shift+Z, and the `undoRedo` option's JSDoc and AGENTS.md left out Ctrl+Y.
+  - The accessibility guide's keyboard map gains the keys it left out: `Escape` clearing a chart's brush or selection, the most recent first; `Shift+F2`, `F2` and `↓` in column layout mode; and when `Ctrl/Cmd+C` leaves the copy to the browser. It said the grid's keys are off while a dialog holds focus; they are off while any dialog or panel is open.
+  - Example 10's README opened the export dialog from a right-click menu on a column header, which does not exist; `table.openExportDialog()` opens it.
 
 ## 0.9.0
 

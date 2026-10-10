@@ -843,6 +843,48 @@ describe('SessionStore — a failed annotations write', () => {
     expect((await store.load('t'))?.annotations?.annotations).toHaveLength(2);
   });
 
+  it('holds the annotations back through AutoSave when their record fails to land twice', async () => {
+    // As Chromium aborts a value over its size cap: after the put, with
+    // `UnknownError`, every time.
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 2);
+    failAnnotationsPut('abort');
+
+    const saved: Promise<unknown>[] = [];
+    const save = store.save.bind(store);
+    vi.spyOn(store, 'save').mockImplementation((snapshot) => {
+      const done = save(snapshot);
+      saved.push(done.catch(() => undefined));
+      return done;
+    });
+    const onError = vi.fn();
+    const autoSave = new AutoSave(state, store, {
+      annotationStore: annotations,
+      debounceMs: 1,
+      onError,
+    });
+    autoSave.enable();
+    const writes = countWrites();
+    for (const [i, direction] of (['asc', 'desc', 'asc'] as const).entries()) {
+      state.sortColumns.set([{ column: 'id', direction }]);
+      await vi.waitFor(() => expect(saved).toHaveLength(i + 1));
+      await Promise.all(saved);
+    }
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]![0]).toMatchObject({
+      code: 'SAVE_FAILED',
+      details: { record: 'annotations' },
+    });
+    // Two attempts, then none.
+    expect(writes.puts('annotations')).toBe(2);
+    const session = await rawSession();
+    expect(session?.['sortColumns']).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(session).not.toHaveProperty('__annotations');
+    autoSave.destroy();
+  });
+
   it('keeps saving the session through AutoSave once the annotations are over quota', async () => {
     const state = makeState();
     const annotations = makeAnnotations(state);

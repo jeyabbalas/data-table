@@ -188,23 +188,66 @@ describe('AutoSave — annotations quota breaker', () => {
     autoSave.destroy();
   });
 
-  it('reports every annotations write failure that is not a quota error, and keeps the annotations', async () => {
+  it('reports a failed annotations write, and the next save tries it again', async () => {
     const { state, annotations } = setup();
-    const store = makeStore([
-      annotationsWriteFailure(new Error('aborted'), 't'),
-      annotationsWriteFailure(new Error('aborted'), 't'),
-    ]);
+    const store = makeStore([annotationsWriteFailure(new Error('aborted'), 't')]);
     const onError = vi.fn();
     const autoSave = new AutoSave(state, store, { annotationStore: annotations, onError });
     autoSave.enable();
 
     state.sortColumns.set([{ column: 'id', direction: 'asc' }]);
     await vi.advanceTimersByTimeAsync(1000);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((onError.mock.calls[0]![0] as PersistenceError).code).toBe('SAVE_FAILED');
+
     state.sortColumns.set([]);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(onError).toHaveBeenCalledTimes(2);
-    expect((onError.mock.calls[0]![0] as PersistenceError).code).toBe('SAVE_FAILED');
     expect(store.snapshots[1]!.annotations?.annotations).toHaveLength(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    autoSave.destroy();
+  });
+
+  it('holds the annotations back after a second failed write in a row, reported once', async () => {
+    const { state, annotations } = setup();
+    const tooLarge = Object.assign(new Error('The serialized value is too large'), {
+      name: 'UnknownError',
+    });
+    const store = makeStore([
+      annotationsWriteFailure(tooLarge, 't'),
+      annotationsWriteFailure(tooLarge, 't'),
+    ]);
+    const onError = vi.fn();
+    const autoSave = new AutoSave(state, store, { annotationStore: annotations, onError });
+    autoSave.enable();
+
+    for (const direction of ['asc', 'desc', 'asc'] as const) {
+      state.sortColumns.set([{ column: 'id', direction }]);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(store.snapshots[1]!.annotations?.annotations).toHaveLength(1);
+    expect(store.snapshots[2]!.annotations).toBeUndefined();
+    autoSave.destroy();
+  });
+
+  it('counts failed annotations writes in a row only', async () => {
+    const { state, annotations } = setup();
+    const store = makeStore([
+      annotationsWriteFailure(new Error('aborted'), 't'),
+      undefined,
+      annotationsWriteFailure(new Error('aborted'), 't'),
+    ]);
+    const onError = vi.fn();
+    const autoSave = new AutoSave(state, store, { annotationStore: annotations, onError });
+    autoSave.enable();
+
+    for (const direction of ['asc', 'desc', 'asc', 'desc'] as const) {
+      state.sortColumns.set([{ column: 'id', direction }]);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    // A success between them: both failures reported, nothing held back.
+    expect(onError).toHaveBeenCalledTimes(2);
+    expect(store.snapshots[3]!.annotations?.annotations).toHaveLength(1);
     autoSave.destroy();
   });
 

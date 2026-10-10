@@ -48,9 +48,9 @@ export interface AutoSaveOptions {
    * the facade wires this to emit an `error` event with `source: 'persistence'`.
    *
    * A quota error stops the saves until the next `enable()`. One on the
-   * table's annotations record alone (`details.record: 'annotations'`) is
-   * reported once and stops only the annotations: the session keeps saving
-   * without them.
+   * table's annotations record alone (`details.record: 'annotations'`), or
+   * a second failed write of that record in a row, is reported once and
+   * stops only the annotations: the session keeps saving without them.
    */
   onError?: ((error: PersistenceError) => void) | undefined;
 }
@@ -80,11 +80,18 @@ export class AutoSave {
   // debounce tick for as long as the user kept mutating state.
   private quotaExceeded = false;
   // The same, for the annotations record alone: a `QuotaExceededError` on
-  // it is reported once, and saves then go without annotations — the
+  // it, or a second failed write of it in a row, holds the annotations
+  // back. It is reported once, and saves then go without annotations — the
   // session record keeps saving, and `SessionStore` deletes the annotations
   // record it no longer names. A million annotations can outgrow a quota
-  // the rest of the session fits in many times over.
-  private annotationsQuotaExceeded = false;
+  // the rest of the session fits in many times over, and Chromium refuses
+  // any one value over 133,169,152 bytes (`UnknownError`), which a million
+  // plain annotations pass: retrying would serialize them all at every save
+  // only to fail again. A single failure is retried by the next save, as a
+  // dropped connection's is no fault of the annotations.
+  private annotationsHeldBack = false;
+  /** Failed writes of the annotations record in a row, other than over the quota. */
+  private annotationsFailures = 0;
 
   constructor(
     private state: TableState,
@@ -111,7 +118,8 @@ export class AutoSave {
     // quota circuit-breakers. clearSession() runs disable→delete→enable, so
     // this naturally re-arms saves after the consumer freed up space.
     this.quotaExceeded = false;
-    this.annotationsQuotaExceeded = false;
+    this.annotationsHeldBack = false;
+    this.annotationsFailures = 0;
 
     const signals = [
       this.state.filters,
@@ -250,9 +258,14 @@ export class AutoSave {
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
       if (result && typeof result.then === 'function') {
-        result.catch((cause) => {
-          this.reportError(cause);
-        });
+        result.then(
+          () => {
+            this.annotationsFailures = 0;
+          },
+          (cause: unknown) => {
+            this.reportError(cause);
+          },
+        );
       }
     } catch (cause) {
       this.reportError(cause);
@@ -283,7 +296,7 @@ export class AutoSave {
       this.presetManager,
       this.annotationStore,
       {
-        annotations: !this.annotationsQuotaExceeded,
+        annotations: !this.annotationsHeldBack,
       },
     );
   }
@@ -292,15 +305,18 @@ export class AutoSave {
     const code = cause instanceof PersistenceError ? cause.code : classifyPersistenceFailure(cause);
     // Trip the circuit-breaker BEFORE invoking onError so a synchronous
     // handler that re-enters AutoSave sees the latched flag.
-    if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
-      if (!isAnnotationsWriteFailure(cause)) {
-        this.quotaExceeded = true;
-      } else if (this.annotationsQuotaExceeded) {
-        // Reported already: a save that was in flight when it tripped.
+    if (isAnnotationsWriteFailure(cause)) {
+      // Reported already: a save that was in flight when it tripped.
+      if (this.annotationsHeldBack) return;
+      if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
+        this.annotationsHeldBack = true;
+      } else if (++this.annotationsFailures > 1) {
+        // The first was reported; the same failure again is no accident.
+        this.annotationsHeldBack = true;
         return;
-      } else {
-        this.annotationsQuotaExceeded = true;
       }
+    } else if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
+      this.quotaExceeded = true;
     }
     if (!this.onError) return;
     const err =

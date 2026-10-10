@@ -2852,10 +2852,7 @@ export class TableBody {
    * @internal
    */
   cachedRowId(position: number): number | null {
-    const rowId = this.isAnimatingScroll
-      ? undefined
-      : this.rowDataCache.get(position)?.[ROWID_COLUMN];
-    return typeof rowId === 'number' ? rowId : null;
+    return this.isAnimatingScroll ? null : rowIdOf(this.rowDataCache.get(position));
   }
 
   /**
@@ -2867,7 +2864,7 @@ export class TableBody {
   cachedPositionOf(rowId: number): number | null {
     if (this.isAnimatingScroll) return null;
     for (const [position, row] of this.rowDataCache) {
-      if (row[ROWID_COLUMN] === rowId) return position;
+      if (rowIdOf(row) === rowId) return position;
     }
     return null;
   }

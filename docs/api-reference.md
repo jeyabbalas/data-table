@@ -392,18 +392,18 @@ CSV and the clipboard's TSV write a nested value (`type: 'nested'`) as standard 
 
 ### Persistence internals
 
-| Symbol                       | Kind      | Purpose                                                                                 |
-| ---------------------------- | --------- | --------------------------------------------------------------------------------------- |
-| `AutoSave`                   | class     | Debounces writes to `SessionStore`.                                                     |
-| `AutoSaveOptions`            | interface | `{ debounceMs, undoManager, presetManager, onError }`.                                  |
-| `SessionSnapshot`            | type      | Full on-disk snapshot (`schema`, `state`, `derivedColumns`, `undo`, `redo`, `presets`). |
-| `SerializedStateSnapshot`    | type      | JSON-safe portion of `SessionSnapshot`.                                                 |
-| `SerializedDerivedColumnDef` | type      | JSON-safe derived-column def (vector refs pooled).                                      |
-| `PooledVectorColumnRef`      | type      | Reference to a pooled vector value list.                                                |
-| `VectorValuePoolEntry`       | type      | A single pool entry.                                                                    |
-| `DateWrapper`                | type      | `{ __date__: string }` marker used to round-trip `Date`.                                |
-| `SNAPSHOT_VERSION`           | const     | Snapshot schema version bumped on breaking changes.                                     |
-| `isPooledVectorRef(value)`   | function  | Type guard for `PooledVectorColumnRef`.                                                 |
+| Symbol                       | Kind      | Purpose                                                                                                                                                                                                                                           |
+| ---------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AutoSave`                   | class     | Debounces writes to `SessionStore`.                                                                                                                                                                                                               |
+| `AutoSaveOptions`            | interface | `{ debounceMs, undoManager, presetManager, annotationStore, onError }`. `onError` hears a failed save of the annotations alone with `details.record: 'annotations'`; a quota error on them, or a second failure in a row, stops only their saves. |
+| `SessionSnapshot`            | type      | Full on-disk snapshot (`schema`, `state`, `derivedColumns`, `undo`, `redo`, `presets`, `annotations`). `SessionStore` keeps `annotations` in a database of its own and attaches them on `load`.                                                   |
+| `SerializedStateSnapshot`    | type      | JSON-safe portion of `SessionSnapshot`.                                                                                                                                                                                                           |
+| `SerializedDerivedColumnDef` | type      | JSON-safe derived-column def (vector refs pooled).                                                                                                                                                                                                |
+| `PooledVectorColumnRef`      | type      | Reference to a pooled vector value list.                                                                                                                                                                                                          |
+| `VectorValuePoolEntry`       | type      | A single pool entry.                                                                                                                                                                                                                              |
+| `DateWrapper`                | type      | `{ __date__: string }` marker used to round-trip `Date`.                                                                                                                                                                                          |
+| `SNAPSHOT_VERSION`           | const     | Snapshot schema version bumped on breaking changes.                                                                                                                                                                                               |
+| `isPooledVectorRef(value)`   | function  | Type guard for `PooledVectorColumnRef`.                                                                                                                                                                                                           |
 
 ### Statistics
 

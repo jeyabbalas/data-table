@@ -445,6 +445,41 @@ export interface Strings {
       warning: string;
       info: string;
     };
+    /**
+     * What the live region says when `F8` / `Shift+F8` (`Alt+↓` / `Alt+↑`),
+     * `actions.nextAnnotation` or `actions.previousAnnotation` move the
+     * cursor to an annotation, or find none to move to.
+     */
+    navigation: {
+      /**
+       * Where the cursor landed: "Row 1,204 of 9,880,000, age: error, value
+       * 200 exceeds maximum 150, and 2 more". `row` counts from 1 in the
+       * view, of `total`; `place` is the cell's column (or `hiddenColumn`'s
+       * words), `null` for the row's own annotations; `severity` (a
+       * `severityNames` entry) and `message` are the first annotation's,
+       * `null` when there is none; `more` counts the others there.
+       */
+      landed: (
+        row: number,
+        total: number,
+        place: string | null,
+        severity: string | null,
+        message: string | null,
+        more: number,
+      ) => string;
+      /** `landed`'s place for a column the table hides: "age (hidden)". */
+      hiddenColumn: (column: string) => string;
+      /** `landed`, after going round from the last annotation to the first. */
+      wrappedToFirst: (landed: string) => string;
+      /** `landed`, after going round from the first annotation to the last. */
+      wrappedToLast: (landed: string) => string;
+      /** Nothing further down, and the search does not go round. */
+      noMoreBelow: string;
+      /** Nothing further up, and the search does not go round. */
+      noMoreAbove: string;
+      /** No annotation of the severities sought in the rows the filters show. */
+      noneShown: string;
+    };
   };
 
   // =========================================
@@ -1029,6 +1064,19 @@ export const defaultStrings: Strings = {
       error: 'error',
       warning: 'warning',
       info: 'info',
+    },
+    navigation: {
+      landed: (row, total, place, severity, message, more) =>
+        `Row ${row.toLocaleString()} of ${total.toLocaleString()}` +
+        (place ? `, ${place}` : '') +
+        (severity ? `: ${severity}${message ? `, ${message}` : ''}` : '') +
+        (more > 0 ? `, and ${more.toLocaleString()} more` : ''),
+      hiddenColumn: (column) => `${column} (hidden)`,
+      wrappedToFirst: (landed) => `Wrapped to the first annotation. ${landed}`,
+      wrappedToLast: (landed) => `Wrapped to the last annotation. ${landed}`,
+      noMoreBelow: 'No more annotations below',
+      noMoreAbove: 'No more annotations above',
+      noneShown: 'No annotations shown',
     },
   },
 

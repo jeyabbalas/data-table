@@ -10,39 +10,29 @@
  * - Crockford alphabet excludes `I`, `L`, `O`, `U` to avoid human confusion.
  * - Randomness via WebCrypto; falls back to `Math.random()` only if
  *   `crypto.getRandomValues` is missing (never in our browser targets).
+ * - Each id is one flat string built from a reused char-code buffer: no
+ *   per-call typed array and no concatenation, whose rope of 27 pieces V8
+ *   would otherwise keep alive for as long as the id lives (~250 bytes each).
  */
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+/** Char codes of {@link CROCKFORD}, indexed by 5-bit value. */
+const CROCKFORD_CODES: readonly number[] = Array.from(CROCKFORD, (ch) => ch.charCodeAt(0));
+
+const ID_LENGTH = 30;
+const PREFIX_LENGTH = 4;
+const TIMESTAMP_CHARS = 10;
+
 let lastTimestamp = -1;
+/** The last id's 80 random bits, big-endian; incremented in place in a same-ms burst. */
 const lastRandom = new Uint8Array(10);
-
-function encodeTimestamp(ms: number): string {
-  // 48-bit timestamp → 10 Crockford chars (5 bits each).
-  let out = '';
-  let value = ms;
-  for (let i = 9; i >= 0; i--) {
-    out = CROCKFORD[value % 32] + out;
-    value = Math.floor(value / 32);
-  }
-  return out;
-}
-
-function encodeRandomness(bytes: Uint8Array): string {
-  // 80 bits → 16 Crockford chars (5 bits each). Read bits MSB-first.
-  let out = '';
-  let bitBuffer = 0;
-  let bitCount = 0;
-  for (const byte of bytes) {
-    bitBuffer = (bitBuffer << 8) | byte;
-    bitCount += 8;
-    while (bitCount >= 5) {
-      bitCount -= 5;
-      out += CROCKFORD[(bitBuffer >>> bitCount) & 0x1f];
-    }
-  }
-  return out;
-}
+/**
+ * Char codes of the id being built: `ann_`, then the timestamp, then the
+ * randomness. A plain array of small integers: `String.fromCharCode.apply`
+ * reads one about three times faster than a typed array.
+ */
+const idChars: number[] = Array.from('ann_'.padEnd(ID_LENGTH, '0'), (ch) => ch.charCodeAt(0));
 
 function fillRandomBytes(target: Uint8Array<ArrayBuffer>): void {
   const cryptoObj: Crypto | undefined =
@@ -79,17 +69,37 @@ function incrementRandomness(bytes: Uint8Array<ArrayBuffer>): void {
  */
 export function generateAnnotationId(): string {
   const now = Date.now();
-  const bytes = new Uint8Array(10);
   if (now === lastTimestamp) {
-    // Same-ms burst — increment the previous suffix to stay monotonic.
-    bytes.set(lastRandom);
-    incrementRandomness(bytes);
+    // Same-ms burst — increment the previous suffix to stay monotonic. The
+    // timestamp's chars in `idChars` are already this millisecond's.
+    incrementRandomness(lastRandom);
   } else {
-    fillRandomBytes(bytes);
+    fillRandomBytes(lastRandom);
     lastTimestamp = now;
+    // 48-bit timestamp → 10 Crockford chars (5 bits each), most significant
+    // first. The value exceeds 32 bits, so no bitwise operators here.
+    let value = now;
+    for (let i = PREFIX_LENGTH + TIMESTAMP_CHARS - 1; i >= PREFIX_LENGTH; i--) {
+      idChars[i] = CROCKFORD_CODES[value % 32]!;
+      value = Math.floor(value / 32);
+    }
   }
-  lastRandom.set(bytes);
-  return `ann_${encodeTimestamp(now)}${encodeRandomness(bytes)}`;
+
+  // 80 random bits → 16 Crockford chars (5 bits each), read MSB-first. At
+  // most 4 bits carry over between bytes, so 12 bits of buffer suffice.
+  let bitBuffer = 0;
+  let bitCount = 0;
+  let out = PREFIX_LENGTH + TIMESTAMP_CHARS;
+  for (const byte of lastRandom) {
+    bitBuffer = ((bitBuffer << 8) | byte) & 0xfff;
+    bitCount += 8;
+    while (bitCount >= 5) {
+      bitCount -= 5;
+      idChars[out++] = CROCKFORD_CODES[(bitBuffer >>> bitCount) & 0x1f]!;
+    }
+  }
+  // One flat (sequential) string from all 30 codes.
+  return String.fromCharCode.apply(null, idChars);
 }
 
 /**

@@ -14,11 +14,55 @@ release can carry breaking changes. Walkthroughs for breaking changes are in
 
 ### Highlights
 
+- **Annotations at a million.** A table holds a million annotations: lookups take microseconds, a scroll step stays within 2 ms of the table without them, and a save writes them only when they change. `F8` / `Shift+F8` go from one annotation to the next, and `actions.showAnnotatedRows()` shows only the rows that have any.
 - **Gutters that scroll.** Hidden columns sit in one row of chips that scrolls sideways, as active filters do, so hiding hundreds of columns no longer takes the table's height. Both rows glide to the chips a change adds.
 - **A new demo.** The [demo](https://jeyabbalas.github.io/data-table/) opens on the table, reads Excel workbooks, and lists every key and gesture on a [Shortcuts](https://jeyabbalas.github.io/data-table/shortcuts/) page; the [examples](https://jeyabbalas.github.io/data-table/examples/) share its look.
-- **Upgrading:** nothing to change, unless a stylesheet styles the filter bar or the hidden-columns gutter by their structure: their buttons moved into the rows' new scrollers, `.dt-filter-scroll` and `.dt-hidden-scroll`.
+- **Upgrading:** nothing to change, unless a stylesheet styles the filter bar or the hidden-columns gutter by their structure (their buttons moved into the rows' new scrollers, `.dt-filter-scroll` and `.dt-hidden-scroll`), or TypeScript code switches exhaustively over `filter.type`, which needs a case for the new `'annotated'` filter. Code that reads `getByCell` for a whole row or column, asserts on annotation events, or runs 0.9 against the same saved sessions should read the [0.9 → 0.10 migration guide](./docs/migration-guides/from-0.9-to-0.10.md).
 
 ### Minor Changes
+
+- Annotations hold a million at a cost that does not grow with the store, persist apart from the session, and gain navigation (`F8`, `actions.nextAnnotation`, `revealRow`) and a filter for the annotated rows.
+
+  **Changed**
+
+  - The annotation store indexes each scope, so no lookup, update or removal passes over the store. At a million annotations (90% cell, 9% row, 1% column over 200,000 rows × 1,000 columns; Node 22, Apple M1 Pro):
+    - **Adding:** `addMany` took 0.77–0.88 s, where it took 4.95 s, and each annotation 258 bytes of heap, where it took 572.
+    - **Lookups:** the median `getByCell` took 2–2.6 µs (856 µs before), `getByRow` about 2 µs (48 ms) and `getByColumn` 131–155 µs (62 ms).
+    - **Removing:** `remove` took 5–6 µs (43.5 ms), `removeMany` of 100 under 0.5 ms (5.4 s), and `clear('all')` 0.1 ms.
+    - **JSON:** `toJSON` took 13–14 ms (237 ms) and `loadJSON(file, 'replace')` onto a million 0.65–0.73 s (3.0 s).
+  - The grid renders annotations from an O(1) summary per row, column and cell, hears the store through one subscription per table, and writes only the classes and counts that change. At 100,000 annotations a scroll step took 1.3 s on a 1,000-column table; with a million it stays within 2 ms of the table without them (headless Chromium), and a change far from the view touches no DOM. `TableBody` and `ColumnHeader` used on their own from `/advanced` keep their own subscription.
+  - `getByCell(rowId, column)` returns the exact intersection its documentation describes: the row's row-scope annotations, the column's column-scope annotations and that cell's own. It returned every cell annotation in the row and in the column too. `getByRow` and `getByColumn` keep their content and order: a row's or a column's own annotations and its cells'.
+  - `loadJSON(file, 'replace')` fires `cleared` for what the store held, then `added` for what the file holds, each only when there is anything to report; it fired one `added`. Change payloads gain `annotations`, the affected annotations (as they were, for `removed` and `cleared`), and, for `updated`, `previous`. A test that compares a whole payload needs `toMatchObject`. Payloads are built only when a listener is subscribed.
+  - `addMany` checks every entry before it stores any: an error's `details.index` is the entry's position, where it was `-1`, and entries without `createdAt` share one timestamp.
+  - The annotation popover lists five annotations per section and counts the rest ("+3 more"), leaves out the severities the severity filter hides and counts them ("2 hidden by the severity filter"), and scrolls past `min(24rem, 100vh − 8px)`, a tab stop while it overflows. A cell or header whose every annotation is hidden opens no popover, and the cell keeps its native `title`; a cell that shows a severity gives its `title` up to the popover. A change to the annotations updates an open popover in place instead of hiding it, and announces nothing when what it shows is the same.
+  - Annotations persist in an IndexedDB database of their own, `dt-annotations`, as a head and chunks of at most 10,000 annotations or about 8 MiB, written in one transaction and only when they change. A save after a sort, filter, width or severity-filter change writes nothing there: 0.2–0.3 ms at a million in Chromium, where every save serialized and cloned them all (about 1.2 s). Writing a million takes about 0.5 s in tasks of at most 16 ms, and restoring them 0.70–0.73 s. The chunks keep each value under Chromium's 127 MiB limit. `dt-sessions` keeps version 1 and `SNAPSHOT_VERSION` stays 5; a 0.9 session's annotations restore and move to `dt-annotations` on the next save, and 0.9 restores a 0.10 session without them.
+  - A failed save of the annotations alone is reported with `details.record: 'annotations'`, and the session keeps saving: a quota error on them, or a second failure in a row, stops only their saves, until `clearSession()` or a reload.
+  - `SessionStoreOptions.onLoadIssue` is told of `PERSISTENCE_ANNOTATIONS_DROPPED` too: a handler that reads `issue.details.version` must narrow on `issue.code` first.
+  - `Alt+↑` and `Alt+↓` no longer leave a header's controls mode.
+
+  **Added**
+
+  - An eighth filter type, `annotated` (`AnnotatedFilter`, exported from the root entry): `{ type: 'annotated', column: '__annotated__', severities?, table? }` keeps the rows with row- or cell-scope annotations of the severities it names, or of any. The `Filter`, `FilterType` and `SerializedFilter` unions grow, so a TypeScript `switch` exhaustive over `filter.type` needs a case.
+    - **Its rows** come from a DuckDB temporary table of the annotated rows, `__dt_annot_<base table>__`, built in one statement when something reads it (0.38 s for a million annotated rows in Node's DuckDB-WASM) and dropped with its base table. The grid, the count and the charts wait for it, so a filter restored with a session or loaded from a preset never queries a table not yet built.
+    - **The view follows the annotations:** adding or removing one under the filter updates the rows, the count, the charts and `filterChange` in place, keeping the scroll position and the cursor. The severity filter does not change which rows it keeps.
+    - **Chips, presets, undo and sessions** handle it: its chip reads "Annotated rows · any severity" or the severities' names, and a preset load or a restore points it at the table it comes back to. 0.9 drops it on restore, with a warning.
+  - `actions.showAnnotatedRows({ severities? })` and `hideAnnotatedRows()` add and remove it, one undo entry each.
+  - `actions.nextAnnotation(options?)` and `previousAnnotation(options?)` move the cursor to the next or previous annotation in the view as filtered and sorted, of the severities the severity filter shows unless told which, going round the end unless told not to, and resolve to where it landed with the annotations there. `actions.revealRow(rowId, column?, options?)` scrolls a row into view by its `__rowid__` and puts the cursor on it, or resolves `null` when the filters hide it. One runs at a time: a newer one, a cursor move or a view change rejects the one running with `QUERY_ABORTED`. Types: `AnnotationNavigationOptions`, `AnnotationNavigationResult`, `RevealRowOptions`, `RevealRowResult`.
+    - **Cost:** from the rows the grid holds, or by binary search in a view neither filtered nor sorted, under 2 ms; otherwise a DuckDB query, 0.1–0.9 s for the search on ten million rows with a million annotated rows in Chrome.
+  - `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` run them from the grid, the filter bar and the hidden-columns gutter, taking the key only while the table has annotations, and the live region reads out where the cursor landed: "Row 1,204 of 9,880,000, age: error, value 200 exceeds maximum 150, and 2 more". The `annotationNavigation` option (default `true`) leaves the keys to the page. Nothing becomes focusable: the tab-stop census stays five.
+  - `messages.annotations` (`severityNames`, `popover`, `navigation`) and `messages.filters.chipDescriptions.annotatedColumn`, `anySeverity` and `severityList`.
+  - The `warning` code `PERSISTENCE_ANNOTATIONS_DROPPED`, with `details.reason` `'missing'`, `'mismatch'`, `'invalid'` or `'unavailable'`: a reload restored the session without the annotations it was saved with.
+  - `AnnotationPopoverOptions.messages` and `severityFilter`, for a popover built from `/advanced`.
+
+  **Fixed**
+
+  - `clear()` threw a `RangeError` from about 125,000 annotations, and so did `loadData()` and `clearSession()`, which clear the store; below that it removed them one at a time (140 s at 100,000, and `clear('column')` 430 s at a million).
+  - `loadJSON` of a file that repeats an `id` stored both entries, and the second could not be removed. It throws `ANNOTATION_DUPLICATE_ID` (`details: { id, index }`) and leaves the store as it was. A session saved with a repeated id still restores, keeping the first.
+  - `update(id, { severity: undefined })` and `{ message: undefined }` set them to `undefined`, leaving an annotation the grid could not render; they are ignored now.
+  - The popover did not open again on a cell it had been hidden on, by `Escape`, a scroll or a click elsewhere, until the pointer had left the cell.
+  - A query result still in flight when `WorkerBridge.clearQueryCache()` ran was stored in the cache, and served to the next identical query. It is no longer stored.
+  - Generated annotation ids took 264 bytes each, kept as a rope of their parts; they take 56, and a million take 93 ms to make instead of 419.
+  - Docs: the annotations guide said `getByRow` and `getByColumn` return one scope only, that `clear` fires an event when it removes nothing, that `update` ignores a change to an immutable field (it throws), and named the header classes `dt-header--annotated` (they are `dt-col-header--annotated`) and the error codes without their `ANNOTATION_` prefix. The troubleshooting guide said a `bigint` `rowId` is stored; it is refused.
 
 - ac5bb53: The hidden-columns gutter keeps its chips in one row that scrolls sideways, as the filter bar does, and both bars scroll to the chips a change adds.
 

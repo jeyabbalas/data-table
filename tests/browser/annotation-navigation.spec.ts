@@ -254,8 +254,117 @@ test('a 300-column table: the annotated column comes into view, a hidden one is 
   expect(await census()).toEqual(before);
 });
 
-// These need the helper table of annotated rows that the `annotated` filter
-// keeps fresh at runtime, which lands separately.
-test.fixme('under the annotated filter: F8 goes through the rows it shows', async () => {});
-test.fixme('under the annotated filter: removing an annotation refreshes the view in place, scroll and cursor kept', async () => {});
-test.fixme('a reload restores the annotated view with no error events', async () => {});
+test('under the annotated filter, F8 goes through the rows it shows', async ({ page }) => {
+  test.setTimeout(180_000);
+  await mountBigTable(page, { rows: 300_000 });
+  await page.evaluate(() => {
+    const t = (window as unknown as BigWindow).__t;
+    t.annotations.addMany([
+      { scope: 'cell', rowId: 3, column: 'grp', severity: 'warning', message: 'odd group' },
+      { scope: 'cell', rowId: 999, column: 'val', severity: 'error', message: 'too high' },
+      { scope: 'row', rowId: 250_000, severity: 'info', message: 'checked' },
+      { scope: 'row', rowId: 299_999, severity: 'error', message: 'last row' },
+      // Singles out no row.
+      { scope: 'column', column: 'id', severity: 'error', message: 'whole column' },
+    ]);
+    t.actions.showAnnotatedRows();
+  });
+  const host = BIG_TABLE_HOST_ID;
+  const count = (): Promise<number> =>
+    page.evaluate(() => (window as unknown as BigWindow).__t.state.filteredRows.get());
+  await expect.poll(count).toBe(4);
+
+  expect(await pressTo(page, host, 'F8', 0)).toEqual({
+    cursor: { row: 0, column: 'grp' },
+    said: 'Row 1 of 4, grp: warning, odd group',
+  });
+  expect(await renderedRowId(page, 0)).toBe(3);
+  expect((await pressTo(page, host, 'F8', 1)).cursor).toEqual({ row: 1, column: 'val' });
+  expect(await renderedRowId(page, 1)).toBe(999);
+  expect(await pressTo(page, host, 'Alt+ArrowDown', 2)).toEqual({
+    cursor: { row: 2, column: 'val' },
+    said: 'Row 3 of 4: info, checked',
+  });
+  expect((await pressTo(page, host, 'F8', 3)).said).toBe('Row 4 of 4: error, last row');
+  expect((await pressTo(page, host, 'F8', 0)).said).toBe(
+    'Wrapped to the first annotation. Row 1 of 4, grp: warning, odd group',
+  );
+
+  // Errors only: two rows, and F8 visits those.
+  await page.evaluate(() =>
+    (window as unknown as BigWindow).__t.actions.showAnnotatedRows({ severities: ['error'] }),
+  );
+  await expect.poll(count).toBe(2);
+  await pressTo(page, host, 'F8', 0, /^Row 1 of 2, val: error, too high$/);
+  expect(await renderedRowId(page, 0)).toBe(999);
+  expect((await pressTo(page, host, 'F8', 1)).said).toBe('Row 2 of 2: error, last row');
+  expect(await renderedRowId(page, 1)).toBe(299_999);
+});
+
+test('under the annotated filter, removing an annotation refreshes the view in place, scroll and cursor kept', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await mountBigTable(page, { rows: 300_000 });
+  // Every third row: 100,000 annotated rows, rowId 3p at position p.
+  const ids = await page.evaluate(() => {
+    const t = (window as unknown as BigWindow).__t;
+    const anns = [];
+    for (let rowId = 0; rowId < 300_000; rowId += 3) {
+      anns.push({
+        scope: 'row' as const,
+        rowId,
+        severity: 'warning' as const,
+        message: `r${rowId}`,
+      });
+    }
+    const added = t.annotations.addMany(anns);
+    const errors: string[] = [];
+    (window as unknown as { __errors: string[] }).__errors = errors;
+    t.on('error', ({ error, source }) => errors.push(`${source}: ${error.message}`));
+    t.actions.showAnnotatedRows();
+    return { first: added[10]!.id };
+  });
+  const count = (): Promise<number> =>
+    page.evaluate(() => (window as unknown as BigWindow).__t.state.filteredRows.get());
+  await expect.poll(count).toBe(100_000);
+
+  const shown = await page.evaluate(() =>
+    (window as unknown as BigWindow).__t.actions.revealRow(150_000, 'grp'),
+  );
+  expect(shown).toEqual({ row: 50_000, column: 'grp' });
+  expect(await renderedRowId(page, 50_000)).toBe(150_000);
+  const scrollTop = (): Promise<number> =>
+    page.evaluate(
+      (host) => document.querySelector(`#${host} .dt-body-scroll`)!.scrollTop,
+      BIG_TABLE_HOST_ID,
+    );
+  const before = await scrollTop();
+  expect(before).toBeGreaterThan(0);
+  // Watch the scroll position from here on: the view must never go back to the top.
+  await page.evaluate((host) => {
+    const scroller = document.querySelector(`#${host} .dt-body-scroll`)!;
+    const w = window as unknown as { __minScroll: number };
+    w.__minScroll = scroller.scrollTop;
+    scroller.addEventListener('scroll', () => {
+      w.__minScroll = Math.min(w.__minScroll, scroller.scrollTop);
+    });
+  }, BIG_TABLE_HOST_ID);
+
+  // Far above the cursor: rowId 30, at position 10.
+  await page.evaluate(
+    (id) => (window as unknown as BigWindow).__t.annotations.remove(id),
+    ids.first,
+  );
+  await expect.poll(count).toBe(99_999);
+  // Each row from position 10 on moved up one: position 50,000 is rowId 150,003 now.
+  await expect.poll(() => renderedRowId(page, 50_000), { timeout: 30_000 }).toBe(150_003);
+  expect(Math.abs((await scrollTop()) - before)).toBeLessThan(2);
+  expect(
+    await page.evaluate(() => (window as unknown as { __minScroll: number }).__minScroll),
+  ).toBeGreaterThan(before - 2);
+  expect((await landing(page, BIG_TABLE_HOST_ID)).cursor).toEqual({ row: 50_000, column: 'grp' });
+  expect(await page.evaluate(() => (window as unknown as { __errors: string[] }).__errors)).toEqual(
+    [],
+  );
+});

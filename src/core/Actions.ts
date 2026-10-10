@@ -86,6 +86,20 @@ function supersededError(column: string): DerivedColumnError {
 }
 
 /**
+ * A condition that reads of the relation `state.tableName` names wait for,
+ * besides derived-column changes: see {@link StateActions.addReadGate}.
+ *
+ * @internal
+ */
+export interface ReadGate {
+  /**
+   * Whether the relation can be read now. Asked each time readability is,
+   * as each block the grid fetches asks, so it must be cheap.
+   */
+  isOpen(): boolean;
+}
+
+/**
  * Options for {@link StateActions.getColumnValues}.
  */
 export interface GetColumnValuesOptions {
@@ -281,6 +295,10 @@ export class StateActions {
    * the load is about to replace, or restore from a saved session.
    */
   private openLoads = 0;
+  /** Conditions reads of the relation wait for besides changes; see {@link addReadGate}. */
+  private readGates: ReadGate[] = [];
+  /** A read gate was found closed since they were last all open; see {@link readGateOpened}. */
+  private readGateFoundClosed = false;
   private destroyed = false;
 
   constructor(
@@ -331,15 +349,17 @@ export class StateActions {
 
   /**
    * Whether a derived-column change is waiting on DuckDB, an add included, or
-   * waiting for its turn behind another (see {@link inTurn}). Charts and stats
-   * panels are built only when none is: one built meanwhile would be built
-   * again for the relation the changes leave. Whether reads of the relation
-   * `state.tableName` names can fail meanwhile is {@link isRelationReadable}.
+   * waiting for its turn behind another (see {@link inTurn}), or a read gate
+   * is closed (see {@link addReadGate}). Charts and stats panels are built
+   * only when none is: one built meanwhile would be built again for the
+   * relation the changes leave, or would query a table its filters read
+   * before it exists. Whether reads of the relation `state.tableName` names
+   * can fail meanwhile is {@link isRelationReadable}.
    *
    * @internal
    */
   isRelationChanging(): boolean {
-    return this.relationChanges > 0 || this.waitingTurns > 0;
+    return this.relationChanges > 0 || this.waitingTurns > 0 || this.readGateClosed();
   }
 
   /**
@@ -348,7 +368,8 @@ export class StateActions {
    * of the last change in line settles, before the state update that follows
    * a successful change; or, for a last change that waited for its turn and
    * then touched nothing in DuckDB (an undo of a filter, an add refused for
-   * its name), when it ends. Not between two changes in line.
+   * its name), when it ends; or when a read gate found closed opens (see
+   * {@link readGateOpened}). Not between two changes in line.
    *
    * @internal
    */
@@ -378,11 +399,12 @@ export class StateActions {
    * a replacement, an undo or redo, a reset, a restore. An add can not, and
    * the relation stays readable while one runs. Nor does a change waiting for
    * its turn: the relation in force can be read until its DuckDB work starts.
+   * Nor while a read gate is closed (see {@link addReadGate}).
    *
    * @internal
    */
   isRelationReadable(): boolean {
-    return this.unreadableRelationChanges === 0;
+    return this.unreadableRelationChanges === 0 && !this.readGateClosed();
   }
 
   /**
@@ -394,8 +416,62 @@ export class StateActions {
    * @internal
    */
   whenRelationReadable(): Promise<void> {
-    if (this.unreadableRelationChanges === 0) return Promise.resolve();
+    if (this.isRelationReadable()) return Promise.resolve();
     return new Promise((resolve) => this.readableWaiters.push(resolve));
+  }
+
+  /**
+   * Add a read gate. While it is closed, reads of the relation wait as they
+   * wait for a derived-column change that can drop or rebuild it:
+   * {@link isRelationReadable} does not hold and {@link isRelationChanging}
+   * does, so the grid's fetches, the filtered-row count, the charts' and the
+   * stats panels' updates wait, and no chart or panel is built. The gate is
+   * asked whenever readability is, so it can close with the state it reads,
+   * before the state's subscribers run. Its owner calls
+   * {@link readGateOpened} whenever it may have opened. Returns a function
+   * that removes the gate, which opens it.
+   *
+   * @internal
+   */
+  addReadGate(gate: ReadGate): () => void {
+    this.readGates.push(gate);
+    return () => {
+      const index = this.readGates.indexOf(gate);
+      if (index === -1) return;
+      this.readGates.splice(index, 1);
+      this.readGateOpened();
+    };
+  }
+
+  /**
+   * Tell the readers a read gate may have opened: once the relation can be
+   * read, the callers of {@link whenRelationReadable} resolve, and once
+   * nothing else is changing it, it is reported settled (see
+   * {@link setOnRelationSettled}). Does nothing unless a gate was found
+   * closed since the gates were last all open, so a gate's owner can call it
+   * whenever its gate may have opened. Works on a destroyed table too, so
+   * that no reader is left waiting.
+   *
+   * @internal
+   */
+  readGateOpened(): void {
+    if (!this.readGateFoundClosed || this.readGateClosed()) return;
+    this.readGateFoundClosed = false;
+    if (this.unreadableRelationChanges === 0) {
+      for (const resolve of this.readableWaiters.splice(0)) resolve();
+    }
+    this.notifyIfRelationSettled();
+  }
+
+  /** Whether a read gate is closed, noted for {@link readGateOpened} when one is. */
+  private readGateClosed(): boolean {
+    for (const gate of this.readGates) {
+      if (!gate.isOpen()) {
+        this.readGateFoundClosed = true;
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -419,7 +495,8 @@ export class StateActions {
       try {
         this.notifyIfRelationSettled();
       } finally {
-        if (this.unreadableRelationChanges === 0) {
+        // A closed read gate keeps them waiting: `readGateOpened` wakes them.
+        if (this.isRelationReadable()) {
           for (const resolve of this.readableWaiters.splice(0)) resolve();
         }
         if (this.relationChanges === 0) {

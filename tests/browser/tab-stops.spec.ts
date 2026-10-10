@@ -4,8 +4,8 @@
  *
  * jsdom cannot answer this. Tabbability depends on computed style and
  * `getClientRects()` — the responsive container queries that hide half the
- * per-column controls at narrow widths, and the `overflow: hidden` clipping
- * on the hidden-columns gutter, are both invisible without real layout.
+ * per-column controls at narrow widths, and the clipping of the toolbars'
+ * scrolling rows of chips, are both invisible without real layout.
  */
 
 import { expect, test } from '@playwright/test';
@@ -79,7 +79,7 @@ test('nested columns add no tab stops: the census is still five', async ({ brows
 test('hiding columns does not add tab stops', async ({ page }) => {
   // The hidden-columns gutter used to emit one plain `<button>` per hidden
   // column, so hiding 250 of 266 columns added 251 tab stops — and the
-  // gutter clips at 200px, making most of them focusable but unreachable.
+  // gutter clipped them, making most of them focusable but out of sight.
   await openDemo(page);
   await loadCsv(page, 8);
 

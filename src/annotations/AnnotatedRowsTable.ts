@@ -98,13 +98,19 @@ type AnnotatedRowsStore = Pick<AnnotationStore, 'contentRevision' | 'annotatedRo
 export interface AnnotatedRowsTableOptions {
   state: TableState;
   actions: Pick<StateActions, 'addReadGate' | 'readGateOpened'>;
-  bridge: Pick<WorkerBridge, 'query' | 'clearQueryCache'>;
+  /**
+   * The bridge the table is built on. Its cached results that read the
+   * table are dropped when a sync rebuilds it, through `invalidateQueries`;
+   * a bridge without it (a test double) has its whole cache cleared.
+   */
+  bridge: Pick<WorkerBridge, 'query' | 'clearQueryCache'> &
+    Partial<Pick<WorkerBridge, 'invalidateQueries'>>;
   store: AnnotatedRowsStore;
   /**
    * Called after a sync changed the table while an annotated filter in
    * force had the view read it: the rows, the row count, the charts and the
    * stats the view shows are to be fetched again, in place. The bridge's
-   * query cache is cleared by then.
+   * cached results that read the table are dropped by then.
    */
   onRefresh?: (() => void) | undefined;
   /**
@@ -513,7 +519,7 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
       this.syncedRows = sync.rows;
       this.failed = null;
       // Results cached before read the table as it was.
-      if (rebuilt) this.bridge.clearQueryCache();
+      if (rebuilt) this.invalidateReads(sync.base);
     } else {
       // The same content failing again, for a caller of `ensureFresh` or
       // other filters, is the failure already reported.
@@ -548,6 +554,20 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
       // changed since it started: the next sync, at once, opens the gate.
     }
     this.schedule();
+  }
+
+  /**
+   * Drop the bridge's cached results that read `base`'s table, which a sync
+   * just rebuilt: they read it as it was. The other results stay, those of
+   * other tables on a shared bridge among them.
+   */
+  private invalidateReads(base: string): void {
+    const table = quoteIdentifier(annotatedRowsTableName(base));
+    if (typeof this.bridge.invalidateQueries === 'function') {
+      this.bridge.invalidateQueries((sql) => sql.includes(table));
+    } else {
+      this.bridge.clearQueryCache();
+    }
   }
 
   /**

@@ -19,7 +19,9 @@ import { DataTableError, QueryError } from '@/core/errors';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { Filter } from '@/core/types';
+import { WorkerBridge } from '@/data/WorkerBridge';
 
+import { createMockWorker } from '../helpers/mockWorker';
 import { makeRowFetchBridge, type CapturedQuery } from '../helpers/rowFetchBridge';
 
 /** The store's side of the contract: a content revision and its annotated rows. */
@@ -654,6 +656,76 @@ describe('AnnotatedRowsTable — ensureFresh', () => {
     state.tableName.set('__dt_view_t__');
     syncs()[0]!.deferred.resolve([]);
     await expect(fresh).resolves.toBe('__dt_annot_t__');
+  });
+});
+
+describe('AnnotatedRowsTable — the bridge’s cached results', () => {
+  it('a sync drops the results that read its table, not another table’s on the same bridge', async () => {
+    const HELD = 'SELECT max("__rowid__") AS n FROM "__dt_annot_t__"';
+    let held: { id: string } | null = null;
+    const mock = createMockWorker({
+      onMessage: (message) => {
+        if (message.type !== 'query') return undefined;
+        if ((message.payload as { sql: string }).sql === HELD) {
+          held = message;
+          return null;
+        }
+        return { id: message.id, type: 'result', payload: { rows: [{ n: 1 }] } };
+      },
+    });
+    const bridge = new WorkerBridge({ workerFactory: () => mock.worker });
+    await bridge.initialize();
+    const actions = { addReadGate: () => () => undefined, readGateOpened: () => undefined };
+    const [t, u] = ['t', 'u'].map((base) => {
+      const state = createTableState();
+      state.tableName.set(base);
+      state.baseTableName.set(base);
+      const store = new FakeStore();
+      store.set([[1, 1]]);
+      const table = new AnnotatedRowsTable({ state, actions, bridge, store: store as never });
+      return { store, table };
+    }) as [
+      { store: FakeStore; table: AnnotatedRowsTable },
+      { store: FakeStore; table: AnnotatedRowsTable },
+    ];
+    try {
+      await t.table.ensureFresh();
+      await u.table.ensureFresh();
+      const reads = [
+        'SELECT count(*) AS n FROM "t" WHERE "__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_t__")',
+        'SELECT count(*) AS n FROM "u" WHERE "__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_u__")',
+        'SELECT count(*) AS n FROM "t"',
+      ];
+      for (const sql of reads) await bridge.query(sql);
+      const posts = (): string[] =>
+        mock.posted
+          .filter((m) => m.type === 'query')
+          .map((m) => (m.payload as { sql: string }).sql);
+      const cached = posts().length;
+      // A read of the table in flight while it is rebuilt.
+      const inFlight = bridge.query(HELD);
+      await vi.waitFor(() => expect(held).not.toBeNull());
+
+      t.store.set([[2, 1]]);
+      await t.table.ensureFresh();
+      expect(posts()).toHaveLength(cached + 2);
+      mock.sendFromWorker({ id: held!.id, type: 'result', payload: { rows: [{ n: 1 }] } });
+      await inFlight;
+
+      held = null;
+      for (const sql of reads) await bridge.query(sql);
+      const again = bridge.query(HELD);
+      await vi.waitFor(() => expect(held).not.toBeNull());
+      mock.sendFromWorker({ id: held!.id, type: 'result', payload: { rows: [{ n: 2 }] } });
+      await again;
+      // The read of the rebuilt table, and the one in flight, go to DuckDB
+      // again; the other table's and the plain read come from the cache.
+      expect(posts().slice(cached + 2)).toEqual([reads[0], HELD]);
+    } finally {
+      t.table.destroy();
+      u.table.destroy();
+      bridge.terminate();
+    }
   });
 });
 

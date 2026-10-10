@@ -261,6 +261,15 @@ export interface CreateDataTableOptions {
   /** Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`. */
   exportDialog?: boolean;
 
+  /**
+   * `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` move the cursor to the next and
+   * previous annotation (of the severities the severity filter shows), and
+   * the live region says what is there. Default: `true`. Pass `false` to
+   * leave those keys to the page; `actions.nextAnnotation`,
+   * `actions.previousAnnotation` and `actions.revealRow` work either way.
+   */
+  annotationNavigation?: boolean;
+
   // ---- Lifecycle ----
 
   /** Where fixed-position modals mount. Default: `document.body`. */
@@ -634,6 +643,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     columnHeaderTooltipPopover,
     // A lazy panel whose chunk did not download (`CHUNK_LOAD_FAILED`).
     onError: (error) => emitError({ error, source: 'unknown' }),
+    annotationNavigation: opts.annotationNavigation !== false,
   });
 
   // -------- Instance id (multi-instance DOM ID isolation) --------
@@ -709,6 +719,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   const coordinator = new CrossfilterCoordinator(state, actions, bridge, undefined, {
     onFilterCycleComplete: (filters) => {
       if (destroyed) return;
+      // Annotation navigation waits for this before it scrolls.
+      tableContainer.filterCycleSettled(filters);
       emitter.emit('filterChange', {
         filters: [...filters],
         filteredRowCount: state.filteredRows.get(),

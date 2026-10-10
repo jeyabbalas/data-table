@@ -7,6 +7,13 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
+import type {
+  AnnotationNavigation,
+  AnnotationNavigationOptions,
+  AnnotationNavigationResult,
+  RevealRowOptions,
+  RevealRowResult,
+} from '../annotations/navigationTypes';
 import { fetchCellJson, readJsonValue, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
@@ -274,6 +281,9 @@ export class StateActions {
    */
   private openLoads = 0;
   private destroyed = false;
+  /** Loads the table UI's annotation navigation; see {@link setAnnotationNavigation}. */
+  private annotationNavigation:
+    (() => AnnotationNavigation | Promise<AnnotationNavigation>) | null = null;
 
   constructor(
     private state: TableState,
@@ -3113,6 +3123,147 @@ export class StateActions {
   clearFocusedCell(): void {
     this.throwIfDestroyed('clearFocusedCell');
     this.state.focusedCell.set(null);
+  }
+
+  // =========================================
+  // Annotation navigation
+  // =========================================
+
+  /**
+   * Hand {@link nextAnnotation}, {@link previousAnnotation} and
+   * {@link revealRow} to the table's UI: `TableContainer` passes the loader
+   * of its navigator, and `null` when it is destroyed. Without one they
+   * reject with `NO_TABLE`.
+   *
+   * @internal
+   */
+  setAnnotationNavigation(
+    load: (() => AnnotationNavigation | Promise<AnnotationNavigation>) | null,
+  ): void {
+    this.annotationNavigation = load;
+  }
+
+  /**
+   * Move the cursor to the next annotation in the view, as filtered and
+   * sorted, and scroll it into view: the next annotated cell of the
+   * cursor's row, then the next row with row or cell annotations, on its
+   * first annotated visible cell (pinned columns first). A row whose
+   * annotations are its own, or in hidden columns, keeps the cursor's
+   * column. Column annotations single out no rows, and are not visited.
+   * Without a cursor, it goes to the first annotation. The live region
+   * says where it landed and what is there, as `F8` does.
+   *
+   * One navigation runs at a time: a newer call, a move of the cursor, or a
+   * change of the filters, the sort or the table aborts it. It waits for a
+   * filter change still counting its rows. Far from the cursor in a large
+   * sorted view, finding the row is a DuckDB query, some hundreds of
+   * milliseconds on ten million rows.
+   *
+   * @param options - Which severities to visit (default: those the severity
+   *   filter shows), whether to go round the end (default: `true`), and an
+   *   `AbortSignal`.
+   * @returns where the cursor went, with the annotations there; `null` when
+   *   no annotation of those severities is in the view (or, with
+   *   `wrap: false`, past the cursor).
+   *
+   * @example
+   * const landed = await table.actions.nextAnnotation();
+   * if (landed) console.log(landed.row, landed.column, landed.annotations[0]?.message);
+   *
+   * @example
+   * // Errors only, stopping at the last one.
+   * await table.actions.nextAnnotation({ severities: ['error'], wrap: false });
+   *
+   * @throws `QueryError` with `code: 'QUERY_ABORTED'` when a newer
+   *   navigation, a cursor move, a view change or `options.signal` aborts
+   *   it; `code: 'NO_TABLE'` when no table is loaded, or the table has no UI.
+   * @throws `ConfigurationError` with `code: 'OPTIONS_INVALID'` for a
+   *   severity that is not `'error'`, `'warning'` or `'info'`, or a `wrap`
+   *   that is not a boolean.
+   * @throws `DestroyedError` if the table was destroyed before the call.
+   */
+  nextAnnotation(
+    options?: AnnotationNavigationOptions,
+  ): Promise<AnnotationNavigationResult | null> {
+    return this.navigateAnnotations('nextAnnotation', (n) => n.next(options));
+  }
+
+  /**
+   * Move the cursor to the previous annotation in the view: the previous
+   * annotated cell of the cursor's row, then the previous row with row or
+   * cell annotations, on its last annotated visible cell. Without a cursor,
+   * it goes to the last annotation. Otherwise as {@link nextAnnotation},
+   * which `Shift+F8` is to `F8`.
+   *
+   * @example
+   * const landed = await table.actions.previousAnnotation({ severities: ['error', 'warning'] });
+   *
+   * @throws As {@link nextAnnotation}.
+   */
+  previousAnnotation(
+    options?: AnnotationNavigationOptions,
+  ): Promise<AnnotationNavigationResult | null> {
+    return this.navigateAnnotations('previousAnnotation', (n) => n.previous(options));
+  }
+
+  /**
+   * Scroll the row whose `__rowid__` is `rowId` into view in the view as
+   * filtered and sorted, and, with `focus` (the default), put the cursor on
+   * it: in `column`, else the cursor's column, else the first visible one,
+   * which comes into view too. For a list of issues that takes the user to
+   * each, where `rowId` is the annotation's or a value of `__rowid__`.
+   *
+   * It waits for a filter change still counting its rows, and runs as one
+   * navigation (see {@link nextAnnotation}): a newer one, a cursor move or
+   * a view change aborts it.
+   *
+   * @param rowId - A non-negative integer, as a number or a bigint.
+   * @param column - A column of the table; a hidden one leaves the cursor's.
+   * @param options - Where the row goes in the view (`align`, default
+   *   `'center'`), whether the cursor moves (`focus`, default `true`), and
+   *   an `AbortSignal`.
+   * @returns the row's position and the column shown; `null` when the
+   *   filters hide the row.
+   *
+   * @example
+   * // From an issue list: the cell a cell annotation is on.
+   * const shown = await table.actions.revealRow(issue.rowId, issue.column);
+   * if (shown === null) console.log('The filters hide that row');
+   *
+   * @example
+   * // Scroll a row to the top, leaving the cursor where it is.
+   * await table.actions.revealRow(42n, undefined, { align: 'start', focus: false });
+   *
+   * @throws `QueryError` with `code: 'INVALID_ROWID'` when `rowId` is not a
+   *   non-negative integer, or no row has it; `code: 'COLUMN_NOT_FOUND'`
+   *   when `column` is not in the schema; `code: 'NO_TABLE'` when no table
+   *   is loaded; `code: 'QUERY_ABORTED'` when it is aborted.
+   * @throws `ConfigurationError` with `code: 'OPTIONS_INVALID'` for an
+   *   `align` or `focus` it does not take.
+   * @throws `DestroyedError` if the table was destroyed before the call.
+   */
+  revealRow(
+    rowId: number | bigint,
+    column?: string,
+    options?: RevealRowOptions,
+  ): Promise<RevealRowResult | null> {
+    return this.navigateAnnotations('revealRow', (n) => n.reveal(rowId, column, options));
+  }
+
+  private navigateAnnotations<T>(
+    method: string,
+    run: (navigation: AnnotationNavigation) => Promise<T>,
+  ): Promise<T> {
+    try {
+      this.throwIfDestroyed(method);
+      const navigation = this.annotationNavigation?.();
+      if (!navigation) throw new QueryError('No table to navigate', { code: 'NO_TABLE' });
+      // Once loaded, it starts in this call, so that a cursor move right
+      // after aborts it. The first call starts when the chunk has loaded.
+      return navigation instanceof Promise ? navigation.then(run) : run(navigation);
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 }
 

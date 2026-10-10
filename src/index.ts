@@ -135,6 +135,13 @@ export type {
   SeverityFilter,
 } from './annotations/types';
 export { ANNOTATION_FILE_VERSION } from './annotations/types';
+// What `actions.nextAnnotation` / `previousAnnotation` / `revealRow` take and give.
+export type {
+  AnnotationNavigationOptions,
+  AnnotationNavigationResult,
+  RevealRowOptions,
+  RevealRowResult,
+} from './annotations/navigationTypes';
 
 // ---- Visualization registry ----
 // Register custom visualizations per-instance via `createDataTable({

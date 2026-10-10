@@ -24,7 +24,7 @@
  *   root entry · ESM               11.53 kB   →  12.1 kB cap (4.9 %)
  *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
- *   lazy ExportDialog chunk       100.88 kB   → 104 kB   cap (3.1 %)
+ *   lazy ExportDialog chunk       104.85 kB   → 105.5 kB cap (0.6 %)
  *   lazy SQLFilterModal chunk       2.56 kB   →   2.6 kB cap (1.6 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
  *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
@@ -34,6 +34,7 @@
  *   lazy ValueInspector chunk       8.44 kB   →   8.9 kB cap (5.5 %)
  *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
+ *   lazy AnnotationNavigator chunk  4.31 kB   →   4.5 kB cap (4.4 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -101,7 +102,12 @@
  * "nice to have" fixes (RT-16 – RT-21: dates and times exported as ISO text,
  * NaN and infinity left out of charts, sub-second intervals, TIME WITH TIME
  * ZONE charts, extreme dates and more) took it to 100.88 kB, and the cap to
- * 104 kB.
+ * 104 kB. Measured again at 0.10.0, it was 101.98 kB. Annotations at a
+ * million took it to 103.63 kB (the store's indexes, read by the body and the
+ * headers), and annotation navigation to 104.85 kB: the keys, the actions
+ * that load its chunk, its live-region strings, the body's reads of the rows
+ * it holds, and a stand-in for the annotated-rows helper table (0.4 kB) that
+ * the helper's own class replaces. The cap moved to 105.5 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -131,6 +137,14 @@
  * panels' element and close-icon helpers into it, and took the copies the
  * inspector kept of shared rules out: TreeView 2.79 kB, ValueInspector
  * 8.45 kB and ExtractColumnPanel 4.95 kB.
+ *
+ * AnnotationNavigator chunk history. New with annotation navigation
+ * (`F8` / `Shift+F8`, `Alt+↓` / `Alt+↑`, `actions.nextAnnotation`,
+ * `previousAnnotation` and `revealRow`), at 4.31 kB: the search for the next
+ * annotated row (the rows the grid holds, a binary search, the SQL that
+ * compares rows key by key as the grid's `ORDER BY` does), the landing and
+ * its announcements, loaded the first time navigation runs. What stays in
+ * the shared chunk is the keys, the actions that load it and the strings.
  *
  * ModalHost no longer ships as a separate chunk: rolldown, since 1.0.1,
  * inlines the shared ModalHost helpers into each modal consumer. The
@@ -182,7 +196,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '104 kB',
+    limit: '105.5 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -228,5 +242,10 @@ module.exports = [
     name: 'lazy TreeView chunk · ESM',
     path: 'dist/TreeView-*.js',
     limit: '2.85 kB',
+  },
+  {
+    name: 'lazy AnnotationNavigator chunk · ESM',
+    path: 'dist/AnnotationNavigator-*.js',
+    limit: '4.5 kB',
   },
 ];

@@ -29,14 +29,16 @@
  * @see KeyboardNavigator
  */
 
+import type { AnnotationNavigator } from '../annotations/AnnotationNavigator';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { SimpleAnnotatedRowsSource } from '../annotations/simpleAnnotatedRowsSource';
 import type { NestedFieldColumnOptions, StateActions } from '../core/Actions';
-import { ConfigurationError, type DataTableError } from '../core/errors';
+import { ConfigurationError, DataTableError, QueryError } from '../core/errors';
 import { resolveInstanceId } from '../core/instanceId';
 import { isAnyModalOpen } from '../core/ModalHost';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
-import type { ColumnSchema } from '../core/types';
+import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColorScheme } from '../DataTable';
 import { AddColumnButton } from '../derived/AddColumnButton';
@@ -164,6 +166,14 @@ export interface TableContainerOptions {
    * says it too. `createDataTable` emits it as the table's `error` event.
    */
   onError?: ((error: DataTableError) => void) | undefined;
+  /**
+   * `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` go to the next and previous
+   * annotation (default: true). `actions.nextAnnotation`,
+   * `actions.previousAnnotation` and `actions.revealRow` work either way. A
+   * failure of a search the keys start is reported through `onError`. The
+   * facade passes its own `annotationNavigation` option.
+   */
+  annotationNavigation?: boolean | undefined;
 }
 
 /** The panels and modals the table opens, one at a time, named as their fields are. */
@@ -297,6 +307,16 @@ export class TableContainer {
   // Keyboard navigation / shortcuts
   private keyboardNavigator: KeyboardNavigator | null = null;
 
+  // Annotation navigation, a lazy chunk: built the first time
+  // `actions.nextAnnotation`, `previousAnnotation` or `revealRow` runs, and
+  // the promise of it while its chunk loads.
+  private annotationNavigator: AnnotationNavigator | Promise<AnnotationNavigator> | null = null;
+  // The filters whose cycle `createDataTable` last said had settled (their
+  // row count is in state), and the navigations waiting for the filters in
+  // state to settle. `null` until it says so, and outside it: nothing waits.
+  private settledFilters: readonly Filter[] | null = null;
+  private filterCycleWaiters: (() => void)[] = [];
+
   // True while `.dt-grid` carries the ARIA grid semantics. Flipped by
   // `applyGridSemantics()` from render(); read by the aria-rowcount /
   // aria-colcount / aria-activedescendant writers so they never annotate a
@@ -351,6 +371,7 @@ export class TableContainer {
       rowCacheRows: undefined as unknown as number,
       prefetch: undefined as unknown as boolean,
       onError: undefined as unknown as (error: DataTableError) => void,
+      annotationNavigation: true,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -545,7 +566,14 @@ export class TableContainer {
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
+        navigateAnnotations:
+          this.resolvedOptions.annotationNavigation !== false
+            ? (direction) => this.navigateAnnotations(direction)
+            : undefined,
       });
+    }
+    if (this.actions && this.bridge) {
+      this.actions.setAnnotationNavigation(() => this.loadAnnotationNavigator());
     }
 
     // Initial render
@@ -2476,6 +2504,100 @@ export class TableContainer {
     }
   }
 
+  // =========================================
+  // Annotation navigation
+  // =========================================
+
+  /**
+   * `F8` and its siblings: start a navigation when there are annotations to
+   * go to, and say whether the key was taken. A navigation dropped for a
+   * newer one, a cursor move or a view change is the user's doing; any
+   * other failure goes to the `onError` option.
+   */
+  private navigateAnnotations(direction: 'next' | 'previous'): boolean {
+    const actions = this.actions;
+    if (!actions || !this.resolvedOptions.annotations?.count() || !this.state.tableName.get()) {
+      return false;
+    }
+    (direction === 'next' ? actions.nextAnnotation() : actions.previousAnnotation()).catch(
+      (error: unknown) => {
+        if (!this.destroyed && error instanceof DataTableError && error.code !== 'QUERY_ABORTED') {
+          this.resolvedOptions.onError?.(error);
+        }
+      },
+    );
+    return true;
+  }
+
+  /**
+   * The table's annotation navigator: its chunk loaded, and the navigator
+   * built, on first use, and the navigator itself from then on. A chunk that
+   * did not load is asked for again the next time, as the panels' are.
+   */
+  private loadAnnotationNavigator(): AnnotationNavigator | Promise<AnnotationNavigator> {
+    if (this.annotationNavigator) return this.annotationNavigator;
+    const loading = import('../annotations/AnnotationNavigator').then(
+      ({ AnnotationNavigator }) => {
+        const { actions, bridge } = this;
+        if (this.destroyed || !actions || !bridge) {
+          throw new QueryError('The table is destroyed', { code: 'NO_TABLE' });
+        }
+        const store = this.resolvedOptions.annotations ?? null;
+        return (this.annotationNavigator = new AnnotationNavigator({
+          state: this.state,
+          actions,
+          bridge,
+          store,
+          source: new SimpleAnnotatedRowsSource(bridge, this.state, store),
+          messages: this.messages,
+          getTableBody: () => this.tableBody,
+          whenFilterCycleSettled: () => this.whenFilterCycleSettled(),
+          revealColumn: (column) => void this.columnWindow.revealColumn(column),
+          closeOverlays: () => {
+            this.resolvedOptions.annotationPopover?.hide();
+            this.pendingInspect = null;
+            if (this.panelRequest?.panel === 'valueInspector') this.panelRequest = null;
+            this.valueInspector?.close();
+          },
+          announce: (message) => this.announce(message),
+        }));
+      },
+      (cause: unknown) => {
+        throw new ConfigurationError(
+          `The annotation navigator chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { code: 'CHUNK_LOAD_FAILED', cause, details: { chunk: 'AnnotationNavigator' } },
+        );
+      },
+    );
+    this.annotationNavigator = loading;
+    loading.catch(() => {
+      if (this.annotationNavigator === loading) this.annotationNavigator = null;
+    });
+    return loading;
+  }
+
+  /**
+   * Say that the filter cycle of `filters` has settled: their row count is
+   * in `state.filteredRows`, and the grid's scroll range follows it.
+   * `createDataTable` calls it from its crossfilter coordinator. Navigation
+   * waits for the filters in state to settle before it scrolls; a container
+   * nobody calls this on does not wait.
+   *
+   * @internal
+   */
+  filterCycleSettled(filters: readonly Filter[]): void {
+    this.settledFilters = filters;
+    if (filters !== this.state.filters.get()) return;
+    for (const resolve of this.filterCycleWaiters.splice(0)) resolve();
+  }
+
+  /** Resolves once the filters in state have settled; see {@link filterCycleSettled}. */
+  private whenFilterCycleSettled(): Promise<void> {
+    const settled = this.settledFilters;
+    if (settled === null || settled === this.state.filters.get()) return Promise.resolve();
+    return new Promise((resolve) => this.filterCycleWaiters.push(resolve));
+  }
+
   /**
    * Where fixed-position modals owned by this table mount. Returns the
    * `portalTarget` option if supplied, otherwise `document.body`. Exposed
@@ -2754,6 +2876,20 @@ export class TableContainer {
       this.keyboardNavigator.destroy();
       this.keyboardNavigator = null;
     }
+
+    // Abort a navigation running, and leave the actions none to run
+    const navigator = this.annotationNavigator;
+    this.annotationNavigator = null;
+    if (navigator instanceof Promise) {
+      void navigator.then(
+        (built) => built.destroy(),
+        () => undefined,
+      );
+    } else {
+      navigator?.destroy();
+    }
+    this.filterCycleWaiters = [];
+    if (this.actions && this.bridge) this.actions.setAnnotationNavigation(null);
 
     // Stop syncing and scrolling the header and body
     this.columnWindow.destroy();

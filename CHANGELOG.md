@@ -21,7 +21,7 @@ release can carry breaking changes. Walkthroughs for breaking changes are in
 
 ### Minor Changes
 
-- Annotations hold a million at a cost that does not grow with the store, persist apart from the session, and gain navigation (`F8`, `actions.nextAnnotation`, `revealRow`) and a filter for the annotated rows.
+- Annotations scale to a million, persist apart from the session, and gain navigation (`F8`, `actions.nextAnnotation`, `revealRow`) and a filter for the annotated rows.
 
   **Changed**
 

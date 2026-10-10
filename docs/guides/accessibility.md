@@ -312,9 +312,10 @@ annotation is read with its severity and message, and the rest counted.
 (or "above") at the end. Every phrase is a `messages.annotations.navigation`
 string; see [i18n → Annotations](./i18n.md#annotations).
 
-This is how a keyboard user hears annotations: the popover opens on pointer
-hover and on DOM focus entering a cell, and the grid's cursor moves
-`aria-activedescendant`, not DOM focus, so moving the cursor does not open it.
+This is how keyboard and screen-reader users reach annotations: the popover
+opens on pointer hover and on DOM focus entering a cell, and the grid's
+cursor moves `aria-activedescendant`, not DOM focus, so moving the cursor
+does not open it.
 A search far from the cursor in a large sorted view is a DuckDB query, some
 hundreds of milliseconds on ten million rows; the keys stay live meanwhile, and
 a newer press, or a cursor move, abandons the search in progress.

@@ -640,7 +640,7 @@ view the search compares rows as the grid's `ORDER BY` does: NULL last in
 either direction, NaN after every number, `__rowid__` last. The navigation
 code is a chunk of its own (4.30 kB brotli), loaded the first time it runs.
 
-## Showing only the annotated rows
+### Showing only the annotated rows
 
 ```ts
 table.actions.showAnnotatedRows(); // the rows with any annotation

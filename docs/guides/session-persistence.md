@@ -183,9 +183,9 @@ was saved with, when known:
 
 **Writes that fail.** The annotations have a circuit breaker of their own.
 A quota error on them stops their saves at once; any other failure is
-reported and retried by the next save, and a second one in a row stops
-them. Each is reported once, as an `error` event with
-`source: 'persistence'` and `details.record: 'annotations'`. The session
+retried by the next save, and a second one in a row stops them. Each failure
+until then is reported as an `error` event with `source: 'persistence'` and
+`details.record: 'annotations'`. The session
 keeps saving without the annotations, and their record is deleted, so a
 reload restores the session without them, and without a warning;
 `clearSession()` or a reload starts their saves again.
@@ -199,7 +199,9 @@ reload restores the session without them, and without a warning;
   tab running an older version keeps its connection and keeps saving. An
   older version reading a session saved this way restores all of it but the
   annotations, which it does not look for, and an annotated filter, which it
-  drops with a console warning.
+  drops with a console warning. Once it saves that session, the record has no
+  marker, and this version restores the session without the annotations too:
+  export them with `toJSON()` before going back to an older version.
 - When `dt-annotations` cannot be opened, annotations are saved inside the
   session record, as before.
 

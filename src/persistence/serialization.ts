@@ -7,6 +7,7 @@
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { normalizeColumnHeaderTooltip } from '../core/columnHeaderTooltip';
+import { DataTableError } from '../core/errors';
 import { batch } from '../core/Signal';
 import {
   type TableState,
@@ -20,6 +21,8 @@ import type { VectorColumnDef } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { Filter } from '../filters/FilterTypes';
 import { normalizeRestoredFilters } from '../filters/restoredFilters';
+import { adoptAnnotationFile, currentAnnotationFile } from './annotationPersistence';
+import type { AnnotationsDropReason } from './annotationPersistence';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
@@ -153,6 +156,34 @@ export function deserializeStateSnapshot(
 
 // ── Session snapshot (full table state + optional undo stacks) ────────
 
+/** Options for {@link snapshotFromState}. */
+export interface SnapshotOptions {
+  /**
+   * Whether the snapshot carries the annotations themselves (default `true`);
+   * the severity filter is captured either way. `AutoSave` turns it off once
+   * the annotations no longer fit in the IndexedDB quota.
+   */
+  annotations?: boolean;
+}
+
+/**
+ * Part of a saved session that its restore left out, having restored the
+ * rest: today, annotations `AnnotationStore.loadJSON` refused. The facade
+ * reports it as a `warning` event.
+ */
+export interface RestoreIssue {
+  code: 'PERSISTENCE_ANNOTATIONS_DROPPED';
+  tableName: string | null;
+  details: {
+    reason: AnnotationsDropReason;
+    /** How many annotations the session was saved with, when known. */
+    count?: number;
+    /** The refusal's `DataTableError.code`, for one that has a code. */
+    errorCode?: string;
+    errorMessage?: string;
+  };
+}
+
 /**
  * Capture the current TableState as a serializable SessionSnapshot.
  *
@@ -161,12 +192,17 @@ export function deserializeStateSnapshot(
  *
  * If an UndoManager is provided, its undo/redo stacks are serialized
  * and included in the snapshot for persistence across refreshes.
+ *
+ * The annotations are {@link currentAnnotationFile}: the same object from
+ * one snapshot to the next until they change, which a `SessionStore` reads
+ * as nothing to write, and which a custom store must not change.
  */
 export function snapshotFromState(
   state: TableState,
   undoManager?: UndoManager,
   presetManager?: FilterPresetManager,
   annotationStore?: AnnotationStore,
+  options: SnapshotOptions = {},
 ): SessionSnapshot {
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
@@ -243,8 +279,9 @@ export function snapshotFromState(
     }
   }
 
-  if (annotationStore && annotationStore.count() > 0) {
-    snapshot.annotations = annotationStore.toJSON();
+  if (annotationStore && options.annotations !== false) {
+    const file = currentAnnotationFile(annotationStore);
+    if (file) snapshot.annotations = file;
   }
 
   // Capture the severity filter only when the user has toggled at least one
@@ -287,6 +324,9 @@ export function snapshotFromState(
  * undo and redo entries saved with the session are made consistent too.
  *
  * Does NOT restore tableName (it comes from data loading, not the snapshot).
+ *
+ * Annotations `loadJSON` refuses are left out and reported to `onIssue`;
+ * the rest of the session is restored either way.
  */
 export function restoreStateFromSnapshot(
   state: TableState,
@@ -294,6 +334,7 @@ export function restoreStateFromSnapshot(
   undoManager?: UndoManager,
   presetManager?: FilterPresetManager,
   annotationStore?: AnnotationStore,
+  onIssue?: (issue: RestoreIssue) => void,
 ): void {
   const schemaColumns = state.schema.get();
   if (schemaColumns.length === 0) return;
@@ -450,14 +491,22 @@ export function restoreStateFromSnapshot(
     presetManager.loadPresets(snapshot.filterPresets);
   }
 
-  // Restore annotations if present. A corrupt blob (e.g. from a manual edit
-  // of IndexedDB) must not block session restore for the rest of the state —
-  // match the "silently drop stale references" posture used above.
+  // Restore annotations if present. A file `loadJSON` refuses (a manual edit
+  // of IndexedDB, a newer file version) must not block session restore for
+  // the rest of the state: it is reported, and the store stays empty. An id
+  // the file repeats keeps its first annotation, as sessions saved before
+  // `loadJSON` refused repeats can hold some. The store then adopts the file
+  // it came from, so the next save writes no annotations until they change;
+  // with a repeat skipped, it writes them once, without it.
   if (annotationStore && snapshot.annotations) {
     try {
-      annotationStore.loadJSON(snapshot.annotations, 'replace');
-    } catch {
-      // Leave the store empty on any parse/shape failure.
+      const { skipped } = annotationStore.loadJSON(snapshot.annotations, {
+        mode: 'replace',
+        duplicates: 'skip',
+      });
+      if (skipped === 0) adoptAnnotationFile(annotationStore, snapshot.annotations);
+    } catch (error) {
+      onIssue?.(annotationsRefused(snapshot, error));
     }
   }
 
@@ -471,4 +520,16 @@ export function restoreStateFromSnapshot(
       // Leave the filter at all-true on any failure.
     }
   }
+}
+
+/** The issue for `snapshot`'s annotations, which `loadJSON` refused with `error`. */
+function annotationsRefused(snapshot: SessionSnapshot, error: unknown): RestoreIssue {
+  const annotations: unknown = snapshot.annotations?.annotations;
+  const details: RestoreIssue['details'] = {
+    reason: 'invalid',
+    errorMessage: error instanceof Error ? error.message : String(error),
+  };
+  if (Array.isArray(annotations)) details.count = annotations.length;
+  if (error instanceof DataTableError) details.errorCode = error.code;
+  return { code: 'PERSISTENCE_ANNOTATIONS_DROPPED', tableName: snapshot.tableName, details };
 }

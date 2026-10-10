@@ -449,6 +449,17 @@ export class AnnotationStore {
     return this.contentRev;
   }
 
+  /**
+   * The table name `toJSON()` tags its file with, resolved now. A cache of
+   * that file keys on it as well as on {@link contentRevision}, which does
+   * not track it.
+   *
+   * @internal
+   */
+  resolvedTableName(): string | null | undefined {
+    return this.resolveTableName();
+  }
+
   // =========================================
   // CRUD
   // =========================================

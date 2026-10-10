@@ -90,8 +90,22 @@ export async function annotatedRowsStatement(
   );
 }
 
+/**
+ * A task boundary, through a message channel rather than a timer. A page in
+ * a background tab gets its timers throttled, and a chain of them, as the
+ * chunks of a million rows make, to one a minute once it has been hidden
+ * for five minutes: a sync the view's reads wait on took minutes there. A
+ * message is not throttled.
+ */
 function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      channel.port1.close();
+      resolve();
+    };
+    channel.port2.postMessage(null);
+  });
 }
 
 /** What the table reads of an annotation store. */

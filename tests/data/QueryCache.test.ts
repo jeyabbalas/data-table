@@ -97,6 +97,33 @@ describe('QueryCache', () => {
     });
   });
 
+  describe('generation', () => {
+    it('counts the clears', () => {
+      const cache = new QueryCache();
+      expect(cache.generation).toBe(0);
+      cache.clear();
+      cache.clear();
+      expect(cache.generation).toBe(2);
+    });
+
+    it('stores a result only if no clear came between the query’s start and its result', () => {
+      const cache = new QueryCache();
+      const started = cache.generation;
+      cache.set('current', [{ v: 1 }], started);
+      expect(cache.get('current')).toEqual([{ v: 1 }]);
+
+      const inFlight = cache.generation;
+      cache.clear();
+      cache.set('stale', [{ v: 2 }], inFlight);
+      expect(cache.get('stale')).toBeUndefined();
+      expect(cache.size).toBe(0);
+
+      // Without a generation, as before.
+      cache.set('plain', [{ v: 3 }]);
+      expect(cache.get('plain')).toEqual([{ v: 3 }]);
+    });
+  });
+
   describe('has', () => {
     beforeEach(() => {
       vi.useFakeTimers();

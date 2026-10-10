@@ -126,4 +126,27 @@ describe('WorkerBridge.query options', () => {
     mock.sendFromWorker({ id: q2Id, type: 'result', payload: { rows: [{ b: 20 }] } });
     await expect(q2).resolves.toEqual([{ b: 20 }]);
   });
+
+  it('a result in flight across clearQueryCache() reaches its caller, and is not cached', async () => {
+    mock = createMockWorker();
+    bridge = new WorkerBridge({ workerFactory: () => mock.worker });
+    await bridge.initialize();
+
+    const sql = 'SELECT 1 AS x';
+    const first = bridge.query<{ x: number }>(sql);
+    await mock.waitForPosts(2);
+    // What the query read changed while it ran: say, a table it reads was rebuilt.
+    bridge.clearQueryCache();
+    mock.sendFromWorker({ id: queryPosts()[0]!.id, type: 'result', payload: { rows: [{ x: 1 }] } });
+    await expect(first).resolves.toEqual([{ x: 1 }]);
+
+    // Asked again, it goes to the worker, and that result is cached.
+    const second = bridge.query<{ x: number }>(sql);
+    await mock.waitForPosts(3);
+    expect(queryPosts()).toHaveLength(2);
+    mock.sendFromWorker({ id: queryPosts()[1]!.id, type: 'result', payload: { rows: [{ x: 2 }] } });
+    await expect(second).resolves.toEqual([{ x: 2 }]);
+    await expect(bridge.query(sql)).resolves.toEqual([{ x: 2 }]);
+    expect(queryPosts()).toHaveLength(2);
+  });
 });

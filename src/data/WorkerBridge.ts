@@ -566,12 +566,15 @@ export class WorkerBridge {
       sql,
       ...(options?.priority !== undefined ? { priority: options.priority } : {}),
     };
+    // A result in flight across a `clearQueryCache()` is not stored: the
+    // clear says the data the query read may have changed under it.
+    const generation = this.queryCache.generation;
     const result = await this.sendMessage('query', payload, undefined, signal);
     const rows = (result as { rows: T[] }).rows;
 
     // Store in cache if cacheable and not aborted
     if (cacheable && !signal?.aborted) {
-      this.queryCache.set(sql, rows);
+      this.queryCache.set(sql, rows, generation);
     }
 
     return rows;
@@ -667,7 +670,9 @@ export class WorkerBridge {
   }
 
   /**
-   * Clear all cached query results
+   * Clear all cached query results. A query still in flight then returns
+   * its result to its caller without storing it, since it may have read
+   * the data from before whatever change the clear is for.
    */
   clearQueryCache(): void {
     this.queryCache.clear();

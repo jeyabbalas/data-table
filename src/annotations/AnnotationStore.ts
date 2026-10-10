@@ -361,10 +361,11 @@ function highestShown(mask: number): AnnotationSeverity | null {
  * Costs, for a store of N annotations and a result of k: `get`, `update`,
  * `remove` and `count` are O(1); `removeMany` is O(k); `getByCell`,
  * `getByRow` and `getByColumn` are O(k log k), never a pass over the store
- * (the first `getByRow` call that meets cell annotations builds a by-row
- * index of them, O(cells), kept up to date afterwards); `add` is O(1) and
- * `addMany` O(k); `getAll`, `toJSON`, `loadJSON` and `clear('all')` are
- * O(N); `clear(scope)` is O(k) for the k annotations it removes.
+ * (the first `getByRow` call, or annotation navigation, that meets cell
+ * annotations builds a by-row index of them, O(cells), kept up to date
+ * afterwards); `add` is O(1) and `addMany` O(k); `getAll`, `toJSON`,
+ * `loadJSON` and `clear('all')` are O(N); `clear(scope)` is O(k) for the k
+ * annotations it removes.
  *
  * Limits and contracts:
  * - Each annotation is one entry in a `Map`, and V8 caps a `Map` at 2²⁴
@@ -817,8 +818,9 @@ export class AnnotationStore {
    * `rowIds[i]`, ORed, whatever the severity filter shows.
    *
    * Built on the first call after a change to row or cell scope, O(R log R +
-   * cells) for R rows, so at most once per `contentRevision`; the same object
-   * is returned until then. Callers must not mutate the arrays.
+   * cells) for R rows (some 0.1 s at a million annotations), so at most once
+   * per `contentRevision`; the same object is returned until then. Callers
+   * must not mutate the arrays.
    *
    * @internal
    */
@@ -847,23 +849,29 @@ export class AnnotationStore {
   }
 
   /**
-   * Row `rowId`'s mask in {@link AnnotationStore.annotatedRows}, or 0 when it
-   * holds no row- or cell-scope annotation. O(log R) once that is built.
+   * Row `rowId`'s mask in {@link AnnotationStore.annotatedRows}: the
+   * `SEVERITY_BIT`s of its row-scope annotations and of its cells'
+   * cell-scope annotations, ORed, whatever the severity filter shows; 0 for
+   * none.
+   *
+   * Read from the indexes, never from `annotatedRows()`, which a change to
+   * row or cell scope makes rebuild in full (~0.1 s at a million
+   * annotations): navigation reads the mask of each row the grid holds, and
+   * must not pay that after every change. O(1) for the row's own, plus O(k)
+   * for its k cell annotations through the by-row index of cells, which the
+   * first call that meets cell annotations builds, as `getByRow` does
+   * (O(cells), about 0.2 s and 24 bytes an annotation at a million), and
+   * which is kept current afterwards.
    *
    * @internal
    */
   annotatedRowMask(rowId: number): number {
-    const { rowIds, masks } = this.annotatedRows();
-    let lo = 0;
-    let hi = rowIds.length - 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >>> 1;
-      const value = rowIds[mid]!;
-      if (value < rowId) lo = mid + 1;
-      else if (value === rowId) return masks[mid]!;
-      else hi = mid - 1;
+    let mask = bucketMask(this.rowScoped.get(rowId));
+    if (this.cellCount > 0) {
+      const cells = this.cellsByRowIndex().get(rowId);
+      if (cells !== undefined) mask |= rowCellsMask(cells);
     }
-    return 0;
+    return mask;
   }
 
   // =========================================

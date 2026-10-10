@@ -248,7 +248,7 @@ class Model {
         list: this.sortedForCell(this.rowScope(r)),
         summary: this.summaryOf(this.rowScope(r)),
         mask: this.maskOf(this.rowScope(r)),
-        annotated: annotated.get(r) ?? 0,
+        annotated: withRows ? (annotated.get(r) ?? 0) : 'skipped',
       })),
       columns: LOOKUP_COLUMNS.map((c) => ({
         byColumn: this.entries.filter((e) => this.onColumn(e, c)).map((e) => e.ann.id),
@@ -299,7 +299,7 @@ function observed(store: AnnotationStore, withRows: boolean): unknown {
       list: store.listRowScope(r).map((a) => a.id),
       summary: sum(store.summarizeRowScope(r, summary)),
       mask: store.rowScopeMask(r),
-      annotated: store.annotatedRowMask(r),
+      annotated: withRows ? store.annotatedRowMask(r) : 'skipped',
     })),
     columns: LOOKUP_COLUMNS.map((c) => ({
       byColumn: store.getByColumn(c).map((a) => a.id),
@@ -737,8 +737,9 @@ function runSeed(seed: number, steps: number): void {
     }
 
     assertSame(events, listening ? expectedEvents : [], `${context}: events`);
-    // `getByRow` builds its by-row index on first use: check it on some steps
-    // only, so ops run both with and without that index.
+    // `getByRow` and `annotatedRowMask` build the by-row index of cells on
+    // first use: check them on some steps only, so ops run both with and
+    // without that index.
     const withRows = rng.chance(0.5);
     assertSame(observed(store, withRows), model.expected(clock, withRows), `${context}: state`);
   }

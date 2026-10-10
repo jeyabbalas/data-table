@@ -6,6 +6,7 @@
  * external code to interact with the table state.
  */
 
+import type { AnnotatedRowsSource } from '../annotations/annotatedRowsSource';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { ALL_SEVERITIES_MASK, severitiesOfMask } from '../annotations/severity';
 import type { AnnotationSeverity } from '../annotations/types';
@@ -299,6 +300,8 @@ export class StateActions {
   private readGates: ReadGate[] = [];
   /** A read gate was found closed since they were last all open; see {@link readGateOpened}. */
   private readGateFoundClosed = false;
+  /** Brings the annotated filter's table of annotated rows up to date; see {@link ensureFiltersFresh}. */
+  private annotatedRowsSource: AnnotatedRowsSource | null = null;
   private destroyed = false;
 
   constructor(
@@ -1441,6 +1444,36 @@ export class StateActions {
   hideAnnotatedRows(): void {
     this.throwIfDestroyed('hideAnnotatedRows');
     this.removeFilter(ANNOTATED_FILTER_COLUMN, 'annotated');
+  }
+
+  /**
+   * Set what keeps the annotated filter's table of annotated rows current
+   * (see {@link ensureFiltersFresh}). The table container sets it.
+   *
+   * @internal
+   */
+  setAnnotatedRowsSource(source: AnnotatedRowsSource | null): void {
+    this.annotatedRowsSource = source;
+  }
+
+  /**
+   * Resolves once the DuckDB tables the filters in force read are current:
+   * with an annotated filter in force, once its table of annotated rows
+   * holds the annotations the store holds now, which it can trail while the
+   * view waits to update in place. At once otherwise. For a read of the
+   * filtered rows that someone is waiting on, such as
+   * {@link getColumnValues} or an export.
+   *
+   * Rejects with a `QueryError` coded `QUERY_ABORTED` when `signal` aborts
+   * first or the table is replaced first, or with the error the update
+   * failed with.
+   *
+   * @internal
+   */
+  async ensureFiltersFresh(signal?: AbortSignal): Promise<void> {
+    const source = this.annotatedRowsSource;
+    if (!source || !this.state.filters.get().some((f) => f.type === 'annotated')) return;
+    await source.ensureFresh(signal);
   }
 
   /**
@@ -2829,6 +2862,10 @@ export class StateActions {
    * `scope: 'filtered'`. For `scope: 'selected'` the values are returned in
    * positional order within the current filter/sort view (same semantics as
    * the export "selected rows" scope) — not strict selection insertion order.
+   * With an annotated filter in force ({@link StateActions.showAnnotatedRows}),
+   * a `'filtered'` or `'selected'` read keeps the rows the annotations in
+   * the store single out, even in the moment before the view catches up
+   * with a change to them.
    *
    * Numeric columns materialize into the narrowest sensible typed array:
    * - DuckDB `BIGINT` / `UBIGINT` / `HUGEINT` / `UHUGEINT` → `BigInt64Array`
@@ -2926,6 +2963,16 @@ export class StateActions {
         code: 'INVALID_PAGINATION',
         details: { offset },
       });
+    }
+
+    // The rows an annotated filter keeps are read from the table of
+    // annotated rows, which can trail the store by a moment.
+    if (scope !== 'all') {
+      try {
+        await this.ensureFiltersFresh(signal);
+      } finally {
+        this.throwIfDestroyed('getColumnValues');
+      }
     }
 
     const tbl = this.state.tableName.get();

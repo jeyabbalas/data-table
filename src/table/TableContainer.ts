@@ -29,9 +29,11 @@
  * @see KeyboardNavigator
  */
 
+import type { AnnotatedRowsSource } from '../annotations/annotatedRowsSource';
+import type { AnnotatedRowsTable } from '../annotations/AnnotatedRowsTable';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { NestedFieldColumnOptions, StateActions } from '../core/Actions';
-import { ConfigurationError, type DataTableError } from '../core/errors';
+import { ConfigurationError, QueryError, type DataTableError } from '../core/errors';
 import { resolveInstanceId } from '../core/instanceId';
 import { isAnyModalOpen } from '../core/ModalHost';
 import type { TableState } from '../core/State';
@@ -158,12 +160,29 @@ export interface TableContainerOptions {
   /**
    * Called with a failure nothing else hears of: a panel that loads on
    * first use, the value inspector or the extract panel, whose chunk did
-   * not download. The error is a `ConfigurationError` with code
-   * `CHUNK_LOAD_FAILED`, `details.panel` (`'valueInspector'` or
-   * `'extractPanel'`) and the import's error as `cause`; the live region
-   * says it too. `createDataTable` emits it as the table's `error` event.
+   * not download, or the chunk that keeps an annotated filter's table of
+   * annotated rows. The error is a `ConfigurationError` with code
+   * `CHUNK_LOAD_FAILED`, `details.panel` (`'valueInspector'`,
+   * `'extractPanel'` or `'annotatedRows'`) and the import's error as
+   * `cause`; for a panel, the live region says it too. `createDataTable`
+   * emits it as the table's `error` event.
    */
   onError?: ((error: DataTableError) => void) | undefined;
+  /**
+   * Called when the annotated rows an annotated filter in force keeps
+   * changed with the annotations, once the body is fetching its rows again
+   * in place: for the row count, charts and stats panels to follow.
+   *
+   * @internal
+   */
+  onAnnotatedRowsChange?: (() => void) | undefined;
+  /**
+   * Called with the error a sync of the DuckDB table of annotated rows
+   * failed with.
+   *
+   * @internal
+   */
+  onAnnotatedRowsError?: ((error: DataTableError) => void) | undefined;
 }
 
 /** The panels and modals the table opens, one at a time, named as their fields are. */
@@ -297,6 +316,17 @@ export class TableContainer {
   // Keyboard navigation / shortcuts
   private keyboardNavigator: KeyboardNavigator | null = null;
 
+  // The DuckDB table of annotated rows an annotated filter reads, kept
+  // current with the annotation store: a lazy chunk, loaded the first time
+  // an annotated filter of this table comes into force or a reader asks for
+  // the table. What reads it goes through the source, which loads it.
+  private annotatedRows: AnnotatedRowsTable | null = null;
+  private annotatedRowsLoad: Promise<AnnotatedRowsTable> | null = null;
+  private annotatedRowsSource: AnnotatedRowsSource | null = null;
+  // Its chunk did not load: the reads it held go ahead, until the filters
+  // change and it is asked for again
+  private annotatedRowsFailed = false;
+
   // True while `.dt-grid` carries the ARIA grid semantics. Flipped by
   // `applyGridSemantics()` from render(); read by the aria-rowcount /
   // aria-colcount / aria-activedescendant writers so they never annotate a
@@ -351,6 +381,8 @@ export class TableContainer {
       rowCacheRows: undefined as unknown as number,
       prefetch: undefined as unknown as boolean,
       onError: undefined as unknown as (error: DataTableError) => void,
+      onAnnotatedRowsChange: undefined as unknown as () => void,
+      onAnnotatedRowsError: undefined as unknown as (error: DataTableError) => void,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -548,8 +580,87 @@ export class TableContainer {
       });
     }
 
+    // The DuckDB table of annotated rows, which an annotated filter keeps
+    // rows by, in a chunk of its own. Until the chunk is in, the reads an
+    // annotated filter of this table makes wait, as nothing has built its
+    // table, and asking for them starts the load; the table then holds them
+    // itself until its first sync lands.
+    if (actions && this.bridge && this.resolvedOptions.annotations) {
+      const load = (): void => void this.loadAnnotatedRows().catch(() => undefined);
+      this.unsubscribes.push(
+        actions.addReadGate({
+          isOpen: () => {
+            if (!this.awaitsAnnotatedRows()) return true;
+            load();
+            return false;
+          },
+        }),
+        this.state.filters.subscribe(() => {
+          this.annotatedRowsFailed = false;
+          if (this.awaitsAnnotatedRows()) load();
+        }),
+      );
+      this.annotatedRowsSource = {
+        ensureFresh: (signal) => this.loadAnnotatedRows().then((rows) => rows.ensureFresh(signal)),
+      };
+      actions.setAnnotatedRowsSource(this.annotatedRowsSource);
+    }
+
     // Initial render
     this.render();
+  }
+
+  /**
+   * Whether an annotated filter of this table's base table is in force
+   * while the chunk that builds its table of annotated rows is not in.
+   */
+  private awaitsAnnotatedRows(): boolean {
+    if (this.annotatedRows || this.annotatedRowsFailed || this.destroyed) return false;
+    const base = this.state.baseTableName.get() ?? this.state.tableName.get();
+    return this.state.filters.get().some((f) => f.type === 'annotated' && f.table === base);
+  }
+
+  /**
+   * The DuckDB table of annotated rows, built once its chunk is in. Once
+   * annotations change under an annotated filter, it has the body fetch its
+   * rows again in place, keeping the scroll position and the cursor. A load
+   * that fails is not kept, so the next need asks for the chunk again; the
+   * failure is reported, and the reads it held go ahead.
+   */
+  private loadAnnotatedRows(): Promise<AnnotatedRowsTable> {
+    const loading = (this.annotatedRowsLoad ??= import('../annotations/AnnotatedRowsTable').then(
+      ({ AnnotatedRowsTable }) => {
+        if (this.destroyed) throw new QueryError('Operation aborted', { code: 'QUERY_ABORTED' });
+        this.annotatedRows ??= new AnnotatedRowsTable({
+          state: this.state,
+          actions: this.actions!,
+          bridge: this.bridge!,
+          store: this.resolvedOptions.annotations!,
+          onRefresh: () => {
+            this.tableBody?.refresh();
+            this.resolvedOptions.onAnnotatedRowsChange?.();
+          },
+          onError: (error) => this.resolvedOptions.onAnnotatedRowsError?.(error),
+        });
+        // Its own gate holds the reads from here on.
+        this.actions?.readGateOpened();
+        return this.annotatedRows;
+      },
+      (cause: unknown) => {
+        if (this.annotatedRowsLoad === loading) this.annotatedRowsLoad = null;
+        const error = new ConfigurationError(
+          `The annotatedRows chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { code: 'CHUNK_LOAD_FAILED', cause, details: { panel: 'annotatedRows' } },
+        );
+        if (!this.destroyed) {
+          this.annotatedRowsFailed = true;
+          this.resolvedOptions.onError?.(error);
+          this.actions?.readGateOpened();
+        }
+        throw error;
+      },
+    ));
+    return loading;
   }
 
   // =========================================
@@ -2629,6 +2740,18 @@ export class TableContainer {
   }
 
   /**
+   * The DuckDB table of the annotated rows, for what reads it: the
+   * annotated filter and annotation navigation. Its `ensureFresh` loads the
+   * table's chunk first, the first time. `null` without an annotation store,
+   * actions and a bridge.
+   *
+   * @internal
+   */
+  getAnnotatedRows(): AnnotatedRowsSource | null {
+    return this.annotatedRowsSource;
+  }
+
+  /**
    * Get all column header instances, one per visible column, in order.
    * Useful for accessing visualization containers in each header.
    *
@@ -2661,6 +2784,15 @@ export class TableContainer {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // Stop syncing the annotated rows, and let nothing wait for them: the
+    // gate held for their chunk goes with the subscriptions below
+    this.annotatedRows?.destroy();
+    this.annotatedRows = null;
+    if (this.annotatedRowsSource) {
+      this.actions?.setAnnotatedRowsSource(null);
+      this.annotatedRowsSource = null;
+    }
 
     // Destroy all column headers
     this.destroyColumnHeaders();

@@ -39,6 +39,7 @@
  * ```
  */
 
+import { annotatedRowsTableName } from './annotations/annotatedRowsSource';
 import { AnnotationStore } from './annotations/AnnotationStore';
 import { StateActions, type LoadDataOptions } from './core/Actions';
 import { checkBrowserSupport } from './core/checkBrowserSupport';
@@ -634,6 +635,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     columnHeaderTooltipPopover,
     // A lazy panel whose chunk did not download (`CHUNK_LOAD_FAILED`).
     onError: (error) => emitError({ error, source: 'unknown' }),
+    // The rows an annotated filter keeps changed with the annotations, and
+    // the grid fetches them again in place: the count, the charts and the
+    // stats panels follow, as for a filter change.
+    onAnnotatedRowsChange: () => {
+      void coordinator.refresh();
+      void statsPanelCoordinator?.syncExistingFilters(state.filters.get());
+    },
+    onAnnotatedRowsError: (error) => emitError({ error, source: 'query' }),
   });
 
   // -------- Instance id (multi-instance DOM ID isolation) --------
@@ -1323,6 +1332,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         instanceId,
         colorSchemeSource: tableContainer.getElement(),
         messages,
+        // An annotated filter's rows, as the annotations in the store say.
+        beforeExport: (signal) => actions.ensureFiltersFresh(signal),
       });
       tableContainer.getPortalTarget().appendChild(exportDialog.getElement());
     }
@@ -1581,6 +1592,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // a stranded table of the same name is being replaced in place.
   const loadingTableNames: string[] = [];
 
+  /** Drop a base table, and with it the DuckDB table of its annotated rows. */
+  const dropBaseTable = (name: string): Promise<unknown> =>
+    Promise.all([bridge.dropTable(name), bridge.dropTable(annotatedRowsTableName(name))]);
+
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
@@ -1705,7 +1720,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             continue;
           }
           try {
-            await bridge.dropTable(name);
+            await dropBaseTable(name);
           } catch (err) {
             console.warn(`[data-table] Failed to drop previous table "${name}":`, err);
           }
@@ -1856,7 +1871,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       strandedTables.clear();
       for (const name of toDrop) {
         try {
-          await bridge.dropTable(name);
+          await dropBaseTable(name);
         } catch (err) {
           console.warn(`[data-table] Failed to drop base table "${name}" on destroy:`, err);
         }
@@ -1900,7 +1915,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       annotationStore.clear('all');
       bridge.clearQueryCache();
       // The emptied table stays queryable until the next load or destroy()
-      // drops it: `actions` reported it as stranded.
+      // drops it, with the table of its annotated rows: `actions` reported
+      // it as stranded.
     } finally {
       if (!destroyed) autoSave?.enable();
     }

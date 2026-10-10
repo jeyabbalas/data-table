@@ -962,4 +962,94 @@ describe('ExportDialog', () => {
       expect(opts.columns).toContain('price');
     });
   });
+
+  // =========================================
+  // beforeExport: what the filters read, brought up to date first
+  // =========================================
+
+  describe('beforeExport', () => {
+    let ready: { resolve: () => void; reject: (error: unknown) => void };
+    let beforeExport: ReturnType<typeof vi.fn>;
+    let prepared: ExportDialog;
+
+    const scope = (value: string): void => {
+      (prepared.getElement().querySelector(`input[value="${value}"]`) as HTMLInputElement).checked =
+        true;
+    };
+    const download = (): HTMLButtonElement => {
+      const button = prepared.getElement().querySelector('.dt-export-btn') as HTMLButtonElement;
+      button.click();
+      return button;
+    };
+
+    beforeEach(() => {
+      beforeExport = vi.fn(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            ready = { resolve, reject };
+          }),
+      );
+      prepared = new ExportDialog(state, mockBridge, { beforeExport });
+      document.body.appendChild(prepared.getElement());
+      prepared.open();
+    });
+
+    afterEach(() => {
+      prepared.destroy();
+    });
+
+    it('is awaited before an export of the filtered rows reads them', async () => {
+      scope('filtered');
+      download();
+      await vi.waitFor(() => expect(beforeExport).toHaveBeenCalledWith(expect.any(AbortSignal)));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(exportFromState).not.toHaveBeenCalled();
+
+      ready.resolve();
+      await vi.waitFor(() => expect(exportFromState).toHaveBeenCalledTimes(1));
+    });
+
+    it('and before a copy of the selected rows', async () => {
+      state.selectedRows.set(new Set([0]));
+      scope('selected');
+      (prepared.getElement().querySelector('.dt-export-copy-btn') as HTMLButtonElement).click();
+      await vi.waitFor(() => expect(beforeExport).toHaveBeenCalledTimes(1));
+      expect(mockWriteText).not.toHaveBeenCalled();
+      ready.resolve();
+      await vi.waitFor(() => expect(mockWriteText).toHaveBeenCalledTimes(1));
+    });
+
+    it('is not asked for an export of every row, which reads no filter', async () => {
+      scope('all');
+      download();
+      await vi.waitFor(() => expect(exportFromState).toHaveBeenCalledTimes(1));
+      expect(beforeExport).not.toHaveBeenCalled();
+    });
+
+    it('fails the export as its own error would', async () => {
+      scope('filtered');
+      download();
+      await vi.waitFor(() => expect(beforeExport).toHaveBeenCalled());
+      ready.reject(new Error('Out of Memory Error'));
+      await vi.waitFor(() => {
+        const errorEl = prepared.getElement().querySelector('.dt-export-error') as HTMLElement;
+        expect(errorEl.textContent).toBe('Out of Memory Error');
+      });
+      expect(exportFromState).not.toHaveBeenCalled();
+    });
+
+    it('cancelled while it waits, ends as a cancelled export: no error, no export', async () => {
+      scope('filtered');
+      const button = download();
+      await vi.waitFor(() => expect(beforeExport).toHaveBeenCalled());
+      const [signal] = beforeExport.mock.calls[0]! as [AbortSignal];
+      button.click(); // Cancel
+      expect(signal.aborted).toBe(true);
+      ready.reject(new Error('Operation aborted'));
+      await vi.waitFor(() => expect(button.textContent).toBe('Download'));
+      const errorEl = prepared.getElement().querySelector('.dt-export-error') as HTMLElement;
+      expect(errorEl.style.display).toBe('none');
+      expect(exportFromState).not.toHaveBeenCalled();
+    });
+  });
 });

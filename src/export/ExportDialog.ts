@@ -84,6 +84,15 @@ export interface ExportDialogOptions {
   colorSchemeSource?: HTMLElement | undefined;
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
+  /**
+   * Awaited before an export or a copy of the filtered or selected rows
+   * reads them, with the export's signal: what the filters read is brought
+   * up to date first, such as an annotated filter's table of annotated
+   * rows. A rejection fails the export as its own error would.
+   *
+   * @internal
+   */
+  beforeExport?: ((signal: AbortSignal) => Promise<void>) | undefined;
 }
 
 /**
@@ -99,6 +108,7 @@ export class ExportDialog {
   private readonly instanceId: string;
   private readonly colorSchemeSource?: HTMLElement | undefined;
   private readonly messages: Strings;
+  private readonly beforeExport: ((signal: AbortSignal) => Promise<void>) | undefined;
 
   // Source file base name (without extension) for export filenames
   private sourceName: string | null = null;
@@ -161,6 +171,7 @@ export class ExportDialog {
     this.instanceId = options.instanceId || nextInstanceId();
     this.colorSchemeSource = options.colorSchemeSource;
     this.messages = options.messages ?? defaultStrings;
+    this.beforeExport = options.beforeExport;
     this.element = this.createElement();
   }
 
@@ -665,6 +676,7 @@ export class ExportDialog {
 
     try {
       const signal = this.abortController.signal;
+      await this.prepareRows(scope, signal);
 
       const columns = this.getColumnsForExport();
 
@@ -749,6 +761,7 @@ export class ExportDialog {
 
     try {
       const signal = this.abortController.signal;
+      await this.prepareRows(scope, signal);
       let result: string;
 
       const columns = this.getColumnsForExport();
@@ -793,6 +806,21 @@ export class ExportDialog {
     } finally {
       this.abortController = null;
       this.setExportingState(false);
+    }
+  }
+
+  /**
+   * Before an export or a copy of the filtered or selected rows, bring what
+   * the filters read up to date (`beforeExport`). Cancelled meanwhile, it
+   * fails as a cancelled export does, which shows no error.
+   */
+  private async prepareRows(scope: ExportScope, signal: AbortSignal): Promise<void> {
+    if (scope === 'all' || !this.beforeExport) return;
+    try {
+      await this.beforeExport(signal);
+    } catch (error) {
+      if (signal.aborted) throw new DOMException('Export aborted', 'AbortError');
+      throw error;
     }
   }
 

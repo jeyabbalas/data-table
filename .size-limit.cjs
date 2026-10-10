@@ -24,7 +24,7 @@
  *   root entry · ESM               11.53 kB   →  12.1 kB cap (4.9 %)
  *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
- *   lazy ExportDialog chunk       100.88 kB   → 104 kB   cap (3.1 %)
+ *   lazy ExportDialog chunk       104.86 kB   → 105.5 kB cap (0.6 %)
  *   lazy SQLFilterModal chunk       2.56 kB   →   2.6 kB cap (1.6 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
  *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
@@ -34,6 +34,7 @@
  *   lazy ValueInspector chunk       8.44 kB   →   8.9 kB cap (5.5 %)
  *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
+ *   lazy AnnotatedRowsTable chunk   2.25 kB   →   2.35 kB cap (4.4 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -101,7 +102,18 @@
  * "nice to have" fixes (RT-16 – RT-21: dates and times exported as ISO text,
  * NaN and infinity left out of charts, sub-second intervals, TIME WITH TIME
  * ZONE charts, extreme dates and more) took it to 100.88 kB, and the cap to
- * 104 kB.
+ * 104 kB. The annotation store's rewrite, for a million annotations, left it
+ * at 103.63 kB. The annotated-rows filter took it to 104.86 kB, and the cap
+ * to 105.5 kB: the filter in the SQL, the chips, presets and restores, the
+ * read gate on the relation, and the gate that holds the filter's reads
+ * until the `AnnotatedRowsTable-*` chunk below is in. In this chunk, that
+ * class took 1.49 kB.
+ *
+ * AnnotatedRowsTable chunk history. New with the annotated-rows filter, at
+ * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with
+ * the annotation store, loaded the first time an annotated filter comes into
+ * force or something reads that table (navigation, a filtered export,
+ * `getColumnValues`).
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -182,7 +194,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '104 kB',
+    limit: '105.5 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -228,5 +240,10 @@ module.exports = [
     name: 'lazy TreeView chunk · ESM',
     path: 'dist/TreeView-*.js',
     limit: '2.85 kB',
+  },
+  {
+    name: 'lazy AnnotatedRowsTable chunk · ESM',
+    path: 'dist/AnnotatedRowsTable-*.js',
+    limit: '2.35 kB',
   },
 ];

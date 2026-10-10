@@ -864,8 +864,9 @@ export class AnnotationStore {
    *
    * Contract: the store **always retains every annotation** regardless of
    * filter state. The flags only affect the cell / row / column-header tints
-   * via `getSeverityFilter()` consulted by the renderer
-   * (`TableBody.applyCellAnnotationClasses`, etc.). Lookup methods
+   * and the popover's lists, which the renderers (`TableBody`,
+   * `ColumnHeader`, `AnnotationPopover`) read through the `summarize*Scope`
+   * methods and `getSeverityFilter()`. Lookup methods
    * (`getByRow`, `getByColumn`, `getByCell`, `getAll`) are **not** filtered —
    * downstream code that wants the visible subset should consult
    * `getSeverityFilter()` directly.

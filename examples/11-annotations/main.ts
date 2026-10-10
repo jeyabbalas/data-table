@@ -250,7 +250,7 @@ let table: DataTable | undefined;
     );
     issuesStatus.textContent =
       errors.length === 0
-        ? 'No errors yet.'
+        ? 'No errors on rows or cells yet.'
         : `${Math.min(errors.length, ISSUES_SHOWN)} of ${errors.length.toLocaleString()} errors on rows and cells.`;
   };
   table.annotations.on('change', () => {

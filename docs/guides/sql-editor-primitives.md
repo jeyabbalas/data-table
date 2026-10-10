@@ -76,7 +76,8 @@ const view = new EditorView({
 });
 ```
 
-That's the full surface for the literal-schema path. Press Ctrl/Cmd+Space
+That's the full surface for the literal-schema path. Press Ctrl+Space (the
+Control key on a Mac too, where Option+I also works; Cmd+Space is not bound)
 and the dropdown lists the three columns (with their DuckDB types as
 `detail`) and 176 DuckDB functions (each with a category chip and a
 one-line description in the side panel).

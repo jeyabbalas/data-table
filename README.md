@@ -325,7 +325,7 @@ All features are on by default; pass `false` or a config object to customize:
 | ------------------ | ------- | ----------------------------------------------------------------------------------------------- |
 | `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                                                     |
 | `presets`          | `true`  | Show the "Presets" button for saving filter sets                                                |
-| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                                                        |
+| `undoRedo`         | `true`  | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y keyboard shortcuts                                      |
 | `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                                                   |
 | `derivedColumns`   | `true`  | Show the "+", `f(x)` and nested/JSON extract buttons, and the value inspector's "Add as column" |
 | `visualizations`   | `true`  | Auto-attach column header charts (histograms, value counts, …)                                  |

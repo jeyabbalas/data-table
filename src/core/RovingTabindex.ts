@@ -34,6 +34,13 @@ export interface RovingTabindexOptions {
    * focusable elements.
    */
   controlSelector?: string | undefined;
+  /**
+   * Bring a control the stop moves to into view. By default each scroll box
+   * between the control and the toolbar scrolls the least distance that
+   * shows it, which cannot know that part of a box is covered: a toolbar
+   * whose chips scroll beneath a sticky group passes its own.
+   */
+  reveal?: ((control: HTMLElement) => void) | undefined;
 }
 
 /** Options for {@link RovingTabindex.refresh}. */
@@ -46,6 +53,13 @@ export interface RovingRefreshOptions {
    * fallen back to `<body>`.
    */
   restoreFocus?: boolean | undefined;
+  /**
+   * The control that takes the stop when the one holding it did not survive
+   * the rebuild: the same chip rebuilt, or the chip next to one that went.
+   * The first control takes it when this is not given or is not one of the
+   * toolbar's navigable controls.
+   */
+  fallback?: HTMLElement | null | undefined;
 }
 
 /**
@@ -89,6 +103,7 @@ export class RovingTabindex {
   private readonly container: HTMLElement;
   private readonly orientation: RovingOrientation;
   private readonly controlSelector: string;
+  private readonly revealControl: ((control: HTMLElement) => void) | undefined;
   private readonly keydownHandler: (e: KeyboardEvent) => void;
   private readonly focusinHandler: (e: FocusEvent) => void;
   private active: HTMLElement | null = null;
@@ -98,6 +113,7 @@ export class RovingTabindex {
     this.container = container;
     this.orientation = options.orientation ?? 'horizontal';
     this.controlSelector = options.controlSelector ?? DEFAULT_CONTROL_SELECTOR;
+    this.revealControl = options.reveal;
 
     this.keydownHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
     this.focusinHandler = (e: FocusEvent) => this.handleFocusIn(e);
@@ -128,14 +144,22 @@ export class RovingTabindex {
   /**
    * Re-establish exactly one `tabindex="0"`. Call after every rebuild of the
    * toolbar's children — the previous stop keeps the tabindex when it survived
-   * the rebuild, otherwise the first control takes over.
+   * the rebuild, otherwise `options.fallback` takes over when it is one of the
+   * controls, and the first control when it is not.
    */
   refresh(options: RovingRefreshOptions = {}): void {
     if (this.destroyed) return;
 
     const controls = this.getControls();
     const previous = this.active;
-    this.active = previous && controls.includes(previous) ? previous : (controls[0] ?? null);
+    const fallback = options.fallback;
+    if (previous && controls.includes(previous)) {
+      this.active = previous;
+    } else if (fallback && controls.includes(fallback)) {
+      this.active = fallback;
+    } else {
+      this.active = controls[0] ?? null;
+    }
     this.applyTabindexes();
 
     // A control that removes itself (a filter chip's own remove button) drops
@@ -241,7 +265,8 @@ export class RovingTabindex {
     // walks every scrollable ancestor up to the viewport and would jump the
     // host page; reveal() touches only the toolbar's own scroll boxes.
     control.focus({ preventScroll: true });
-    this.reveal(control);
+    if (this.revealControl) this.revealControl(control);
+    else this.reveal(control);
   }
 
   private applyTabindexes(): void {
@@ -252,13 +277,11 @@ export class RovingTabindex {
 
   /**
    * Scroll the toolbar's own scroll boxes so `control` is inside the visible
-   * area.
+   * area: what the `reveal` option does when it is not given.
    *
-   * The hidden-columns gutter is `max-height: 200px; overflow: hidden`, which
-   * clips every chip past the third or fourth row. `overflow: hidden` still
-   * establishes a scroll box — it is only the *user* that cannot scroll it —
-   * so assigning `scrollTop` reveals the clipped chip. The filter bar's chip
-   * strip is the same story on the horizontal axis (`overflow-x: auto`).
+   * A box clipped with `overflow: hidden` counts too. It still establishes a
+   * scroll box — it is only the *user* that cannot scroll it — so assigning
+   * `scrollTop` or `scrollLeft` reveals a control it clips.
    *
    * In jsdom every layout number is 0, which makes the whole walk a no-op.
    */

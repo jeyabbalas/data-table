@@ -360,6 +360,18 @@ describe('syncs on real DuckDB', () => {
     rows.destroy();
   });
 
+  it('goes with the statement WorkerBridge.dropTable sends, as the facade drops it with its base table', async () => {
+    const { rows } = tableOf(bridge, 'dropped', [
+      { scope: 'row', rowId: 5, severity: 'error', message: 'e' },
+    ]);
+    await rows.ensureFresh();
+    rows.destroy();
+    await expect(read('__dt_annot_dropped__')).resolves.toEqual([{ __rowid__: 5, __mask__: 1 }]);
+    // A temporary table, found by its name alone as the base table is.
+    await bridge.query('DROP TABLE IF EXISTS "__dt_annot_dropped__"');
+    await expect(read('__dt_annot_dropped__')).rejects.toThrow(/does not exist/);
+  });
+
   it('two tables on one database keep two tables of annotated rows', async () => {
     await harness.conn.query(BASE_SQL('left', 50));
     await harness.conn.query(BASE_SQL('right', 50));

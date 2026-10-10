@@ -182,3 +182,108 @@ describe('SessionStore.load — shape coercion', () => {
     }
   });
 });
+
+/** Put a raw value into the annotations store, keyed out-of-line. */
+async function plantAnnotations(key: string, value: unknown): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.open('dt-annotations', 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains('annotations')) {
+        req.result.createObjectStore('annotations');
+      }
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction('annotations', 'readwrite');
+      tx.objectStore('annotations').put(value, key);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+describe('SessionStore.load — a tampered annotations record or marker', () => {
+  let store: SessionStore;
+  let issues: unknown[];
+
+  beforeEach(async () => {
+    await clearStore();
+    await new Promise<void>((resolve) => {
+      const req = indexedDB.deleteDatabase('dt-annotations');
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      req.onblocked = () => resolve();
+    });
+    issues = [];
+    store = new SessionStore({ onLoadIssue: (issue) => issues.push(issue) });
+    await store.open();
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  const marker = { format: 1, count: 1, owner: 'o' };
+  const file = {
+    version: 1,
+    tableName: 'test_table',
+    annotations: [{ id: 'a', scope: 'row', rowId: 0, severity: 'info', message: 'm' }],
+  };
+
+  it('never hands back the marker, whatever it holds', async () => {
+    await plantRaw({ ...makeValidSnapshot(), __annotations: 'not a marker' });
+    const loaded = await store.load('test_table');
+    expect(loaded).not.toBeNull();
+    expect(loaded).not.toHaveProperty('__annotations');
+    expect(loaded?.annotations).toBeUndefined();
+    expect(issues).toMatchObject([{ details: { reason: 'invalid' } }]);
+  });
+
+  it('does not pollute Object.prototype through a marker or a record', async () => {
+    await plantRaw({
+      ...makeValidSnapshot(),
+      __annotations: JSON.parse(
+        '{"__proto__": {"polluted": "yes"}, "format": 1, "count": 1, "owner": "o"}',
+      ),
+    });
+    await plantAnnotations(
+      'test_table',
+      JSON.parse(
+        `{"__proto__": {"polluted": "yes"}, "format": 1, "owner": "o", "count": 1, "file": ${JSON.stringify(file)}}`,
+      ),
+    );
+    const loaded = await store.load('test_table');
+    expect((Object.prototype as unknown as { polluted?: string }).polluted).toBeUndefined();
+    expect(({} as unknown as { polluted?: string }).polluted).toBeUndefined();
+    expect(loaded?.annotations?.annotations).toHaveLength(1);
+  });
+
+  it('does not attach a record whose file is not an object with as many annotations as it says', async () => {
+    await plantRaw({ ...makeValidSnapshot(), __annotations: marker });
+    for (const bad of [
+      { format: 1, owner: 'o', count: 1, file: [file] },
+      { format: 1, owner: 'o', count: 1, file: { ...file, annotations: {} } },
+      { format: 1, owner: 'o', count: 1, file: { ...file, annotations: [] } },
+      { format: 1, owner: 'o', count: '1', file },
+      { format: '1', owner: 'o', count: 1, file },
+    ]) {
+      await plantAnnotations('test_table', bad);
+      issues = [];
+      const loaded = await store.load('test_table');
+      expect(loaded?.annotations, JSON.stringify(bad)).toBeUndefined();
+      expect(issues, JSON.stringify(bad)).toMatchObject([{ details: { reason: 'invalid' } }]);
+    }
+  });
+
+  it('does not attach a record stored under another table’s key', async () => {
+    await plantRaw({ ...makeValidSnapshot(), __annotations: marker });
+    await plantAnnotations('other_table', { format: 1, owner: 'o', count: 1, file });
+    const loaded = await store.load('test_table');
+    expect(loaded?.annotations).toBeUndefined();
+    expect(issues).toMatchObject([{ details: { reason: 'missing', count: 1 } }]);
+  });
+});

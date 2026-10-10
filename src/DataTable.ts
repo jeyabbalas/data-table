@@ -547,6 +547,21 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   let sessionStore: SessionStore | null = null;
   let ownsSessionStore = false;
   let autoSave: AutoSave | null = null;
+  // Annotations a saved session had that its restore left out, having
+  // restored the rest: a record the session store could not attach to the
+  // session, or a file `loadJSON` refused.
+  const warnAnnotationsDropped = (
+    tableName: string | null,
+    details: { reason: string; count?: number | undefined },
+  ): void => {
+    if (destroyed) return;
+    emitter.emit('warning', {
+      code: 'PERSISTENCE_ANNOTATIONS_DROPPED',
+      message: `The annotations saved with the session for "${tableName}" were not restored (${details.reason}); the rest of the session was.`,
+      details: { tableName, ...details },
+    });
+  };
+  actions.setOnRestoreIssue((issue) => warnAnnotationsDropped(issue.tableName, issue.details));
   if (opts.persistence !== false) {
     const persistConfig = typeof opts.persistence === 'object' ? opts.persistence : {};
     if (persistConfig.sessionStore) {
@@ -559,6 +574,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // IDB row). Phase 7 deferred this; Phase 9 surfaces it.
       sessionStore = new SessionStore({
         onLoadIssue: (issue) => {
+          if (issue.code === 'PERSISTENCE_ANNOTATIONS_DROPPED') {
+            warnAnnotationsDropped(issue.tableName, issue.details);
+            return;
+          }
           if (destroyed) return;
           emitter.emit('warning', {
             code: issue.code,

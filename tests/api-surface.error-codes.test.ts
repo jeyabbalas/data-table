@@ -71,6 +71,10 @@ const ALLOWLISTED_LITERAL_CODES = new Set<string>([
   // version is outside [1, SNAPSHOT_VERSION] (typically a downgraded library).
   // Documented in the "Warning events" table.
   'PERSISTENCE_VERSION_REJECTED',
+  // A restored session's annotations were left out: `SessionStore.load()`
+  // could not attach their record, or `restoreStateFromSnapshot` saw
+  // `loadJSON` refuse them. Documented in the "Warning events" table.
+  'PERSISTENCE_ANNOTATIONS_DROPPED',
 ]);
 
 // ---------------------------------------------------------------------------

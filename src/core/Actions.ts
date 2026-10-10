@@ -20,6 +20,7 @@ import type { FilterPresetManager } from '../filters/FilterPresets';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import { normalizeRestoredFilters } from '../filters/restoredFilters';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
+import type { RestoreIssue } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
 import { collidingColumnName, columnNameKey } from './columnNames';
@@ -253,6 +254,7 @@ export class StateActions {
   private unreadableRelationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
   private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
+  private onRestoreIssueCallback?: ((issue: RestoreIssue) => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
   /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
@@ -361,6 +363,18 @@ export class StateActions {
   setOnBaseTableReplaced(callback: (tableName: string) => void): void {
     this.throwIfDestroyed('setOnBaseTableReplaced');
     this.onBaseTableReplacedCallback = callback;
+  }
+
+  /**
+   * Set a callback told what a load's restore of a saved session left out,
+   * having restored the rest: today, annotations `loadJSON` refused. The
+   * facade reports each as a `warning` event.
+   *
+   * @internal
+   */
+  setOnRestoreIssue(callback: (issue: RestoreIssue) => void): void {
+    this.throwIfDestroyed('setOnRestoreIssue');
+    this.onRestoreIssueCallback = callback;
   }
 
   /**
@@ -1078,6 +1092,7 @@ export class StateActions {
               this.undoManager,
               options.presetManager,
               options.annotationStore,
+              this.onRestoreIssueCallback,
             );
             return true;
           } catch (err) {

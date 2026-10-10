@@ -1,9 +1,13 @@
 /**
  * How a failed IndexedDB write is reported.
  *
- * `AutoSave` maps whatever a save rejects with to a `PersistenceError`, its
- * code from {@link classifyPersistenceFailure}.
+ * `AutoSave` maps whatever a save rejects with to a `PersistenceError`, and
+ * `SessionStore` wraps a failed write of a table's annotations record in one
+ * itself, so that `AutoSave` can tell it from a failed write of the session
+ * record and stop saving the annotations alone.
  */
+
+import { PersistenceError } from '../core/errors';
 
 /**
  * The most specific `PersistenceError.code` for an arbitrary thrown or
@@ -26,4 +30,33 @@ export function classifyPersistenceFailure(
     return 'PERSISTENCE_QUOTA_EXCEEDED';
   }
   return 'SAVE_FAILED';
+}
+
+/**
+ * The error a save reports when the session record was written but the
+ * table's annotations record was not. Its `details.record` is
+ * `'annotations'`, which {@link isAnnotationsWriteFailure} reads.
+ *
+ * @internal
+ */
+export function annotationsWriteFailure(cause: unknown, tableName: string): PersistenceError {
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  return new PersistenceError(
+    `The annotations of "${tableName}" were not saved (${reason}); the rest of the session was.`,
+    {
+      code: classifyPersistenceFailure(cause),
+      cause,
+      details: { record: 'annotations', tableName },
+    },
+  );
+}
+
+/**
+ * Whether `error` reports a failed write of an annotations record alone,
+ * the session record having been written.
+ *
+ * @internal
+ */
+export function isAnnotationsWriteFailure(error: unknown): error is PersistenceError {
+  return error instanceof PersistenceError && error.details?.['record'] === 'annotations';
 }

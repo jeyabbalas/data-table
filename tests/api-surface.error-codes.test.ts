@@ -99,12 +99,13 @@ function walkTsFiles(dir: string, acc: string[] = []): string[] {
 }
 
 // Codes returned indirectly via small helpers (e.g. classifyPersistenceFailure
-// in AutoSave.ts which feeds `code: classifyPersistenceFailure(cause)`). These
+// in persistenceErrors.ts, which AutoSave.ts and SessionStore.ts feed into
+// `code: classifyPersistenceFailure(cause)`). These
 // don't appear at literal `code: 'X'` construction sites but are real codes
 // users will see. Add new entries here when introducing new code-classifier
 // helpers — verify the helper actually feeds an error-construction path.
 const INDIRECT_CODES: Record<string, string> = {
-  PERSISTENCE_QUOTA_EXCEEDED: 'src/persistence/AutoSave.ts',
+  PERSISTENCE_QUOTA_EXCEEDED: 'src/persistence/persistenceErrors.ts',
   // NestedPathError codes: the path walker builds each error through
   // `failure(code, step, message)`, and `actions.addNestedFieldColumn`
   // resolves `{ success: false, error }` with its message.

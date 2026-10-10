@@ -117,7 +117,14 @@ export interface AnnotationFile {
   [unknown: string]: unknown;
 }
 
-/** Event payload emitted by `AnnotationStore.on('change', …)`. */
+/**
+ * Event payload emitted by `AnnotationStore.on('change', …)`.
+ *
+ * Events fire synchronously, after the store has changed: a handler that
+ * reads the store sees the new contents. `loadJSON(file, 'replace')` fires
+ * two: `cleared` for what the store held (when it held anything), then
+ * `added` for what the file holds (when it holds anything).
+ */
 export interface AnnotationChangePayload {
   /**
    * `'filterChanged'` is a visual-only signal — it fires when
@@ -126,7 +133,19 @@ export interface AnnotationChangePayload {
    * skip this kind; renderers should reapply.
    */
   kind: 'added' | 'removed' | 'updated' | 'cleared' | 'filterChanged';
+  /** Ids of the affected annotations, in the order of `annotations`. */
   ids: string[];
+  /**
+   * The affected annotations, parallel to `ids`: for `added` and
+   * `updated` as they are now, for `removed` and `cleared` as they were.
+   * Absent for `filterChanged`.
+   */
+  annotations?: Annotation[];
+  /**
+   * For `updated` only: each annotation as it was before the update,
+   * parallel to `annotations`.
+   */
+  previous?: Annotation[];
 }
 
 /** Handler function shape for `AnnotationStore.on('change', …)`. */

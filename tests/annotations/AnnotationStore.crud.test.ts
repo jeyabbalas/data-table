@@ -304,3 +304,86 @@ describe('AnnotationStore — CRUD', () => {
     });
   });
 });
+
+describe('AnnotationStore — update with undefined fields', () => {
+  let store: AnnotationStore;
+
+  beforeEach(() => {
+    store = makeStore();
+  });
+
+  it('keeps a severity or message given as undefined', () => {
+    const a = store.add({ scope: 'row', rowId: 0, severity: 'warning', message: 'keep me' });
+    const updated = store.update(a.id, { severity: undefined, message: undefined, code: 'C1' });
+    expect(updated.severity).toBe('warning');
+    expect(updated.message).toBe('keep me');
+    expect(updated.code).toBe('C1');
+    expect(store.listRowScope(0).map((x) => x.severity)).toEqual(['warning']);
+    expect(store.toJSON().annotations[0]).toMatchObject({
+      severity: 'warning',
+      message: 'keep me',
+    });
+  });
+
+  it('still clears an optional field given as undefined', () => {
+    const a = store.add({ scope: 'row', rowId: 0, severity: 'info', message: 'm', code: 'C1' });
+    const updated = store.update(a.id, { code: undefined });
+    expect(updated.code).toBeUndefined();
+    const json = JSON.parse(JSON.stringify(store.toJSON())) as { annotations: object[] };
+    expect(json.annotations[0]).not.toHaveProperty('code');
+  });
+});
+
+describe('AnnotationStore — batch errors and defaults', () => {
+  it('reports the index of the first malformed entry in addMany', () => {
+    const store = makeStore();
+    try {
+      store.addMany([
+        { scope: 'row', rowId: 0, severity: 'info', message: 'a' },
+        { scope: 'row', rowId: 1, severity: 'info', message: 'b' },
+        { scope: 'row', rowId: 2, severity: 'info', message: '' },
+        { scope: 'row', rowId: 3, severity: 'nope' as never, message: 'd' },
+      ]);
+      expect.fail('expected a throw');
+    } catch (e) {
+      expect((e as AnnotationError).code).toBe('ANNOTATION_INVALID_SHAPE');
+      expect((e as AnnotationError).details).toEqual({ index: 2, field: 'message' });
+    }
+    expect(store.count()).toBe(0);
+  });
+
+  it('reports the duplicate id and its index in addMany, and only the id in add', () => {
+    const store = makeStore();
+    store.add({ id: 'x', scope: 'row', rowId: 0, severity: 'info', message: 'a' });
+    try {
+      store.addMany([
+        { scope: 'row', rowId: 1, severity: 'info', message: 'b' },
+        { id: 'x', scope: 'row', rowId: 2, severity: 'info', message: 'c' },
+      ]);
+      expect.fail('expected a throw');
+    } catch (e) {
+      expect((e as AnnotationError).details).toEqual({ id: 'x', index: 1 });
+    }
+    try {
+      store.add({ id: 'x', scope: 'row', rowId: 2, severity: 'info', message: 'c' });
+      expect.fail('expected a throw');
+    } catch (e) {
+      expect((e as AnnotationError).details).toEqual({ id: 'x' });
+    }
+    expect(store.getAll().map((a) => a.id)).toEqual(['x']);
+  });
+
+  it('gives the entries of one call without createdAt one timestamp', () => {
+    let tick = 0;
+    const store = new AnnotationStore({ now: () => `T${tick++}` });
+    const added = store.addMany([
+      { scope: 'row', rowId: 0, severity: 'info', message: 'a' },
+      { scope: 'row', rowId: 1, severity: 'info', message: 'b', createdAt: 'explicit' },
+      { scope: 'row', rowId: 2, severity: 'info', message: 'c' },
+    ]);
+    expect(added.map((a) => a.createdAt)).toEqual(['T0', 'explicit', 'T0']);
+    expect(store.add({ scope: 'row', rowId: 3, severity: 'info', message: 'd' }).createdAt).toBe(
+      'T1',
+    );
+  });
+});

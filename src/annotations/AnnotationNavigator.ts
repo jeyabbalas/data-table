@@ -29,6 +29,7 @@
 import type { StateActions } from '../core/Actions';
 import { holdsVariant, parseDuckDBType } from '../core/duckdbType';
 import { ConfigurationError, QueryError } from '../core/errors';
+import { nextTask } from '../core/nextTask';
 import { effectiveRowCount, type TableState } from '../core/State';
 import type { Strings } from '../core/Strings';
 import { ROWID_COLUMN, type ColumnSchema, type SortColumn } from '../core/types';
@@ -434,7 +435,7 @@ export class AnnotationNavigator implements AnnotationNavigation {
     while (!actions.isRelationReadable()) {
       await this.until(actions.whenRelationReadable(), signal);
       // The state update that follows the change lands a task later.
-      await this.until(new Promise<void>((resolve) => setTimeout(resolve, 0)), signal);
+      await this.until(nextTask(), signal);
     }
     if (!state.tableName.get()) throw noTable();
     this.host.getTableBody()?.cancelScrollAnimation();

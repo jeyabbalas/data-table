@@ -19,6 +19,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { nextTask } from '../core/nextTask';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -203,7 +204,7 @@ export class CrossfilterCoordinator {
   private async waitForReadableRelation(seq: number): Promise<boolean> {
     while (!this.actions.isRelationReadable()) {
       await this.actions.whenRelationReadable();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await nextTask();
       if (this.destroyed || seq !== this.filterSequence) return false;
     }
     return true;

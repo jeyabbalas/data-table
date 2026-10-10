@@ -7,6 +7,7 @@
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { StateActions } from '../core/Actions';
+import { nextTask } from '../core/nextTask';
 import { setOwnProperty } from '../core/ownProperty';
 import type { Signal } from '../core/Signal';
 import type { TableState } from '../core/State';
@@ -1070,7 +1071,7 @@ export class TableBody {
     if (actions && !actions.isRelationReadable()) {
       this.relationWait ??= actions
         .whenRelationReadable()
-        .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+        .then(nextTask)
         .then(() => {
           this.relationWait = null;
           if (this.destroyed) return;

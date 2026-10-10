@@ -13,6 +13,7 @@
 
 import type { ReadGate, StateActions } from '../core/Actions';
 import { DataTableError, QueryError } from '../core/errors';
+import { nextTask } from '../core/nextTask';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -55,7 +56,7 @@ export async function annotatedRowsStatement(
   rows: { readonly rowIds: Float64Array; readonly masks: Uint8Array },
   {
     chunkSize = CHUNK_SIZE,
-    yieldNow = yieldToEventLoop,
+    yieldNow = nextTask,
     signal,
   }: {
     chunkSize?: number | undefined;
@@ -88,24 +89,6 @@ export async function annotatedRowsStatement(
     `SELECT CAST(v >> 3 AS BIGINT) AS "__rowid__", CAST(v & 7 AS UTINYINT) AS "__mask__" ` +
     `FROM (SELECT CAST(s AS BIGINT) AS v FROM (SELECT unnest(string_split('${chunks.join(',')}', ',')) AS s))`
   );
-}
-
-/**
- * A task boundary, through a message channel rather than a timer. A page in
- * a background tab gets its timers throttled, and a chain of them, as the
- * chunks of a million rows make, to one a minute once it has been hidden
- * for five minutes: a sync the view's reads wait on took minutes there. A
- * message is not throttled.
- */
-function yieldToEventLoop(): Promise<void> {
-  return new Promise((resolve) => {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      channel.port1.close();
-      resolve();
-    };
-    channel.port2.postMessage(null);
-  });
 }
 
 /** What the table reads of an annotation store. */

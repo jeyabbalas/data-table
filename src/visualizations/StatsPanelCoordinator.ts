@@ -30,6 +30,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { nextTask } from '../core/nextTask';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { BaseStatsPanel } from './BaseStatsPanel';
@@ -146,7 +147,7 @@ export class StatsPanelCoordinator {
   private async waitForReadableRelation(actions: StateActions, seq: number): Promise<boolean> {
     while (!actions.isRelationReadable()) {
       await actions.whenRelationReadable();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await nextTask();
       if (this.destroyed || seq !== this.filterSequence) return false;
     }
     return true;

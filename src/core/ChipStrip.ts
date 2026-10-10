@@ -181,9 +181,13 @@ export class ChipStrip {
     } else if (rect.right > to) {
       delta = rect.right - to;
     }
-    // Fractional layout leaves sub-pixel gaps that no scroll would close.
-    if (Math.abs(delta) < 1) return;
-    const left = this.scroller.scrollLeft + delta;
+    // Nothing to close but the noise of fractional layout.
+    if (Math.abs(delta) < 0.01) return;
+    // To a whole pixel, away from the chip: at a device-pixel ratio of 1 the
+    // browser scrolls by whole pixels, and a fraction rounded toward the chip
+    // would leave that much of it under the edge.
+    const exact = this.scroller.scrollLeft + delta;
+    const left = delta > 0 ? Math.ceil(exact) : Math.floor(exact);
     if (behavior === 'smooth' && typeof this.scroller.scrollTo === 'function') {
       this.scroller.scrollTo({ left, behavior });
     } else {

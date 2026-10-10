@@ -206,7 +206,8 @@ test('a chip hidden out of view is scrolled to, smoothly, and stops clear of "Sh
 
   expect(row.chips[row.chips.length - 1]).toBe(col(200));
   expect(row.whole).toContain(col(200));
-  expect(row.left).toBe(row.max);
+  // At the end of the row, give or take the pixel past the last chip.
+  expect(row.max - row.left).toBeLessThanOrEqual(1);
   expect(forward[0]).toBe(0);
   // Frames in between: a glide, not a jump.
   expect(between(forward).length).toBeGreaterThan(2);
@@ -323,7 +324,9 @@ test('the filter bar glides to a new filter, and stays put when one changes or g
   await still(page, 'filter');
   let bar = await strip(page, 'filter');
   expect(bar.max).toBeGreaterThan(0);
-  expect(bar.left).toBe(bar.max);
+  // At the end of the row, give or take the pixel past the last chip.
+  expect(bar.max - bar.left).toBeLessThanOrEqual(1);
+  expect(bar.whole).toContain(col(13));
 
   await scrollStrip(page, 'filter', 0);
   await startRecording(page, 'filter');
@@ -345,4 +348,51 @@ test('the filter bar glides to a new filter, and stays put when one changes or g
   expect(bar.chips[bar.chips.length - 1]).toBe(col(20));
   expect(bar.whole).toContain(col(20));
   expect(between(glide).length).toBeGreaterThan(2);
+});
+
+test('chips of fractional width end whole, clear of "Show all", at a pixel ratio of 1', async ({
+  page,
+}) => {
+  // At a device-pixel ratio of 1 the row scrolls by whole pixels, and to a
+  // whole pixel at most. Rounded toward a chip, or stopped short of the end of
+  // chips of fractional width, it left a fraction of the chip under the
+  // pinned end: past half a pixel at 64.2px, with CI's Linux fonts as here.
+  await mountTable(page, {
+    columns: 300,
+    width: 1000,
+    height: 600,
+    css: '.dt-hidden-chip { width: 64.2px; max-width: none; }',
+  });
+  expect(await page.evaluate(() => devicePixelRatio)).toBe(1);
+  await hide(
+    page,
+    Array.from({ length: 50 }, (_, i) => col(i + 10)),
+  );
+  await settle(page);
+  await still(page, 'hidden');
+  let row = await strip(page, 'hidden');
+  // At the end of the row, give or take the pixel past the last chip.
+  expect(row.max - row.left).toBeLessThanOrEqual(1);
+  expect(row.whole).toContain(col(59));
+
+  // A chip added at the end, glided to from the start.
+  await scrollStrip(page, 'hidden', 0);
+  await hide(page, [col(200)]);
+  await still(page, 'hidden');
+  row = await strip(page, 'hidden');
+  expect(row.whole).toContain(col(200));
+
+  // Mid-row, by the keyboard: each chip the arrows reach is whole.
+  await scrollStrip(page, 'hidden', Math.round(row.max / 2) + 0.4);
+  await page.locator(`#${HOST_ID} .dt-hidden-show-all`).focus();
+  await page.keyboard.press('Home');
+  for (let i = 0; i < 20; i++) {
+    await page.keyboard.press('ArrowRight');
+    const name = await page.evaluate(
+      () =>
+        document.activeElement?.closest('.dt-hidden-chip')?.querySelector('.dt-hidden-chip-name')
+          ?.textContent ?? '',
+    );
+    expect((await strip(page, 'hidden')).whole, `after → to ${name}`).toContain(name);
+  }
 });

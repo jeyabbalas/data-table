@@ -103,6 +103,20 @@ describe('ChipStrip', () => {
       expect(layout.scrollLeft).toBe(440);
     });
 
+    it('scrolls to a whole pixel past the chip, never one short of it', () => {
+      // At a device-pixel ratio of 1 the browser scrolls by whole pixels:
+      // rounded toward the chip, a fraction of it would stay under the edge.
+      layout.restore();
+      layout = fakeChipStrip(scroller, end, '.chip', { width: 400, end: 80, chip: 100.3, gap: 10 });
+
+      strip.reveal(chips.get('c5')!); // 551.5–651.8, and the room ends at 320
+      expect(layout.scrollLeft).toBe(332);
+
+      layout.scrollLeft = 500;
+      strip.reveal(chips.get('c2')!); // 220.6–320.9
+      expect(layout.scrollLeft).toBe(220);
+    });
+
     it('leaves the sticky end, and anything outside the strip, alone', () => {
       layout.scrollLeft = 300;
       strip.reveal(end.querySelector('button')!);

@@ -194,6 +194,10 @@
   gap: 0.375rem;
   /* Fills the row, so its end sits at the far edge until the chips overflow. */
   flex: 1 0 auto;
+  /* A pixel past the last chip. The row scrolls at most to a whole pixel,
+     which can stop short of the end of chips of fractional width, and leave
+     that fraction of the last chip under the pinned end. */
+  margin-inline-end: 1px;
 }
 
 /* The toolbar's buttons, pinned to the row's end while the chips scroll

@@ -436,6 +436,18 @@ export interface Strings {
   };
 
   // =========================================
+  // Annotations — popover, navigation
+  // =========================================
+  annotations: {
+    /** A severity's name, wherever one is shown or announced. */
+    severityNames: {
+      error: string;
+      warning: string;
+      info: string;
+    };
+  };
+
+  // =========================================
   // Statistics — column-header stats line
   // =========================================
   statistics: {
@@ -1010,6 +1022,14 @@ export const defaultStrings: Strings = {
     columnMoveBlockedPinned: (column) => `${column} is pinned and cannot be moved`,
     columnLayoutCancelled: (column) => `${column} layout cancelled, width and position restored`,
     columnLayoutCommitted: (column) => `${column} layout committed`,
+  },
+
+  annotations: {
+    severityNames: {
+      error: 'error',
+      warning: 'warning',
+      info: 'info',
+    },
   },
 
   statistics: {

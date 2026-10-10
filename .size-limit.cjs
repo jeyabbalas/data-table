@@ -24,7 +24,7 @@
  *   root entry · ESM               11.53 kB   →  12.1 kB cap (4.9 %)
  *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
- *   lazy ExportDialog chunk       105.28 kB   → 106 kB   cap (0.7 %)
+ *   lazy ExportDialog chunk       106.11 kB   → 107 kB   cap (0.8 %)
  *   lazy SQLFilterModal chunk       2.56 kB   →   2.6 kB cap (1.6 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
  *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
@@ -105,7 +105,10 @@
  * 103.63 kB, and keeping a session's annotations in a record of their own
  * (`dt-annotations`, written only when they change, with the marker that
  * ties it to its session record, the restore warning and the quota breaker
- * for annotations alone) to 105.28 kB, and the cap to 106 kB.
+ * for annotations alone) to 105.28 kB, and the cap to 106 kB. Writing that
+ * record in chunks (a store of its own, chunks bounded by count and by
+ * estimated bytes, put one after another) took it to 106.11 kB, and the cap
+ * to 107 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -186,7 +189,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '106 kB',
+    limit: '107 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

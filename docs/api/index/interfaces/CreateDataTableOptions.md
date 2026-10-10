@@ -3167,7 +3167,7 @@ loads under a generated name, so no saved session is restored.
 
 Defined in: [DataTable.ts:206](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L206)
 
-Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
+Enable undo/redo (Cmd/Ctrl+Z; Cmd/Ctrl+Shift+Z or Ctrl+Y to redo). Default: `true`.
 
 ***
 

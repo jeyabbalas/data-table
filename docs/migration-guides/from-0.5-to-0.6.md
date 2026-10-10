@@ -187,10 +187,12 @@ which of your selectors were positional.` Grep your stylesheets and DOM code for
 **What changed.** In `0.5` the table's tab stops grew with use — six at rest,
 thirteen after hiding six of eight columns, ten with three filters applied — and
 forward `Tab` never escaped the table at all. In `0.6` a loaded table is exactly
-five stops, in DOM order: `.dt-filter-bar`, `.dt-grid`, `.dt-header-scroll`,
-`.dt-body-scroll`, `.dt-hidden-gutter`. The count does not move with the column
-count, the number of hidden columns, or the number of active filters, and `Tab`
-crosses the table in both directions.
+five stops inside `.dt-root`, in DOM order: `.dt-filter-bar`, `.dt-grid`,
+`.dt-header-scroll`, `.dt-body-scroll`, `.dt-hidden-gutter`. The "+" add-column
+button after `.dt-root`, there while the `derivedColumns` UI is on (the
+default), is one more. The count does not move with the column count, the
+number of hidden columns, or the number of active filters, and `Tab` crosses
+the table in both directions.
 
 The two toolbars get there through the APG roving-tabindex model — one
 `tabindex="0"` inside each, arrows and Home/End to move it — so a filter chip's
@@ -205,8 +207,9 @@ for the full model.
 **Automated migration.** `N/A — manual review required because the fix is to
 re-record the expected count.` If an end-to-end test presses `Tab` a fixed
 number of times to step from the control before the table to the one after it,
-that number is now 6 — five stops inside, one more to leave. Prefer asserting on
-the element that ends up focused rather than on a press count.
+that number is now 7 — five stops inside `.dt-root`, the add-column button, one
+more to leave — or 6 with `derivedColumns: false`. Prefer asserting on the
+element that ends up focused rather than on a press count.
 
 ## Non-breaking but recommended
 

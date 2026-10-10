@@ -14,7 +14,8 @@
  * for a column far from the view (see {@link ColumnHeader.setControlsMounted}).
  * A derived column's f(x) icon stays.
  *
- * Supports click to sort and Shift+click for multi-column sort.
+ * The sort button sorts on a click, and adds the column to a multi-column sort
+ * on a Cmd/Ctrl+click. A click elsewhere on the header does not sort.
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';

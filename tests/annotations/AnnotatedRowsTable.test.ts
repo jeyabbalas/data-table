@@ -457,6 +457,59 @@ describe('AnnotatedRowsTable — the read gate', () => {
     expect(onRefresh).not.toHaveBeenCalled();
   });
 
+  it('a sync that keeps failing is tried again only when something changes, each content reported once', async () => {
+    vi.useFakeTimers();
+    const { store, actions, table, syncs, onError, onRefresh } = setup({ minInterval: 150 });
+    const fail = (i: number): void => syncs()[i]!.deferred.reject(new Error('Out of Memory Error'));
+    store.set([[1, 1]]);
+    actions.showAnnotatedRows();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncs()).toHaveLength(1);
+    fail(0);
+    // Ten seconds of a page on which nothing changes: no sync, no report.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(actions.isRelationReadable()).toBe(true);
+
+    // A caller of ensureFresh tries again; the same content is not reported again.
+    const fresh = expect(table.ensureFresh()).rejects.toThrow('Out of Memory Error');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncs()).toHaveLength(2);
+    fail(1);
+    await fresh;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(2);
+
+    // So do new filters.
+    actions.showAnnotatedRows({ severities: ['error'] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncs()).toHaveLength(3);
+    fail(2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(3);
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // New content is tried after the interval, and its failure reported.
+    store.set([[2, 1]]);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(syncs()).toHaveLength(4);
+    fail(3);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(4);
+    expect(onError).toHaveBeenCalledTimes(2);
+
+    // And content that syncs updates the view, which read a table that failed.
+    store.set([[3, 1]]);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(syncs()).toHaveLength(5);
+    syncs()[4]!.deferred.resolve([]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(5);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(2);
+  });
+
   it('passes on the error a sync fails with when it is the library’s', async () => {
     const { actions, syncs, onError } = setup();
     actions.showAnnotatedRows();

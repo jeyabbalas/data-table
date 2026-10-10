@@ -107,7 +107,10 @@ export interface AnnotatedRowsTableOptions {
    * query cache is cleared by then.
    */
   onRefresh?: (() => void) | undefined;
-  /** Called with the error a sync failed with. The table stays as it was. */
+  /**
+   * Called with the error a sync failed with, once for each content that
+   * fails. The table stays as it was.
+   */
   onError?: ((error: DataTableError) => void) | undefined;
   /** Rows in each chunk of a sync's statement text. Default 100,000. */
   chunkSize?: number | undefined;
@@ -167,7 +170,10 @@ function abortedError(): QueryError {
  * a time, and the next one written is the store's latest content, whatever
  * changed in between. A sync sends nothing when the store's annotated rows
  * are the ones the table holds, as after a change to a message or to column
- * scope; and a change to the severity filter changes no content at all.
+ * scope; and a change to the severity filter changes no content at all. A
+ * sync that fails is reported once for the content it wrote, and the view
+ * tries no other until the content, the filters or the base table change,
+ * as each would fail the same way; a caller of `ensureFresh` still does.
  *
  * **The read gate.** An annotated filter that comes into force, restored
  * with a session, undone back, loaded with a preset or just added, would
@@ -209,6 +215,17 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
   private syncedRows: AnnotatedRows | null = null;
   /** The filters the gate is open for: what the view may already have read. */
   private openFor: readonly Filter[] | null = null;
+  /**
+   * The last sync, when it failed: the base table and content it wrote, and
+   * the filters in force when it failed. Until one of those changes, the
+   * view schedules no sync of its own (each would fail as it did), and the
+   * failure of that content is reported once.
+   */
+  private failed: {
+    readonly base: string;
+    readonly revision: number;
+    readonly filters: readonly Filter[];
+  } | null = null;
   private running: Sync | null = null;
   private waiters: Waiter[] = [];
   private microtaskQueued = false;
@@ -337,6 +354,21 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     return this.synced !== null && this.synced === this.store.contentRevision;
   }
 
+  /**
+   * Whether the last sync failed and nothing a sync depends on has changed
+   * since: the base table, the store's content and the filters in force.
+   * The view does not try again then; a caller of {@link ensureFresh} does.
+   */
+  private isFailing(): boolean {
+    const failed = this.failed;
+    return (
+      failed !== null &&
+      failed.base === this.base &&
+      failed.revision === this.store.contentRevision &&
+      failed.filters === this.state.filters.get()
+    );
+  }
+
   private onFiltersChanged(): void {
     if (this.destroyed) return;
     const live = this.isLive();
@@ -367,6 +399,7 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     this.synced = null;
     this.syncedRows = null;
     this.openFor = null;
+    this.failed = null;
     this.clearTimer();
     this.running?.controller.abort();
     this.rejectWaiters(abortedError());
@@ -376,8 +409,9 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
   /**
    * Queue the next sync, if one is wanted: on a microtask for a caller of
    * {@link ensureFresh} or a view the gate holds, after the view's interval
-   * for a view that reads the table already. With a sync running, its end
-   * comes back here.
+   * for a view that reads the table already, unless the last sync failed
+   * and nothing has changed since. With a sync running, its end comes back
+   * here.
    */
   private schedule(): void {
     if (this.destroyed || this.running || this.base === null) return;
@@ -388,6 +422,8 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     if (this.waiters.length > 0 || this.isGateWaiting()) {
       this.clearTimer();
       this.queueSync();
+    } else if (this.isFailing()) {
+      this.clearTimer();
     } else if (this.isLive() && this.timer === null && !this.microtaskQueued) {
       const wait = this.lastEnd + Math.max(this.minInterval, this.lastDuration) - Date.now();
       this.timer = setTimeout(
@@ -475,17 +511,24 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     if (error === null) {
       this.synced = sync.revision;
       this.syncedRows = sync.rows;
+      this.failed = null;
       // Results cached before read the table as it was.
       if (rebuilt) this.bridge.clearQueryCache();
     } else {
-      this.onError?.(
-        error instanceof DataTableError
-          ? error
-          : new QueryError(error instanceof Error ? error.message : String(error), {
-              code: 'QUERY_RUNTIME',
-              cause: error,
-            }),
-      );
+      // The same content failing again, for a caller of `ensureFresh` or
+      // other filters, is the failure already reported.
+      const reported = this.failed?.base === sync.base && this.failed.revision === sync.revision;
+      this.failed = { base: sync.base, revision: sync.revision, filters: this.state.filters.get() };
+      if (!reported) {
+        this.onError?.(
+          error instanceof DataTableError
+            ? error
+            : new QueryError(error instanceof Error ? error.message : String(error), {
+                code: 'QUERY_RUNTIME',
+                cause: error,
+              }),
+        );
+      }
     }
     this.settleWaiters(sync, error);
 

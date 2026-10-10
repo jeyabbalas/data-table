@@ -93,6 +93,20 @@ export class CrossfilterCoordinator {
     return this.countFilteredRows(filters, ++this.filterSequence);
   }
 
+  /**
+   * Run a filter cycle for the filters in force, as a change to them would:
+   * count the filtered rows, refetch the charts, and fire
+   * `onFilterCycleComplete` once the count has settled. For when the rows
+   * the filters keep changed while the filters did not, as an annotated
+   * filter's do when annotations change. A cycle in flight is superseded.
+   *
+   * @internal
+   */
+  refresh(): Promise<void> {
+    if (this.destroyed) return Promise.resolve();
+    return this.onFiltersChanged(this.state.filters.get());
+  }
+
   /** Route a visualization's onFilterChange to StateActions */
   handleFilterChange(columnName: string, filter: Filter | null): void {
     if (filter) {

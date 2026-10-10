@@ -71,6 +71,7 @@ export type {
   NullFilter,
   PatternFilter,
   RawSQLFilter,
+  AnnotatedFilter,
 } from './filters/FilterTypes';
 
 // ---- SQL-authoring helpers ----

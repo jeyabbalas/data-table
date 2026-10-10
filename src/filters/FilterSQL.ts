@@ -6,8 +6,12 @@
  * general-purpose SQL utilities used across all visualization types.
  */
 
+import { annotatedRowsTableName } from '../annotations/annotatedRowsSource';
+import { ALL_SEVERITIES_MASK } from '../annotations/severity';
 import { SQLValidationError } from '../core/errors';
-import type { Filter, NotSetFilter, SetFilter } from '../core/types';
+import { ROWID_COLUMN } from '../core/types';
+import type { AnnotatedFilter, Filter, NotSetFilter, SetFilter } from '../core/types';
+import { annotatedFilterMask } from './annotatedFilters';
 
 /**
  * Quote a SQL identifier (table/column name) for safe DuckDB use.
@@ -146,6 +150,23 @@ function escapeLikePattern(pattern: string): string {
 }
 
 /**
+ * An annotated filter's predicate: the row's `__rowid__` is one of its base
+ * table's annotated rows, of a severity the filter keeps. Inside the
+ * subquery `"__rowid__"` binds to the helper table's own column. With no
+ * table to read, or no severity to keep, it keeps no row: `FALSE`.
+ */
+function annotatedFilterSQL(filter: AnnotatedFilter): string {
+  const { table } = filter;
+  if (typeof table !== 'string' || table === '' || table.includes('\0')) return 'FALSE';
+  const mask = annotatedFilterMask(filter);
+  if (mask === 0) return 'FALSE';
+  const rowid = quoteIdentifier(ROWID_COLUMN);
+  const helper = quoteIdentifier(annotatedRowsTableName(table));
+  const severities = mask === ALL_SEVERITIES_MASK ? '' : ` WHERE ("__mask__" & ${mask}) <> 0`;
+  return `${rowid} IN (SELECT ${rowid} FROM ${helper}${severities})`;
+}
+
+/**
  * Convert a single filter to SQL WHERE clause fragment
  */
 export function filterToSQL(filter: Filter): string {
@@ -255,6 +276,9 @@ export function filterToSQL(filter: Filter): string {
       // DuckDB validates parseability, host app owns semantic validation.
       return '(' + filter.sql + ')';
 
+    case 'annotated':
+      return annotatedFilterSQL(filter);
+
     default: {
       // Unknown filter type - fail closed (match nothing) to avoid exposing unfiltered data
       console.error(`Unknown filter type: ${(filter as Filter).type}`);
@@ -278,16 +302,20 @@ export function filterToSQL(filter: Filter): string {
  *
  * @param filters - Array of filters to convert.
  * @param excludeColumn - Optional column name to exclude from the WHERE
- *   clause (used for crossfilter behavior). Raw-SQL filters are never
- *   excluded — their synthetic column keys never match real columns.
+ *   clause (used for crossfilter behavior). Raw-SQL and annotated filters
+ *   are never excluded — their synthetic column keys never match real
+ *   columns.
  * @returns SQL fragment (no WHERE keyword), or empty string if no filters.
  */
 export function filtersToWhereClause(filters: Filter[], excludeColumn?: string): string {
   // Filter out excluded column if specified.
-  // Raw SQL filters are never excluded — they are global conditions that apply
-  // to all crossfilter views (their synthetic column keys never match real columns).
+  // Raw SQL and annotated filters are never excluded — they are global
+  // conditions that apply to all crossfilter views (their synthetic column
+  // keys never match real columns).
   const applicableFilters = excludeColumn
-    ? filters.filter((f) => f.type === 'raw-sql' || f.column !== excludeColumn)
+    ? filters.filter(
+        (f) => f.type === 'raw-sql' || f.type === 'annotated' || f.column !== excludeColumn,
+      )
     : filters;
 
   if (applicableFilters.length === 0) {

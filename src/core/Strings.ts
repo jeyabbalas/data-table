@@ -181,6 +181,15 @@ export interface Strings {
       };
       /** Column label shown on raw-sql chips. */
       sqlColumn: string;
+      /** Column label shown on the annotated-rows chip (`actions.showAnnotatedRows`). */
+      annotatedColumn: string;
+      /** The annotated-rows chip's description when it keeps every severity. */
+      anySeverity: string;
+      /**
+       * The annotated-rows chip's description when it keeps some severities:
+       * their names (`annotations.severityNames`), most severe first.
+       */
+      severityList: (names: string[]) => string;
     };
 
     /** SQL (raw WHERE) filter modal. */
@@ -866,6 +875,9 @@ export const defaultStrings: Strings = {
         regex: 'matches',
       },
       sqlColumn: 'SQL',
+      annotatedColumn: 'Annotated rows',
+      anySeverity: 'any severity',
+      severityList: (names) => names.join(', '),
     },
 
     sqlFilter: {

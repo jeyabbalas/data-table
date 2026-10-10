@@ -308,10 +308,15 @@ describe('DataTable — lifecycle (Phase 2)', () => {
       expect(vi.mocked(store.delete)).toHaveBeenCalledWith('new');
       // Nothing names the table the load replaced, nor the one it made:
       // both are dropped, the latter by the load or on destroy at the
-      // latest, and each once.
+      // latest, and each once, with the table of its annotated rows.
       expect(dropTable.mock.calls.map(([name]) => name)).toContain('old');
       await table.destroy();
-      expect(dropTable.mock.calls.map(([name]) => name).sort()).toEqual(['new', 'old']);
+      expect(dropTable.mock.calls.map(([name]) => name).sort()).toEqual([
+        '__dt_annot_new__',
+        '__dt_annot_old__',
+        'new',
+        'old',
+      ]);
     });
   });
 

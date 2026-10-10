@@ -12,15 +12,14 @@
  *
  * The body holds only the cursor's row, so every search past it is SQL
  * (the binary search over positions is checked once, unfiltered and
- * unsorted). The helper table is built by `SimpleAnnotatedRowsSource`,
- * which this exercises too, and one filter reads it the way the
- * `annotated` filter does.
+ * unsorted). The helper table is built with the statement
+ * `AnnotatedRowsTable` sends, which this exercises too, and one filter
+ * reads it the way the `annotated` filter does.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AnnotationNavigator } from '@/annotations/AnnotationNavigator';
 import { AnnotationStore } from '@/annotations/AnnotationStore';
-import { SimpleAnnotatedRowsSource } from '@/annotations/simpleAnnotatedRowsSource';
 import type { AnnotationSeverity, NewAnnotation } from '@/annotations/types';
 import type { ColumnSchema, Filter, SortColumn } from '@/core/types';
 import { detectSchema } from '@/data/SchemaDetector';
@@ -29,6 +28,7 @@ import { buildRowQuery } from '@/table/rowQuery';
 import { createNodeDuckDB, type NodeDuckDBHarness } from '../helpers/duckdbNode';
 import { BIT, makeHost, ModelStore } from '../helpers/navigationFakes';
 import { makeNodeBridge } from '../helpers/nodeBridge';
+import { TestAnnotatedRowsSource } from '../helpers/testAnnotatedRowsSource';
 
 const ROWS = 64;
 const BLOCK = 128;
@@ -298,7 +298,7 @@ describe('annotation navigation on real DuckDB', () => {
 
   function setup(c: Case, store: AnnotationStore) {
     const schema = schemas.get(c.table)!;
-    let source: SimpleAnnotatedRowsSource | null = null;
+    let source: TestAnnotatedRowsSource | null = null;
     const host = makeHost({
       store,
       schema,
@@ -312,7 +312,7 @@ describe('annotation navigation on real DuckDB', () => {
     host.state.sortColumns.set(c.sort);
     host.state.filters.set(c.filters);
     host.body.positions = c.positions ?? false;
-    source = new SimpleAnnotatedRowsSource(bridge, host.state, store);
+    source = new TestAnnotatedRowsSource(bridge, host.state, store);
     return { host, source, nav: new AnnotationNavigator(host) };
   }
 
@@ -408,7 +408,7 @@ describe('annotation navigation on real DuckDB', () => {
         return bridge.query(sql, signal);
       },
     };
-    const source = new SimpleAnnotatedRowsSource(
+    const source = new TestAnnotatedRowsSource(
       counting,
       { baseTableName: { get: () => 'base' } } as never,
       store,

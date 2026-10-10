@@ -35,6 +35,7 @@ export class QueryCache {
   private cache = new Map<string, CacheEntry>();
   private maxEntries: number;
   private ttlMs: number;
+  private clears = 0;
 
   constructor(options?: Partial<QueryCacheOptions>) {
     const resolved = { ...DEFAULT_OPTIONS, ...options };
@@ -63,10 +64,24 @@ export class QueryCache {
   }
 
   /**
-   * Store a query result with TTL. Evicts LRU entry if at capacity.
+   * How many times the cache has been cleared. A query reads it as it
+   * starts, and passes it to {@link set} with its result.
    */
-  set(key: string, value: unknown[]): void {
+  get generation(): number {
+    return this.clears;
+  }
+
+  /**
+   * Store a query result with TTL. Evicts LRU entry if at capacity.
+   *
+   * With `generation`, the {@link generation} read as the query started,
+   * the result is stored only if the cache has not been cleared since: a
+   * clear means what the queries read changed, and a result in flight across
+   * it may have read the data from before.
+   */
+  set(key: string, value: unknown[], generation?: number): void {
     if (this.maxEntries <= 0) return;
+    if (generation !== undefined && generation !== this.clears) return;
 
     // Remove existing entry to update position
     this.cache.delete(key);
@@ -88,6 +103,7 @@ export class QueryCache {
   /** Clear all cached entries */
   clear(): void {
     this.cache.clear();
+    this.clears++;
   }
 
   /** Current number of entries (including potentially expired ones) */

@@ -72,7 +72,9 @@ export function deserializeStateSnapshot(
   const filters = s.filters
     .map(deserializeFilter)
     .filter(
-      (f): f is Filter => f !== null && (f.type === 'raw-sql' || effectiveValid.has(f.column)),
+      (f): f is Filter =>
+        f !== null &&
+        (f.type === 'raw-sql' || f.type === 'annotated' || effectiveValid.has(f.column)),
     );
 
   const sortColumns = s.sortColumns.filter((sc) => effectiveValid.has(sc.column));
@@ -274,7 +276,8 @@ export function snapshotFromState(
  * otherwise fail every query on text that is not JSON; a range filter on a
  * TIME WITH TIME ZONE column whose bounds have no offset compares the time
  * of day its column's chart shows; and a range filter's `valueType: 'time'`
- * on a column that is not TIME or TIME WITH TIME ZONE goes.
+ * on a column that is not TIME or TIME WITH TIME ZONE goes. An annotated
+ * filter keeps the annotated rows of this table, the one it is restored to.
  * Only the schema's columns are known here, not the derived columns the
  * snapshot brings back. The snapshot's column order is made
  * consistent ({@link consistentColumnOrder}): the visible columns as the
@@ -305,17 +308,22 @@ export function restoreStateFromSnapshot(
   }
 
   const allColumnNames = schemaColumns.map((c) => c.name);
+  // The table an annotated filter reads the annotated rows of: this one.
+  const baseTable = state.baseTableName.get() ?? state.tableName.get();
 
   // Filters: deserialize and drop stale column references.
-  // Raw SQL filters use synthetic column keys that aren't in the schema —
-  // they must bypass column validation to survive session restore.
+  // Raw SQL and annotated filters use synthetic column keys that aren't in
+  // the schema — they must bypass column validation to survive session restore.
   const filters = normalizeRestoredFilters(
     snapshot.filters
       .map(deserializeFilter)
       .filter(
-        (f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)),
+        (f): f is Filter =>
+          f !== null &&
+          (f.type === 'raw-sql' || f.type === 'annotated' || validColumns.has(f.column)),
       ),
     schemaColumns,
+    baseTable,
   );
 
   // Sort: drop stale column references
@@ -425,7 +433,10 @@ export function restoreStateFromSnapshot(
     }
     const restore = (s: SerializedStateSnapshot): StateSnapshot => {
       const entry = deserializeStateSnapshot(s, validColumns, hydratedPool);
-      return { ...entry, filters: normalizeRestoredFilters(entry.filters, schemaColumns) };
+      return {
+        ...entry,
+        filters: normalizeRestoredFilters(entry.filters, schemaColumns, baseTable),
+      };
     };
     const deserialized = {
       undoStack: snapshot.undoStack.map(restore),

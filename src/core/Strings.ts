@@ -445,6 +445,19 @@ export interface Strings {
       warning: string;
       info: string;
     };
+    /** The popover that lists the annotations of a cell or a column header. */
+    popover: {
+      /** Title of the section listing the row's annotations. */
+      rowTitle: string;
+      /** Title of the section listing the column's annotations. */
+      columnTitle: string;
+      /** Title of the section listing the cell's own annotations. */
+      cellTitle: string;
+      /** A section lists five annotations at most; this line counts the rest. */
+      moreEntries: (count: number) => string;
+      /** Counts a section's annotations the severity filter hides, which it leaves out. */
+      hiddenBySeverityFilter: (count: number) => string;
+    };
   };
 
   // =========================================
@@ -1029,6 +1042,13 @@ export const defaultStrings: Strings = {
       error: 'error',
       warning: 'warning',
       info: 'info',
+    },
+    popover: {
+      rowTitle: 'Row',
+      columnTitle: 'Column',
+      cellTitle: 'Cell',
+      moreEntries: (count) => `+${count.toLocaleString()} more`,
+      hiddenBySeverityFilter: (count) => `${count.toLocaleString()} hidden by the severity filter`,
     },
   },
 

@@ -101,7 +101,11 @@
  * "nice to have" fixes (RT-16 – RT-21: dates and times exported as ISO text,
  * NaN and infinity left out of charts, sub-second intervals, TIME WITH TIME
  * ZONE charts, extreme dates and more) took it to 100.88 kB, and the cap to
- * 104 kB.
+ * 104 kB. Annotations at a million took it to 103.63 kB with the store's
+ * per-scope indexes, and to 105.65 kB with the grid reading them a scope at
+ * a time and writing only what changed, one store subscription for the
+ * whole grid, and the popover capped and refreshed in place; the cap moved
+ * to 108 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -182,7 +186,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '104 kB',
+    limit: '108 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

@@ -301,4 +301,64 @@ describe('ColumnHeader — annotation overlay', () => {
 
     header.destroy();
   });
+
+  it('shows the column’s annotations from construction, for a header built after them', () => {
+    store.add({ scope: 'column', column: 'fare_amount', severity: 'info', message: 'i' });
+    store.add({ scope: 'column', column: 'fare_amount', severity: 'warning', message: 'w' });
+    const header = new ColumnHeader(column, state, actions, { annotations: store });
+    const el = header.getElement();
+    expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
+    expect(el.classList.contains('dt-col-header--annotation-warning')).toBe(true);
+    expect(el.dataset.dtAnnotationCount).toBe('2');
+    header.destroy();
+  });
+
+  it('writes nothing on a change that leaves its column’s annotations as they are', () => {
+    const header = new ColumnHeader(column, state, actions, { annotations: store });
+    const el = header.getElement();
+    const ann = store.add({
+      scope: 'column',
+      column: 'fare_amount',
+      severity: 'error',
+      message: 'e',
+    });
+    const observer = new MutationObserver(() => {});
+    observer.observe(el, { attributes: true });
+    store.add({ scope: 'cell', rowId: 1, column: 'fare_amount', severity: 'info', message: 'c' });
+    store.add({ scope: 'column', column: 'other_col', severity: 'info', message: 'o' });
+    store.update(ann.id, { message: 'still an error' });
+    store.setSeverityFilter({ info: false });
+    expect(observer.takeRecords()).toEqual([]);
+    observer.disconnect();
+    header.destroy();
+  });
+
+  it('opens no popover when the severity filter hides every annotation of its column', () => {
+    const filtered = new AnnotationPopover({
+      portalTarget: portal,
+      severityFilter: () => store.getSeverityFilter(),
+    });
+    const header = new ColumnHeader(column, state, actions, {
+      annotations: store,
+      annotationPopover: filtered,
+    });
+    const el = header.getElement();
+    document.body.appendChild(el);
+    store.add({ scope: 'column', column: 'fare_amount', severity: 'info', message: 'i' });
+    store.setSeverityFilter({ info: false });
+
+    el.dispatchEvent(new Event('pointerenter'));
+    expect(filtered.isOpen()).toBe(false);
+    // The marker and the count stay.
+    expect(el.classList.contains('dt-col-header--annotated')).toBe(true);
+    expect(el.dataset.dtAnnotationCount).toBe('1');
+
+    store.setSeverityFilter({ info: true });
+    el.dispatchEvent(new Event('pointerenter'));
+    expect(filtered.isOpenFor(el)).toBe(true);
+
+    el.remove();
+    header.destroy();
+    filtered.destroy();
+  });
 });

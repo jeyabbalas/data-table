@@ -605,6 +605,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   const annotationPopover = new AnnotationPopover({
     classPrefix: opts.classPrefix ?? 'dt',
     portalTarget: opts.portalTarget,
+    messages,
+    // It leaves out the severities the store's filter hides.
+    severityFilter: () => annotationStore.getSeverityFilter(),
   });
   const columnHeaderTooltipPopover = new ColumnHeaderTooltipPopover({
     classPrefix: opts.classPrefix ?? 'dt',

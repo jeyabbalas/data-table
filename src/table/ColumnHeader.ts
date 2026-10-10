@@ -19,13 +19,20 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { maxSeverity } from '../annotations/severity';
 import type { StateActions } from '../core/Actions';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, ColumnHeaderTooltipContent } from '../core/types';
 import { columnTypeLabel, columnTypeSpoken, columnTypeTitle } from '../nested/typeOutline';
 import type { AnnotationPopover } from './AnnotationPopover';
+import {
+  annotationClasses,
+  applyCount,
+  applyScope,
+  codeOf,
+  columnScopeState,
+  countOf,
+} from './annotationRender';
 import { isInspectableColumn } from './Cell';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, getColumnLayout } from './ColumnLayout';
@@ -73,6 +80,16 @@ export interface ColumnHeaderOptions {
   messages?: Strings | undefined;
   /** Shared annotation store for column-scope annotation classes + popover. */
   annotations?: AnnotationStore | undefined;
+  /**
+   * Who keeps the header in step with `annotations`: the header, through a
+   * `change` subscription of its own (`'self'`, the default), or its owner,
+   * which calls {@link ColumnHeader.syncAnnotations} for the changes that
+   * touch its column (`'owner'`). `TableContainer` passes `'owner'`: one
+   * subscription for the grid rather than one per column.
+   *
+   * @internal
+   */
+  annotationSync?: 'self' | 'owner' | undefined;
   /** Shared popover singleton used to display column-scope annotations on hover / focus. */
   annotationPopover?: AnnotationPopover | undefined;
   /** Shared singleton used to display the app-controlled column-name tooltip popover. */
@@ -139,6 +156,11 @@ export class ColumnHeader {
   private layoutMode = false;
   /** Releases the hold a resize drag keeps on the column, while one runs. */
   private releaseResizeHold: (() => void) | null = null;
+  /**
+   * What the header shows of its column's column-scope annotations, packed
+   * (see annotationRender.ts).
+   */
+  private annotationState = 0;
   private unsubscribes: (() => void)[] = [];
   private destroyed = false;
   private readonly classPrefix: string;
@@ -156,6 +178,9 @@ export class ColumnHeader {
     this.messages = options.messages ?? defaultStrings;
     this.element = this.createElement();
     this.statsEl = this.element.querySelector(`.${this.classPrefix}-col-stats`)!;
+    // From the store's O(1) summary: a header built later, for a column
+    // shown or added, shows what is there now.
+    this.syncAnnotations();
 
     this.attachEventListeners();
     this.subscribeToState();
@@ -272,11 +297,6 @@ export class ColumnHeader {
     actionPanel.className = `${this.classPrefix}-col-action-panel`;
     el.appendChild(actionPanel);
     this.actionPanel = actionPanel;
-
-    // Apply annotation classes + popover wiring on initial render. The
-    // store subscription in subscribeToState() re-applies on every
-    // annotation change.
-    this.applyAnnotationClasses(el);
 
     return el;
   }
@@ -524,50 +544,62 @@ export class ColumnHeader {
   };
 
   /**
-   * Read column-scope annotations from the store and rewrite the header's
-   * annotation CSS classes + data attributes. `getByColumn` also surfaces
-   * cell-scope annotations (every cell ann lands in byRow/byColumn/byCell),
-   * so we filter to `scope === 'column'` — a pure cell annotation must not
-   * tint the header.
+   * Bring the header's annotation classes and count up to date with its
+   * column's column-scope annotations in the store: cell-scope annotations
+   * in the column tint their cells, never the header.
+   *
+   * `.dt-col-header--annotated` and `data-dt-annotation-count` follow the
+   * annotations whatever the severity filter shows, so the header still says
+   * it holds some when the filter hides them all; the severity class falls
+   * back through error, warning and info as the filter hides them. One O(1)
+   * summary from the store, compared with what the header shows: nothing is
+   * written when they match, and only what differs otherwise.
+   *
+   * The header's own subscription calls it (`annotationSync: 'self'`), or
+   * else its owner does, for the changes that touch its column.
+   *
+   * @internal
    */
-  private applyAnnotationClasses(el: HTMLElement): void {
-    const p = this.classPrefix;
-    const annotations = this.options.annotations;
-    el.classList.remove(
-      `${p}-col-header--annotated`,
-      `${p}-col-header--annotation-error`,
-      `${p}-col-header--annotation-warning`,
-      `${p}-col-header--annotation-info`,
+  syncAnnotations(): void {
+    if (this.destroyed) return;
+    const store = this.options.annotations;
+    if (!store) return;
+    const prev = this.annotationState;
+    const next = columnScopeState(store, this.column.name);
+    if (prev === next) return;
+    applyScope(
+      this.element.classList,
+      annotationClasses(this.classPrefix).header,
+      codeOf(prev),
+      codeOf(next),
     );
-    delete el.dataset['dtAnnotationCount'];
-    if (!annotations) return;
-    const anns = annotations.getByColumn(this.column.name).filter((a) => a.scope === 'column');
-    if (anns.length === 0) return;
-    // Marker class + count track unfiltered presence so the popover stays
-    // reachable even when every visible severity is hidden; the severity
-    // class falls back through error → warning → info per the filter.
-    el.classList.add(`${p}-col-header--annotated`);
-    el.dataset['dtAnnotationCount'] = String(anns.length);
-    const filter = annotations.getSeverityFilter();
-    const sev = maxSeverity(anns.filter((a) => filter[a.severity]));
-    if (sev) el.classList.add(`${p}-col-header--annotation-${sev}`);
+    applyCount(this.element, countOf(prev), countOf(next));
+    this.annotationState = next;
   }
 
   /**
-   * Show the shared popover anchored on the header root, populated with the
-   * current column-scope annotations. No-op when no popover / store is
+   * Show the shared popover anchored on the header root, listing the
+   * column's column-scope annotations. No-op when no popover / store is
    * wired or when the column has no column-scope annotations (cell-scope
    * annotations at cells in this column don't open the header popover —
-   * they open the cell's own popover).
+   * they open the cell's own popover), or the severity filter hides them all.
    */
   private showAnnotationPopover = (): void => {
     if (this.destroyed) return;
     const popover = this.options.annotationPopover;
     const store = this.options.annotations;
-    if (!popover || !store) return;
-    const anns = store.getByColumn(this.column.name).filter((a) => a.scope === 'column');
-    if (anns.length === 0) return;
-    popover.show(this.element, anns);
+    if (!popover || !store || countOf(this.annotationState) === 0) return;
+    // Open on it already: focus after the pointer, or the pointer back in
+    // time to stop the grace-period hide.
+    if (popover.isOpenFor(this.element)) {
+      popover.cancelGraceHide();
+      return;
+    }
+    const name = this.column.name;
+    // A header going hides its popover itself (see destroy).
+    popover.showFrom(this.element, () =>
+      this.destroyed ? null : { column: store.listColumnScope(name) },
+    );
   };
 
   /**
@@ -754,14 +786,13 @@ export class ColumnHeader {
     // Set initial hide button state
     this.updateHideButtonState(this.state.visibleColumns.get());
 
-    // Annotation store — re-apply classes whenever any mutation lands.
-    // Coarse re-read (one getByColumn call per change) is cheaper than
-    // filtering payload.ids through `store.get(id)?.scope === 'column' && …`.
-    if (this.options.annotations) {
+    // Annotation store, unless an owner hears it for the whole grid: one
+    // O(1) summary per change, and a write only where the header differs.
+    if (this.options.annotations && this.options.annotationSync !== 'owner') {
       const unsubAnn = this.options.annotations.on('change', () => {
-        if (!this.destroyed) {
-          this.applyAnnotationClasses(this.element);
-        }
+        if (this.destroyed) return;
+        this.syncAnnotations();
+        this.options.annotationPopover?.requestRefresh();
       });
       this.unsubscribes.push(unsubAnn);
     }
@@ -1231,6 +1262,11 @@ export class ColumnHeader {
 
     // Detach the resizer and the controls' listeners
     this.unmountControls();
+
+    // A popover over a header that is going would stay, over nothing, until
+    // something else closed it: no pointer can leave an element gone.
+    const popover = this.options.annotationPopover;
+    if (popover?.isOpenFor(this.element)) popover.hide();
 
     // Remove event listeners
     this.element.removeEventListener('keydown', this.handleHeaderKeyDown);

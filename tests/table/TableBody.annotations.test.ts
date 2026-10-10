@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableBody } from '@/table/TableBody';
 import { AnnotationPopover } from '@/table/AnnotationPopover';
 import { AnnotationStore } from '@/annotations/AnnotationStore';
+import { ALL_ANNOTATIONS } from '@/table/annotationRender';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
@@ -707,7 +708,7 @@ describe('TableBody — annotation overlay', () => {
     const formattedTitle = priceCell.title;
     expect(formattedTitle.length).toBeGreaterThan(0);
 
-    // Add an annotation: change event fires reapplyAnnotationsToVisibleRows.
+    // Add an annotation: change event fires syncAnnotations.
     const ann = store.add({
       scope: 'cell',
       rowId: 0,
@@ -717,9 +718,9 @@ describe('TableBody — annotation overlay', () => {
     });
     expect(priceCell.title).toBe('');
 
-    // Remove it: change event fires reapplyAnnotationsToVisibleRows again.
-    // Without the per-cell render call inside reapply, the title would
-    // stay empty until the next virtualization render.
+    // Remove it: change event fires syncAnnotations again. Without the
+    // render of a cell that stops showing a severity, the title would stay
+    // empty until the next virtualization render.
     store.remove(ann.id);
     expect(priceCell.title).toBe(formattedTitle);
     expect(priceCell.classList.contains('dt-cell--annotated')).toBe(false);
@@ -813,7 +814,20 @@ describe('TableBody — annotation overlay', () => {
 
   // =========================================
   // Popover — triggered on hover / focus
+  //
+  // Read from what the popover lists: the body opens it with the internal
+  // `showFrom`, which reads the cell's annotations from the store again on
+  // a refresh, rather than with `show`.
   // =========================================
+
+  /** What the popover lists, as `scope: message`, in order. */
+  const listed = (): string[] =>
+    Array.from(portal.querySelectorAll('.dt-annotation-popover section'), (section) =>
+      Array.from(
+        section.querySelectorAll('.dt-annotation-message'),
+        (m) => `${section.className.match(/group--(\w+)/)![1]}: ${m.textContent}`,
+      ),
+    ).flat();
 
   it('popover opens on pointerover of a row-only annotated cell and shows the row annotation only', () => {
     const rows = buildFakeRows(5);
@@ -828,7 +842,7 @@ describe('TableBody — annotation overlay', () => {
     const schemaMap = new Map<string, ColumnSchema>();
     for (const c of testSchema) schemaMap.set(c.name, c);
 
-    const rowAnn = store.add({ scope: 'row', rowId: 2, severity: 'info', message: 'row-only' });
+    store.add({ scope: 'row', rowId: 2, severity: 'info', message: 'row-only' });
 
     const internal = body as unknown as {
       updateRowContent(
@@ -842,16 +856,11 @@ describe('TableBody — annotation overlay', () => {
     internal.updateRowContent(rowEl, 2, rows[2], schemaMap);
     container.appendChild(rowEl);
 
-    const showSpy = vi.spyOn(popover, 'show');
-
     const idCell = rowEl.children[visibleColumns.indexOf('id')] as HTMLElement;
     idCell.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
 
-    expect(showSpy).toHaveBeenCalledTimes(1);
-    const [, anns] = showSpy.mock.calls[0] as [HTMLElement, (typeof rowAnn)[]];
-    expect(anns.length).toBe(1);
-    expect(anns[0].id).toBe(rowAnn.id);
-    expect(anns[0].scope).toBe('row');
+    expect(popover.isOpenFor(idCell)).toBe(true);
+    expect(listed()).toEqual(['row: row-only']);
 
     body.destroy();
   });
@@ -872,13 +881,13 @@ describe('TableBody — annotation overlay', () => {
     // A column-scope ann at 'price' AND a cell-scope ann at (3, 'price').
     // The col-scope ann gets picked up for every cell in the column; the
     // cell-scope ann must stay local to (3, 'price').
-    const colAnn = store.add({
+    store.add({
       scope: 'column',
       column: 'price',
       severity: 'warning',
       message: 'col',
     });
-    const cellAnn = store.add({
+    store.add({
       scope: 'cell',
       rowId: 3,
       column: 'price',
@@ -904,15 +913,11 @@ describe('TableBody — annotation overlay', () => {
     internal.updateRowContent(rowB, 3, rows[3], schemaMap);
     container.appendChild(rowB);
 
-    const showSpy = vi.spyOn(popover, 'show');
-
     // Hover row-1 price cell (col-only).
     const colOnlyCell = rowA.children[visibleColumns.indexOf('price')] as HTMLElement;
     colOnlyCell.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
-    expect(showSpy).toHaveBeenCalledTimes(1);
-    const [, colOnlyAnns] = showSpy.mock.calls[0] as [HTMLElement, (typeof colAnn)[]];
-    expect(colOnlyAnns.map((a) => a.id)).toEqual([colAnn.id]);
-    expect(colOnlyAnns.map((a) => a.id)).not.toContain(cellAnn.id);
+    expect(popover.isOpenFor(colOnlyCell)).toBe(true);
+    expect(listed()).toEqual(['column: col']);
 
     // Clear the popover tracking so the next pointerover is recognised as
     // a new anchor. pointerout with relatedTarget outside mimics the
@@ -930,12 +935,8 @@ describe('TableBody — annotation overlay', () => {
     intersectionCell.dispatchEvent(
       new PointerEvent('pointerover', { bubbles: true, cancelable: true }),
     );
-    expect(showSpy).toHaveBeenCalledTimes(2);
-    const [, intersectionAnns] = showSpy.mock.calls[1] as [HTMLElement, (typeof colAnn)[]];
-    const ids = intersectionAnns.map((a) => a.id);
-    expect(ids).toContain(colAnn.id);
-    expect(ids).toContain(cellAnn.id);
-    expect(ids.length).toBe(2);
+    expect(popover.isOpenFor(intersectionCell)).toBe(true);
+    expect(listed()).toEqual(['column: col', 'cell: cell']);
 
     body.destroy();
   });
@@ -991,22 +992,22 @@ describe('TableBody — annotation overlay', () => {
     // dtAnnotationCount = 3 row + 3 col + 3 cell = 9.
     expect(priceCell.dataset.dtAnnotationCount).toBe('9');
 
-    // Hover triggers the popover with all 9 anns.
-    const showSpy = vi.spyOn(popover, 'show');
+    // Hover opens the popover on the cell, listing all 9 anns.
     priceCell.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, cancelable: true }));
-    expect(showSpy).toHaveBeenCalledTimes(1);
-    const [anchorEl, anns] = showSpy.mock.calls[0] as [
-      HTMLElement,
-      Array<{ scope: string; message: string }>,
-    ];
-    expect(anchorEl).toBe(priceCell);
-    expect(anns.length).toBe(9);
-    expect(anns.filter((a) => a.scope === 'row').length).toBe(3);
-    expect(anns.filter((a) => a.scope === 'column').length).toBe(3);
-    expect(anns.filter((a) => a.scope === 'cell').length).toBe(3);
+    expect(popover.isOpenFor(priceCell)).toBe(true);
+    expect(listed()).toEqual([
+      'row: r-error',
+      'row: r-warning',
+      'row: r-info',
+      'column: c-error',
+      'column: c-warning',
+      'column: c-info',
+      'cell: x-error',
+      'cell: x-warning',
+      'cell: x-info',
+    ]);
 
-    // Verify the popover renders 9 list entries across 3 sections.
-    popover.show(anchorEl, anns as never);
+    // 9 list entries across 3 sections.
     const popoverEl = portal.querySelector('.dt-annotation-popover') as HTMLElement;
     expect(popoverEl).toBeTruthy();
     const sections = popoverEl.querySelectorAll('section.dt-annotation-popover__group');
@@ -1278,7 +1279,7 @@ describe('TableBody — annotation overlay', () => {
       body.destroy();
     });
 
-    it('reapplyAnnotationsToVisibleRows reflects the latest filter on every visible row', () => {
+    it('syncAnnotations reflects the latest filter on every visible row', () => {
       const { body, rows, visibleColumns, schemaMap, internal } = setup();
       store.add({ scope: 'cell', rowId: 3, column: 'price', severity: 'error', message: 'e' });
       store.add({ scope: 'cell', rowId: 3, column: 'price', severity: 'warning', message: 'w' });
@@ -1298,9 +1299,7 @@ describe('TableBody — annotation overlay', () => {
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(true);
 
       store.setSeverityFilter({ error: false });
-      (
-        body as unknown as { reapplyAnnotationsToVisibleRows(): void }
-      ).reapplyAnnotationsToVisibleRows();
+      body.syncAnnotations(ALL_ANNOTATIONS);
       expect(cell.classList.contains('dt-cell--annotation-error')).toBe(false);
       expect(cell.classList.contains('dt-cell--annotation-warning')).toBe(true);
 
@@ -1310,7 +1309,7 @@ describe('TableBody — annotation overlay', () => {
     it('end-to-end row-scope: error+warning+info on one row; toggling off error surfaces warning, not info', async () => {
       const { body, rows, visibleColumns, schemaMap, internal } = setup();
       // Subscribe the body so setSeverityFilter triggers the change handler →
-      // reapplyAnnotationsToVisibleRows (the production path, not a manual call).
+      // syncAnnotations (the production path, not a manual call).
       await body.initialize();
 
       // All three severities on one row.
@@ -1333,7 +1332,7 @@ describe('TableBody — annotation overlay', () => {
       expect(rowEl.classList.contains('dt-row--annotation-info')).toBe(false);
 
       // Toggle off error via the public API. The body subscribes to 'change'
-      // events on construction, so this fires reapplyAnnotationsToVisibleRows.
+      // events on initialize(), so this fires syncAnnotations.
       store.setSeverityFilter({ error: false });
 
       expect(rowEl.classList.contains('dt-row--annotation-error')).toBe(false);

@@ -642,6 +642,10 @@ describe('stylesheet antipatterns', () => {
       '.dt-filter-preset-list', // preset rows, each with load/delete buttons
       '.dt-value-tree', // treeitems, the active one the tree's tab stop
       '.dt-extract-panel__body', // the type's tree, inputs, the name field
+      // One per table, outside it, for messages too long to clip: a tab stop
+      // of its own while it overflows (`AnnotationPopover.position`), never
+      // one per column or per annotation.
+      '.dt-annotation-popover',
     ]);
     const found: string[] = [];
     for (const file of componentStyleFiles()) {

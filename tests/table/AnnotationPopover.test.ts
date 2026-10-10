@@ -1,11 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { AnnotationPopover } from '@/table/AnnotationPopover';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { AnnotationPopover, type AnnotationSections } from '@/table/AnnotationPopover';
 import { maxSeverity, severityRank } from '@/annotations/severity';
 import { ModalHost, __resetModalHostForTests } from '@/core/ModalHost';
-import type { Annotation } from '@/annotations/types';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
+import type { Annotation, SeverityFilter } from '@/annotations/types';
 
 function makeAnn(
   overrides: Partial<Annotation> & Pick<Annotation, 'scope' | 'severity' | 'message'>,
@@ -395,5 +396,301 @@ describe('AnnotationPopover — modal-open dismissal', () => {
     expect(() => host.open({ mode: 'panel', element: panel })).not.toThrow();
     host.close();
     panel.remove();
+  });
+});
+
+describe('AnnotationPopover — what it lists', () => {
+  let popover: AnnotationPopover;
+  let portal: HTMLElement;
+  let anchor: HTMLElement;
+  let filter: SeverityFilter;
+
+  beforeEach(() => {
+    portal = document.createElement('div');
+    document.body.appendChild(portal);
+    anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    filter = { error: true, warning: true, info: true };
+    popover = new AnnotationPopover({
+      portalTarget: portal,
+      severityFilter: () => ({ ...filter }),
+    });
+  });
+
+  afterEach(() => {
+    popover.destroy();
+    portal.remove();
+    anchor.remove();
+  });
+
+  const root = (): HTMLElement => portal.querySelector('.dt-annotation-popover') as HTMLElement;
+  const section = (scope: string): HTMLElement | null =>
+    root().querySelector(`.dt-annotation-popover__group--${scope}`);
+  const messagesIn = (el: Element | null): string[] =>
+    Array.from(el?.querySelectorAll('.dt-annotation-message') ?? [], (n) => n.textContent ?? '');
+
+  it('lists at most five entries a section, and counts the rest', () => {
+    const rows = Array.from({ length: 8 }, (_, i) =>
+      makeAnn({ scope: 'row', rowId: 1, severity: 'warning', message: `r${i}` }),
+    );
+    const cells = [0, 1].map((i) =>
+      makeAnn({ scope: 'cell', rowId: 1, column: 'x', severity: 'info', message: `c${i}` }),
+    );
+    popover.show(anchor, [...rows, ...cells]);
+    expect(messagesIn(section('row'))).toEqual(['r0', 'r1', 'r2', 'r3', 'r4']);
+    expect(section('row')!.querySelector('.dt-annotation-popover__more')?.textContent).toBe(
+      '+3 more',
+    );
+    expect(messagesIn(section('cell'))).toEqual(['c0', 'c1']);
+    expect(section('cell')!.querySelector('.dt-annotation-popover__more')).toBeNull();
+  });
+
+  it('leaves out the severities the filter hides, and counts them in their section', () => {
+    filter.warning = false;
+    popover.show(anchor, [
+      makeAnn({ scope: 'row', rowId: 1, severity: 'error', message: 'e' }),
+      makeAnn({ scope: 'row', rowId: 1, severity: 'warning', message: 'w1' }),
+      makeAnn({ scope: 'row', rowId: 1, severity: 'warning', message: 'w2' }),
+      makeAnn({ scope: 'column', column: 'x', severity: 'warning', message: 'cw' }),
+    ]);
+    expect(messagesIn(section('row'))).toEqual(['e']);
+    expect(section('row')!.querySelector('.dt-annotation-popover__hidden')?.textContent).toBe(
+      '2 hidden by the severity filter',
+    );
+    // A section of hidden annotations only: its title and the count.
+    expect(messagesIn(section('column'))).toEqual([]);
+    expect(section('column')!.querySelector('.dt-annotation-popover__hidden')?.textContent).toBe(
+      '1 hidden by the severity filter',
+    );
+  });
+
+  it('opens nowhere the filter hides every annotation', () => {
+    popover.show(anchor, [makeAnn({ scope: 'row', rowId: 1, severity: 'info', message: 'i' })]);
+    expect(popover.isOpenFor(anchor)).toBe(true);
+    filter.info = false;
+    popover.show(anchor, [makeAnn({ scope: 'row', rowId: 1, severity: 'info', message: 'i' })]);
+    expect(popover.isOpen()).toBe(false);
+    expect(anchor.hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('writes its text from the messages it was given', () => {
+    popover.destroy();
+    popover = new AnnotationPopover({
+      portalTarget: portal,
+      messages: mergeStrings(defaultStrings, {
+        annotations: {
+          severityNames: { error: 'erreur', warning: 'avertissement' },
+          popover: {
+            rowTitle: 'Ligne',
+            cellTitle: 'Cellule',
+            moreEntries: (n) => `+${n} de plus`,
+          },
+        },
+      }),
+    });
+    popover.show(anchor, [
+      ...Array.from({ length: 6 }, (_, i) =>
+        makeAnn({ scope: 'row', rowId: 1, severity: 'error', message: `r${i}` }),
+      ),
+      makeAnn({ scope: 'cell', rowId: 1, column: 'x', severity: 'warning', message: 'c' }),
+    ]);
+    const titles = Array.from(
+      root().querySelectorAll('.dt-annotation-popover__group-title'),
+      (n) => n.textContent,
+    );
+    expect(titles).toEqual(['Ligne', 'Cellule']);
+    expect(section('row')!.querySelector('.dt-annotation-pill')?.textContent).toBe('erreur');
+    expect(section('cell')!.querySelector('.dt-annotation-pill')?.textContent).toBe(
+      'avertissement',
+    );
+    expect(section('row')!.querySelector('.dt-annotation-popover__more')?.textContent).toBe(
+      '+1 de plus',
+    );
+  });
+
+  it('gives a severity outside the allow-list no class', () => {
+    popover.show(anchor, [
+      makeAnn({ scope: 'row', rowId: 1, severity: 'x y' as never, message: 'odd' }),
+    ]);
+    const entry = root().querySelector('.dt-annotation-entry') as HTMLElement;
+    expect(entry.className).toBe('dt-annotation-entry');
+    expect(entry.querySelector('.dt-annotation-pill')!.className).toBe('dt-annotation-pill');
+    expect(entry.querySelector('.dt-annotation-pill')!.textContent).toBe('x y');
+  });
+});
+
+describe('AnnotationPopover — refresh', () => {
+  let popover: AnnotationPopover;
+  let portal: HTMLElement;
+  let anchor: HTMLElement;
+  let sections: AnnotationSections | null;
+  let source: ReturnType<typeof vi.fn<() => AnnotationSections | null>>;
+
+  beforeEach(() => {
+    portal = document.createElement('div');
+    document.body.appendChild(portal);
+    anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    popover = new AnnotationPopover({ portalTarget: portal });
+    sections = {
+      cell: [makeAnn({ scope: 'cell', rowId: 1, column: 'x', severity: 'error', message: 'one' })],
+    };
+    source = vi.fn(() => sections);
+    popover.showFrom(anchor, source);
+  });
+
+  afterEach(() => {
+    popover.destroy();
+    portal.remove();
+    anchor.remove();
+  });
+
+  const root = (): HTMLElement => portal.querySelector('.dt-annotation-popover') as HTMLElement;
+  const messages = (): string[] =>
+    Array.from(root().querySelectorAll('.dt-annotation-message'), (n) => n.textContent ?? '');
+
+  async function mutationsDuringRefresh(): Promise<MutationRecord[]> {
+    const observer = new MutationObserver(() => {});
+    observer.observe(root(), {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    popover.requestRefresh();
+    await Promise.resolve();
+    const records = observer.takeRecords();
+    observer.disconnect();
+    return records;
+  }
+
+  it('rewrites nothing while what it shows is unchanged', async () => {
+    expect(await mutationsDuringRefresh()).toEqual([]);
+    expect(popover.isOpenFor(anchor)).toBe(true);
+  });
+
+  it('rewrites itself in place when its anchor’s annotations change', async () => {
+    sections = {
+      row: [makeAnn({ scope: 'row', rowId: 1, severity: 'info', message: 'row' })],
+      cell: sections!.cell,
+    };
+    expect((await mutationsDuringRefresh()).length).toBeGreaterThan(0);
+    expect(popover.isOpenFor(anchor)).toBe(true);
+    expect(anchor.getAttribute('aria-describedby')).toBe(popover.getId());
+    expect(messages()).toEqual(['row', 'one']);
+  });
+
+  it('reads its anchor once for any number of requests in a task', async () => {
+    source.mockClear();
+    for (let i = 0; i < 100; i++) popover.requestRefresh();
+    await Promise.resolve();
+    expect(source).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides when nothing is left to list, or its anchor is gone', async () => {
+    sections = { cell: [] };
+    popover.requestRefresh();
+    await Promise.resolve();
+    expect(popover.isOpen()).toBe(false);
+    expect(anchor.hasAttribute('aria-describedby')).toBe(false);
+
+    sections = {
+      cell: [makeAnn({ scope: 'cell', rowId: 1, column: 'x', severity: 'error', message: 'b' })],
+    };
+    popover.showFrom(anchor, source);
+    sections = null;
+    popover.requestRefresh();
+    await Promise.resolve();
+    expect(popover.isOpen()).toBe(false);
+  });
+
+  it('does nothing while hidden', async () => {
+    popover.hide();
+    source.mockClear();
+    popover.requestRefresh();
+    await Promise.resolve();
+    expect(source).not.toHaveBeenCalled();
+    expect(popover.isOpen()).toBe(false);
+  });
+
+  it('applies a new severity filter to annotations shown without a source', async () => {
+    popover.destroy();
+    let showInfo = true;
+    popover = new AnnotationPopover({
+      portalTarget: portal,
+      severityFilter: () => ({ error: true, warning: true, info: showInfo }),
+    });
+    popover.show(anchor, [
+      makeAnn({ scope: 'row', rowId: 1, severity: 'info', message: 'i' }),
+      makeAnn({ scope: 'row', rowId: 1, severity: 'error', message: 'e' }),
+    ]);
+    expect(messages()).toEqual(['i', 'e']);
+    showInfo = false;
+    popover.requestRefresh();
+    await Promise.resolve();
+    expect(messages()).toEqual(['e']);
+  });
+});
+
+describe('AnnotationPopover — scrolling', () => {
+  let popover: AnnotationPopover;
+  let portal: HTMLElement;
+  let anchor: HTMLElement;
+
+  beforeEach(() => {
+    portal = document.createElement('div');
+    document.body.appendChild(portal);
+    anchor = document.createElement('div');
+    document.body.appendChild(anchor);
+    popover = new AnnotationPopover({ portalTarget: portal });
+    popover.show(anchor, [makeAnn({ scope: 'row', rowId: 1, severity: 'info', message: 'x' })]);
+  });
+
+  afterEach(() => {
+    popover.destroy();
+    portal.remove();
+    anchor.remove();
+  });
+
+  const root = (): HTMLElement => portal.querySelector('.dt-annotation-popover') as HTMLElement;
+
+  it('stays open through its own scroll, and closes on any other', () => {
+    root().dispatchEvent(new Event('scroll'));
+    expect(popover.isOpenFor(anchor)).toBe(true);
+    root().querySelector('.dt-annotation-message')!.dispatchEvent(new Event('scroll'));
+    expect(popover.isOpenFor(anchor)).toBe(true);
+
+    const other = document.createElement('div');
+    document.body.appendChild(other);
+    other.dispatchEvent(new Event('scroll'));
+    expect(popover.isOpen()).toBe(false);
+    other.remove();
+  });
+
+  it('is a tab stop only while its content overflows it', () => {
+    expect(root().getAttribute('tabindex')).toBe('-1');
+    Object.defineProperty(root(), 'scrollHeight', { value: 900, configurable: true });
+    Object.defineProperty(root(), 'clientHeight', { value: 384, configurable: true });
+    popover.show(anchor, [makeAnn({ scope: 'row', rowId: 1, severity: 'info', message: 'y' })]);
+    expect(root().getAttribute('tabindex')).toBe('0');
+  });
+
+  it('stays open while focus is inside it', () => {
+    vi.useFakeTimers();
+    try {
+      popover.scheduleGraceHide();
+      root().dispatchEvent(new FocusEvent('focusin'));
+      vi.advanceTimersByTime(500);
+      expect(popover.isOpenFor(anchor)).toBe(true);
+      root().dispatchEvent(new FocusEvent('focusout', { relatedTarget: anchor }));
+      vi.advanceTimersByTime(500);
+      expect(popover.isOpenFor(anchor)).toBe(true);
+      root().dispatchEvent(new FocusEvent('focusout', { relatedTarget: document.body }));
+      vi.advanceTimersByTime(500);
+      expect(popover.isOpen()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

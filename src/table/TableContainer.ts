@@ -49,6 +49,7 @@ import type { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { SQLFilterModal } from '../filters/SQLFilterModal';
 import { columnTypeLabel } from '../nested/typeOutline';
+import { AnnotationOverlay } from './AnnotationOverlay';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
@@ -123,8 +124,9 @@ export interface TableContainerOptions {
   messages?: Strings | undefined;
   /**
    * Shared annotation store. When provided, `TableBody` and every
-   * `ColumnHeader` subscribe to it so annotations render inline (tint +
-   * popover) without requiring a full `render()`.
+   * `ColumnHeader` render its annotations inline (tint + popover), and the
+   * container hears its changes, once for the whole grid, to keep them up
+   * to date without a `render()`.
    */
   annotations?: AnnotationStore | undefined;
   /**
@@ -306,6 +308,10 @@ export class TableContainer {
 
   // Every sideways scroll of the header and body, and the sync between them
   private readonly columnWindow: ColumnWindowController;
+
+  // The grid's one subscriber to the annotation store, when there is one:
+  // the body and the headers it builds leave their annotations to it.
+  private readonly annotationOverlay: AnnotationOverlay | null;
 
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
@@ -506,6 +512,19 @@ export class TableContainer {
       // that wraps. Nothing else re-reads it until the next scroll.
       onBodyResize: () => this.tableBody?.getVirtualScroller().refresh(),
     });
+
+    // Before anything else hears the annotation store, so the grid is up to
+    // date when the session's auto-save and app code hear of a change.
+    const annotations = this.resolvedOptions.annotations;
+    this.annotationOverlay = annotations
+      ? new AnnotationOverlay({
+          store: annotations,
+          getBody: () => this.tableBody,
+          getHeader: (column) => this.headersByColumn.get(column),
+          getHeaders: () => this.columnHeaders,
+          popover: this.resolvedOptions.annotationPopover,
+        })
+      : null;
 
     // Set up resize observer
     this.resizeObserver = this.setupResizeObserver();
@@ -1336,6 +1355,7 @@ export class TableContainer {
           messages: this.messages,
           showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
           annotations: this.resolvedOptions.annotations,
+          annotationSync: this.annotationOverlay ? 'owner' : undefined,
           annotationPopover: this.resolvedOptions.annotationPopover,
           columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
           announce: (message) => this.announce(message),
@@ -1634,6 +1654,7 @@ export class TableContainer {
               mountedColumns: this.columnWindow.mountedColumns,
               // headerHeight no longer needed - body scroll only contains body
               annotations: this.resolvedOptions.annotations,
+              annotationSync: this.annotationOverlay ? 'owner' : undefined,
               annotationPopover: this.resolvedOptions.annotationPopover,
               messages: this.messages,
               fetchBlockSize: this.resolvedOptions.fetchBlockSize,
@@ -2661,6 +2682,9 @@ export class TableContainer {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // First, so no annotation change reaches a part being torn down
+    this.annotationOverlay?.destroy();
 
     // Destroy all column headers
     this.destroyColumnHeaders();

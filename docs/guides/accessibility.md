@@ -12,6 +12,7 @@ focus-trap behavior for modals.
 
 - Navigate the table entirely from the keyboard
 - Open a list, struct, map or JSON value and walk it as a tree
+- Go from one annotation to the next, and hear what each says
 - Understand the ARIA roles and live-region announcements
 - Override the ARIA labels for localization or rewording
 - Test the table with a screen reader
@@ -62,6 +63,8 @@ others the table contributes — and then:
 | `Escape` (value inspector)                             | Close the inspector; focus returns to the grid, cursor kept                  |
 | `Escape`                                               | Clear the cursor                                                             |
 | `Escape` (no cursor)                                   | Clear a chart's brush or selection, the most recent first                    |
+| `F8`, or `Alt` + `↓`                                   | Go to the next [annotation](#annotation-navigation-f8)                       |
+| `Shift` + `F8`, or `Alt` + `↑`                         | Go to the previous annotation                                                |
 | `Ctrl` + `Z` / `Cmd` + `Z`                             | Undo                                                                         |
 | `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z`         | Redo                                                                         |
 | `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)                          |
@@ -262,17 +265,74 @@ has been closed, by Cancel, `Escape`, a press outside, another panel or a
 cursor move, the column is still added and announced, but the cursor, the
 view and focus stay where the user has gone.
 
+### Annotation navigation (`F8`)
+
+When the table has [annotations](./annotations.md), `F8` moves the cursor to
+the next one and `Shift+F8` to the previous one, in the view as filtered and
+sorted; `Alt+↓` and `Alt+↑` do the same, for keyboards where `F8` is hard to
+reach (on a Mac, `F8` may need `fn`, and `Alt` is the Option key). The next
+annotation is the next annotated cell of the cursor's row, then the first
+annotated cell of the next row that has any, pinned columns first; going
+back, the last annotated cell of the previous row. A row whose annotations
+are its own, or in hidden columns, keeps the cursor's column. Column
+annotations single out no row, and are not visited. Past the last annotation
+the search goes round to the first. It visits the severities the severity
+filter shows, so it skips what the table does not paint.
+
+The keys work wherever focus is in the table: the grid, the filter bar and
+the hidden-columns gutter. They do nothing in a header's controls mode
+(`F2`), where `Alt+↑` and `Alt+↓` no longer leave the mode, and are not
+taken in column layout mode (`Shift+F2`), while a dialog or panel is open,
+or when another handler has prevented the key's default. The table takes the
+key, preventing its default, only while it holds annotations and has data
+loaded; otherwise the key stays the page's. With `annotationNavigation: false`
+the keys are always the page's, and `actions.nextAnnotation`,
+`actions.previousAnnotation` and `actions.revealRow` still work. No element
+advertises the keys with `aria-keyshortcuts`, as the grid advertises none of
+its own keys that way; this guide and the [shortcuts page](https://jeyabbalas.github.io/data-table/shortcuts/)
+list them.
+
+Landing moves the cursor and nothing else takes focus: the row scrolls to the
+middle of the view and the column into view, `aria-activedescendant` names
+the new cell, the annotation popover and the value inspector close, and the
+transient live region (`.dt-announce`) says where the cursor is and what is
+there:
+
+| Situation                                    | Announcement                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| Landed on a cell                             | "Row 1,204 of 9,880,000, age: error, value 200 exceeds maximum 150, and 2 more" |
+| Landed on a row's own annotations            | "Row 1,204 of 9,880,000: warning, duplicate record"                             |
+| The row's annotations are in a hidden column | "Row 1,204 of 9,880,000, age (hidden): error, value 200 exceeds maximum 150"    |
+| Went round the end                           | "Wrapped to the first annotation. Row 3 of 9,880,000, …"                        |
+| No annotation to go to                       | "No annotations shown"                                                          |
+
+The row counts from 1 in the view, of the rows the filters show; the first
+annotation is read with its severity and message, and the rest counted.
+`actions.nextAnnotation({ wrap: false })` says "No more annotations below"
+(or "above") at the end. Every phrase is a `messages.annotations.navigation`
+string; see [i18n → Annotations](./i18n.md#annotations).
+
+This is how a keyboard user hears annotations: the popover opens on pointer
+hover and on DOM focus entering a cell, and the grid's cursor moves
+`aria-activedescendant`, not DOM focus, so moving the cursor does not open it.
+A search far from the cursor in a large sorted view is a DuckDB query, some
+hundreds of milliseconds on ten million rows; the keys stay live meanwhile, and
+a newer press, or a cursor move, abandons the search in progress.
+
+Nothing becomes focusable, so the [five-stop census](#focus-model-single-cursor--aria-activedescendant)
+does not change.
+
 ### Focus model (single cursor + `aria-activedescendant`)
 
 Inside `.dt-root`, a loaded table has exactly **five** tab stops, in this DOM
 order, and that number never changes with the data:
 
-| Stop                                      | Why it exists                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| `.dt-filter-bar`                          | `role="toolbar"` — one roving stop for the whole bar, however many chips it holds. |
-| `.dt-grid`                                | The cursor — arrows, Home/End, PageUp/PageDown, Enter, F2, the keyboard map above. |
-| `.dt-header-scroll` and `.dt-body-scroll` | WCAG 2.1.1: a scrollable region has to be keyboard-reachable.                      |
-| `.dt-hidden-gutter`                       | `role="toolbar"` — one roving stop, however many columns are hidden.               |
+| Stop                                      | Why it exists                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `.dt-filter-bar`                          | `role="toolbar"` — one roving stop for the whole bar, however many chips it holds.     |
+| `.dt-grid`                                | The cursor — arrows, Home/End, PageUp/PageDown, Enter, F2, F8, the keyboard map above. |
+| `.dt-header-scroll` and `.dt-body-scroll` | WCAG 2.1.1: a scrollable region has to be keyboard-reachable.                          |
+| `.dt-hidden-gutter`                       | `role="toolbar"` — one roving stop, however many columns are hidden.                   |
 
 With the `derivedColumns` UI on (the default), the table has one more stop: the
 "+" add-column button (`.dt-add-column-btn`, named "Add derived column"), a
@@ -459,7 +519,11 @@ announces state changes to screen readers:
 | Row count changed (after load or clear) | "Showing N rows"                                  |
 
 The exact wording comes from `messages.a11y.*` — translate these carefully
-for non-English locales.
+for non-English locales. The second, transient region speaks what a gesture
+did: column widths and moves, the value inspector's and the extract panel's
+outcomes, and where `F8` landed (see
+[Annotation navigation](#annotation-navigation-f8)), in
+`messages.a11y`, `messages.values` and `messages.annotations.navigation`.
 
 ## Modal focus trap
 
@@ -483,13 +547,20 @@ Two non-modal popovers attach to header / cell elements. Both are
 keyboard-reachable and `Escape`-dismissable:
 
 - **Annotation popover** ([`AnnotationPopover`](../../src/table/AnnotationPopover.ts))
-  — anchored on row / cell / header elements that carry annotations.
+  — anchored on the cells and column headers that show annotations.
   `role="tooltip"` + `aria-live="polite"`. Opens on `pointerenter` /
   `focusin`; dismisses on `pointerleave` (with a 120ms grace so users
-  can move into the popover content), `focusout`, `Escape`, scroll, or
-  click outside. Severity-filtered annotations remain in the
-  underlying store but are not painted or popped while their flag is
-  off.
+  can move into the popover content), `focusout`, `Escape`, a scroll of
+  anything but itself, or click outside. It lists five annotations per
+  section and counts the rest ("+3 more"). Annotations of a severity the
+  severity filter hides are left out and counted ("2 hidden by the severity
+  filter"), and an anchor whose every annotation is hidden opens no popover.
+  Past `min(24rem, 100vh − 8px)` it scrolls, and while it overflows it is a
+  tab stop (`tabindex="0"`), so the region it scrolls can be reached and
+  scrolled from the keyboard, as axe's `scrollable-region-focusable` asks;
+  one that fits is `tabindex="-1"`. A change to its annotations updates it
+  in place, rewriting it only when what it shows changed, so it is not
+  announced again.
 - **Column-header tooltip popover** ([`ColumnHeaderTooltipPopover`](../../src/table/ColumnHeaderTooltipPopover.ts))
   — anchored on the column-name span (`.dt-col-name`). The span
   receives `tabindex="-1"` only when an override is set via
@@ -613,6 +684,7 @@ messages: {
 - **The per-column buttons are not in the tab order.** Sort, pin, hide, filter, a nested or JSON column's extract button and the derived-column `f(x)` icon are reachable through `F2` from the header row, not by tabbing. A 266-column table would otherwise put ~1,600 tab stops in front of the next control on the page.
 - **Only the columns near the view have their buttons.** Every visible column has its `columnheader`, with its label, sort state and `aria-colindex`, but the pin, hide, filter and sort buttons and the drag and resize handles exist only for the columns body rows render cells for. The cursor's column is always one of them, so `F2` always has buttons to cycle, and so is a column whose filter panel, extract panel or derived-column editor is open, so closing it gives focus back to the button that opened it. A screen reader's browse mode, reading the page rather than the grid, finds buttons only in those headers.
 - **The drag handle and the resize handle are not in the `F2` cycle either.** `ColumnHeader.getControls()` — the list `F2` walks — omits them on purpose, along with any control the responsive rules have hidden and any disabled one. A focus stop whose Enter key does nothing is worse than no stop at all, and a focusable `role="separator"` would need `aria-valuenow` / `aria-valuemin` / `aria-valuemax` to stay valid. They have their own gesture instead: [`Shift+F2`](#column-layout-mode-shiftf2), which costs no tab stop and no focus stop.
+- **`F8` and `Alt+↑` / `Alt+↓` are taken only when there are annotations.** In a table without any, the keys reach the page, the browser or the screen reader as before. In a header's controls mode they do nothing.
 - **Live-region announcements are `polite`, not `assertive`.** Long-running operations queue without interrupting the user's current read. For ops that need interruption (errors), raise your own `role="alert"` region.
 - **Hide button preserves the last-visible column.** Pressing hide on the only visible column does nothing — the table must have at least one visible column.
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
@@ -649,6 +721,7 @@ reader from each row. The test rig is the demo (`npm run dev`).
 | **Sort change** — click a column's sort button twice (toggle desc)                                                                      | live region: "sorted by NAME descending"                                                                                                                                  | same                    | same                   |
 | **Modal open** — open Export, then SQL filter, then Derived column                                                                      | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener                                                                | same                    | same                   |
 | **Annotation popover** — focus an annotated cell; trigger via pointer / focus                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
+| **Annotation navigation** — with annotations in the table, F8, F8, Shift+F8, then Alt+↓ from the filter bar                             | each press announces "Row N of M, column: severity, message"; the cursor lands on the cell; past the last, "Wrapped to the first annotation."                             | same                    | same                   |
 | **Column header tooltip** — focus a header with a tooltip set                                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
 | **Undo / redo** — Cmd/Ctrl+Z then Cmd/Ctrl+Shift+Z                                                                                      | live region announces resulting state ("0 filters active, …")                                                                                                             | same (Ctrl+Z / Ctrl+Y)  | same                   |
 
@@ -729,4 +802,4 @@ the SQL editors' modals open over it, their placeholders showing.
 - i18n: [i18n guide](./i18n.md) for translating `a11y` strings and ARIA labels
 - Theming: [Theming guide](./theming.md) for focus-outline and contrast customization
 - Migration: [v0.5 → v0.6](../migration-guides/from-0.5-to-0.6.md) if you query the table's DOM by ARIA role
-- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode), `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region, `openValueInspector`), `src/table/ValueInspector.ts`, `src/table/ExtractColumnPanel.ts` and `src/table/TreeView.ts` (the value inspector, the extract panel and their tree), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/12-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)
+- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode, `F8`), `src/annotations/AnnotationNavigator.ts` (where `F8` lands, its announcements), `src/table/AnnotationPopover.ts`, `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region, `openValueInspector`), `src/table/ValueInspector.ts`, `src/table/ExtractColumnPanel.ts` and `src/table/TreeView.ts` (the value inspector, the extract panel and their tree), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/12-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)

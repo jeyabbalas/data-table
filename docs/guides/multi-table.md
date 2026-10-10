@@ -74,7 +74,7 @@ one IndexedDB handle.
 Pass one initialized `WorkerBridge` to each `createDataTable()` via the
 `bridge` option. The library honours `ownsBridge` semantics: a table's
 `destroy()` terminates only a bridge the table created itself
-([`src/DataTable.ts:515,:1866`](../../src/DataTable.ts)). A bridge you
+([`src/DataTable.ts:526,:1921`](../../src/DataTable.ts)). A bridge you
 constructed yourself survives every table's destruction — call
 `bridge.terminate()` when you're done with the page.
 
@@ -99,6 +99,16 @@ bridge keep their tables and continue working.
   and each table's vector columns get helper tables of their own, so adding,
   editing or removing a derived column on one table leaves the other's alone,
   even when both have a vector column of the same name.
+- **So are the annotated rows.** The annotated filter and annotation
+  navigation read a DuckDB temporary table of a table's annotated rows,
+  `__dt_annot_<base table>__`
+  ([`src/annotations/annotatedRowsSource.ts`](../../src/annotations/annotatedRowsSource.ts)),
+  one per table, named from its base table, which no other table on the
+  bridge has. It is built only when one of them reads it, rebuilt when that
+  table's annotations change, and dropped with its base table: when a load
+  replaces the table, and on `destroy()`. A rebuild runs in the bridge's one
+  queue, as any query does: for a million annotated rows, 0.64–0.7 s in
+  Chrome.
 
 **Caveats (honest):**
 
@@ -222,12 +232,12 @@ sharedStore.close();
 ```
 
 Tables skip `bridge.terminate()` when they don't own the bridge
-(`ownsBridge` in `src/DataTable.ts:515,:1866`), so a shared bridge survives
+(`ownsBridge` in `src/DataTable.ts:526,:1921`), so a shared bridge survives
 both `destroy()` calls and must be terminated explicitly. Each table
 does drop its own base table from the bridge before exiting, with its
-derived columns' VIEW and helper tables, so the bridge's DuckDB catalog
-stays clean even when you destroy tables one at a time without ever
-calling `terminate()`.
+derived columns' VIEW and helper tables and the table of its annotated rows,
+so the bridge's DuckDB catalog stays clean even when you destroy tables one
+at a time without ever calling `terminate()`.
 
 Closing the store before destroying tables is benign (auto-save may skip a
 final flush) but not fatal — `SessionStore.saveSync()` silently no-ops on a

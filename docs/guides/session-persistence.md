@@ -1,15 +1,16 @@
 # Session persistence
 
 By default, `@jeyabbalas/data-table` persists your filters, sort, column
-layout, derived columns, and undo/redo stack to IndexedDB (keyed by the
-DuckDB table name) and auto-restores them next time the page loads. This
-guide covers how that works, how to opt out, how to share storage across
+layout, derived columns, undo/redo stack and annotations to IndexedDB (keyed
+by the DuckDB table name) and auto-restores them next time the page loads.
+This guide covers how that works, how to opt out, how to share storage across
 multiple tables, and how to handle environments where IndexedDB isn't
 available.
 
 ## You'll learn how to
 
 - Understand what gets persisted and when
+- Know where annotations are kept, and when they are written
 - Opt out of persistence entirely or per-feature
 - Share a `SessionStore` across multiple table instances
 - Handle IndexedDB unavailability (private browsing, storage blocked)
@@ -24,17 +25,17 @@ available.
 
 A session snapshot is a JSON-serializable object keyed by `tableName`:
 
-| Field                                                                                | Content                                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `filters`                                                                            | All active filters (Dates wrapped as `{ __date__: ISO8601 }`)                                                                                                                                  |
-| `sortColumns`                                                                        | Current sort priorities                                                                                                                                                                        |
-| `visibleColumns`, `columnOrder`, `pinnedColumns`, `columnWidths`, `hiddenColumnInfo` | Column layout state                                                                                                                                                                            |
-| `derivedColumns`                                                                     | Expression and vector column definitions                                                                                                                                                       |
-| `undoStack`, `redoStack`                                                             | Undo/redo history                                                                                                                                                                              |
-| `vectorValuePool`                                                                    | Deduplicated vector column values shared across undo entries                                                                                                                                   |
-| `filterPresets`                                                                      | Saved filter presets                                                                                                                                                                           |
-| `annotations`                                                                        | Full `AnnotationFile` written by `table.annotations.toJSON()` — every annotation (row / column / cell) plus unknown app-defined fields. See the [annotations guide](./annotations.md).         |
-| `columnHeaderTooltips`                                                               | Per-column structured tooltip content (`{ title?, description?, items? }`) attached via `actions.setColumnHeaderTooltip`. See the [column-header tooltips guide](./column-header-tooltips.md). |
+| Field                                                                                | Content                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filters`                                                                            | All active filters (Dates wrapped as `{ __date__: ISO8601 }`)                                                                                                                                                                |
+| `sortColumns`                                                                        | Current sort priorities                                                                                                                                                                                                      |
+| `visibleColumns`, `columnOrder`, `pinnedColumns`, `columnWidths`, `hiddenColumnInfo` | Column layout state                                                                                                                                                                                                          |
+| `derivedColumns`                                                                     | Expression and vector column definitions                                                                                                                                                                                     |
+| `undoStack`, `redoStack`                                                             | Undo/redo history                                                                                                                                                                                                            |
+| `vectorValuePool`                                                                    | Deduplicated vector column values shared across undo entries                                                                                                                                                                 |
+| `filterPresets`                                                                      | Saved filter presets                                                                                                                                                                                                         |
+| `annotations`                                                                        | Full `AnnotationFile` written by `table.annotations.toJSON()` — every annotation (row / column / cell) plus unknown app-defined fields. Kept in a database of its own; see [below](#annotations-in-a-database-of-their-own). |
+| `columnHeaderTooltips`                                                               | Per-column structured tooltip content (`{ title?, description?, items? }`) attached via `actions.setColumnHeaderTooltip`. See the [column-header tooltips guide](./column-header-tooltips.md).                               |
 
 Other state (hovered row, focused cell, row selection) is transient and not
 persisted.
@@ -43,7 +44,8 @@ The snapshot schema version (`SNAPSHOT_VERSION`, currently `5`) sits at the
 top. On load, older versions are upgraded transparently — pre-v5 snapshots
 load with empty `annotations` and absent `columnHeaderTooltips`, no error.
 Unknown filter types from a newer version are silently dropped with a warning
-to the console.
+to the console. `SessionStore.load()` returns a snapshot with its annotations
+in `annotations`, wherever they were stored.
 
 ## Default behavior
 
@@ -58,8 +60,8 @@ const table = await createDataTable({
 
 On mount:
 
-1. Open IndexedDB database `dt-sessions`
-2. Look up a snapshot by `tableName` (here, `'trips'`)
+1. Open the IndexedDB databases `dt-sessions` and `dt-annotations`
+2. Look up a snapshot by `tableName` (here, `'trips'`), and its annotations
 3. If one exists, restore filters/sort/columns/derived after data load. With
    derived columns, the filters, sort and columns are restored in one change
    with them: a filter or sort that names a derived column is read and
@@ -70,7 +72,8 @@ On mount:
    [Derived columns → Validation](./derived-columns.md#validation)), and a
    base column of the same name keeps its place. An exact filter on a JSON
    column saved without a `valueType`, as before 0.9, is given
-   `valueType: 'text'`, in the undo and redo entries too
+   `valueType: 'text'`, in the undo and redo entries too. An annotated
+   filter keeps the annotated rows of the table it comes back to
 4. Subsequent mutations auto-save on a debounced timer
 
 On unmount (call `table.destroy()`): the auto-save flushes a final snapshot.
@@ -117,6 +120,94 @@ same-`tableName` path.
 `clearSession` follows the same ownership rule: it clears the
 `FilterPresetManager` only when this DataTable owns it, so a multi-table
 dashboard's shared presets survive when one table is wiped.
+
+## Annotations in a database of their own
+
+A table's annotations are not stored in its session record. They go to a
+second IndexedDB database, `dt-annotations`, under the same table name, and
+are written only when they change, so that saving a sort or a column width
+does not copy a million annotations again.
+
+| Database         | Store         | Key                         | Holds                                                                                                                     |
+| ---------------- | ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `dt-sessions`    | `sessions`    | `tableName`                 | The session snapshot, without its annotations, and a marker in their place: `__annotations: { format: 1, count, owner }`. |
+| `dt-annotations` | `annotations` | `tableName`                 | The head: `{ format: 1, owner, count, chunks, file }`, `file` being the `AnnotationFile` without its `annotations` array. |
+| `dt-annotations` | `chunks`      | `[tableName, owner, index]` | The annotations, in slices of at most 10,000 annotations or about 8 MiB.                                                  |
+
+`owner` is a token made for each write of the annotations and copied into the
+marker of the session record saved with it. `SessionStore.load()` strips the
+marker, and attaches the annotations only when the head's `owner` and
+`count` match it.
+
+**When they are written.** `AutoSave` hands the store the same annotation
+file object from one save to the next until the annotations change, and the
+store writes the annotations only when the file is not the one it last
+wrote or read:
+
+- A save after a sort, filter, width or severity-filter change writes the
+  session record alone, and nothing to `dt-annotations`: 0.2–0.3 ms in
+  Chromium with a million annotations, where serializing and cloning them all
+  took about 1.2 s (Node) before.
+- A save after the annotations change writes them in one readwrite
+  transaction: it deletes the table's chunks, puts the new ones, each once
+  the one before it is stored, then the head. A failure aborts the whole
+  transaction, and the previous head and chunks stay as they were. A million
+  annotations take 100 chunks: 0.48–0.5 s in Chromium, no task over 16 ms.
+- `saveSync()`, which runs when the page is hidden or unloaded, puts every
+  chunk at once, when the annotations changed since the last write: one task
+  of 0.43–0.46 s at a million.
+- A reload restores the annotations and writes nothing back until they
+  change. Reading a million took 0.57–0.61 s in Chromium, most of it one
+  `getAll` of the chunks, and restoring them 0.70–0.73 s.
+- Emptying the store (`table.annotations.clear()`) deletes the record at the
+  next save, and so does a save of a table whose record an older version's
+  `clearSession()` left behind.
+
+The chunks are there because Chromium refuses any single IndexedDB value
+over 133,169,152 bytes (127 MiB), and a million annotations of about 167
+bytes each pass that in one value. A chunk can reach it only with some 13 KB
+an annotation in parts its size estimate cannot see, such as a `Blob` in
+`metadata`.
+
+**When they are not restored.** The rest of the session restores, and the
+table emits a `warning` coded `PERSISTENCE_ANNOTATIONS_DROPPED`, with
+`details: { tableName, reason, count? }`, `count` being how many the session
+was saved with, when known:
+
+| `reason`        | Cause                                                                                                                                                                                                                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'missing'`     | The session names annotations, but no record of them is there: another tab cleared the session while this one saved, or their first write did not land.                                                              |
+| `'mismatch'`    | The record is from another save: the page closed after the session record was written and before the annotations landed, or another tab saved the same table. The annotations saved before stay on disk, unrestored. |
+| `'invalid'`     | A malformed head, chunk or marker, or a file `loadJSON` refused, whose code and message are in `details.errorCode` and `details.errorMessage`.                                                                       |
+| `'unavailable'` | `dt-annotations` could not be read.                                                                                                                                                                                  |
+
+**Writes that fail.** The annotations have a circuit breaker of their own.
+A quota error on them stops their saves at once; any other failure is
+reported and retried by the next save, and a second one in a row stops
+them. Each is reported once, as an `error` event with
+`source: 'persistence'` and `details.record: 'annotations'`. The session
+keeps saving without the annotations, and their record is deleted, so a
+reload restores the session without them, and without a warning;
+`clearSession()` or a reload starts their saves again.
+
+**Older sessions and older versions.**
+
+- A session saved by 0.9 or earlier holds its annotations inside the session
+  record. It restores them, and the next save moves them to `dt-annotations`.
+  Annotations inside a session record always win over a separate record.
+- `dt-sessions` keeps its version, 1, and `SNAPSHOT_VERSION` stays 5, so a
+  tab running an older version keeps its connection and keeps saving. An
+  older version reading a session saved this way restores all of it but the
+  annotations, which it does not look for, and an annotated filter, which it
+  drops with a console warning.
+- When `dt-annotations` cannot be opened, annotations are saved inside the
+  session record, as before.
+
+**Custom stores.** An object of your own passed as
+`persistence.sessionStore` receives whole snapshots, annotations included,
+and gets the same `annotations` object from one save to the next until they
+change: compare it by identity to skip writing them again, and treat it as
+read-only.
 
 ## Opting out
 
@@ -233,7 +324,8 @@ await table.clearSession();
 
 Effect:
 
-- IDB record for `tableName` deleted (if persistence enabled)
+- IDB records for `tableName` deleted, the session's and its annotations'
+  head and chunks (if persistence enabled)
 - Filters, sort, column layout, derived columns reset
 - Undo/redo stacks cleared
 - Query cache flushed
@@ -242,7 +334,7 @@ Effect:
   (i.e. you didn't pass a shared `presets: { manager }`)
 - The DuckDB table is **not** dropped — its rows remain queryable via
   `bridge.query()` until the next `loadData()` (or `destroy()` on a
-  shared bridge) evicts it. Use `bridge.dropTable(tableName)` to
+  shared bridge) evicts it, with the temporary table of its annotated rows. Use `bridge.dropTable(tableName)` to
   release that worker memory immediately if you need to. The derived
   columns' VIEW and helper tables are dropped, and `derivedChange` fires
   when there were any.
@@ -327,11 +419,11 @@ useEffect(() => {
 ## Gotchas
 
 - **Two tables with the same `tableName` overwrite each other's sessions.** Pick unique names, or share the store and accept the overwrite.
-- **Two tabs of the same app race on the IDB row.** Two browser tabs that mount a table with the same `tableName` against the same `dt-sessions` database both open their own `SessionStore` and write debounced snapshots. There is no cross-tab coordination (no `BroadcastChannel`, no IDB observer): whichever tab's debounced save lands second wins, and the other tab's most-recent edits are lost on reload. Practical mitigations: scope `tableName` per-tab (e.g. include a tab id or session id), avoid sharing the same `tableName` across tabs that are likely to be edited concurrently, or accept last-writer-wins as the documented contract. A future Phase-9-or-later release may add `BroadcastChannel` coordination; until then, treat IDB session state as single-writer.
+- **Two tabs of the same app race on the IDB row.** Two browser tabs that mount a table with the same `tableName` against the same `dt-sessions` database both open their own `SessionStore` and write debounced snapshots. There is no cross-tab coordination (no `BroadcastChannel`, no IDB observer): whichever tab's debounced save lands second wins, and the other tab's most-recent edits are lost on reload. Practical mitigations: scope `tableName` per-tab (e.g. include a tab id or session id), avoid sharing the same `tableName` across tabs that are likely to be edited concurrently, or accept last-writer-wins as the documented contract. A future Phase-9-or-later release may add `BroadcastChannel` coordination; until then, treat IDB session state as single-writer. With annotations, a session record one tab saves can name annotations the other tab has since replaced: the next reload then restores the session without annotations, with a `PERSISTENCE_ANNOTATIONS_DROPPED` warning (`'mismatch'`).
 - **`SessionStore` is a thin IDB wrapper — it never throws.** On failure (closed DB, blocked storage) it resolves with `null` / `false`. Check return values and listen for `warning`.
 - **`saveSync()` requires the DB to already be open.** It's a no-op until after `await store.open()` resolves. The library opens the DB during `createDataTable()` init.
 - **Snapshot size grows with derived vectors.** A 1M-row vector column adds ~MBs per snapshot. Use expression columns when possible; otherwise, accept the cost.
-- **IDB quotas vary by browser.** Safari is stingiest. Prune old sessions if you mount many. When a save trips `QuotaExceededError`, AutoSave latches a one-shot circuit-breaker: the consumer's `onError` (or the facade's `error` event with `source: 'persistence'`) fires exactly once for that quota episode, and subsequent state mutations skip the save attempt. Calling `actions.clearSession()` (which deletes the snapshot) re-arms the breaker — saves resume on the next debounce tick.
+- **IDB quotas vary by browser.** Safari is stingiest. Prune old sessions if you mount many. When a save trips `QuotaExceededError`, AutoSave latches a one-shot circuit-breaker: the consumer's `onError` (or the facade's `error` event with `source: 'persistence'`) fires exactly once for that quota episode, and subsequent state mutations skip the save attempt. Calling `actions.clearSession()` (which deletes the snapshot) re-arms the breaker — saves resume on the next debounce tick. A quota error on the annotations alone (`details.record: 'annotations'`) stops only their saves: see [Annotations in a database of their own](#annotations-in-a-database-of-their-own).
 - **Private browsing silently fails.** No error, no exception — just a `warning` event. Your UI should handle the no-persist case gracefully.
 - **Session restore happens _after_ data load.** Filters/sort don't apply during the load progress stage; they snap into place on `loadComplete`.
 - **A snapshot that cannot be read is skipped.** If a `SessionStore` hands back a snapshot whose fields are malformed, the load logs `[data-table] Could not restore the saved session; loading without it` to the console and goes ahead with the fresh state, rather than rejecting.
@@ -342,4 +434,4 @@ useEffect(() => {
 - Multi-table: [Multi-table dashboards](./multi-table.md) for shared-store patterns
 - Troubleshooting: [IndexedDB persistence failing](../troubleshooting.md)
 - API reference: [`persistence` option](../api-reference.md#createdatatable), [`SessionStore`](../api-reference.md#sessionstore)
-- Source: `src/persistence/SessionStore.ts:1-443`, `src/persistence/types.ts`, `src/persistence/AutoSave.ts`
+- Source: `src/persistence/SessionStore.ts`, `src/persistence/annotationPersistence.ts`, `src/persistence/types.ts`, `src/persistence/AutoSave.ts`

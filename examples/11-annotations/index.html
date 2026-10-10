@@ -64,12 +64,20 @@
           <h2>About</h2>
           <p>
             <code>table.annotations</code> marks rows, columns and cells as errors, warnings or
-            info: each gets a tint, and a popover lists the annotations where you hover, grouped by
-            scope.
+            info: each gets a tint, a popover lists the annotations where you hover, grouped by
+            scope, and <kbd>F8</kbd> takes the cursor from one to the next.
           </p>
           <ol>
             <li>Click a scenario (A–E) to add a specific set of annotations.</li>
-            <li>Hover or keyboard-focus an annotated cell or header to open the popover.</li>
+            <li>Hover an annotated cell or header to open the popover.</li>
+            <li>
+              Click in the table and press <kbd>F8</kbd> or <kbd>Shift</kbd> + <kbd>F8</kbd> (<kbd
+                >Alt</kbd
+              >
+              + <kbd>↓</kbd> or <kbd>↑</kbd>) to go to the next or previous one.
+            </li>
+            <li>Add 100,000 annotations, then scroll, sort and filter.</li>
+            <li>Click an error in the list to bring its cell into view.</li>
             <li>
               Toggle the severity filter checkboxes to hide a severity's tints without changing the
               store.
@@ -95,6 +103,35 @@
             Each scenario clears existing annotations first so they don't accumulate.
             <strong>Clear all</strong> empties the store directly.
           </p>
+        </section>
+
+        <section>
+          <h2>Scale</h2>
+          <button id="btn-add-100k">Add 100,000 annotations</button>
+          <p class="note" id="scale-status">
+            90% on cells, 9% on rows and 1% on columns, in one <code>addMany</code>. Each click adds
+            100,000 more.
+          </p>
+        </section>
+
+        <section>
+          <h2>Navigate</h2>
+          <div class="row">
+            <button id="btn-prev">← Previous</button>
+            <button id="btn-next">Next →</button>
+          </div>
+          <label><input id="only-annotated" type="checkbox" /> Show only the annotated rows</label>
+          <p class="note" id="nav-status">
+            <code>actions.previousAnnotation()</code> and <code>nextAnnotation()</code>, as
+            <kbd>Shift</kbd> + <kbd>F8</kbd> and <kbd>F8</kbd>; the checkbox calls
+            <code>showAnnotatedRows()</code>.
+          </p>
+        </section>
+
+        <section>
+          <h2>Errors</h2>
+          <ol id="issues"></ol>
+          <p class="note" id="issues-status">No errors yet.</p>
         </section>
 
         <section>

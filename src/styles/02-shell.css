@@ -1,6 +1,6 @@
 /*
- * Shell — root container, header area, filter bar, gutter labels,
- * hidden-columns gutter, body-scroll wrapper. Precedes columns / modals /
+ * Shell — root container, header area, filter bar, chip strips, gutter
+ * labels, hidden-columns gutter, body-scroll wrapper. Precedes columns / modals /
  * grid / filters / export / responsive in cascade order.
  */
 
@@ -112,14 +112,19 @@
   position: relative;
   z-index: var(--dt-z-filter-bar, 40);
   display: flex;
-  align-items: center;
+  /* Baseline, not center: the label lines up with the chips' text whether or
+     not a scrollbar sits under them. The hidden gutter does the same. */
+  align-items: baseline;
   gap: 0.5rem;
   padding: 0.375rem 0.75rem;
   border-bottom: 1px solid var(--dt-border);
   background: var(--dt-bg);
   flex-shrink: 0;
   overflow: hidden;
-  max-height: 50px;
+  /* Room for one row of chips and the scrollbar under it, in rem as the chips
+     are: in px it clipped the scrollbar at a larger root font size. Only the
+     collapse transition reads it. */
+  max-height: 4rem;
   transition:
     max-height 0.2s ease,
     padding 0.2s ease,
@@ -133,33 +138,80 @@
   border-bottom-color: transparent;
 }
 
-.dt-filter-chips {
+/* ===========================================
+   Chip Strips (shared by filter bar and hidden gutter)
+   =========================================== */
+
+/* Each toolbar's chips sit in one row that scrolls sideways once it is wider
+   than the table. The toolbar's buttons scroll with them, as the row's sticky
+   end, rather than sitting beside it: a roving tabindex leaves one control in
+   the tab order, and a region that overflows has to hold it, or axe's
+   `scrollable-region-focusable` fails. */
+.dt-filter-scroll,
+.dt-hidden-scroll {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
   flex: 1;
   min-width: 0;
+  /* Room inside the clip for a focus ring (2px, 1px out), borrowed from the
+     toolbar's padding so the toolbar keeps its height. */
+  padding-block: 3px;
+  margin-block: -3px;
   overflow-x: auto;
+  overflow-y: hidden;
+  /* Passed on to the sticky end, which hides the chips beneath it. */
+  background-color: inherit;
   scrollbar-width: thin;
   scrollbar-color: var(--dt-border) transparent;
 }
 
-/* Thin scrollbar for chips container (WebKit/Blink) */
-.dt-filter-chips::-webkit-scrollbar {
+/* Thin scrollbar for the row (WebKit/Blink) */
+.dt-filter-scroll::-webkit-scrollbar,
+.dt-hidden-scroll::-webkit-scrollbar {
   height: 4px;
 }
 
-.dt-filter-chips::-webkit-scrollbar-track {
+.dt-filter-scroll::-webkit-scrollbar-track,
+.dt-hidden-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.dt-filter-chips::-webkit-scrollbar-thumb {
+.dt-filter-scroll::-webkit-scrollbar-thumb,
+.dt-hidden-scroll::-webkit-scrollbar-thumb {
   background: var(--dt-border);
   border-radius: 2px;
 }
 
-.dt-filter-chips::-webkit-scrollbar-thumb:hover {
+.dt-filter-scroll::-webkit-scrollbar-thumb:hover,
+.dt-hidden-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--dt-text-tertiary);
+}
+
+.dt-filter-chips,
+.dt-hidden-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  /* Fills the row, so its end sits at the far edge until the chips overflow. */
+  flex: 1 0 auto;
+}
+
+/* The toolbar's buttons, pinned to the row's end while the chips scroll
+   beneath them. */
+.dt-filter-actions,
+.dt-hidden-actions {
+  position: sticky;
+  inset-inline-end: 0;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 0.5rem;
+  flex: none;
+  /* The toolbar's gap between the chips and its buttons, opaque so that a
+     chip passing beneath stops short of them; then room for the last
+     button's focus ring. */
+  padding-inline: 0.5rem 3px;
+  background-color: inherit;
 }
 
 .dt-filter-chip {
@@ -333,29 +385,21 @@
   position: relative;
   z-index: var(--dt-z-header, 21);
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.5rem;
   padding: 0.375rem 0.75rem;
   border-top: 1px solid var(--dt-border);
   background: var(--dt-bg);
   flex-shrink: 0;
-  flex-wrap: wrap;
+  /* One row, as the filter bar's: its chips scroll sideways in
+     `.dt-hidden-scroll` (Chip Strips, above) however many are hidden. It
+     used to wrap them onto rows, up to 200px of the table's height. */
   overflow: hidden;
-  max-height: 200px;
+  max-height: 4rem;
   transition:
     max-height 0.2s ease,
     padding 0.2s ease,
     border-top-color 0.2s ease;
-}
-
-/* Past `max-height` the chips still have to be reachable: the roving tabindex
-   scrolls the keyboard cursor into view, but `overflow: hidden` leaves a
-   pointer user no way in. Scoped off the collapsed state so no scrollbar
-   flashes through the transition. axe's `scrollable-region-focusable` is
-   satisfied by the chips themselves — `tabindex` here would put back the tab
-   stop this work removes. */
-.dt-hidden-gutter:not(.dt-hidden-gutter--hidden) {
-  overflow: hidden auto;
 }
 
 .dt-hidden-gutter--hidden {
@@ -363,15 +407,6 @@
   padding-top: 0;
   padding-bottom: 0;
   border-top-color: transparent;
-}
-
-.dt-hidden-chips {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 0;
 }
 
 .dt-hidden-chip {
@@ -387,6 +422,7 @@
   max-width: 280px;
   white-space: nowrap;
   line-height: 1.4;
+  flex-shrink: 0;
 }
 
 .dt-hidden-chip-name {

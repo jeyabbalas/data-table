@@ -73,6 +73,13 @@
     padding: 0.25rem 0.5rem;
   }
 
+  /* The toolbars' pinned buttons: the same tighter spacing */
+  .dt-filter-actions,
+  .dt-hidden-actions {
+    gap: 0.25rem;
+    padding-inline-start: 0.25rem;
+  }
+
   /* Filter chips: further reduced */
   .dt-filter-chip {
     max-width: 140px;

@@ -288,9 +288,22 @@ hidden column and the filter bar one per chip, so the count grew with use.
 The two toolbars follow the
 [APG roving-tabindex model](https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/):
 exactly one control inside carries `tabindex="0"`, the rest carry `-1`, and `←`
-/ `→` (plus `↑` / `↓` in the gutter, which wraps onto several rows) move that
-stop between them, with `Home` / `End` jumping to the ends. Tab enters and
-leaves the toolbar; it never walks through it.
+/ `→` move that stop between them, with `Home` / `End` jumping to the ends. Tab
+enters and leaves the toolbar; it never walks through it.
+
+Each toolbar holds its chips in one row that scrolls sideways once it is wider
+than the table (`.dt-filter-scroll`, `.dt-hidden-scroll`), with its other
+buttons ("Clear all", "Expression", "Presets"; "Show all") pinned at the row's
+end while the chips pass beneath them. Those buttons are inside the row, not
+beside it, so the toolbar's one stop is always inside the region that scrolls,
+wherever it rests: axe's `scrollable-region-focusable` asks that of a region
+that overflows. The stop moving onto a chip, by an arrow key or by Tab, scrolls
+the row the least distance that shows the whole chip clear of the pinned
+buttons; focus from a pointer press scrolls nothing, so the click still lands.
+A chip that removes itself with its own button hands the stop, and focus, to the
+chip after it, or before it at the end of the row, so the row stays where the
+user was. A chip a change adds out of view is scrolled to smoothly, or at once
+under `prefers-reduced-motion: reduce`; a chip changed or removed moves nothing.
 
 Landing on a scroll region is not a mode. The first cursor key pressed there
 hands focus to `.dt-grid` and moves the cursor as usual, so there is no state to
@@ -386,7 +399,7 @@ tooltip popovers that open on `focusin`, are left alone.
 | SQL filter modal, export dialog, derived-column modal | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` its title                                      |
 | Null filter toggle group                              | `role="radiogroup"`                                                                                    |
 | Filter bar (`.dt-filter-bar`)                         | `role="toolbar"`, `aria-label`, roving tabindex (horizontal)                                           |
-| Hidden-columns gutter (`.dt-hidden-gutter`)           | `role="toolbar"`, `aria-label`, roving tabindex (both axes)                                            |
+| Hidden-columns gutter (`.dt-hidden-gutter`)           | `role="toolbar"`, `aria-label`, roving tabindex (horizontal)                                           |
 | Column resizer handle                                 | `role="separator"`, `aria-orientation="vertical"`, never focusable                                     |
 | Live-region announcers (two)                          | `role="status"` with `aria-live="polite"`, `aria-atomic="true"`                                        |
 

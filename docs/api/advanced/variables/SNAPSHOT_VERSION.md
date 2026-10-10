@@ -8,6 +8,6 @@
 
 > `const` **SNAPSHOT\_VERSION**: `5` = `5`
 
-Defined in: [persistence/types.ts:21](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L21)
+Defined in: [persistence/types.ts:21](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/persistence/types.ts#L21)
 
 Current snapshot schema version — bump when the shape changes

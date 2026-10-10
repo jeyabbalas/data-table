@@ -6,7 +6,7 @@
 
 # Interface: DuckDBMapTypeNode
 
-Defined in: [core/duckdbType.ts:175](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L175)
+Defined in: [core/duckdbType.ts:175](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L175)
 
 A MAP: `MAP(VARCHAR, INTEGER)`.
 
@@ -28,7 +28,7 @@ if (node.kind === 'map') {
 
 > `readonly` **key**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:178](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L178)
+Defined in: [core/duckdbType.ts:178](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L178)
 
 ***
 
@@ -36,7 +36,7 @@ Defined in: [core/duckdbType.ts:178](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **kind**: `"map"`
 
-Defined in: [core/duckdbType.ts:176](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L176)
+Defined in: [core/duckdbType.ts:176](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L176)
 
 ***
 
@@ -44,7 +44,7 @@ Defined in: [core/duckdbType.ts:176](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:177](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L177)
+Defined in: [core/duckdbType.ts:177](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L177)
 
 ***
 
@@ -52,4 +52,4 @@ Defined in: [core/duckdbType.ts:177](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **value**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:179](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L179)
+Defined in: [core/duckdbType.ts:179](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L179)

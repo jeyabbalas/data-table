@@ -6,7 +6,7 @@
 
 # Interface: ExpressionEditorConfig
 
-Defined in: [derived/ExpressionEditorTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/derived/ExpressionEditorTypes.ts#L46)
+Defined in: [derived/ExpressionEditorTypes.ts:46](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/derived/ExpressionEditorTypes.ts#L46)
 
 The placeholder and accessible name a dialog gives its expression editor,
 from the table's `messages`: `derived.expressionPlaceholder` and
@@ -24,7 +24,7 @@ gets it as its 3rd.
 
 > `optional` **ariaLabel?**: `string`
 
-Defined in: [derived/ExpressionEditorTypes.ts:54](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/derived/ExpressionEditorTypes.ts#L54)
+Defined in: [derived/ExpressionEditorTypes.ts:54](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/derived/ExpressionEditorTypes.ts#L54)
 
 The editor's accessible name, the text of the label above it. The
 bundled editors replace an empty one with their default, since an
@@ -36,6 +36,6 @@ editor without a name is an unnamed text box to a screen reader.
 
 > `optional` **placeholder?**: `string`
 
-Defined in: [derived/ExpressionEditorTypes.ts:48](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/derived/ExpressionEditorTypes.ts#L48)
+Defined in: [derived/ExpressionEditorTypes.ts:48](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/derived/ExpressionEditorTypes.ts#L48)
 
 Shown while the editor is empty. An empty string shows none.

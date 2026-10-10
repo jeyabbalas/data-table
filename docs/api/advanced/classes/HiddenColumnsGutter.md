@@ -6,17 +6,22 @@
 
 # Class: HiddenColumnsGutter
 
-Defined in: [table/HiddenColumnsGutter.ts:34](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/HiddenColumnsGutter.ts#L34)
+Defined in: [table/HiddenColumnsGutter.ts:40](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L40)
 
 HiddenColumnsGutter renders a horizontal bar of chips for hidden columns.
 It auto-shows when columns are hidden and collapses when all are visible.
 
+The chips sit in one row, in the table's column order, which scrolls
+sideways once it is wider than the table, with "Show all" pinned at its end.
+A chip that hiding a column adds is scrolled into view, smoothly; hiding
+several at once scrolls to the right-most of them.
+
 The gutter is a `role="toolbar"` with the APG roving-tabindex treatment, so
 it is a single tab stop no matter how many columns are hidden — hiding 250
 of a 266-column table used to put 251 tab stops in front of the rest of the
-page, most of them clipped out of sight by the gutter's `max-height`. All
-four arrow keys move the stop (the chips wrap onto several rows), `Home` /
-`End` jump to the ends, and the movement wraps.
+page. `←` / `→` move the stop, `Home` / `End` jump to the ends, and the
+movement wraps. Restoring a column with its chip's own button leaves the
+stop, and focus, on the chip next to it.
 
 ## Constructors
 
@@ -24,7 +29,7 @@ four arrow keys move the stop (the chips wrap onto several rows), `Home` /
 
 > **new HiddenColumnsGutter**(`state`, `actions`, `options?`): `HiddenColumnsGutter`
 
-Defined in: [table/HiddenColumnsGutter.ts:44](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/HiddenColumnsGutter.ts#L44)
+Defined in: [table/HiddenColumnsGutter.ts:54](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L54)
 
 #### Parameters
 
@@ -50,7 +55,7 @@ Defined in: [table/HiddenColumnsGutter.ts:44](https://github.com/jeyabbalas/data
 
 > **destroy**(): `void`
 
-Defined in: [table/HiddenColumnsGutter.ts:187](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/HiddenColumnsGutter.ts#L187)
+Defined in: [table/HiddenColumnsGutter.ts:258](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L258)
 
 Destroy and clean up
 
@@ -64,7 +69,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/HiddenColumnsGutter.ts:180](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/HiddenColumnsGutter.ts#L180)
+Defined in: [table/HiddenColumnsGutter.ts:251](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L251)
 
 Get the gutter's DOM element
 

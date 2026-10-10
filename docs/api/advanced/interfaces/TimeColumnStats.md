@@ -6,7 +6,7 @@
 
 # Interface: TimeColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:97](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L97)
+Defined in: [statistics/ColumnStatsTypes.ts:97](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L97)
 
 Stats for time columns.
 Line 2: "08:00 – 23:45"
@@ -21,7 +21,7 @@ Line 2: "08:00 – 23:45"
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -35,7 +35,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"time"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:98](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L98)
+Defined in: [statistics/ColumnStatsTypes.ts:98](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L98)
 
 ***
 
@@ -43,7 +43,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:98](https://github.com/jeyabbalas/da
 
 > **maxSeconds**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:102](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L102)
+Defined in: [statistics/ColumnStatsTypes.ts:102](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L102)
 
 Maximum time as seconds from midnight, or null if all null
 
@@ -53,7 +53,7 @@ Maximum time as seconds from midnight, or null if all null
 
 > **minSeconds**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:100](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L100)
+Defined in: [statistics/ColumnStatsTypes.ts:100](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L100)
 
 Minimum time as seconds from midnight, or null if all null
 
@@ -63,7 +63,7 @@ Minimum time as seconds from midnight, or null if all null
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -77,7 +77,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -91,7 +91,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

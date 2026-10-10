@@ -6,7 +6,7 @@
 
 # Interface: DuckDBStructField
 
-Defined in: [core/duckdbType.ts:130](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L130)
+Defined in: [core/duckdbType.ts:130](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L130)
 
 One field of a STRUCT.
 
@@ -27,7 +27,7 @@ if (unnamed.kind === 'struct') unnamed.fields.map((f) => f.name); // [null, null
 
 > `readonly` **name**: `string` \| `null`
 
-Defined in: [core/duckdbType.ts:138](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L138)
+Defined in: [core/duckdbType.ts:138](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L138)
 
 The field's name: `null` for a field of an unnamed struct
 (`STRUCT(INTEGER, VARCHAR)`, what `row(1, 'a')` makes), `''` for a
@@ -41,4 +41,4 @@ the JSON `{"b": 2, "": 1}`.
 
 > `readonly` **type**: [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:139](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L139)
+Defined in: [core/duckdbType.ts:139](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L139)

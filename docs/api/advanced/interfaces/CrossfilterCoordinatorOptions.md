@@ -6,7 +6,7 @@
 
 # Interface: CrossfilterCoordinatorOptions
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:42](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/visualizations/CrossfilterCoordinator.ts#L42)
+Defined in: [visualizations/CrossfilterCoordinator.ts:42](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/visualizations/CrossfilterCoordinator.ts#L42)
 
 Optional hooks the facade can pass into the coordinator. `onFilterCycleComplete`
 fires for a filter cycle as soon as its async row-count query has settled,
@@ -21,7 +21,7 @@ count and can take seconds longer on a large table.
 
 > `optional` **onFilterCycleComplete?**: (`filters`) => `void`
 
-Defined in: [visualizations/CrossfilterCoordinator.ts:43](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/visualizations/CrossfilterCoordinator.ts#L43)
+Defined in: [visualizations/CrossfilterCoordinator.ts:43](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/visualizations/CrossfilterCoordinator.ts#L43)
 
 #### Parameters
 

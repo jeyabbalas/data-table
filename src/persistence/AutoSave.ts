@@ -26,9 +26,10 @@ import { PersistenceError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
-import { classifyPersistenceFailure } from './persistenceErrors';
+import { classifyPersistenceFailure, isAnnotationsWriteFailure } from './persistenceErrors';
 import { snapshotFromState } from './serialization';
 import type { SessionStore } from './SessionStore';
+import type { SessionSnapshot } from './types';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
 
@@ -45,6 +46,11 @@ export interface AutoSaveOptions {
    * Invoked when a snapshot save fails (e.g., IndexedDB quota exceeded,
    * transaction aborted). If omitted, save failures are swallowed —
    * the facade wires this to emit an `error` event with `source: 'persistence'`.
+   *
+   * A quota error stops the saves until the next `enable()`. One on the
+   * table's annotations record alone (`details.record: 'annotations'`) is
+   * reported once and stops only the annotations: the session keeps saving
+   * without them.
    */
   onError?: ((error: PersistenceError) => void) | undefined;
 }
@@ -73,6 +79,12 @@ export class AutoSave {
   // Without this, a constrained tab would emit one PersistenceError per
   // debounce tick for as long as the user kept mutating state.
   private quotaExceeded = false;
+  // The same, for the annotations record alone: a `QuotaExceededError` on
+  // it is reported once, and saves then go without annotations — the
+  // session record keeps saving, and `SessionStore` deletes the annotations
+  // record it no longer names. A million annotations can outgrow a quota
+  // the rest of the session fits in many times over.
+  private annotationsQuotaExceeded = false;
 
   constructor(
     private state: TableState,
@@ -96,9 +108,10 @@ export class AutoSave {
     if (this.unsubscribes.length > 0) return;
 
     // A fresh enable() (after disable() or first activation) resets the
-    // quota circuit-breaker. clearSession() runs disable→delete→enable, so
+    // quota circuit-breakers. clearSession() runs disable→delete→enable, so
     // this naturally re-arms saves after the consumer freed up space.
     this.quotaExceeded = false;
+    this.annotationsQuotaExceeded = false;
 
     const signals = [
       this.state.filters,
@@ -124,7 +137,8 @@ export class AutoSave {
     // Subscribe to annotation-store changes. The store's `on('change', …)`
     // API returns a plain unsubscribe function matching our signal contract.
     // `filterChanged` toggles are visual-only but persisted in the snapshot
-    // (annotationSeverityFilter), so they need to schedule a save too.
+    // (annotationSeverityFilter), so they need to schedule a save too: one
+    // that leaves the annotations record alone, their content unchanged.
     if (this.annotationStore) {
       this.unsubscribes.push(this.annotationStore.on('change', () => this.scheduleSave()));
     }
@@ -232,12 +246,7 @@ export class AutoSave {
     if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(
-      this.state,
-      this.undoManager,
-      this.presetManager,
-      this.annotationStore,
-    );
+    const snapshot = this.snapshot();
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
       if (result && typeof result.then === 'function') {
@@ -259,12 +268,7 @@ export class AutoSave {
     if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(
-      this.state,
-      this.undoManager,
-      this.presetManager,
-      this.annotationStore,
-    );
+    const snapshot = this.snapshot();
     try {
       this.store.saveSync(snapshot);
     } catch (cause) {
@@ -272,12 +276,31 @@ export class AutoSave {
     }
   }
 
+  private snapshot(): SessionSnapshot {
+    return snapshotFromState(
+      this.state,
+      this.undoManager,
+      this.presetManager,
+      this.annotationStore,
+      {
+        annotations: !this.annotationsQuotaExceeded,
+      },
+    );
+  }
+
   private reportError(cause: unknown): void {
     const code = cause instanceof PersistenceError ? cause.code : classifyPersistenceFailure(cause);
     // Trip the circuit-breaker BEFORE invoking onError so a synchronous
     // handler that re-enters AutoSave sees the latched flag.
     if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
-      this.quotaExceeded = true;
+      if (!isAnnotationsWriteFailure(cause)) {
+        this.quotaExceeded = true;
+      } else if (this.annotationsQuotaExceeded) {
+        // Reported already: a save that was in flight when it tripped.
+        return;
+      } else {
+        this.annotationsQuotaExceeded = true;
+      }
     }
     if (!this.onError) return;
     const err =

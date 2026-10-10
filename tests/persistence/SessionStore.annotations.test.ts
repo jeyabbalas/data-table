@@ -842,4 +842,54 @@ describe('SessionStore — a failed annotations write', () => {
     expect(writes.puts('annotations')).toBe(1);
     expect((await store.load('t'))?.annotations?.annotations).toHaveLength(2);
   });
+
+  it('keeps saving the session through AutoSave once the annotations are over quota', async () => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 2);
+    // A record from before the quota ran out, which the session stops naming.
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    annotate(annotations, 1, 2);
+    failAnnotationsPut('throw');
+
+    const saved: Promise<unknown>[] = [];
+    const save = store.save.bind(store);
+    vi.spyOn(store, 'save').mockImplementation((snapshot) => {
+      const done = save(snapshot);
+      saved.push(done.catch(() => undefined));
+      return done;
+    });
+    const onError = vi.fn();
+    const autoSave = new AutoSave(state, store, {
+      annotationStore: annotations,
+      debounceMs: 1,
+      onError,
+    });
+    autoSave.enable();
+    const settle = async (count: number) => {
+      await vi.waitFor(() => expect(saved).toHaveLength(count));
+      await Promise.all(saved);
+    };
+
+    state.sortColumns.set([{ column: 'id', direction: 'asc' }]);
+    await settle(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]![0]).toMatchObject({
+      code: 'PERSISTENCE_QUOTA_EXCEEDED',
+      details: { record: 'annotations' },
+    });
+
+    state.sortColumns.set([{ column: 'name', direction: 'desc' }]);
+    await settle(2);
+    annotate(annotations, 1, 3);
+    await settle(3);
+    expect(onError).toHaveBeenCalledTimes(1);
+    const session = await rawSession();
+    expect(session?.['sortColumns']).toEqual([{ column: 'name', direction: 'desc' }]);
+    expect(session).not.toHaveProperty('__annotations');
+    expect(session).not.toHaveProperty('annotations');
+    // The record the session no longer names is gone.
+    expect(await rawAnnotations()).toBeUndefined();
+    autoSave.destroy();
+  });
 });

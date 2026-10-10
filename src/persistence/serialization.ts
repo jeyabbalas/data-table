@@ -154,6 +154,16 @@ export function deserializeStateSnapshot(
 
 // ── Session snapshot (full table state + optional undo stacks) ────────
 
+/** Options for {@link snapshotFromState}. */
+export interface SnapshotOptions {
+  /**
+   * Whether the snapshot carries the annotations themselves (default `true`);
+   * the severity filter is captured either way. `AutoSave` turns it off once
+   * the annotations no longer fit in the IndexedDB quota.
+   */
+  annotations?: boolean;
+}
+
 /**
  * Part of a saved session that its restore left out, having restored the
  * rest: today, annotations `AnnotationStore.loadJSON` refused. The facade
@@ -190,6 +200,7 @@ export function snapshotFromState(
   undoManager?: UndoManager,
   presetManager?: FilterPresetManager,
   annotationStore?: AnnotationStore,
+  options: SnapshotOptions = {},
 ): SessionSnapshot {
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
@@ -266,7 +277,7 @@ export function snapshotFromState(
     }
   }
 
-  if (annotationStore) {
+  if (annotationStore && options.annotations !== false) {
     const file = currentAnnotationFile(annotationStore);
     if (file) snapshot.annotations = file;
   }

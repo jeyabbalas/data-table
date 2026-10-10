@@ -5,6 +5,11 @@ Built on [DuckDB WASM](https://duckdb.org/docs/api/wasm/overview) — all
 analytics run entirely in the browser, so no data ever leaves the user's
 machine.
 
+**[Try the live demo](https://jeyabbalas.github.io/data-table/)**: open a CSV,
+JSON or Parquet file, or an Excel workbook, which the demo converts, and
+explore it. See also the [examples](https://jeyabbalas.github.io/data-table/examples/)
+and the [keyboard shortcuts](https://jeyabbalas.github.io/data-table/shortcuts/).
+
 - Per-column visualizations (histograms, value counts, date/time histograms)
   with brush/click crossfilter; nested columns get a non-null / null summary
   bar, which does not filter
@@ -320,7 +325,7 @@ All features are on by default; pass `false` or a config object to customize:
 | ------------------ | ------- | ----------------------------------------------------------------------------------------------- |
 | `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                                                     |
 | `presets`          | `true`  | Show the "Presets" button for saving filter sets                                                |
-| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                                                        |
+| `undoRedo`         | `true`  | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y keyboard shortcuts                                      |
 | `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                                                   |
 | `derivedColumns`   | `true`  | Show the "+", `f(x)` and nested/JSON extract buttons, and the value inspector's "Add as column" |
 | `visualizations`   | `true`  | Auto-attach column header charts (histograms, value counts, …)                                  |

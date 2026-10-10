@@ -8,7 +8,7 @@
 
 > **isPooledVectorRef**(`d`): `d is PooledVectorColumnRef`
 
-Defined in: [persistence/types.ts:141](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L141)
+Defined in: [persistence/types.ts:141](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/persistence/types.ts#L141)
 
 Type guard: true when a serialized derived column uses a pool reference.
 

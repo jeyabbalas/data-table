@@ -241,6 +241,27 @@ describe('RovingTabindex', () => {
     roving.destroy();
   });
 
+  it('reveals the control it moves to with the reveal option, in place of its own scroll', () => {
+    const { toolbar, buttons } = makeToolbar(3);
+    const reveal = vi.fn();
+    const roving = new RovingTabindex(toolbar, { reveal });
+    // Its own scroll would move this box: a 600px row in a 200px view.
+    Object.defineProperty(toolbar, 'scrollWidth', { value: 600, configurable: true });
+    Object.defineProperty(toolbar, 'clientWidth', { value: 200, configurable: true });
+    toolbar.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 20 }) as DOMRect;
+    buttons[1]!.getBoundingClientRect = () =>
+      ({ left: 500, right: 580, top: 0, width: 80, height: 20 }) as DOMRect;
+
+    buttons[0]!.focus();
+    press(buttons[0]!, 'ArrowRight');
+
+    expect(document.activeElement).toBe(buttons[1]);
+    expect(reveal).toHaveBeenCalledWith(buttons[1]);
+    expect(toolbar.scrollLeft).toBe(0);
+
+    roving.destroy();
+  });
+
   describe('refresh() after a re-render', () => {
     it('keeps the stop when the active control survived', () => {
       const { toolbar, buttons } = makeToolbar(3);
@@ -267,6 +288,57 @@ describe('RovingTabindex', () => {
 
       expect(roving.getActiveControl()).toBe(buttons[0]);
       expect(tabindexes(toolbar)).toEqual(['0', '-1']);
+
+      roving.destroy();
+    });
+
+    it('hands the stop, and focus, to the fallback the caller names', () => {
+      const { toolbar, buttons } = makeToolbar(4);
+      const roving = new RovingTabindex(toolbar);
+
+      buttons[1]!.focus();
+      buttons[1]!.remove();
+      roving.refresh({ restoreFocus: true, fallback: buttons[2] });
+
+      expect(roving.getActiveControl()).toBe(buttons[2]);
+      expect(document.activeElement).toBe(buttons[2]);
+      expect(tabindexes(toolbar)).toEqual(['-1', '0', '-1']);
+
+      roving.destroy();
+    });
+
+    it('keeps a stop that survived over the fallback', () => {
+      const { toolbar, buttons } = makeToolbar(3);
+      const roving = new RovingTabindex(toolbar);
+
+      buttons[1]!.focus();
+      roving.refresh({ fallback: buttons[2] });
+
+      expect(roving.getActiveControl()).toBe(buttons[1]);
+
+      roving.destroy();
+    });
+
+    it('ignores a fallback that is not one of its navigable controls', () => {
+      const { toolbar, buttons } = makeToolbar(3);
+      const roving = new RovingTabindex(toolbar);
+      const outsider = document.createElement('button');
+      document.body.appendChild(outsider);
+
+      buttons[2]!.focus();
+      buttons[2]!.remove();
+      buttons[1]!.style.display = 'none';
+      roving.refresh({ fallback: outsider });
+      expect(roving.getActiveControl()).toBe(buttons[0]);
+
+      buttons[0]!.focus();
+      buttons[0]!.remove();
+      buttons[1]!.style.display = '';
+      const hidden = document.createElement('button');
+      hidden.style.display = 'none';
+      toolbar.appendChild(hidden);
+      roving.refresh({ fallback: hidden });
+      expect(roving.getActiveControl()).toBe(buttons[1]);
 
       roving.destroy();
     });

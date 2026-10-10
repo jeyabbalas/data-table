@@ -76,9 +76,9 @@ async function reads(page: Page): Promise<string[]> {
   return page.evaluate(() => (window as unknown as Probe).__reads);
 }
 
+/** Pick a file in the demo's file picker, which loads it at once. */
 async function loadFile(page: Page, file: Parameters<Page['setInputFiles']>[1]): Promise<void> {
   await page.setInputFiles('#file-input', file);
-  await page.click('#load-file-btn');
 }
 
 async function expectTable(page: Page, rows = ROWS): Promise<void> {
@@ -373,21 +373,30 @@ test('runs one load at a time', async ({ page }) => {
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await route.continue();
   });
-  await page.setInputFiles('#file-input', CSV);
   await page.fill('#url-input', url);
   await page.click('#load-url-btn');
 
-  await expect(page.locator('#load-file-btn')).toBeDisabled();
+  await expect(page.locator('#open-file-btn')).toBeDisabled();
+  await expect(page.locator('#file-input')).toBeDisabled();
   await expect(page.locator('#load-url-btn')).toBeDisabled();
   for (const chip of await page.locator('.chip[data-url]').all()) await expect(chip).toBeDisabled();
-  // Neither starts a second load, which would mount a second table and
-  // DuckDB worker: Enter in the URL input, which stays enabled, and a click
-  // on Load File, forced as a user's would be.
+  // None starts a second load, which would mount a second table and DuckDB
+  // worker: Enter in the URL input, which stays enabled, and a file dropped
+  // on the page.
   await page.press('#url-input', 'Enter');
-  await page.locator('#load-file-btn').click({ force: true });
+  await page.evaluate(
+    (csv) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([csv], 'titanic.csv', { type: 'text/csv' }));
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        window.dispatchEvent(new DragEvent(type, { dataTransfer: transfer, cancelable: true }));
+      }
+    },
+    readFileSync(CSV, 'utf8'),
+  );
 
   await expectTable(page);
-  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#open-file-btn')).toBeEnabled();
   await expect(page.locator('#load-url-btn')).toBeEnabled();
   await expect(page.locator('#table-container .dt-root')).toHaveCount(1);
   expect(fetches).toBe(1);
@@ -424,7 +433,7 @@ test('shows the loading file, not the last dataset, until the load ends', async 
   // Counts shown before the load ended would carry the last load's time, and
   // on a first load that one included DuckDB's start-up.
   expect(new Set(texts.slice(firstCounts)).size).toBe(1);
-  expect(texts.at(-1)).toMatch(/891 rows.*\| loaded in \d+\.\d s$/);
+  expect(texts.at(-1)).toMatch(/891 rows.* · loaded in \d+\.\d s$/);
 });
 
 test('offers to forget a cached dataset it cannot restore', async ({ page }) => {
@@ -446,7 +455,7 @@ test('offers to forget a cached dataset it cannot restore', async ({ page }) => 
   // Nothing is deleted on its own: the reason may pass.
   expect(await readCacheRow(page, 'dt_file_broken')).not.toBeNull();
   expect(await sessionTableName(page)).toBe('dt_file_broken');
-  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#open-file-btn')).toBeEnabled();
   await expect(page.locator('#load-url-btn')).toBeEnabled();
 
   await info.getByRole('link', { name: 'Forget it' }).click();
@@ -486,7 +495,7 @@ test('keeps a cached dataset through a restore that fails for a reason that pass
   await expect(info).toContainText('Could not restore titanic.parquet', { timeout: 90_000 });
   expect(await readCacheRow(page, tableName)).not.toBeNull();
   expect(await sessionTableName(page)).toBe(tableName);
-  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#open-file-btn')).toBeEnabled();
   await expect(page.locator('#load-url-btn')).toBeEnabled();
 
   // The next normal reload restores it.
@@ -529,13 +538,13 @@ test('offers to skip a restore that stalls', async ({ page }) => {
   await page.evaluate(() => sessionStorage.setItem('dt-test-silent-worker', '1'));
   await page.reload();
   await expect(info).toContainText('Loading titanic.parquet');
-  await expect(page.locator('#load-file-btn')).toBeDisabled();
+  await expect(page.locator('#open-file-btn')).toBeDisabled();
 
   await page.evaluate(() => sessionStorage.removeItem('dt-test-silent-worker'));
   await info.getByRole('link', { name: 'Skip' }).click();
   await expect(info).toHaveText('Load a file or URL to get started.');
   expect(await page.evaluate(() => localStorage.getItem('dt-last-session'))).toBeNull();
-  await expect(page.locator('#load-file-btn')).toBeEnabled();
+  await expect(page.locator('#open-file-btn')).toBeEnabled();
 });
 
 test('shows a shared ?url= link as text, not markup', async ({ page }) => {
@@ -550,19 +559,34 @@ test('shows a shared ?url= link as text, not markup', async ({ page }) => {
 test('shows a failed load’s error as text, not markup', async ({ page }) => {
   await watchInjection(page);
   const message = '<img src="x" alt="">';
+  // The demo downloads with an XHR; this server's refusal says it in markup.
   await page.addInitScript((message) => {
-    const fetchOriginal = window.fetch.bind(window);
-    window.fetch = (input, init) =>
-      String(input).includes('/refused/')
-        ? Promise.reject(new Error(message))
-        : fetchOriginal(input, init);
+    const open = XMLHttpRequest.prototype.open;
+    const send = XMLHttpRequest.prototype.send;
+    const refused = new WeakSet<XMLHttpRequest>();
+    XMLHttpRequest.prototype.open = function (
+      this: XMLHttpRequest,
+      ...args: Parameters<XMLHttpRequest['open']>
+    ) {
+      if (String(args[1]).includes('/refused/')) refused.add(this);
+      return open.apply(this, args as Parameters<typeof open>);
+    } as typeof open;
+    XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, body) {
+      if (!refused.has(this)) return send.call(this, body);
+      Object.defineProperty(this, 'status', { value: 500 });
+      Object.defineProperty(this, 'statusText', { value: message });
+      setTimeout(() => this.dispatchEvent(new ProgressEvent('load')));
+    };
   }, message);
   await openDemo(page);
 
   await page.fill('#url-input', `${new URL(page.url()).origin}/refused/data.parquet`);
   await page.click('#load-url-btn');
 
-  await expect(page.locator('#table-info')).toHaveText(`Error: ${message}`, { timeout: 90_000 });
+  await expect(page.locator('#table-info')).toHaveText(
+    `Error: Failed to fetch URL: 500 ${message}`,
+    { timeout: 90_000 },
+  );
   expect(await injected(page)).toBe(false);
 });
 
@@ -655,7 +679,7 @@ test('in development, the Nested types chip loads the dev server’s fixture, it
   expect(schema.find((c) => c.name === 'doc')!.type).toBe('string');
   // The info bar counts the file's columns, without the hidden `__rowid__`.
   const info = page.locator('#table-info');
-  await expect(info).toContainText(`${NESTED_ROWS}, ${NESTED_COLUMNS.length} columns (`);
+  await expect(info).toContainText(`${NESTED_ROWS} · ${NESTED_COLUMNS.length} columns (`);
   await expect(info).toContainText(`, ${nested.length} nested)`);
 });
 

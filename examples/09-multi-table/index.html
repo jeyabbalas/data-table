@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Multi-table dashboard</title>
+    <title>Multi-table dashboard · Data Table examples</title>
+    <!-- Light or dark as picked in the demo; the system's otherwise. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('dt-demo-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.dtColorScheme = theme;
+        }
+      } catch (e) {
+        /* storage unavailable */
+      }
+    </script>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       html,
       body {
@@ -14,84 +26,63 @@
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
-      }
-      header {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid #ddd;
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      header h1 {
-        margin: 0 0.75rem 0 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--dt-text);
-      }
-      button {
-        font: inherit;
-        padding: 0.35rem 0.75rem;
-        background: var(--dt-bg-tertiary);
-        color: var(--dt-text);
-        border: 1px solid var(--dt-border);
-        border-radius: 4px;
-        cursor: pointer;
-      }
-      button:hover {
-        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
       }
       main {
         flex: 1;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 0.5rem;
-        padding: 0.5rem;
+        gap: 12px;
         min-height: 0;
+        padding: 12px 16px 16px;
+      }
+      .wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-height: 0;
+      }
+      .wrap h2 {
+        margin: 0;
+        color: var(--ex-muted);
+        font-size: 12px;
+        font-weight: 600;
       }
       #table-a,
       #table-b {
         flex: 1;
         min-height: 0;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        overflow: hidden;
-      }
-      .label {
-        position: absolute;
-        margin: 0.25rem 0.5rem;
-        font-size: 0.8rem;
-        color: #666;
-        background: rgba(255, 255, 255, 0.8);
-        padding: 0.1rem 0.35rem;
-        border-radius: 3px;
-        pointer-events: none;
-        z-index: 1;
-      }
-      .wrap {
-        position: relative;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Multi-table (<a href="../">back</a>)</h1>
-      <button id="save-a">Save preset from A</button>
-      <button id="load-b">Load latest into B</button>
-      <button id="clear">Clear both</button>
-      <button id="clear-session">Clear session + reload</button>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">09</span> Multi-table</h1>
+      <div class="ex-actions">
+        <button id="save-a">Save preset from A</button>
+        <button id="load-b">Load latest into B</button>
+        <button id="clear">Clear both</button>
+        <button id="clear-session">Clear session + reload</button>
+      </div>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/09-multi-table"
+        rel="noopener"
+        >Source ↗</a
+      >
+      <p class="ex-lede">
+        Two tables on one <code>WorkerBridge</code>, sharing a <code>FilterPresetManager</code> and
+        a <code>SessionStore</code>. Filter A, save its filters as a preset, then load the preset
+        into B.
+      </p>
     </header>
     <main>
       <div class="wrap">
-        <span class="label">A</span>
+        <h2>Table A</h2>
         <div id="table-a"></div>
       </div>
       <div class="wrap">
-        <span class="label">B</span>
+        <h2>Table B</h2>
         <div id="table-b"></div>
       </div>
     </main>

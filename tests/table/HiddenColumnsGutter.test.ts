@@ -8,6 +8,7 @@ import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { fakeChipStrip, nextFrame, type FakeStrip } from '../helpers/fakeChipStrip';
 
 const mockBridge = {
   initialize: vi.fn(),
@@ -279,7 +280,7 @@ describe('HiddenColumnsGutter', () => {
       gutter.destroy();
     });
 
-    it('moves the stop with all four arrows, because the chips wrap onto rows', () => {
+    it('moves the stop with ← / →, and not ↑ / ↓, since the chips sit in one row', () => {
       const gutter = mount();
       actions.hideColumn('name');
       actions.hideColumn('age');
@@ -294,11 +295,9 @@ describe('HiddenColumnsGutter', () => {
       press(second!, 'ArrowLeft');
       expect(document.activeElement).toBe(first);
 
-      press(first!, 'ArrowDown');
-      expect(document.activeElement).toBe(second);
-
-      press(second!, 'ArrowUp');
+      const down = press(first!, 'ArrowDown');
       expect(document.activeElement).toBe(first);
+      expect(down.defaultPrevented).toBe(false);
 
       gutter.destroy();
     });
@@ -348,7 +347,7 @@ describe('HiddenColumnsGutter', () => {
       gutter.destroy();
     });
 
-    it('re-establishes the stop after a chip restores itself away', () => {
+    it('hands the stop, and focus, to the next chip when a chip restores itself away', () => {
       const gutter = mount();
       actions.hideColumn('name');
       actions.hideColumn('age');
@@ -363,9 +362,50 @@ describe('HiddenColumnsGutter', () => {
 
       const all = buttons(gutter);
       expect(all.filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1);
-      expect(all[0]!.getAttribute('tabindex')).toBe('0');
+      // The chip that took its place, not the first: in a row scrolled to the
+      // middle, the first chip is out of sight, and going to it would scroll
+      // the row back to its start.
+      expect(all[1]!.getAttribute('aria-label')).toBe('Show email');
+      expect(all[1]!.getAttribute('tabindex')).toBe('0');
       // Focus followed the stop instead of falling out of the gutter.
-      expect(document.activeElement).toBe(all[0]);
+      expect(document.activeElement).toBe(all[1]);
+
+      gutter.destroy();
+    });
+
+    it('hands them to the chip before when the last chip restores itself away', () => {
+      const gutter = mount();
+      actions.hideColumn('name');
+      actions.hideColumn('age');
+      actions.hideColumn('email');
+
+      const last = buttons(gutter)[2]!;
+      expect(last.getAttribute('aria-label')).toBe('Show email');
+      last.focus();
+      last.click();
+
+      // Not "Show all", next in the row: a second Enter there would restore
+      // every column.
+      const age = buttons(gutter)[1]!;
+      expect(age.getAttribute('aria-label')).toBe('Show age');
+      expect(document.activeElement).toBe(age);
+
+      gutter.destroy();
+    });
+
+    it('keeps the stop on its chip through a rebuild that leaves the chip', () => {
+      const gutter = mount();
+      actions.hideColumn('name');
+      actions.hideColumn('email');
+      const email = buttons(gutter)[1]!;
+      email.focus();
+
+      // Hiding another column rebuilds every chip.
+      actions.hideColumn('age');
+
+      const stop = buttons(gutter).find((b) => b.getAttribute('tabindex') === '0');
+      expect(stop?.getAttribute('aria-label')).toBe('Show email');
+      expect(document.activeElement).toBe(stop);
 
       gutter.destroy();
     });
@@ -412,37 +452,184 @@ describe('HiddenColumnsGutter', () => {
       gutter.destroy();
     });
 
-    it('scrolls a chip clipped by the gutter max-height back into view', () => {
+    it('scrolls the whole chip the arrows move to into view, clear of "Show all"', () => {
       const gutter = mount();
       actions.hideColumn('name');
       actions.hideColumn('age');
+      actions.hideColumn('email');
       const el = gutter.getElement();
-      const [first, second] = buttons(gutter);
+      // 200px of row, the last 60 under "Show all"; chips 100 wide, 10 apart.
+      const layout = fakeChipStrip(
+        el.querySelector('.dt-hidden-scroll')!,
+        el.querySelector('.dt-hidden-actions')!,
+        '.dt-hidden-chip',
+        { width: 200, end: 60, chip: 100, gap: 10 },
+      );
+      const [first, second, third] = buttons(gutter);
 
-      // jsdom has no layout: fake the one thing that matters, a gutter whose
-      // content is taller than its 200px clip, and a chip below the fold.
-      let scrollTop = 0;
-      Object.defineProperty(el, 'scrollTop', {
-        get: () => scrollTop,
-        set: (v: number) => {
-          scrollTop = v;
-        },
-        configurable: true,
-      });
-      Object.defineProperty(el, 'scrollHeight', { value: 600, configurable: true });
-      Object.defineProperty(el, 'clientHeight', { value: 200, configurable: true });
-      el.getBoundingClientRect = () => ({ top: 0, left: 0, height: 200, width: 400 }) as DOMRect;
-      second!.getBoundingClientRect = () =>
-        ({ top: 500, left: 0, height: 20, width: 80 }) as DOMRect;
+      try {
+        first!.focus();
+        press(first!, 'ArrowRight');
+        expect(document.activeElement).toBe(second);
+        // The second chip spans 110–210, the room ends at 140.
+        expect(layout.scrollLeft).toBe(70);
 
-      first!.focus();
-      press(first!, 'ArrowRight');
+        press(second!, 'ArrowRight');
+        expect(document.activeElement).toBe(third);
+        expect(layout.scrollLeft).toBe(320 - 140);
 
-      expect(document.activeElement).toBe(second);
-      // 500 + 20 - 200 = 320: the chip's bottom edge lands on the clip's.
-      expect(el.scrollTop).toBe(320);
+        // "Show all" is pinned in view: no scroll.
+        press(third!, 'ArrowRight');
+        expect(layout.scrollLeft).toBe(180);
 
+        // Wrapping to the first chip shows it whole, from its start.
+        press(document.activeElement!, 'ArrowRight');
+        expect(document.activeElement).toBe(first);
+        expect(layout.scrollLeft).toBe(0);
+      } finally {
+        layout.restore();
+        gutter.destroy();
+      }
+    });
+  });
+
+  describe('one row that scrolls sideways', () => {
+    /** Twelve columns, `c0`…`c11`. */
+    const wideSchema: ColumnSchema[] = Array.from({ length: 12 }, (_, i) => ({
+      name: `c${i}`,
+      type: 'integer',
+      nullable: false,
+      originalType: 'INTEGER',
+    }));
+
+    let gutter: HiddenColumnsGutter;
+    let layout: FakeStrip;
+
+    beforeEach(() => {
+      state = createTableState();
+      actions = new StateActions(state, mockBridge);
+      initializeColumnsFromSchema(state, wideSchema);
+      gutter = new HiddenColumnsGutter(state, actions);
+      document.body.appendChild(gutter.getElement());
+      const el = gutter.getElement();
+      // 400px of row, the last 80 under "Show all"; chips 100 wide, 10 apart.
+      layout = fakeChipStrip(
+        el.querySelector('.dt-hidden-scroll')!,
+        el.querySelector('.dt-hidden-actions')!,
+        '.dt-hidden-chip',
+        { width: 400, end: 80, chip: 100, gap: 10 },
+      );
+    });
+
+    afterEach(() => {
+      layout.restore();
       gutter.destroy();
+      vi.unstubAllGlobals();
+      document.body.innerHTML = '';
+    });
+
+    function chipNames(): string[] {
+      return Array.from(gutter.getElement().querySelectorAll('.dt-hidden-chip-name')).map(
+        (n) => n.textContent ?? '',
+      );
+    }
+
+    it('keeps "Show all" inside the row that scrolls, so the tab stop always is', () => {
+      // axe's `scrollable-region-focusable` wants something in the tab order
+      // inside a region that overflows, and the roving stop may rest on
+      // "Show all".
+      const el = gutter.getElement();
+      const scroll = el.querySelector('.dt-hidden-scroll')!;
+      expect(scroll.querySelector('.dt-hidden-chips')).not.toBeNull();
+      expect(scroll.querySelector('.dt-hidden-actions .dt-hidden-show-all')).not.toBeNull();
+      expect(Array.from(el.querySelectorAll('button')).every((b) => scroll.contains(b))).toBe(true);
+    });
+
+    it('glides to the chip a hidden column adds out of view, at the next frame', async () => {
+      for (const c of ['c0', 'c1', 'c2', 'c3']) actions.hideColumn(c);
+      await nextFrame();
+      layout.scrollTo.mockClear();
+      layout.scrollLeft = 0;
+
+      actions.hideColumn('c9');
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+      await nextFrame();
+
+      // c9 is the fifth chip: 440–540, and the room ends at 320.
+      expect(chipNames()).toEqual(['c0', 'c1', 'c2', 'c3', 'c9']);
+      expect(layout.scrollTo).toHaveBeenCalledWith({ left: 540 - 320, behavior: 'smooth' });
+    });
+
+    it('makes one scroll for columns hidden together, to the right-most of their chips', async () => {
+      for (const c of ['c8', 'c2', 'c10', 'c5', 'c0']) actions.hideColumn(c);
+      await nextFrame();
+
+      // In column order, not hiding order: c10 is the last chip, 440–540.
+      expect(chipNames()).toEqual(['c0', 'c2', 'c5', 'c8', 'c10']);
+      expect(layout.scrollTo).toHaveBeenCalledTimes(1);
+      expect(layout.scrollTo).toHaveBeenCalledWith({ left: 540 - 320, behavior: 'smooth' });
+    });
+
+    it('glides back for a chip that lands before the view', async () => {
+      for (const c of ['c2', 'c3', 'c4', 'c5', 'c6', 'c7']) actions.hideColumn(c);
+      await nextFrame();
+      layout.scrollLeft = 300;
+      layout.scrollTo.mockClear();
+
+      actions.hideColumn('c0');
+      await nextFrame();
+
+      // c0 goes first in the row, at 0.
+      expect(layout.scrollTo).toHaveBeenCalledWith({ left: 0, behavior: 'smooth' });
+    });
+
+    it('does not scroll for a chip in view, for a chip that goes, or for a reorder', async () => {
+      for (const c of ['c1', 'c4', 'c6', 'c9', 'c11']) actions.hideColumn(c);
+      await nextFrame();
+      layout.scrollTo.mockClear();
+      layout.scrollLeft = 100;
+
+      actions.hideColumn('c5'); // between c4 and c6: 220–320, in view
+      await nextFrame();
+      actions.showColumn('c9');
+      await nextFrame();
+      actions.setColumnOrder(['c3', 'c0', 'c2', 'c7', 'c8', 'c9', 'c10']);
+      await nextFrame();
+
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+      expect(layout.scrollLeft).toBe(100);
+    });
+
+    it('does not scroll for the chips its first render finds', async () => {
+      gutter.destroy();
+      layout.restore();
+      for (const c of ['c3', 'c7', 'c11']) actions.hideColumn(c);
+
+      gutter = new HiddenColumnsGutter(state, actions);
+      document.body.appendChild(gutter.getElement());
+      const el = gutter.getElement();
+      layout = fakeChipStrip(
+        el.querySelector('.dt-hidden-scroll')!,
+        el.querySelector('.dt-hidden-actions')!,
+        '.dt-hidden-chip',
+        { width: 200, end: 80, chip: 100, gap: 10 },
+      );
+      await nextFrame();
+
+      expect(chipNames()).toEqual(['c3', 'c7', 'c11']);
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('jumps rather than glides when the user prefers reduced motion', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({ matches: query === '(prefers-reduced-motion: reduce)' })),
+      );
+      for (const c of ['c0', 'c1', 'c2', 'c3', 'c4']) actions.hideColumn(c);
+      await nextFrame();
+
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+      expect(layout.scrollLeft).toBe(540 - 320);
     });
   });
 

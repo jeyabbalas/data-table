@@ -26,6 +26,7 @@ import {
   openDemo,
   setTheme,
   settle,
+  tallDemoTable,
 } from './helpers/demo';
 import { openExtractPanel } from './helpers/extract';
 import { escapeInspector, openWithF2 } from './helpers/inspector';
@@ -290,6 +291,51 @@ for (const theme of ['light', 'dark'] as const) {
     assertClean(await scan(page), `${WIDE_COLUMNS} columns, ${theme}`);
   });
 
+  test(`the filter bar and the hidden-columns gutter are axe-clean in ${theme} with their chips overflowing`, async ({
+    page,
+  }) => {
+    // Each toolbar's chips scroll in one row under its buttons, pinned at the
+    // row's end, and the roving stop can rest on one of those buttons. A
+    // region that overflows passes `scrollable-region-focusable` only if it
+    // holds something in the tab order: the filter bar's chips failed it
+    // while the stop rested on Expression, beside them, as it does by
+    // default. The chips that pass under the buttons have their contrast
+    // checked like any other.
+    await mountTable(page, { columns: 120, rows: 50 });
+    await setTableTheme(page, theme);
+    await page.evaluate(() => {
+      const { actions } = (window as unknown as TestWindow).__dt;
+      const name = (i: number) => `c${String(i).padStart(3, '0')}`;
+      for (let i = 20; i < 100; i++) actions.hideColumn(name(i));
+      for (let i = 0; i < 16; i++) actions.addFilter({ type: 'not-null', column: name(i) });
+    });
+    await settle(page);
+    // The gutter's stop on "Show all"; the bar's stays on Expression.
+    await page.locator(`#${HOST_ID} .dt-hidden-show-all`).focus();
+    const toolbars = await page.evaluate((host) => {
+      const root = document.getElementById(host)!;
+      const overflows = (selector: string) => {
+        const el = root.querySelector<HTMLElement>(selector)!;
+        return el.scrollWidth > el.clientWidth;
+      };
+      const stop = (selector: string) =>
+        root.querySelector(`${selector} [tabindex="0"]`)?.className ?? null;
+      return {
+        filterOverflows: overflows('.dt-filter-scroll'),
+        hiddenOverflows: overflows('.dt-hidden-scroll'),
+        filterStop: stop('.dt-filter-bar'),
+        hiddenStop: stop('.dt-hidden-gutter'),
+      };
+    }, HOST_ID);
+    expect(toolbars).toEqual({
+      filterOverflows: true,
+      hiddenOverflows: true,
+      filterStop: 'dt-filter-expression-btn',
+      hiddenStop: 'dt-hidden-show-all',
+    });
+    assertClean(await scan(page), `overflowing toolbars, ${theme}`);
+  });
+
   test(`column layout mode is axe-clean in ${theme}`, async ({ page }) => {
     // The mode adds `aria-keyshortcuts` to every header and a second
     // `role="status"` region, and lights a `role="separator"` that stays
@@ -365,6 +411,9 @@ for (const theme of ['light', 'dark'] as const) {
     await openDemo(page);
     await loadExample(page, NESTED_EXAMPLE);
     await setTheme(page, theme);
+    // Room below the header for the whole panel: a field its body scrolls
+    // out of view is one whose background axe cannot tell.
+    await tallDemoTable(page);
 
     const people = await openExtractPanel(page, 'people', 'demo');
     // length, then element › name, which asks for the element's position.

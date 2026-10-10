@@ -518,7 +518,7 @@ The facade re-emits these on the `error` event with `source: 'stats-panel'` (the
 
 ### 23. I added `createSqlExtensions` but no autocomplete dropdown appears
 
-Symptom: the host-built CodeMirror editor mounts, the SQL grammar highlights correctly, but pressing Ctrl/Cmd+Space (or typing a partial identifier) shows no dropdown.
+Symptom: the host-built CodeMirror editor mounts, the SQL grammar highlights correctly, but pressing Ctrl+Space (or typing a partial identifier) shows no dropdown.
 
 Cause: `createSqlExtensions` ships only the autocomplete _source_ (a `PostgreSQL.language.data.of({ autocomplete: ... })` extension), not the autocomplete _UI_ extension. The bundled `CodeMirrorExpressionEditor` adds the UI explicitly (`src/sql-editor/CodeMirrorExpressionEditor.ts:71-73`) and the inline comment at `src/sql-editor/extensions.ts:156-158` flags this; host-assembled editors must do the same.
 

@@ -5,282 +5,141 @@
  * the data table library. Users should NOT include this file in their apps.
  *
  * For the data table styles, use: @jeyabbalas/data-table/styles
+ *
+ * Selectors stay on the demo's own classes and ids. A bare element selector
+ * here (`input[type='text']`, `button`) would outrank the library's single
+ * class rules and restyle the inputs and buttons in its panels and modals.
  */
 
 /* ===========================================
-   CSS Reset & Base
+   Tokens
+   ===========================================
+
+   The page follows the theme switch, as the table does: `data-theme` on
+   <html> is `light` or `dark` when one is picked, and absent for Auto,
+   which follows the system. The palette sits beside the library's
+   (`--dt-*`): the same grays and blue, with the page a step darker than the
+   table so the table reads as the surface. */
+
+:root {
+  color-scheme: light;
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-hover: #f3f4f6;
+  --surface-pressed: #e5e7eb;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --text: #111827;
+  --text-muted: #4b5563;
+  --text-subtle: #6b7280;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-text: #ffffff;
+  --accent-soft: #eff6ff;
+  --danger: #b91c1c;
+  --scrim: rgba(247, 248, 250, 0.72);
+  --shadow-table: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-float: 0 16px 40px rgba(16, 24, 40, 0.14), 0 2px 8px rgba(16, 24, 40, 0.06);
+  --radius: 8px;
+  --gutter: 20px;
+  --font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0b0f17;
+  --surface: #111827;
+  --surface-hover: #1f2937;
+  --surface-pressed: #283244;
+  --border: #1f2937;
+  --border-strong: #374151;
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-subtle: #9ca3af;
+  --accent: #60a5fa;
+  --accent-hover: #93c5fd;
+  --accent-text: #0b0f17;
+  --accent-soft: rgba(96, 165, 250, 0.12);
+  --danger: #f87171;
+  --scrim: rgba(11, 15, 23, 0.7);
+  --shadow-table: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0b0f17;
+    --surface: #111827;
+    --surface-hover: #1f2937;
+    --surface-pressed: #283244;
+    --border: #1f2937;
+    --border-strong: #374151;
+    --text: #f3f4f6;
+    --text-muted: #9ca3af;
+    --text-subtle: #9ca3af;
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+    --accent-text: #0b0f17;
+    --accent-soft: rgba(96, 165, 250, 0.12);
+    --danger: #f87171;
+    --scrim: rgba(11, 15, 23, 0.7);
+    --shadow-table: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* ===========================================
+   Base
    =========================================== */
 
+/* Elements only, as the demo has always had it: the table's pseudo-elements
+   keep the sizing its stylesheet gives them. */
 * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+}
+
+/* The table measures its container to decide how many rows to render, so
+   the height chain from the viewport down to #table-container is
+   load-bearing: html and body take the viewport, and every flex item on the
+   way keeps `min-height: 0`. */
+html,
+body {
+  height: 100%;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  padding: 2rem 8rem;
-  background: #f5f5f5;
   margin: 0;
-  color: #333;
-}
-
-/* Dark mode for demo page */
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #0f172a;
-    color: #f1f5f9;
-  }
-}
-
-/* ===========================================
-   Typography
-   =========================================== */
-
-h1 {
-  margin-bottom: 1rem;
-  color: #333;
-}
-
-h2 {
-  margin: 0 0 0.5rem;
-  color: #555;
-  font-size: 1.1rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  h1 {
-    color: #f1f5f9;
-  }
-
-  h2 {
-    color: #cbd5e1;
-  }
-}
-
-/* ===========================================
-   Card Component
-   =========================================== */
-
-.card {
-  background: white;
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.card--no-padding {
-  padding: 0;
-  overflow: hidden;
-}
-
-@media (prefers-color-scheme: dark) {
-  .card {
-    background: #1e293b;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-}
-
-/* ===========================================
-   Layout Utilities
-   =========================================== */
-
-.row {
   display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
 }
 
-.row--mb {
-  margin-bottom: 0.5rem;
+/* Type for the page's own parts. Not on <body>: the table would inherit the
+   line height, and its headers grow with it. */
+.topbar,
+.loadbar,
+.statusbar,
+.empty-state,
+.loading-card,
+.drop-target,
+.dialog,
+.doc {
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Space the example-dataset chips below the URL input row so they read as
-   a separate "or try one of these" affordance rather than a continuation
-   of the URL input. */
-.row--examples {
-  margin-top: 0.75rem;
-}
-
-/* ===========================================
-   Form Elements
-   ===========================================
-
-   These selectors are scoped to the demo-owned inputs (`#url-input` and
-   `#file-input`) on purpose. A generic `input[type="text"]` selector
-   outranks the library's `.dt-filter-input` class by specificity
-   ((0,1,1) vs (0,1,0)) and was overriding the library's dark/light
-   toggle on every modal input — caret, background, border stuck on the
-   demo-hardcoded values. Keep future demo form styling ID-scoped so
-   nothing bleeds into library widgets. */
-
-#url-input,
-#file-input {
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  flex: 1;
-  min-width: 200px;
-  font-size: 0.9rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  #url-input,
-  #file-input {
-    background: #334155;
-    border-color: #475569;
-    color: #f1f5f9;
-  }
-
-  #url-input::placeholder {
-    color: #94a3b8;
-  }
-}
-
-/* ===========================================
-   Buttons
-   =========================================== */
-
-button {
-  padding: 0.5rem 1rem;
-  background: #2563eb;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.15s ease;
-}
-
-button:hover {
-  background: #1d4ed8;
-}
-
-button:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-.btn--secondary {
-  background: #6b7280;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8rem;
-  margin-left: 0.5rem;
-}
-
-.btn--secondary:hover {
-  background: #4b5563;
-}
-
-.btn-group {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-/* ===========================================
-   Example dataset chips
-   =========================================== */
-
-/* Inline label that introduces the chip row. Muted in both color schemes
-   so the chips themselves are the visual anchor of the row. */
-.row-label {
-  align-self: center;
-  font-size: 0.85rem;
-  color: #6b7280;
-}
-
-@media (prefers-color-scheme: dark) {
-  .row-label {
-    color: #94a3b8;
-  }
-}
-
-/* `.chip` is a deliberately lower-contrast secondary action — distinct from
-   the primary blue `<button>` so users perceive it as a shortcut, not a
-   submit. Uses fixed colors (rather than --dt-* tokens) because the demo
-   page chrome lives outside the data-table widget and stays on its own
-   palette. */
-.chip {
-  padding: 0.3rem 0.7rem;
-  font-size: 0.8rem;
-  font-weight: 500;
-  background: #eef2ff;
-  color: #1e40af;
-  border: 1px solid #c7d2fe;
-  border-radius: 999px;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.chip:hover {
-  background: #e0e7ff;
-  border-color: #a5b4fc;
-}
-
-.chip:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .chip {
-    background: #334155;
-    color: #e2e8f0;
-    border-color: #475569;
-  }
-
-  .chip:hover {
-    background: #475569;
-    border-color: #64748b;
-  }
-}
-
-/* ===========================================
-   Status Bar
-   =========================================== */
-
-.status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.9rem;
-}
-
-.status-bar .version {
-  color: #6b7280;
-}
-
-.status-bar .init-status {
-  font-weight: 500;
-}
-
-/* Theme toggle (Light / Dark / Auto) — demo-only chrome for Phase 7. */
-.theme-toggle {
-  display: inline-flex;
-  gap: 0.5rem;
-  align-items: center;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.theme-toggle label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  cursor: pointer;
-}
-
-.theme-toggle input[type='radio'] {
-  margin: 0;
-}
-
-.sr-only {
+.visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -292,193 +151,1046 @@ button:disabled {
   border: 0;
 }
 
-.init-status--success {
-  color: #059669;
-}
-
-.init-status--error {
-  color: #dc2626;
-}
-
-@media (prefers-color-scheme: dark) {
-  .init-status--success {
-    color: #34d399;
-  }
-
-  .init-status--error {
-    color: #f87171;
-  }
-}
-
 /* ===========================================
-   Features Bar
+   Top bar
    =========================================== */
 
-.features-bar {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: #6b7280;
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--border);
 }
 
-@media (prefers-color-scheme: dark) {
-  .features-bar {
-    color: #94a3b8;
-  }
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 6px;
 }
 
-/* ===========================================
-   Table Container
-   =========================================== */
-
-.table-wrapper {
-  height: 660px;
+.brand-mark {
+  width: 22px;
+  height: 22px;
 }
 
-/* ===========================================
-   Info Panel
-   =========================================== */
-
-.info-panel {
-  font-size: 0.85rem;
-  color: #6b7280;
+.brand-mark rect {
+  fill: var(--accent);
 }
 
-.info-panel strong {
-  color: #374151;
+.brand-mark path {
+  fill: none;
+  stroke: var(--accent-text);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
 }
 
-@media (prefers-color-scheme: dark) {
-  .info-panel {
-    color: #94a3b8;
-  }
-
-  .info-panel strong {
-    color: #e2e8f0;
-  }
-}
-
-/* Colored info text */
-.info-text--primary {
-  color: #2563eb;
-  font-size: 0.8rem;
-}
-
-.info-text--secondary {
-  color: #6b7280;
-  font-size: 0.8rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  .info-text--primary {
-    color: #60a5fa;
-  }
-
-  .info-text--secondary {
-    color: #94a3b8;
-  }
-}
-
-/* ===========================================
-   Test Info
-   =========================================== */
-
-.test-info {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: #6b7280;
-}
-
-@media (prefers-color-scheme: dark) {
-  .test-info {
-    color: #94a3b8;
-  }
-}
-
-/* ===========================================
-   Examples Call-to-Action
-   =========================================== */
-
-.examples-cta {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #e5e7eb;
-  font-size: 0.85rem;
-  color: #374151;
-}
-
-.examples-cta a {
+.brand-name {
+  font-size: 15px;
   font-weight: 600;
-  color: #2563eb;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.version {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.topnav a {
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.topnav a:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+/* Light / Dark / Auto: native radios, one over each icon, so the arrow keys
+   move between them and a click lands on the input itself. */
+.theme-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 0 0 4px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.theme-switch label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--text-subtle);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.theme-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.theme-switch svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.theme-switch label:hover {
+  color: var(--text);
+}
+
+.theme-switch label:has(input:checked) {
+  color: var(--text);
+  background: var(--surface-pressed);
+}
+
+.theme-switch label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ===========================================
+   Buttons
+   =========================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.btn:active:not(:disabled) {
+  background: var(--surface-pressed);
+}
+
+.btn:focus-visible,
+.chip:focus-visible,
+.topnav a:focus-visible,
+.brand:focus-visible,
+.table-info a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn--primary:hover:not(:disabled),
+.btn--primary:active:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.btn--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.btn--quiet {
+  height: 28px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+/* ===========================================
+   Load bar
+   =========================================== */
+
+.loadbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 14px var(--gutter) 12px;
+}
+
+/* The URL box and its Load button, joined. */
+.url-form {
+  display: flex;
+  flex: 1 1 340px;
+  min-width: 0;
+  max-width: 600px;
+  margin: 0;
+}
+
+.url-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.url-field svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 15px;
+  height: 15px;
+  margin-top: -7.5px;
+  fill: none;
+  stroke: var(--text-subtle);
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+#url-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px 0 32px;
+  border: 1px solid var(--border-strong);
+  border-right: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+#url-input::placeholder {
+  color: var(--text-subtle);
+}
+
+#url-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+#load-url-btn {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.examples-label {
+  margin-right: 2px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 26px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chip-format {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ===========================================
+   Workspace: the table
+   =========================================== */
+
+.workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* A floor, so a short window still gets a usable table: the page scrolls
+     instead. It sits here, on the flex item, not on the frame inside it: a
+     frame taller than the workspace would spill under the status bar. */
+  min-height: 360px;
+  padding: 0 var(--gutter);
+}
+
+.table-frame {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.table-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The table's outer box: its wrapper when it has the "+" add-column strip,
+   its root otherwise. */
+.table-container > .dt-table-wrapper,
+.table-container > .dt-root {
+  box-shadow: var(--shadow-table);
+}
+
+/* Before the first load: what the frame is for. Gone once anything else
+   mounts in the container, the table or a test's own host. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px 24px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.table-container:has(> :not(.empty-state)) > .empty-state {
+  display: none;
+}
+
+.empty-icon {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+  fill: none;
+  stroke: var(--text-subtle);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.empty-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.empty-text {
+  max-width: 420px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.empty-error {
+  max-width: 520px;
+  margin: 14px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* A file dragged over the page. */
+.drop-target {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  /* The tint over an opaque surface: the frame's contents stay out of sight. */
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface);
+  pointer-events: none;
+}
+
+.drop-target p {
+  margin: 0;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* A load in progress: shown only once it has taken a moment, so a quick
+   load never flashes it. */
+.loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--scrim);
+  backdrop-filter: blur(1.5px);
+  animation: fade-in 0.2s ease;
+}
+
+.loading[hidden],
+.drop-target[hidden] {
+  display: none;
+}
+
+.loading-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 14px;
+  width: min(380px, calc(100% - 32px));
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-text {
+  min-width: 0;
+}
+
+.loading-title,
+.loading-detail {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loading-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.loading-detail {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.loading-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-pressed);
+}
+
+.loading-bar > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.loading-skip {
+  grid-column: 1 / -1;
+  justify-self: end;
+  margin: 10px -8px -6px 0;
+}
+
+.loading-bar[hidden],
+.loading-skip[hidden] {
+  display: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+
+  .loading {
+    animation: none;
+  }
+}
+
+/* ===========================================
+   Status bar
+   =========================================== */
+
+.statusbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  min-height: 48px;
+  padding: 8px var(--gutter);
+}
+
+.table-info {
+  flex: 1 1 360px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-info strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.table-info a {
+  border-radius: 3px;
+  color: var(--accent);
+  font-weight: 500;
   text-decoration: none;
 }
 
-.examples-cta a:hover {
+.table-info a:hover {
   text-decoration: underline;
 }
 
-@media (prefers-color-scheme: dark) {
-  .examples-cta {
-    border-top-color: #334155;
-    color: #cbd5e1;
+.table-info .sep {
+  margin: 0 7px;
+  color: var(--border-strong);
+}
+
+.table-info .hint {
+  color: var(--text-subtle);
+}
+
+.table-info--error {
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.actions .btn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.actions #export-btn {
+  margin-left: 6px;
+}
+
+.actions-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--border);
+}
+
+/* ===========================================
+   Sheet picker (Excel workbooks)
+   =========================================== */
+
+.dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 48px));
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-float);
+}
+
+.dialog::backdrop {
+  background: rgba(10, 14, 22, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.dialog[open] {
+  animation: dialog-in 0.18s ease;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  margin: 0;
+  padding: 20px;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dialog-text {
+  margin: 4px 0 14px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.dialog-text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  margin: 0 -4px;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.sheet-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.sheet-option:hover {
+  border-color: var(--border-strong);
+}
+
+.sheet-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sheet-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sheet-option input {
+  margin: 0;
+  accent-color: var(--accent);
+  transform: translateY(2px);
+}
+
+.sheet-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-size {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sheet-columns {
+  grid-column: 2 / -1;
+  min-width: 0;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* ===========================================
+   Documentation pages (Shortcuts)
+   =========================================== */
+
+/* A page that scrolls, unlike the demo's, which fits the window. */
+body.doc-page {
+  display: block;
+  height: auto;
+  min-height: 100%;
+}
+
+.topnav a[aria-current='page'] {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.doc {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px var(--gutter) 56px;
+}
+
+.doc-intro h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.doc-intro p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+.doc-sections {
+  margin-top: 32px;
+  columns: 2 440px;
+  column-gap: 20px;
+}
+
+.keys-section {
+  margin: 0 0 20px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  break-inside: avoid;
+}
+
+.keys-section h2 {
+  margin: 0 0 14px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.keys-note {
+  margin: -8px 0 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* One width for the keys in every section, so the descriptions line up. */
+.keys {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 10px 18px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.keys dt {
+  color: var(--text-muted);
+}
+
+.keys dd {
+  margin: 0;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font: 500 12px/19px var(--font);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.glyph {
+  color: var(--text);
+}
+
+.or {
+  color: var(--text-subtle);
+}
+
+.doc-footnote {
+  max-width: 680px;
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.doc-footnote strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* The examples index: a card per example. */
+.doc-intro code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.example-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.example-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-table);
+  transform: translateY(-1px);
+}
+
+.example-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.example-num {
+  color: var(--text-subtle);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.example-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.example-text {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.example-text code,
+.example-api code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+}
+
+.example-api {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.example-api code {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .example-card {
+    transition: none;
   }
 
-  .examples-cta a {
-    color: #60a5fa;
+  .example-card:hover {
+    transform: none;
   }
 }
 
 /* ===========================================
-   Responsive — Tablet
+   Narrow screens
    =========================================== */
 
-@media (max-width: 768px) {
-  body {
-    padding: 1.5rem 2rem;
+@media (max-width: 720px) {
+  :root {
+    --gutter: 12px;
   }
 
-  .table-wrapper {
-    height: 70vh;
+  .topbar {
+    gap: 8px;
   }
 
-  .btn--secondary {
-    margin-left: 0;
+  .version {
+    display: none;
+  }
+
+  .topnav a {
+    padding: 4px 6px;
+  }
+
+  .url-form {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .workspace {
+    min-height: 65vh;
+  }
+
+  .actions .btn {
+    padding: 0 8px;
   }
 }
-
-/* ===========================================
-   Responsive — Mobile
-   =========================================== */
 
 @media (max-width: 480px) {
-  body {
-    padding: 1rem;
-  }
-
-  h1 {
-    font-size: 1.3rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .table-wrapper {
-    height: 65vh;
-  }
-
-  #url-input,
-  #file-input {
-    min-width: 0;
-  }
-
-  .row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .btn-group {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .test-info {
+  .topnav a[rel='noopener'],
+  .actions-divider {
     display: none;
   }
 }

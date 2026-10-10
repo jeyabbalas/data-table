@@ -27,7 +27,10 @@ const SRC = join(__dirname, '..', '..', 'src');
 const ALLOWED = new Map([
   ['table/ColumnWindowController.ts', 'the one writer for the grid'],
   ['core/RovingTabindex.ts', 'reveals a toolbar control in its own scroll box'],
-  ['filters/FilterBar.ts', 'scrolls the filter chip strip to a new chip'],
+  [
+    'core/ChipStrip.ts',
+    "scrolls the filter bar's and the hidden-columns gutter's rows of chips to a chip",
+  ],
 ]);
 
 /** Methods that scroll the element they are called on. */

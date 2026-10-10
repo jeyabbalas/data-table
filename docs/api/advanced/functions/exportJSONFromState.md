@@ -8,7 +8,7 @@
 
 > **exportJSONFromState**(`state`, `bridge`, `options?`, `signal?`): `Promise`\<`string`\>
 
-Defined in: [export/JSONExport.ts:300](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/export/JSONExport.ts#L300)
+Defined in: [export/JSONExport.ts:300](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/export/JSONExport.ts#L300)
 
 Convenience wrapper that reads Signals from a TableState and delegates
 to `exportToJSON`.

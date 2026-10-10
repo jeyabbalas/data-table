@@ -8,6 +8,6 @@
 
 > **SortDirection** = `"asc"` \| `"desc"`
 
-Defined in: [core/types.ts:80](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/types.ts#L80)
+Defined in: [core/types.ts:80](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/types.ts#L80)
 
 Sort direction for a single column — ascending or descending.

@@ -6,7 +6,7 @@
 
 # Interface: TemporalColumnStats
 
-Defined in: [statistics/ColumnStatsTypes.ts:77](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L77)
+Defined in: [statistics/ColumnStatsTypes.ts:77](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L77)
 
 Stats for date and timestamp columns.
 Line 2: "2020-01-01 – 2024-12-31", then "· 2 non-finite" when the column
@@ -27,7 +27,7 @@ writes them: a year before 1 or past 9999 with its sign and six digits,
 
 > **filteredTotalRows**: `number` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L23)
+Defined in: [statistics/ColumnStatsTypes.ts:23](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L23)
 
 Total rows in filtered view, or null if no filter is active
 
@@ -41,7 +41,7 @@ Total rows in filtered view, or null if no filter is active
 
 > **kind**: `"temporal"`
 
-Defined in: [statistics/ColumnStatsTypes.ts:78](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L78)
+Defined in: [statistics/ColumnStatsTypes.ts:78](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L78)
 
 ***
 
@@ -49,7 +49,7 @@ Defined in: [statistics/ColumnStatsTypes.ts:78](https://github.com/jeyabbalas/da
 
 > **max**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:82](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L82)
+Defined in: [statistics/ColumnStatsTypes.ts:82](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L82)
 
 Maximum date/timestamp the chart draws, as ISO string, or null if there is none
 
@@ -59,7 +59,7 @@ Maximum date/timestamp the chart draws, as ISO string, or null if there is none
 
 > **min**: `string` \| `null`
 
-Defined in: [statistics/ColumnStatsTypes.ts:80](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L80)
+Defined in: [statistics/ColumnStatsTypes.ts:80](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L80)
 
 Minimum date/timestamp the chart draws, as ISO string, or null if there is none
 
@@ -69,7 +69,7 @@ Minimum date/timestamp the chart draws, as ISO string, or null if there is none
 
 > `optional` **nonFiniteCount?**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:90](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L90)
+Defined in: [statistics/ColumnStatsTypes.ts:90](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L90)
 
 Count of `infinity`, `-infinity` and dates more than about 270,000 years
 from 1970, which a JavaScript `Date` cannot hold, in the (possibly
@@ -83,7 +83,7 @@ built by a custom chart still type-check.
 
 > **nonNullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L19)
+Defined in: [statistics/ColumnStatsTypes.ts:19](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L19)
 
 Count of non-null values in the (possibly filtered) column
 
@@ -97,7 +97,7 @@ Count of non-null values in the (possibly filtered) column
 
 > **nullCount**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L21)
+Defined in: [statistics/ColumnStatsTypes.ts:21](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L21)
 
 Count of null values in the (possibly filtered) column
 
@@ -111,7 +111,7 @@ Count of null values in the (possibly filtered) column
 
 > **totalRows**: `number`
 
-Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/statistics/ColumnStatsTypes.ts#L17)
+Defined in: [statistics/ColumnStatsTypes.ts:17](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/statistics/ColumnStatsTypes.ts#L17)
 
 Total row count (unfiltered when filteredTotalRows is set, otherwise current)
 

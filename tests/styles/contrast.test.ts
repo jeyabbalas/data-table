@@ -568,7 +568,8 @@ describe('stylesheet antipatterns', () => {
       '.dt-col-resize-handle', // a 5px strip, filled only while in use
       '.dt-col-drag-handle', // its dots are filled with a token
       '.dt-col-sort-btn', // its arrows are filled with tokens, its badge has its own fill
-      '.dt-filter-chips::-webkit-scrollbar-track', // nothing is painted on a track
+      '.dt-filter-scroll::-webkit-scrollbar-track', // nothing is painted on a track
+      '.dt-hidden-scroll::-webkit-scrollbar-track',
     ]);
     const found: string[] = [];
     for (const file of componentStyleFiles()) {
@@ -629,9 +630,11 @@ describe('stylesheet antipatterns', () => {
     // column into the header. Clip instead, the way `.dt-col-stats` does.
     const allowed = new Set([
       '.dt-header-scroll', // column headers — every one holds buttons
-      '.dt-filter-chips', // chips, each with a remove button
+      // The toolbars' chips, and their buttons too, so that the toolbar's one
+      // roving stop is inside the region, wherever it rests.
+      '.dt-filter-scroll',
+      '.dt-hidden-scroll',
       '.dt-body-scroll', // the grid, focusable through the roving cursor
-      '.dt-hidden-gutter:not(.dt-hidden-gutter--hidden)', // hidden-column chips
       '.dt-derived-modal-dialog', // dialogs: inputs, editor, footer buttons
       '.dt-sql-filter-modal-dialog',
       '.dt-export-dialog',
@@ -657,19 +660,25 @@ describe('stylesheet antipatterns', () => {
     expect(found, 'scrollable regions outside the reviewed allowlist').toEqual([]);
   });
 
-  it('keeps the hidden-columns gutter reachable by pointer', () => {
-    // The gutter caps at `max-height: 200px`. Clipping the overflow instead of
-    // scrolling it leaves chips past that line unreachable for anyone without
-    // a keyboard — the roving tabindex scrolls the container to the active
-    // chip, but a mouse has no equivalent. The allowlist above only permits
-    // this region to scroll; this asserts it still does.
-    expect(
-      declarationFor(
-        '02-shell.css',
-        '.dt-hidden-gutter:not(.dt-hidden-gutter--hidden)',
-        'overflow',
-      ),
-    ).toMatch(/\b(auto|scroll)\b/);
+  it("lays both toolbars' chips in one row that scrolls sideways under a pinned end", () => {
+    // The hidden-columns gutter wrapped its chips onto rows, up to 200px of
+    // the table's height, so hiding many columns left the grid a row or two.
+    // Both toolbars now keep one row, as the filter bar always did. It has to
+    // scroll, not clip: the roving tabindex scrolls to the keyboard's chip,
+    // but a mouse has no equivalent. The allowlist above only permits these
+    // regions to scroll; this asserts they still do.
+    const wraps = (selector: string): boolean =>
+      rulesFor('02-shell.css', selector).some((rule) => rule.declarations['flex-wrap'] === 'wrap');
+    for (const kind of ['filter', 'hidden']) {
+      expect(declarationFor('02-shell.css', `.dt-${kind}-scroll`, 'overflow-x')).toMatch(
+        /^(auto|scroll)$/,
+      );
+      expect(wraps(`.dt-${kind}-chips`), `.dt-${kind}-chips wraps`).toBe(false);
+      // A chip keeps its width rather than shrink to its button.
+      expect(declarationFor('02-shell.css', `.dt-${kind}-chip`, 'flex-shrink')).toBe('0');
+      expect(declarationFor('02-shell.css', `.dt-${kind}-actions`, 'position')).toBe('sticky');
+    }
+    expect(wraps('.dt-hidden-gutter'), '.dt-hidden-gutter wraps').toBe(false);
   });
 });
 

@@ -10,11 +10,13 @@ From the repo root:
 npm run dev
 ```
 
-Then open `http://localhost:5173/data-table/` and click **fourteen focused examples** to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
+Then open `http://localhost:5173/data-table/` and click **Examples** in the top bar to land on `http://localhost:5173/data-table/examples/`. Each example links from there.
 
 No pre-build needed — Vite serves the library from source via aliases (see `vite.demo.config.ts`).
 
 The same examples are also browsable on the deployed demo under [`/data-table/examples/`](https://jeyabbalas.github.io/data-table/examples/).
+
+The page around each table (its header, side panel and buttons) takes its look from [`examples.css`](./examples.css), shared by all fourteen. It is decoration: leave it out of a copy and the example works the same. Each page follows the light or dark theme last picked in the demo, else the system's, by setting `data-dt-color-scheme` on `<html>` before the first paint, except `06-custom-theme`, which has its own switch.
 
 ## Sizing the mount container
 

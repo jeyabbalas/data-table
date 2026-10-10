@@ -371,7 +371,7 @@ export class KeyboardNavigator {
     }
 
     // Enter / Space on a header cell toggles sort; Shift/Ctrl/Meta adds to
-    // the multi-sort stack, mirroring Shift+click.
+    // the multi-sort stack, as Cmd/Ctrl+click on the sort button does.
     if (onHeader && focused && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
       e.preventDefault();
       this.claimGridFocus();

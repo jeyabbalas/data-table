@@ -202,7 +202,7 @@ export interface CreateDataTableOptions {
    */
   presets?: boolean | { manager?: FilterPresetManager };
 
-  /** Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`. */
+  /** Enable undo/redo (Cmd/Ctrl+Z; Cmd/Ctrl+Shift+Z or Ctrl+Y to redo). Default: `true`. */
   undoRedo?: boolean;
 
   /** Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `true`. */

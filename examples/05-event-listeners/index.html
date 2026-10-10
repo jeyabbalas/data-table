@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Event listeners</title>
+    <title>Event listeners · Data Table examples</title>
+    <!-- Light or dark as picked in the demo; the system's otherwise. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('dt-demo-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.dtColorScheme = theme;
+        }
+      } catch (e) {
+        /* storage unavailable */
+      }
+    </script>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       html,
       body {
@@ -14,22 +26,6 @@
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
-        background: var(--dt-bg);
-        color: var(--dt-text);
-      }
-      header {
-        padding: 0.5rem 1rem;
-        border-bottom: 1px solid var(--dt-border);
-      }
-      header h1 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--dt-text);
-      }
-      header a {
-        color: var(--dt-primary);
       }
       .split {
         flex: 1;
@@ -40,79 +36,42 @@
       #table {
         min-height: 0;
       }
-      aside {
-        padding: 1rem;
-        border-left: 1px solid var(--dt-border);
-        overflow: auto;
-        font-size: 0.9em;
-        background: var(--dt-bg-secondary);
-        color: var(--dt-text);
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
+      .event-name {
+        margin: 10px 0 4px;
+        font-family: var(--ex-mono);
+        font-size: 12px;
+        font-weight: 600;
       }
-      aside section {
-        background: var(--dt-bg);
-        border: 1px solid var(--dt-border);
-        border-radius: 4px;
-        padding: 0.75rem;
-      }
-      aside section h2 {
-        font-size: 0.75em;
-        margin: 0 0 0.5rem;
-        color: var(--dt-text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-      aside pre {
-        margin: 0 0 0.5rem;
-        font-size: 0.8em;
-        white-space: pre-wrap;
-        word-break: break-all;
-        color: var(--dt-text);
-      }
-      aside pre:last-child {
-        margin-bottom: 0;
-      }
-      .drive button {
-        display: block;
-        width: 100%;
-        text-align: left;
-        padding: 0.4rem 0.6rem;
-        margin: 0 0 0.4rem;
-        background: var(--dt-bg-tertiary);
-        color: var(--dt-text);
-        border: 1px solid var(--dt-border);
-        border-radius: 3px;
-        font: inherit;
-        cursor: pointer;
-      }
-      .drive button:hover {
-        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
-      }
-      .drive button:last-child {
-        margin-bottom: 0;
+      .event-name:first-of-type {
+        margin-top: 0;
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Event listeners (<a href="../">back</a>)</h1>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">05</span> Event listeners</h1>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/05-event-listeners"
+        rel="noopener"
+        >Source ↗</a
+      >
     </header>
     <div class="split">
       <div id="table"></div>
       <aside>
         <section>
-          <h2>Observe (via `on`)</h2>
-          <div>filterChange</div>
+          <h2>Observe (via <code>on</code>)</h2>
+          <div class="event-name">filterChange</div>
           <pre id="obs-filter">—</pre>
-          <div>sortChange</div>
+          <div class="event-name">sortChange</div>
           <pre id="obs-sort">—</pre>
-          <div>selectionChange</div>
+          <div class="event-name">selectionChange</div>
           <pre id="obs-sel">—</pre>
         </section>
         <section class="drive">
-          <h2>Drive (via `actions`)</h2>
+          <h2>Drive (via <code>actions</code>)</h2>
           <button id="drv-sort">Sort by Fare ↓</button>
           <button id="drv-survived">Filter Survived = 1</button>
           <button id="drv-first10">Select first 10 rows</button>

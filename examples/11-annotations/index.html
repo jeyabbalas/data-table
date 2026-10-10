@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Annotations</title>
+    <title>Annotations · Data Table examples</title>
+    <!-- Light or dark as picked in the demo; the system's otherwise. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('dt-demo-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.dtColorScheme = theme;
+        }
+      } catch (e) {
+        /* storage unavailable */
+      }
+    </script>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       html,
       body {
@@ -14,22 +26,6 @@
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
-        background: var(--dt-bg);
-        color: var(--dt-text);
-      }
-      header {
-        padding: 0.5rem 1rem;
-        border-bottom: 1px solid var(--dt-border);
-      }
-      header h1 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--dt-text);
-      }
-      header a {
-        color: var(--dt-primary);
       }
       .split {
         flex: 1;
@@ -40,89 +36,26 @@
       #table {
         min-height: 0;
       }
-      aside {
-        padding: 1rem;
-        border-left: 1px solid var(--dt-border);
-        overflow: auto;
-        font-size: 0.9em;
-        background: var(--dt-bg-secondary);
-        color: var(--dt-text);
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-      aside section {
-        background: var(--dt-bg);
-        border: 1px solid var(--dt-border);
-        border-radius: 4px;
-        padding: 0.75rem;
-      }
-      aside section h2 {
-        font-size: 0.75em;
-        margin: 0 0 0.5rem;
-        color: var(--dt-text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-      aside p {
-        margin: 0 0 0.5rem;
-      }
-      aside ol {
-        margin: 0;
-        padding-left: 1.1rem;
-      }
-      aside ol li {
-        margin: 0.2rem 0;
-      }
-      aside code {
-        background: var(--dt-bg-tertiary);
-        padding: 0 0.2rem;
-        border-radius: 3px;
-        font-size: 0.95em;
-      }
-      aside label {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        margin: 0.25rem 0;
-        font-size: 0.9em;
-      }
-      aside button {
-        display: block;
-        width: 100%;
-        text-align: left;
-        padding: 0.4rem 0.6rem;
-        margin: 0 0 0.4rem;
-        background: var(--dt-bg-tertiary);
-        color: var(--dt-text);
-        border: 1px solid var(--dt-border);
-        border-radius: 3px;
-        font: inherit;
-        cursor: pointer;
-      }
-      aside button:hover {
-        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
-      }
-      aside button:last-child {
-        margin-bottom: 0;
-      }
       .row {
         display: flex;
-        gap: 0.4rem;
+        gap: 6px;
       }
-      .row > * {
+      .row > button {
         flex: 1;
-      }
-      .counter {
-        font-size: 0.85em;
-        color: var(--dt-text-secondary);
-        margin-top: 0.35rem;
+        margin: 0;
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Annotations (<a href="../">back</a>)</h1>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">11</span> Annotations</h1>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/11-annotations"
+        rel="noopener"
+        >Source ↗</a
+      >
     </header>
     <div class="split">
       <div id="table"></div>
@@ -130,15 +63,15 @@
         <section>
           <h2>About</h2>
           <p>
-            <code>table.annotations</code> is a programmatic row / column / cell overlay. Phase 4
-            layers the visible rendering on top: CSS tints on rows / cells / column headers and a
-            library-owned popover grouped by scope.
+            <code>table.annotations</code> marks rows, columns and cells as errors, warnings or
+            info: each gets a tint, and a popover lists the annotations where you hover, grouped by
+            scope.
           </p>
           <ol>
-            <li>Click a Scenario button (A–E) to seed a specific overlay.</li>
+            <li>Click a scenario (A–E) to add a specific set of annotations.</li>
             <li>Hover or keyboard-focus an annotated cell or header to open the popover.</li>
             <li>
-              Toggle the severity filter checkboxes to hide a severity tint without modifying the
+              Toggle the severity filter checkboxes to hide a severity's tints without changing the
               store.
             </li>
           </ol>
@@ -158,7 +91,7 @@
             E — multiple anns at intersection (rowId 5, <code>fare_amount</code>)
           </button>
           <button id="btn-clear">Clear all</button>
-          <p class="counter">
+          <p class="note">
             Each scenario clears existing annotations first so they don't accumulate.
             <strong>Clear all</strong> empties the store directly.
           </p>
@@ -178,7 +111,7 @@
             ><input id="filter-info" type="checkbox" checked /> Show
             <strong>info</strong> tints</label
           >
-          <p class="counter">Visual-only — annotations remain in the store regardless.</p>
+          <p class="note">Visual-only — annotations remain in the store regardless.</p>
         </section>
 
         <section>
@@ -193,7 +126,7 @@
             accept="application/json,.json"
             style="display: none"
           />
-          <p class="counter">Note: Load replaces everything currently in the store.</p>
+          <p class="note">Note: Load replaces everything currently in the store.</p>
         </section>
 
         <section>

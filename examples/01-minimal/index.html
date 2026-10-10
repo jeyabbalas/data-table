@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Minimal</title>
+    <title>Minimal · Data Table examples</title>
+    <!-- Light or dark as picked in the demo; the system's otherwise. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('dt-demo-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.dtColorScheme = theme;
+        }
+      } catch (e) {
+        /* storage unavailable */
+      }
+    </script>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       html,
       body {
@@ -14,13 +26,6 @@
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
-      }
-      h1 {
-        margin: 1rem;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--dt-text);
       }
       #table {
         flex: 1;
@@ -29,7 +34,16 @@
     </style>
   </head>
   <body>
-    <h1>Minimal (<a href="../">back</a>)</h1>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">01</span> Minimal</h1>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/01-minimal"
+        rel="noopener"
+        >Source ↗</a
+      >
+    </header>
     <div id="table"></div>
     <script type="module" src="./main.ts"></script>
   </body>

@@ -5,6 +5,11 @@ Built on [DuckDB WASM](https://duckdb.org/docs/api/wasm/overview) — all
 analytics run entirely in the browser, so no data ever leaves the user's
 machine.
 
+**[Try the live demo](https://jeyabbalas.github.io/data-table/)**: open a CSV,
+JSON or Parquet file, or an Excel workbook, which the demo converts, and
+explore it. See also the [examples](https://jeyabbalas.github.io/data-table/examples/)
+and the [keyboard shortcuts](https://jeyabbalas.github.io/data-table/shortcuts/).
+
 - Per-column visualizations (histograms, value counts, date/time histograms)
   with brush/click crossfilter; nested columns get a non-null / null summary
   bar, which does not filter

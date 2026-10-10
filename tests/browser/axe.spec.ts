@@ -26,6 +26,7 @@ import {
   openDemo,
   setTheme,
   settle,
+  tallDemoTable,
 } from './helpers/demo';
 import { openExtractPanel } from './helpers/extract';
 import { escapeInspector, openWithF2 } from './helpers/inspector';
@@ -365,6 +366,9 @@ for (const theme of ['light', 'dark'] as const) {
     await openDemo(page);
     await loadExample(page, NESTED_EXAMPLE);
     await setTheme(page, theme);
+    // Room below the header for the whole panel: a field its body scrolls
+    // out of view is one whose background axe cannot tell.
+    await tallDemoTable(page);
 
     const people = await openExtractPanel(page, 'people', 'demo');
     // length, then element › name, which asks for the element's position.

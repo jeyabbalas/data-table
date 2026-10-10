@@ -7,6 +7,8 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
+import { ALL_SEVERITIES_MASK, severitiesOfMask } from '../annotations/severity';
+import type { AnnotationSeverity } from '../annotations/types';
 import { fetchCellJson, readJsonValue, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
@@ -16,6 +18,11 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
+import {
+  ANNOTATED_FILTER_COLUMN,
+  annotatedFilterMask,
+  isAnnotationSeverity,
+} from '../filters/annotatedFilters';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import { normalizeRestoredFilters } from '../filters/restoredFilters';
@@ -42,6 +49,7 @@ import {
   pinnedColumnsFirst,
 } from './State';
 import type {
+  AnnotatedFilter,
   Filter,
   FilterType,
   RawSQLFilter,
@@ -1166,10 +1174,14 @@ export class StateActions {
   /**
    * Add or update a filter
    *
-   * If a filter for the same column exists, it will be replaced.
+   * If a filter for the same column exists, it will be replaced. An
+   * annotated filter is made to keep the annotated rows of this table (its
+   * `table` is set to the base table's name), and replaces the annotated
+   * filter in force: see {@link StateActions.showAnnotatedRows}.
    */
   addFilter(filter: Filter): void {
     this.throwIfDestroyed('addFilter');
+    if (filter.type === 'annotated') filter = this.ownAnnotatedFilter(filter);
     this.captureForUndo();
     const current = this.state.filters.get();
     const existingIndex = current.findIndex((f) => f.column === filter.column);
@@ -1241,7 +1253,8 @@ export class StateActions {
    * given `valueType: 'time'`, so that it compares the time of day its
    * column's chart shows rather than the instant; and a range filter's
    * `valueType: 'time'` on a column that is not TIME or TIME WITH TIME ZONE,
-   * where the cast would fail every query, goes.
+   * where the cast would fail every query, goes. An annotated filter keeps
+   * the annotated rows of this table, whichever table it was saved on.
    *
    * Columns the preset does not carry forward have lost their filter, so they
    * are notified — outside the suppression window, since the callback may
@@ -1254,7 +1267,9 @@ export class StateActions {
     this.suppressUndoCapture = true;
     try {
       batch(() => {
-        this.state.filters.set(normalizeRestoredFilters(filters, this.state.schema.get()));
+        this.state.filters.set(
+          normalizeRestoredFilters(filters, this.state.schema.get(), this.baseTable()),
+        );
         if (sortColumns) {
           this.state.sortColumns.set(sortColumns);
         }
@@ -1263,6 +1278,106 @@ export class StateActions {
       this.suppressUndoCapture = false;
     }
     this.notifyRemovedFilters(before, this.state.filters.get());
+  }
+
+  // =========================================
+  // Annotated Rows
+  // =========================================
+
+  /**
+   * Show only the rows that have annotations: the rows with a row-scope or a
+   * cell-scope annotation in `table.annotations`, of the severities given,
+   * or of any severity. Adds an annotated filter ({@link AnnotatedFilter}),
+   * which replaces the one in force, as one undo entry; asked for again with
+   * the same severities, it changes nothing. Its chip reads "Annotated rows"
+   * and "any severity", or the severities' names.
+   *
+   * The view follows the annotations: adding or removing one while the
+   * filter is on updates the view in place, keeping its scroll position and
+   * the cursor. A column-scope annotation singles out no row. The severity
+   * filter (`annotations.setSeverityFilter`) changes which tints show, not
+   * which rows this shows.
+   *
+   * Synchronous, like `addFilter`. The rows, the count and the charts follow
+   * as they do for any filter change, once DuckDB holds the table's annotated
+   * rows, which takes a fraction of a second at a million of them.
+   *
+   * @param options.severities - Show the rows with annotations of these
+   *   severities. Left out or empty, the rows with annotations of any
+   *   severity.
+   *
+   * @example
+   * table.actions.showAnnotatedRows();
+   *
+   * @example
+   * // Only the rows with an error or a warning, and how many there are
+   * table.on('filterChange', ({ filteredRowCount }) => console.log(filteredRowCount));
+   * table.actions.showAnnotatedRows({ severities: ['error', 'warning'] });
+   *
+   * @throws `ConfigurationError` with `code: 'OPTIONS_INVALID'` when
+   *   `severities` is not a list of `'error'`, `'warning'` and `'info'`.
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  showAnnotatedRows(options: { severities?: AnnotationSeverity[] | undefined } = {}): void {
+    this.throwIfDestroyed('showAnnotatedRows');
+    const severities: unknown = options?.severities;
+    if (
+      severities !== undefined &&
+      !(Array.isArray(severities) && severities.every(isAnnotationSeverity))
+    ) {
+      throw new ConfigurationError(
+        "showAnnotatedRows: severities must be a list of 'error', 'warning' and 'info'.",
+        { code: 'OPTIONS_INVALID', details: { severities } },
+      );
+    }
+    // Each severity once, most severe first, and none for all three: the
+    // filter then reads as any other that shows the same rows.
+    const mask = annotatedFilterMask({
+      type: 'annotated',
+      column: ANNOTATED_FILTER_COLUMN,
+      severities: severities as AnnotationSeverity[] | undefined,
+    });
+    const filter = this.ownAnnotatedFilter({
+      type: 'annotated',
+      column: ANNOTATED_FILTER_COLUMN,
+      ...(mask === ALL_SEVERITIES_MASK ? {} : { severities: severitiesOfMask(mask) }),
+    });
+    const current = this.state.filters
+      .get()
+      .find((f): f is AnnotatedFilter => f.type === 'annotated');
+    if (current && current.table === filter.table && annotatedFilterMask(current) === mask) return;
+    this.addFilter(filter);
+  }
+
+  /**
+   * Stop showing only the annotated rows: remove the annotated filter that
+   * {@link StateActions.showAnnotatedRows} added, as one undo entry. With
+   * none in force, it changes nothing.
+   *
+   * @example
+   * table.actions.showAnnotatedRows();
+   * // …
+   * table.actions.hideAnnotatedRows();
+   *
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  hideAnnotatedRows(): void {
+    this.throwIfDestroyed('hideAnnotatedRows');
+    this.removeFilter(ANNOTATED_FILTER_COLUMN, 'annotated');
+  }
+
+  /**
+   * `filter`, made to keep the annotated rows of this table's base table,
+   * under the key every annotated filter has.
+   */
+  private ownAnnotatedFilter(filter: AnnotatedFilter): AnnotatedFilter {
+    const table = this.baseTable() ?? filter.table;
+    return { ...filter, column: ANNOTATED_FILTER_COLUMN, ...(table ? { table } : {}) };
+  }
+
+  /** The table the data loaded into, under its derived-column view if it has one. */
+  private baseTable(): string | null {
+    return this.state.baseTableName.get() ?? this.state.tableName.get();
   }
 
   // =========================================
@@ -2378,8 +2493,11 @@ export class StateActions {
               this.onFilterRemoveCallback?.(oldName);
             }
           } else {
+            // An annotated filter's key is no column's, and stays.
             this.state.filters.set(
-              filters.map((f) => (f.column === oldName ? { ...f, column: def.name } : f)),
+              filters.map((f) =>
+                f.type !== 'annotated' && f.column === oldName ? { ...f, column: def.name } : f,
+              ),
             );
           }
         } else if (typeChanged) {

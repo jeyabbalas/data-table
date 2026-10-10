@@ -44,4 +44,34 @@ describe('normalizeRestoredFilters', () => {
     ];
     expect(normalizeRestoredFilters(filters, SCHEMA)).toBe(filters);
   });
+
+  it('points an annotated filter at the base table it comes back to', () => {
+    const range: Filter = { type: 'range', column: 'day', min: '2024-01-01', max: '2024-02-01' };
+    const filters: Filter[] = [
+      { type: 'annotated', column: '__annotated__', severities: ['error'], table: 'saved_on' },
+      range,
+    ];
+    const restored = normalizeRestoredFilters(filters, SCHEMA, 'orders');
+    expect(restored).toEqual([
+      { type: 'annotated', column: '__annotated__', severities: ['error'], table: 'orders' },
+      range,
+    ]);
+    expect(restored[1]).toBe(range);
+
+    // One that names no table, or a key of its own, gets the table's and the key.
+    expect(
+      normalizeRestoredFilters(
+        [{ type: 'annotated', column: 'x' as '__annotated__' }],
+        SCHEMA,
+        'orders',
+      ),
+    ).toEqual([{ type: 'annotated', column: '__annotated__', table: 'orders' }]);
+  });
+
+  it('leaves an annotated filter as it is without a base table, or when it reads it already', () => {
+    const filters: Filter[] = [{ type: 'annotated', column: '__annotated__', table: 'orders' }];
+    expect(normalizeRestoredFilters(filters, SCHEMA)).toBe(filters);
+    expect(normalizeRestoredFilters(filters, SCHEMA, null)).toBe(filters);
+    expect(normalizeRestoredFilters(filters, SCHEMA, 'orders')).toBe(filters);
+  });
 });

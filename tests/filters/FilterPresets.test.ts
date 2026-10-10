@@ -125,6 +125,24 @@ describe('FilterPresetManager', () => {
       manager.load('nonexistent', actions);
       expect(actions.loadFilterPreset).not.toHaveBeenCalled();
     });
+
+    it('saves, exports, imports and loads an annotated filter', () => {
+      const annotated: Filter = {
+        type: 'annotated',
+        column: '__annotated__',
+        severities: ['error', 'warning'],
+        table: 'orders',
+      };
+      manager.save('Annotated', [annotated, rangeFilter()]);
+      const other = new FilterPresetManager();
+      expect(other.importFromJSON(manager.exportToJSON())).toEqual({ imported: 1, errors: [] });
+
+      const actions = mockActions();
+      other.load(other.getPresets()[0].id, actions);
+      const [filters] = (actions.loadFilterPreset as ReturnType<typeof vi.fn>).mock.calls[0];
+      // As saved: `loadFilterPreset` points it at the table it is loaded on.
+      expect(filters).toEqual([annotated, rangeFilter()]);
+    });
   });
 
   // ==========================================
@@ -481,6 +499,7 @@ describe('FilterPresetManager', () => {
               { type: 'not-null', column: 'f' },
               { type: 'pattern', column: 'g', pattern: 'test', mode: 'contains' },
               { type: 'raw-sql', column: '__raw_sql_x__', sql: 'a > 1', id: 'x' },
+              { type: 'annotated', column: '__annotated__', severities: ['error'], table: 't' },
             ],
           },
         ],
@@ -488,7 +507,44 @@ describe('FilterPresetManager', () => {
       const result = manager.importFromJSON(json);
       expect(result.imported).toBe(1);
       expect(result.errors).toHaveLength(0);
-      expect(manager.getPresets()[0].filters).toHaveLength(8);
+      expect(manager.getPresets()[0].filters).toHaveLength(9);
+    });
+
+    it('accepts an annotated filter with or without severities and a table', () => {
+      const json = JSON.stringify({
+        version: 1,
+        presets: [
+          { name: 'Any', filters: [{ type: 'annotated', column: '__annotated__' }] },
+          {
+            name: 'Some',
+            filters: [
+              {
+                type: 'annotated',
+                column: '__annotated__',
+                severities: ['warning', 'info'],
+                table: 'saved_on',
+              },
+            ],
+          },
+        ],
+      });
+      expect(manager.importFromJSON(json)).toEqual({ imported: 2, errors: [] });
+    });
+
+    it('rejects an annotated filter with a severity it does not know, another key or a bad table', () => {
+      const invalid = [
+        { type: 'annotated', column: '__annotated__', severities: ['error', 'fatal'] },
+        { type: 'annotated', column: '__annotated__', severities: 'error' },
+        { type: 'annotated', column: 'status' },
+        { type: 'annotated', column: '__annotated__', table: 42 },
+      ];
+      const json = JSON.stringify({
+        version: 1,
+        presets: invalid.map((filter, i) => ({ name: `P${i}`, filters: [filter] })),
+      });
+      const result = manager.importFromJSON(json);
+      expect(result.imported).toBe(0);
+      expect(result.errors.filter((e) => e.includes('invalid filter'))).toHaveLength(4);
     });
 
     // --- sortColumns validation ---

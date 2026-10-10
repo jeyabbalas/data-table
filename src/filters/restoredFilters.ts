@@ -3,11 +3,13 @@
  * table they come back to.
  *
  * A saved filter can lack a `valueType` this version needs, or carry one its
- * column cannot take. Each backfill goes in {@link normalizeRestoredFilters},
- * which every restore path calls, so none is applied in one path only.
+ * column cannot take, and an annotated filter names the table it was saved
+ * on. Each backfill goes in {@link normalizeRestoredFilters}, which every
+ * restore path calls, so none is applied in one path only.
  */
 
 import type { ColumnSchema, Filter } from '../core/types';
+import { annotatedFiltersFor } from './annotatedFilters';
 import { jsonFiltersAsText } from './jsonFilters';
 import { timeOfDayRanges } from './timeFilters';
 
@@ -20,13 +22,17 @@ import { timeOfDayRanges } from './timeFilters';
  * - a range filter on a TIME WITH TIME ZONE column whose bounds are times of
  *   day without an offset compares the time of day, and a range's
  *   `valueType: 'time'` on a column that is not TIME or TIME WITH TIME ZONE
- *   goes ({@link timeOfDayRanges}).
+ *   goes ({@link timeOfDayRanges});
+ * - given `baseTable`, the table they come back to, an annotated filter
+ *   keeps its annotated rows ({@link annotatedFiltersFor}).
  *
  * Returns `filters` itself when nothing changed.
  */
 export function normalizeRestoredFilters(
   filters: Filter[],
   schema: readonly ColumnSchema[],
+  baseTable?: string | null,
 ): Filter[] {
-  return timeOfDayRanges(jsonFiltersAsText(filters, schema), schema);
+  const restored = timeOfDayRanges(jsonFiltersAsText(filters, schema), schema);
+  return baseTable ? annotatedFiltersFor(restored, baseTable) : restored;
 }

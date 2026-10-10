@@ -175,6 +175,29 @@ describe('Filter round-trip via structured-clone-equivalent path', () => {
     };
     expect(roundTrip(filter)).toEqual(filter);
   });
+
+  it('annotated, with and without severities, with its own copy of them', () => {
+    const any: Filter = { type: 'annotated', column: '__annotated__', table: 'orders' };
+    expect(roundTrip(any)).toEqual(any);
+
+    const severities: ['error', 'warning'] = ['error', 'warning'];
+    const some: Filter = { type: 'annotated', column: '__annotated__', severities, table: 't' };
+    const serialized = serializeFilter(some) as Filter & { type: 'annotated' };
+    expect(serialized).toEqual(some);
+    expect(serialized.severities).not.toBe(severities);
+    const round = deserializeFilter(serialized) as Filter & { type: 'annotated' };
+    expect(round).toEqual(some);
+    expect(round.severities).not.toBe(serialized.severities);
+  });
+
+  it('annotated whose saved severities are not a list keeps every severity', () => {
+    const saved = { type: 'annotated', column: '__annotated__', severities: 'error', table: 't' };
+    expect(deserializeFilter(saved as never)).toEqual({
+      type: 'annotated',
+      column: '__annotated__',
+      table: 't',
+    });
+  });
 });
 
 describe('Filter round-trip via FilterPresetManager JSON path', () => {
@@ -223,6 +246,8 @@ describe('Filter round-trip via FilterPresetManager JSON path', () => {
         id: 'a',
         label: 'Adults',
       },
+      { type: 'annotated', column: '__annotated__', table: 'orders' },
+      { type: 'annotated', column: '__annotated__', severities: ['info'], table: 'orders' },
     ];
     for (const filter of cases) {
       expect(jsonRoundTrip(filter)).toEqual(filter);

@@ -5,7 +5,7 @@
  * All operations degrade gracefully — returns null/[] on failure, never throws.
  */
 
-import type { Filter } from '../filters/FilterTypes';
+import type { AnnotatedFilter, Filter } from '../filters/FilterTypes';
 import { SNAPSHOT_VERSION } from './types';
 import type { DateWrapper, SerializedFilter, SessionSnapshot } from './types';
 
@@ -93,7 +93,19 @@ export function serializeFilter(filter: Filter): SerializedFilter {
     case 'pattern':
     case 'raw-sql':
       return { ...filter };
+    case 'annotated':
+      return copyAnnotatedFilter(filter);
   }
+}
+
+/**
+ * An annotated filter with its own copy of the severities it keeps. Saved
+ * severities that are not a list are left out, so the filter keeps every
+ * severity, as one that names none does.
+ */
+function copyAnnotatedFilter(filter: AnnotatedFilter): AnnotatedFilter {
+  const { severities, ...rest } = filter;
+  return Array.isArray(severities) ? { ...rest, severities: [...severities] } : rest;
 }
 
 /** Convert a serialized filter back to a live Filter with Date objects restored.
@@ -123,6 +135,8 @@ export function deserializeFilter(filter: SerializedFilter): Filter | null {
     case 'pattern':
     case 'raw-sql':
       return { ...filter };
+    case 'annotated':
+      return copyAnnotatedFilter(filter);
     default:
       console.warn(
         'Unknown filter type during deserialization:',

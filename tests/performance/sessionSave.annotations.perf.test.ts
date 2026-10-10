@@ -18,10 +18,14 @@
  *   a sort-change save, before (toJSON + clone of every annotation)   ~1.2 s
  *   a sort-change save, after (the session record alone)              0.18 ms
  *     of which the annotations' part (`currentAnnotationFile`)        0.4 µs
- *   the first save, which writes the annotations record               ~1.2 s
- *   a reload: load (both records)                                     ~1.5 s
- *             restore (`loadJSON` and the adopting `toJSON`)          ~1 s
+ *   the first save, which writes the record in 100 chunks             ~1 s
+ *     its longest task                                                30 ms
+ *   a reload: load (the head and one `getAll` of the chunks)          ~1.3 s
+ *             restore (`loadJSON` and the adopting `toJSON`)          ~1.1 s
  *             its first save, with no annotations written             ~2 ms
+ *
+ * In Chromium the same write takes 0.48 s with no task over 13 ms, and the
+ * load 0.57 s, of which `getAll`'s 0.52 s is one task.
  */
 import 'fake-indexeddb/auto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -80,6 +84,26 @@ function fixture(seed: number): NewAnnotation[] {
   return out;
 }
 
+/**
+ * The longest stretch the event loop was blocked while `work` ran, as gaps
+ * between ticks of a `setImmediate` probe: the longest task.
+ */
+async function longestTask<T>(work: () => Promise<T>): Promise<[number, T]> {
+  let longest = 0;
+  let last = performance.now();
+  let running = true;
+  const tick = (): void => {
+    const now = performance.now();
+    longest = Math.max(longest, now - last);
+    last = now;
+    if (running) setImmediate(tick);
+  };
+  setImmediate(tick);
+  const result = await work();
+  running = false;
+  return [Math.max(longest, performance.now() - last), result];
+}
+
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)]!;
@@ -99,6 +123,7 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
   let annotations: AnnotationStore;
   let store: SessionStore;
   let firstSaveMs = 0;
+  let firstSaveLongestMs = 0;
 
   beforeAll(async () => {
     state = createTableState();
@@ -110,8 +135,11 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     store = new SessionStore();
     await store.open();
     const start = performance.now();
-    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    const [longest] = await longestTask(() =>
+      store.save(snapshotFromState(state, undefined, undefined, annotations)),
+    );
     firstSaveMs = performance.now() - start;
+    firstSaveLongestMs = longest;
   }, 120_000);
 
   afterAll(() => {
@@ -149,13 +177,16 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     const oldSaveMs = performance.now() - start;
 
     console.log(
-      `[sessionSave 1M] first save (writes the record) ${firstSaveMs.toFixed(0)} ms; ` +
+      `[sessionSave 1M] first save (writes the record) ${firstSaveMs.toFixed(0)} ms, ` +
+        `its longest task ${firstSaveLongestMs.toFixed(0)} ms; ` +
         `currentAnnotationFile median ${(median(lookups) * 1000).toFixed(1)} µs; ` +
         `snapshot median ${median(snapshots).toFixed(2)} ms; ` +
         `sort-change save median ${median(saves).toFixed(2)} ms; ` +
         `old per-save toJSON + clone ${oldSaveMs.toFixed(0)} ms`,
     );
     expect(annotationPuts).toBe(0);
+    // A hundred chunks of 10,000, none of them one long task.
+    expect(firstSaveLongestMs).toBeLessThan(250);
     expect(median(lookups)).toBeLessThan(1);
     expect(median(snapshots)).toBeLessThan(5);
     expect(median(saves)).toBeLessThan(50);
@@ -171,7 +202,7 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     const nextAnnotations = new AnnotationStore({ tableName: nextState.baseTableName });
 
     let start = performance.now();
-    const snapshot = await reloaded.load('perf');
+    const [loadLongestMs, snapshot] = await longestTask(() => reloaded.load('perf'));
     const loadMs = performance.now() - start;
     start = performance.now();
     restoreStateFromSnapshot(nextState, snapshot!, undefined, undefined, nextAnnotations);
@@ -190,7 +221,8 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     reloaded.close();
 
     console.log(
-      `[sessionSave 1M] reload: load ${loadMs.toFixed(0)} ms; ` +
+      `[sessionSave 1M] reload: load ${loadMs.toFixed(0)} ms ` +
+        `(longest task ${loadLongestMs.toFixed(0)} ms); ` +
         `restore (loadJSON + adopt) ${restoreMs.toFixed(0)} ms; ` +
         `first save after it ${saveMs.toFixed(2)} ms`,
     );

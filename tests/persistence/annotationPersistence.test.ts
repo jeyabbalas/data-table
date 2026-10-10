@@ -3,20 +3,27 @@
  * of the store's content, so the store can tell an unchanged one by its
  * token alone, and adopted after a restore, so a reload writes nothing.
  */
+import { serialize } from 'node:v8';
 import { describe, expect, it, vi } from 'vitest';
 import { AnnotationStore } from '@/annotations/AnnotationStore';
 import type { AnnotationFile } from '@/annotations/types';
 import { createSignal } from '@/core/Signal';
 import {
+  ANNOTATION_CHUNK_MAX_BYTES,
+  ANNOTATION_CHUNK_MAX_COUNT,
   ANNOTATIONS_RECORD_FORMAT,
   adoptAnnotationFile,
+  annotationChunkEnd,
   annotationFileToken,
-  checkAnnotationsRecord,
+  assembleAnnotationFile,
+  checkAnnotationsHead,
   currentAnnotationFile,
+  estimateAnnotationBytes,
   isAnnotationsMarker,
   newAnnotationsOwner,
   shareAnnotationFileToken,
 } from '@/persistence/annotationPersistence';
+import type { AnnotationsHead } from '@/persistence/annotationPersistence';
 
 function makeStore(tableName: string | null = 't') {
   const name = createSignal<string | null>(tableName);
@@ -205,11 +212,13 @@ describe('adoptAnnotationFile', () => {
 
 describe('the annotations record and its marker', () => {
   const marker = { format: ANNOTATIONS_RECORD_FORMAT, count: 2, owner: 'o1' };
-  const record = (overrides: Record<string, unknown> = {}) => ({
+  const { annotations: _annotations, ...fields } = fileOf(2);
+  const head = (overrides: Record<string, unknown> = {}) => ({
     format: ANNOTATIONS_RECORD_FORMAT,
     owner: 'o1',
     count: 2,
-    file: fileOf(2),
+    chunks: 1,
+    file: fields,
     ...overrides,
   });
 
@@ -229,34 +238,128 @@ describe('the annotations record and its marker', () => {
     expect(isAnnotationsMarker([marker])).toBe(false);
   });
 
-  it('attaches the record written with the session record', () => {
-    const value = record();
-    expect(checkAnnotationsRecord(marker, value)).toEqual({ ok: true, file: value.file });
+  it('attaches the head written with the session record', () => {
+    const value = head();
+    expect(checkAnnotationsHead(marker, value)).toEqual({ ok: true, head: value });
+    const empty = head({ count: 0, chunks: 0 });
+    expect(checkAnnotationsHead({ ...marker, count: 0 }, empty)).toEqual({ ok: true, head: empty });
   });
 
-  it('tells a missing record, another save’s, and a malformed one apart', () => {
-    expect(checkAnnotationsRecord(marker, undefined)).toEqual({ ok: false, reason: 'missing' });
-    expect(checkAnnotationsRecord(marker, record({ owner: 'o2' }))).toEqual({
+  it('tells a missing head, another save’s, and a malformed one apart', () => {
+    expect(checkAnnotationsHead(marker, undefined)).toEqual({ ok: false, reason: 'missing' });
+    expect(checkAnnotationsHead(marker, head({ owner: 'o2' }))).toEqual({
       ok: false,
       reason: 'mismatch',
     });
     for (const bad of [
       'a string',
-      [record()],
-      record({ format: 2 }),
-      record({ owner: 7 }),
-      record({ count: 3 }),
-      record({ count: -1 }),
-      record({ file: null }),
-      record({ file: [] }),
-      record({ file: { version: 1, annotations: 'x' } }),
-      record({ file: { annotations: fileOf(2).annotations } }),
-      record({ file: fileOf(3), count: 2 }),
+      [head()],
+      head({ format: 2 }),
+      head({ owner: 7 }),
+      head({ count: 3 }),
+      head({ count: -1 }),
+      head({ chunks: 1.5 }),
+      head({ chunks: 0 }),
+      head({ chunks: 3 }),
+      head({ file: null }),
+      head({ file: [] }),
+      head({ file: { tableName: 't' } }),
     ]) {
-      expect(checkAnnotationsRecord(marker, bad), JSON.stringify(bad)).toEqual({
+      expect(checkAnnotationsHead(marker, bad), JSON.stringify(bad)).toEqual({
         ok: false,
         reason: 'invalid',
       });
     }
   });
+
+  it('reassembles the file from its chunks, in order', () => {
+    const file = fileOf(5);
+    const value = head({ count: 5, chunks: 3 }) as unknown as AnnotationsHead;
+    const chunks = [
+      file.annotations.slice(0, 2),
+      file.annotations.slice(2, 4),
+      file.annotations.slice(4),
+    ];
+    const assembled = assembleAnnotationFile(value, chunks);
+    expect(assembled).toEqual({ ...fields, annotations: file.annotations });
+    expect(assembled?.annotations[3]).toBe(file.annotations[3]);
+  });
+
+  it('assembles nothing from chunks that disagree with the head', () => {
+    const file = fileOf(5);
+    const value = head({ count: 5, chunks: 2 }) as unknown as AnnotationsHead;
+    const [first, rest] = [file.annotations.slice(0, 2), file.annotations.slice(2)];
+    expect(assembleAnnotationFile(value, [first])).toBeNull();
+    expect(assembleAnnotationFile(value, [first, rest, rest])).toBeNull();
+    expect(assembleAnnotationFile(value, [first, rest.slice(1)])).toBeNull();
+    expect(assembleAnnotationFile(value, [first, []])).toBeNull();
+    expect(assembleAnnotationFile(value, [first, { length: 3 }])).toBeNull();
+  });
 });
+
+describe('annotation chunks', () => {
+  const annotation = (message: string, metadata?: unknown) => ({
+    id: 'ann_0',
+    scope: 'row',
+    rowId: 0,
+    severity: 'info',
+    message,
+    ...(metadata === undefined ? {} : { metadata }),
+  });
+
+  it('estimates two bytes to a character, and more than a clone takes', () => {
+    const short = estimateAnnotationBytes(annotation('m'));
+    const long = estimateAnnotationBytes(annotation('m'.repeat(1001)));
+    expect(long - short).toBe(2_000);
+    const value = annotation('Value violates rule 7', { rule: 'max', path: ['a', 'b', 3] });
+    expect(estimateAnnotationBytes(value)).toBeGreaterThan(structuredCloneSize(value));
+  });
+
+  it('counts metadata, binary data, maps and sets', () => {
+    const base = estimateAnnotationBytes(annotation('m', {}));
+    expect(
+      estimateAnnotationBytes(annotation('m', { data: new Uint8Array(5000) })),
+    ).toBeGreaterThan(base + 5000);
+    expect(
+      estimateAnnotationBytes(annotation('m', { data: new ArrayBuffer(5000) })),
+    ).toBeGreaterThan(base + 5000);
+    expect(
+      estimateAnnotationBytes(annotation('m', { map: new Map([['k', 'v'.repeat(500)]]) })),
+    ).toBeGreaterThan(base + 1000);
+    expect(
+      estimateAnnotationBytes(annotation('m', { set: new Set(['v'.repeat(500)]) })),
+    ).toBeGreaterThan(base + 1000);
+  });
+
+  it('counts a value of too many parts, a cycle among them, as a chunk of its own', () => {
+    const cycle: Record<string, unknown> = { name: 'loop' };
+    cycle['self'] = cycle;
+    cycle['again'] = cycle;
+    expect(estimateAnnotationBytes(annotation('m', cycle))).toBe(ANNOTATION_CHUNK_MAX_BYTES);
+    const wide = Array.from({ length: 5000 }, (_, i) => i);
+    expect(estimateAnnotationBytes(annotation('m', wide))).toBe(ANNOTATION_CHUNK_MAX_BYTES);
+  });
+
+  it('ends a chunk at the count, at the bytes, or at the end', () => {
+    const plain = Array.from({ length: 25_000 }, () => annotation('m'));
+    expect(annotationChunkEnd(plain, 0)).toBe(ANNOTATION_CHUNK_MAX_COUNT);
+    expect(annotationChunkEnd(plain, 20_000)).toBe(25_000);
+    expect(annotationChunkEnd(plain, 24_999)).toBe(25_000);
+
+    const heavy = Array.from({ length: 100 }, () => annotation('m'.repeat(1024 * 1024)));
+    // Over two megabytes each, as estimated: three fit in eight.
+    expect(annotationChunkEnd(heavy, 0)).toBe(3);
+    expect(annotationChunkEnd(heavy, 99)).toBe(100);
+  });
+
+  it('puts an annotation past the bytes in a chunk of its own', () => {
+    const huge = [annotation('m'.repeat(5 * 1024 * 1024)), annotation('m'), annotation('m')];
+    expect(annotationChunkEnd(huge, 0)).toBe(1);
+    expect(annotationChunkEnd(huge, 1)).toBe(3);
+  });
+});
+
+/** The bytes V8's serializer, which structured clone uses, writes for `value`. */
+function structuredCloneSize(value: unknown): number {
+  return serialize(value).length;
+}

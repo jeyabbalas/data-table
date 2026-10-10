@@ -11,10 +11,24 @@
  * same file object until the store's content changes, and each file object
  * has a token ({@link annotationFileToken}).
  *
+ * A table's annotations record is a head and chunks. The head, in the
+ * `annotations` store under the table name, is `{ format, owner, count,
+ * chunks, file }`, `file` being the annotation file without its annotations.
+ * Those are in the `chunks` store, in slices of at most
+ * {@link ANNOTATION_CHUNK_MAX_COUNT} annotations or about
+ * {@link ANNOTATION_CHUNK_MAX_BYTES} ({@link annotationChunkEnd}), each under
+ * `[tableName, owner, index]`: one key range holds a table's chunks, another
+ * those of one write. Chromium refuses any one value over 133,169,152 bytes,
+ * which a million annotations pass as a single file; a chunk stays far below
+ * it, and a write clones a million annotations in a hundred short tasks
+ * rather than one long one. A write deletes the table's chunks and puts the
+ * new ones and the head in one transaction, so a reader finds the old record
+ * or the new one, never part of either.
+ *
  * The session record holds a marker in place of its annotations,
- * `__annotations: { format, count, owner }`, and the annotations record is
- * `{ format, owner, count, file }`. A load attaches the record only when the
- * session record has a marker and the two agree. `owner` is a token made for
+ * `__annotations: { format, count, owner }`. A load attaches the annotations
+ * record only when the session record has a marker and the two agree, the
+ * chunks with them. `owner` is a token made for
  * each write of the record ({@link newAnnotationsOwner}) and copied into the
  * marker of the session record written with it, rather than the table name,
  * which the key already is. The two records live in separate databases, so
@@ -154,16 +168,18 @@ export interface AnnotationsMarker {
 }
 
 /**
- * The value of a table's annotations record in `dt-annotations`, keyed by
- * the table name.
+ * The head of a table's annotations record in `dt-annotations`, keyed by the
+ * table name: its file without the annotations, which are in `chunks`
+ * chunks, keyed `[tableName, owner, 0]` to `[tableName, owner, chunks - 1]`.
  *
  * @internal
  */
-export interface AnnotationsRecord {
+export interface AnnotationsHead {
   format: number;
   owner: string;
   count: number;
-  file: AnnotationFile;
+  chunks: number;
+  file: Omit<AnnotationFile, 'annotations'>;
 }
 
 /**
@@ -215,36 +231,149 @@ export function isAnnotationsMarker(value: unknown): value is AnnotationsMarker 
 }
 
 /**
- * The annotations file of `value`, the stored annotations record of a
- * session whose marker is `marker`, when the record is the one written with
- * that session record; otherwise why not. The file's annotations are left
- * to `loadJSON` to check.
+ * The head of `value`, the stored head of the annotations record of a
+ * session whose marker is `marker`, when it is the head written with that
+ * session record; otherwise why not.
  *
  * @internal
  */
-export function checkAnnotationsRecord(
+export function checkAnnotationsHead(
   marker: AnnotationsMarker,
   value: unknown,
 ):
-  | { ok: true; file: AnnotationFile }
+  | { ok: true; head: AnnotationsHead }
   | { ok: false; reason: Exclude<AnnotationsDropReason, 'unavailable'> } {
   if (value === undefined || value === null) return { ok: false, reason: 'missing' };
   if (!isPlainObject(value) || value['format'] !== ANNOTATIONS_RECORD_FORMAT) {
     return { ok: false, reason: 'invalid' };
   }
-  const owner = value['owner'];
-  if (typeof owner !== 'string' || !isCount(value['count']))
+  const { owner, count, chunks, file } = value;
+  if (typeof owner !== 'string' || !isCount(count) || !isCount(chunks)) {
     return { ok: false, reason: 'invalid' };
+  }
   if (owner !== marker.owner) return { ok: false, reason: 'mismatch' };
-  const file = value['file'];
   if (
-    value['count'] !== marker.count ||
+    count !== marker.count ||
+    // Every chunk holds an annotation at least.
+    chunks > count ||
+    (count > 0 && chunks === 0) ||
     !isPlainObject(file) ||
-    typeof file['version'] !== 'number' ||
-    !Array.isArray(file['annotations']) ||
-    file['annotations'].length !== marker.count
+    typeof file['version'] !== 'number'
   ) {
     return { ok: false, reason: 'invalid' };
   }
-  return { ok: true, file: file as unknown as AnnotationFile };
+  return { ok: true, head: value as unknown as AnnotationsHead };
+}
+
+/**
+ * The file `head` and the values stored for its chunks, in key order, make;
+ * `null` when they do not agree with it. The annotations themselves are left
+ * to `loadJSON` to check.
+ *
+ * @internal
+ */
+export function assembleAnnotationFile(
+  head: AnnotationsHead,
+  chunks: readonly unknown[],
+): AnnotationFile | null {
+  if (chunks.length !== head.chunks) return null;
+  let count = 0;
+  for (const chunk of chunks) {
+    if (!Array.isArray(chunk) || chunk.length === 0) return null;
+    count += chunk.length;
+  }
+  if (count !== head.count) return null;
+  const annotations = new Array<unknown>(count);
+  let i = 0;
+  for (const chunk of chunks as unknown[][]) {
+    for (const annotation of chunk) annotations[i++] = annotation;
+  }
+  return { ...head.file, annotations } as AnnotationFile;
+}
+
+// ── Chunks ────────────────────────────────────────────────────────────
+
+/**
+ * The annotations a chunk holds at most. Together with
+ * {@link ANNOTATION_CHUNK_MAX_BYTES} it keeps a chunk far below Chromium's
+ * cap on one value, 133,169,152 bytes: only annotations averaging over
+ * 13 KB in parts the estimate does not see (a `Blob`'s contents) could fill
+ * one, or an annotation of 127 MiB by itself.
+ *
+ * @internal
+ */
+export const ANNOTATION_CHUNK_MAX_COUNT = 10_000;
+
+/**
+ * The bytes a chunk holds at most, as {@link estimateAnnotationBytes}
+ * counts them: two to a character, so about twice what Latin-1 text takes.
+ * A chunk of plain annotations reaches the count first.
+ *
+ * @internal
+ */
+export const ANNOTATION_CHUNK_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Parts a value's estimate visits at most; past them, a cycle perhaps, it fills a chunk. */
+const ESTIMATE_MAX_PARTS = 4096;
+let partsLeft = 0;
+
+function sizeOf(value: unknown): number {
+  if (--partsLeft < 0) return 0;
+  switch (typeof value) {
+    case 'string':
+      return 4 + 2 * value.length;
+    case 'object': {
+      if (value === null) return 1;
+      if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return 16 + value.byteLength;
+      let bytes = 8;
+      if (Array.isArray(value)) {
+        for (const item of value) bytes += sizeOf(item);
+      } else if (value instanceof Map) {
+        for (const [key, item] of value) bytes += sizeOf(key) + sizeOf(item);
+      } else if (value instanceof Set) {
+        for (const item of value) bytes += sizeOf(item);
+      } else {
+        for (const key in value) {
+          bytes += 4 + 2 * key.length + sizeOf((value as Record<string, unknown>)[key]);
+        }
+      }
+      return bytes;
+    }
+    default:
+      return 9;
+  }
+}
+
+/**
+ * About the bytes a structured clone of `annotation` takes, or more: two to
+ * a character, which a string past Latin-1 takes, and a few for each number
+ * and container. A value of more than 4,096 parts — a cycle among them —
+ * counts as a chunk's worth, so that it goes in a chunk of its own.
+ *
+ * @internal
+ */
+export function estimateAnnotationBytes(annotation: unknown): number {
+  partsLeft = ESTIMATE_MAX_PARTS;
+  const bytes = sizeOf(annotation);
+  return partsLeft < 0 ? ANNOTATION_CHUNK_MAX_BYTES : bytes;
+}
+
+/**
+ * Where the chunk of `annotations` that starts at `start` ends (exclusive):
+ * after {@link ANNOTATION_CHUNK_MAX_COUNT} annotations, or before the one
+ * that takes it past {@link ANNOTATION_CHUNK_MAX_BYTES}, but after one at
+ * least.
+ *
+ * @internal
+ */
+export function annotationChunkEnd(annotations: readonly unknown[], start: number): number {
+  const limit = Math.min(annotations.length, start + ANNOTATION_CHUNK_MAX_COUNT);
+  let bytes = 0;
+  let end = start;
+  while (end < limit) {
+    bytes += estimateAnnotationBytes(annotations[end]);
+    if (bytes > ANNOTATION_CHUNK_MAX_BYTES && end > start) break;
+    end++;
+  }
+  return end;
 }

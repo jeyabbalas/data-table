@@ -91,27 +91,38 @@ function readRaw(dbName: string, storeName: string, key: string): Promise<unknow
   });
 }
 
-/** Put a value as another writer (an older version, a tamperer) would. */
-function plant(
+/** The stores of `dt-annotations`, made as this version's upgrade makes them. */
+function createAnnotationStores(db: IDBDatabase): void {
+  if (!db.objectStoreNames.contains('annotations')) db.createObjectStore('annotations');
+  if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks');
+}
+
+/**
+ * Put values as another writer (an older version, a tamperer) would: each
+ * `[value, key]` in `store` of `dbName`.
+ */
+function plantIn(
   dbName: 'dt-sessions' | 'dt-annotations',
-  value: unknown,
-  key?: string,
+  storeName: 'sessions' | 'annotations' | 'chunks',
+  entries: [unknown, IDBValidKey?][],
 ): Promise<void> {
-  const storeName = dbName === 'dt-sessions' ? 'sessions' : 'annotations';
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName, 1);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore(
-        storeName,
-        dbName === 'dt-sessions' ? { keyPath: 'tableName' } : undefined,
-      );
+      if (dbName === 'dt-sessions') {
+        request.result.createObjectStore('sessions', { keyPath: 'tableName' });
+      } else {
+        createAnnotationStores(request.result);
+      }
     };
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
       const db = request.result;
       const tx = db.transaction(storeName, 'readwrite');
-      if (key === undefined) tx.objectStore(storeName).put(value);
-      else tx.objectStore(storeName).put(value, key);
+      for (const [value, key] of entries) {
+        if (key === undefined) tx.objectStore(storeName).put(value);
+        else tx.objectStore(storeName).put(value, key);
+      }
       tx.oncomplete = () => {
         db.close();
         resolve();
@@ -121,20 +132,112 @@ function plant(
   });
 }
 
+/** Delete `key` from `store` of `dt-annotations`, as another writer would. */
+function deleteRaw(storeName: 'annotations' | 'chunks', key: IDBValidKey): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('dt-annotations', 1);
+    request.onupgradeneeded = () => createAnnotationStores(request.result);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(storeName, 'readwrite');
+      tx.objectStore(storeName).delete(key);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+
+/** Put a session record, or an annotations head under `key`, as another writer would. */
+function plant(
+  dbName: 'dt-sessions' | 'dt-annotations',
+  value: unknown,
+  key?: string,
+): Promise<void> {
+  return plantIn(dbName, dbName === 'dt-sessions' ? 'sessions' : 'annotations', [[value, key]]);
+}
+
+/** Put `file` as `table`'s annotations record under `owner`, as this version writes one. */
+async function plantRecord(
+  table: string,
+  owner: string,
+  file: AnnotationFile,
+  chunkSize = 10_000,
+): Promise<void> {
+  const chunks: [unknown, IDBValidKey][] = [];
+  for (let start = 0; start < file.annotations.length; start += chunkSize) {
+    chunks.push([file.annotations.slice(start, start + chunkSize), [table, owner, chunks.length]]);
+  }
+  const { annotations, ...fields } = file;
+  await plantIn('dt-annotations', 'chunks', chunks);
+  await plant(
+    'dt-annotations',
+    { format: 1, owner, count: annotations.length, chunks: chunks.length, file: fields },
+    table,
+  );
+}
+
 const rawSession = (key = 't') =>
   readRaw('dt-sessions', 'sessions', key) as Promise<Record<string, unknown> | undefined>;
+/** The head of `key`'s annotations record. */
 const rawAnnotations = (key = 't') =>
   readRaw('dt-annotations', 'annotations', key) as Promise<Record<string, unknown> | undefined>;
+
+/** Every stored chunk of `table`, in key order. */
+function rawChunks(table = 't'): Promise<{ key: [string, string, number]; value: unknown }[]> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('dt-annotations');
+    request.onupgradeneeded = () => request.transaction!.abort();
+    request.onerror = () => resolve([]);
+    request.onsuccess = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('chunks')) {
+        db.close();
+        resolve([]);
+        return;
+      }
+      const range = IDBKeyRange.bound([table], [table, []]);
+      const store = db.transaction('chunks', 'readonly').objectStore('chunks');
+      const keys = store.getAllKeys(range);
+      const values = store.getAll(range);
+      values.onsuccess = () => {
+        db.close();
+        resolve(
+          values.result.map((value, i) => ({
+            key: keys.result[i] as [string, string, number],
+            value,
+          })),
+        );
+      };
+      values.onerror = () => {
+        db.close();
+        reject(values.error);
+      };
+    };
+  });
+}
+
+/** The ids the stored chunks of `table` hold, in order. */
+async function rawIds(table = 't'): Promise<string[]> {
+  return (await rawChunks(table)).flatMap((chunk) =>
+    (chunk.value as { id: string }[]).map((a) => a.id),
+  );
+}
+
+type Store = 'sessions' | 'annotations' | 'chunks';
 
 /** Counts the puts and deletes each object store receives. */
 function countWrites() {
   const put = vi.spyOn(IDBObjectStore.prototype, 'put');
   const del = vi.spyOn(IDBObjectStore.prototype, 'delete');
-  const tally = (spy: { mock: { contexts: unknown[] } }, store: string) =>
+  const tally = (spy: { mock: { contexts: unknown[] } }, store: Store) =>
     spy.mock.contexts.filter((ctx) => (ctx as IDBObjectStore).name === store).length;
   return {
-    puts: (store: 'sessions' | 'annotations') => tally(put, store),
-    deletes: (store: 'sessions' | 'annotations') => tally(del, store),
+    puts: (store: Store) => tally(put, store),
+    deletes: (store: Store) => tally(del, store),
   };
 }
 
@@ -195,21 +298,22 @@ describe('SessionStore — annotations in a record of their own', () => {
     await store.save(snapshotFromState(state, undefined, undefined, annotations));
     expect(writes.puts('sessions')).toBe(1);
     expect(writes.puts('annotations')).toBe(0);
+    expect(writes.puts('chunks')).toBe(0);
 
     annotate(annotations, 3);
     await store.save(snapshotFromState(state, undefined, undefined, annotations));
     expect(writes.puts('annotations')).toBe(1);
+    expect(writes.puts('chunks')).toBe(1);
 
     const session = await rawSession();
     const record = await rawAnnotations();
     expect(session).not.toHaveProperty('annotations');
     expect(session?.['__annotations']).toEqual({ format: 1, count: 3, owner: record?.['owner'] });
-    expect(record).toMatchObject({ format: 1, count: 3 });
-    expect((record?.['file'] as AnnotationFile).annotations.map((a) => a.id)).toEqual([
-      'a0',
-      'a1',
-      'a2',
-    ]);
+    expect(record).toMatchObject({ format: 1, count: 3, chunks: 1 });
+    expect(record?.['file']).toMatchObject({ version: 1, tableName: 't' });
+    expect(record?.['file']).not.toHaveProperty('annotations');
+    expect((await rawChunks()).map((chunk) => chunk.key)).toEqual([['t', record?.['owner'], 0]]);
+    expect(await rawIds()).toEqual(['a0', 'a1', 'a2']);
 
     // A sort, a width and a severity toggle: the session record alone.
     state.sortColumns.set([{ column: 'id', direction: 'asc' }]);
@@ -220,6 +324,9 @@ describe('SessionStore — annotations in a record of their own', () => {
     await store.save(snapshotFromState(state, undefined, undefined, annotations));
     expect(writes.puts('sessions')).toBe(5);
     expect(writes.puts('annotations')).toBe(1);
+    expect(writes.puts('chunks')).toBe(1);
+    // The first save's, which found no annotations, and the write's.
+    expect(writes.deletes('chunks')).toBe(2);
     expect((await rawSession())?.['__annotations']).toEqual(session?.['__annotations']);
     expect((await rawSession())?.['annotationSeverityFilter']).toEqual({
       error: true,
@@ -227,13 +334,16 @@ describe('SessionStore — annotations in a record of their own', () => {
       info: true,
     });
 
-    // A change of the annotations writes them, under a new owner.
+    // A change of the annotations writes them, under a new owner, and the
+    // old owner's chunks go.
     annotate(annotations, 1, 3);
     await store.save(snapshotFromState(state, undefined, undefined, annotations));
     expect(writes.puts('annotations')).toBe(2);
     const after = await rawAnnotations();
     expect(after?.['count']).toBe(4);
     expect(after?.['owner']).not.toBe(record?.['owner']);
+    expect((await rawChunks()).map((chunk) => chunk.key)).toEqual([['t', after?.['owner'], 0]]);
+    expect(await rawIds()).toEqual(['a0', 'a1', 'a2', 'a3']);
     expect((await rawSession())?.['__annotations']).toEqual({
       format: 1,
       count: 4,
@@ -497,17 +607,14 @@ describe('SessionStore — annotations in a record of their own', () => {
       restoreStateFromSnapshot(state, snapshot!, undefined, undefined, fresh);
       await reloaded.save(snapshotFromState(state, undefined, undefined, fresh));
       expect(await rawAnnotations()).toBeUndefined();
+      expect(await rawChunks()).toEqual([]);
       reloaded.close();
     });
 
     it('does not attach a record left behind when a later save of this version did not write its own', async () => {
       // A record an older version's clearSession left behind; then this
       // version saves a session whose annotations put fails.
-      await plant(
-        'dt-annotations',
-        { format: 1, owner: 'left-behind', count: 1, file: annotationFile(1) },
-        't',
-      );
+      await plantRecord('t', 'left-behind', annotationFile(1));
       const state = makeState();
       const annotations = makeAnnotations(state);
       annotate(annotations, 1);
@@ -518,7 +625,7 @@ describe('SessionStore — annotations in a record of their own', () => {
         key?: IDBValidKey,
       ) {
         const request = put.call(this, value, key);
-        if (this.name === 'annotations') this.transaction.abort();
+        if (this.name === 'chunks') this.transaction.abort();
         return request;
       });
       await expect(
@@ -617,15 +724,11 @@ describe('SessionStore — annotations in a record of their own', () => {
       ['a newer record format', (r: Record<string, unknown>) => ({ ...r, format: 2 })],
       ['a count that disagrees', (r: Record<string, unknown>) => ({ ...r, count: 3 })],
       ['a file that is not an object', (r: Record<string, unknown>) => ({ ...r, file: 'x' })],
-      [
-        'a file with fewer annotations',
-        (r: Record<string, unknown>) => ({
-          ...r,
-          file: { ...(r['file'] as object), annotations: [] },
-        }),
-      ],
-      ['a value that is not a record', () => 42],
-    ])('is reported invalid for %s', async (_label, tamper) => {
+      ['more chunks than it has', (r: Record<string, unknown>) => ({ ...r, chunks: 2 })],
+      ['no chunks for its annotations', (r: Record<string, unknown>) => ({ ...r, chunks: 0 })],
+      ['more chunks than annotations', (r: Record<string, unknown>) => ({ ...r, chunks: 3 })],
+      ['a value that is not a head', () => 42],
+    ])('is reported invalid for a head with %s', async (_label, tamper) => {
       await savedWithTwo();
       const record = (await rawAnnotations())!;
       await plant('dt-annotations', tamper(record), 't');
@@ -633,6 +736,38 @@ describe('SessionStore — annotations in a record of their own', () => {
       expect(issues).toMatchObject([
         { code: 'PERSISTENCE_ANNOTATIONS_DROPPED', details: { reason: 'invalid', count: 2 } },
       ]);
+    });
+
+    it.each([
+      ['missing', null],
+      ['empty', []],
+      ['not a list', { 0: 'a' }],
+      ['short of the count', 'one'],
+    ])('is reported invalid for a chunk %s', async (_label, replacement) => {
+      await savedWithTwo();
+      const [chunk] = await rawChunks();
+      if (replacement === null) await deleteRaw('chunks', chunk!.key);
+      else if (replacement === 'one') {
+        await plantIn('dt-annotations', 'chunks', [
+          [(chunk!.value as unknown[]).slice(0, 1), chunk!.key],
+        ]);
+      } else await plantIn('dt-annotations', 'chunks', [[replacement, chunk!.key]]);
+      expectRestoredWithout(await loadFresh());
+      expect(issues).toMatchObject([
+        { code: 'PERSISTENCE_ANNOTATIONS_DROPPED', details: { reason: 'invalid', count: 2 } },
+      ]);
+    });
+
+    it('reads only the chunks of the head it attaches', async () => {
+      await savedWithTwo();
+      // Chunks of another write, which a range covering the table holds too.
+      await plantIn('dt-annotations', 'chunks', [
+        [annotationFile(5).annotations, ['t', 'another-write', 0]],
+        [annotationFile(5).annotations, ['t', 'another-write', 1]],
+      ]);
+      const snapshot = await loadFresh();
+      expect(issues).toEqual([]);
+      expect(snapshot?.annotations?.annotations.map((a) => a.id)).toEqual(['a0', 'a1']);
     });
 
     it('is reported invalid for a marker this version does not read', async () => {
@@ -648,14 +783,10 @@ describe('SessionStore — annotations in a record of their own', () => {
 
     it('is reported when loadJSON refuses the file, and the rest of the session restores', async () => {
       await savedWithTwo();
-      const record = (await rawAnnotations())!;
-      const file = record['file'] as AnnotationFile;
-      // Passes the record's shape check; `loadJSON` refuses its entries.
-      const broken = {
-        ...file,
-        annotations: file.annotations.map((a) => ({ ...a, scope: 'table' })),
-      };
-      await plant('dt-annotations', { ...record, file: broken }, 't');
+      const [chunk] = await rawChunks();
+      // Passes the record's checks; `loadJSON` refuses its entries.
+      const broken = (chunk!.value as object[]).map((a) => ({ ...a, scope: 'table' }));
+      await plantIn('dt-annotations', 'chunks', [[broken, chunk!.key]]);
       const snapshot = await loadFresh();
       expect(issues).toEqual([]);
 
@@ -779,14 +910,17 @@ describe('SessionStore — a failed annotations write', () => {
     vi.restoreAllMocks();
   });
 
-  function failAnnotationsPut(how: 'throw' | 'abort'): void {
+  /** Make the put of chunk `index` of every record write throw, or abort its transaction. */
+  function failAnnotationsPut(how: 'throw' | 'abort', index = 0): void {
     const put = IDBObjectStore.prototype.put;
     vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
       this: IDBObjectStore,
       value: unknown,
       key?: IDBValidKey,
     ) {
-      if (this.name !== 'annotations') return put.call(this, value, key);
+      if (this.name !== 'chunks' || (key as unknown[])[2] !== index) {
+        return put.call(this, value, key);
+      }
       if (how === 'throw') throw new DOMException('quota', 'QuotaExceededError');
       const request = put.call(this, value, key);
       this.transaction.abort();
@@ -878,7 +1012,8 @@ describe('SessionStore — a failed annotations write', () => {
       details: { record: 'annotations' },
     });
     // Two attempts, then none.
-    expect(writes.puts('annotations')).toBe(2);
+    expect(writes.puts('chunks')).toBe(2);
+    expect(writes.puts('annotations')).toBe(0);
     const session = await rawSession();
     expect(session?.['sortColumns']).toEqual([{ column: 'id', direction: 'asc' }]);
     expect(session).not.toHaveProperty('__annotations');
@@ -933,5 +1068,213 @@ describe('SessionStore — a failed annotations write', () => {
     // The record the session no longer names is gone.
     expect(await rawAnnotations()).toBeUndefined();
     autoSave.destroy();
+  });
+});
+
+describe('SessionStore — annotations in chunks', () => {
+  let store: SessionStore;
+
+  beforeEach(async () => {
+    await deleteDatabase('dt-sessions');
+    await deleteDatabase('dt-annotations');
+    store = new SessionStore();
+    await store.open();
+  });
+
+  afterEach(() => {
+    store.close();
+    vi.restoreAllMocks();
+  });
+
+  async function flushMicrotasks(): Promise<void> {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  }
+
+  it.each([
+    [1, [1]],
+    [10_000, [10_000]],
+    [10_001, [10_000, 1]],
+    [20_000, [10_000, 10_000]],
+  ])('round-trips %i annotations in chunks of %j', async (count, sizes) => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, count);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+
+    const head = await rawAnnotations();
+    const chunks = await rawChunks();
+    expect(head).toMatchObject({ count, chunks: sizes.length });
+    expect(chunks.map((chunk) => chunk.key)).toEqual(
+      sizes.map((_, i) => ['t', head?.['owner'], i]),
+    );
+    expect(chunks.map((chunk) => (chunk.value as unknown[]).length)).toEqual(sizes);
+
+    store.close();
+    const reloaded = new SessionStore();
+    const next = makeState();
+    const nextAnnotations = makeAnnotations(next);
+    const snapshot = await reloaded.load('t');
+    expect(snapshot?.annotations?.annotations).toHaveLength(count);
+    restoreStateFromSnapshot(next, snapshot!, undefined, undefined, nextAnnotations);
+    expect(nextAnnotations.getAll().map((a) => a.id)).toEqual(
+      annotations.getAll().map((a) => a.id),
+    );
+    const writes = countWrites();
+    await reloaded.save(snapshotFromState(next, undefined, undefined, nextAnnotations));
+    expect(writes.puts('chunks')).toBe(0);
+    expect(writes.puts('annotations')).toBe(0);
+    reloaded.close();
+  });
+
+  it('bounds a chunk by bytes as well as by count', async () => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    const detail = 'x'.repeat(4_000);
+    annotations.addMany(
+      Array.from({ length: 3_000 }, (_, i) => ({
+        scope: 'row' as const,
+        rowId: i,
+        severity: 'info' as const,
+        message: `m${i}`,
+        metadata: { detail },
+      })),
+    );
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    const chunks = await rawChunks();
+    // About 8 KB each as estimated, 8 MiB a chunk: three chunks, not one.
+    expect(chunks.length).toBe(3);
+    expect(chunks.reduce((n, chunk) => n + (chunk.value as unknown[]).length, 0)).toBe(3_000);
+    expect((await store.load('t'))?.annotations?.annotations).toHaveLength(3_000);
+  });
+
+  it('puts the chunks one after another in save(), and all at once in saveSync()', async () => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 25_000);
+    const writes = countWrites();
+
+    const saving = store.save(snapshotFromState(state, undefined, undefined, annotations));
+    await flushMicrotasks();
+    // The first chunk now; each next one once the previous is put.
+    expect(writes.puts('chunks')).toBe(1);
+    expect(writes.puts('annotations')).toBe(0);
+    await saving;
+    expect(writes.puts('chunks')).toBe(3);
+    expect(writes.puts('annotations')).toBe(1);
+
+    annotate(annotations, 1, 25_000);
+    store.saveSync(snapshotFromState(state, undefined, undefined, annotations));
+    expect(writes.puts('chunks')).toBe(6);
+    expect(writes.puts('annotations')).toBe(2);
+    await vi.waitFor(async () => expect((await rawAnnotations())?.['count']).toBe(25_001));
+    expect((await store.load('t'))?.annotations?.annotations).toHaveLength(25_001);
+  });
+
+  it.each([
+    ['aborts', 'abort', 'SAVE_FAILED'],
+    ['throws', 'throw', 'PERSISTENCE_QUOTA_EXCEEDED'],
+  ] as const)(
+    'keeps the previous record whole when a later chunk %s, and reports it',
+    async (_label, how, code) => {
+      const state = makeState();
+      const annotations = makeAnnotations(state);
+      annotate(annotations, 25_000);
+      await store.save(snapshotFromState(state, undefined, undefined, annotations));
+      const before = await rawAnnotations();
+      const beforeChunks = await rawChunks();
+
+      annotate(annotations, 1, 25_000);
+      const put = IDBObjectStore.prototype.put;
+      vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+        this: IDBObjectStore,
+        value: unknown,
+        key?: IDBValidKey,
+      ) {
+        if (this.name !== 'chunks' || (key as unknown[])[2] !== 1) {
+          return put.call(this, value, key);
+        }
+        if (how === 'throw') throw new DOMException('quota', 'QuotaExceededError');
+        const request = put.call(this, value, key);
+        this.transaction.abort();
+        return request;
+      });
+      await expect(
+        store.save(snapshotFromState(state, undefined, undefined, annotations)),
+      ).rejects.toMatchObject({ code, details: { record: 'annotations' } });
+      vi.mocked(IDBObjectStore.prototype.put).mockRestore();
+
+      expect(await rawAnnotations()).toEqual(before);
+      expect(await rawChunks()).toEqual(beforeChunks);
+    },
+  );
+
+  it('deletes the old chunks when the annotations shrink', async () => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 20_001);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    expect(await rawChunks()).toHaveLength(3);
+
+    annotations.removeMany(
+      annotations
+        .getAll()
+        .slice(5)
+        .map((a) => a.id),
+    );
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    const head = await rawAnnotations();
+    expect(head).toMatchObject({ count: 5, chunks: 1 });
+    expect((await rawChunks()).map((chunk) => chunk.key)).toEqual([['t', head?.['owner'], 0]]);
+  });
+
+  it('deletes the head and every chunk with the session', async () => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 20_001);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    await store.delete('t');
+    expect(await rawSession()).toBeUndefined();
+    expect(await rawAnnotations()).toBeUndefined();
+    expect(await rawChunks()).toEqual([]);
+  });
+
+  it('writes nothing to dt-annotations for a save whose annotations did not change', async () => {
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 20_001);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    const writes = countWrites();
+    state.sortColumns.set([{ column: 'id', direction: 'asc' }]);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    annotations.setSeverityFilter({ error: false });
+    store.saveSync(snapshotFromState(state, undefined, undefined, annotations));
+    expect(writes.puts('sessions')).toBe(2);
+    for (const name of ['annotations', 'chunks'] as const) {
+      expect(writes.puts(name)).toBe(0);
+      expect(writes.deletes(name)).toBe(0);
+    }
+  });
+
+  it('keeps annotations in the session record with a database made without the chunk store', async () => {
+    store.close();
+    // As an earlier build of this version made it.
+    await deleteDatabase('dt-annotations');
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.open('dt-annotations', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('annotations');
+      request.onsuccess = () => {
+        request.result.close();
+        resolve();
+      };
+    });
+    store = new SessionStore();
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 2);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    const session = await rawSession();
+    expect(session).not.toHaveProperty('__annotations');
+    expect((session?.['annotations'] as AnnotationFile).annotations).toHaveLength(2);
+    expect((await store.load('t'))?.annotations?.annotations).toHaveLength(2);
   });
 });

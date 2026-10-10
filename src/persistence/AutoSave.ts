@@ -84,11 +84,11 @@ export class AutoSave {
   // back. It is reported once, and saves then go without annotations — the
   // session record keeps saving, and `SessionStore` deletes the annotations
   // record it no longer names. A million annotations can outgrow a quota
-  // the rest of the session fits in many times over, and Chromium refuses
-  // any one value over 133,169,152 bytes (`UnknownError`), which a million
-  // plain annotations pass: retrying would serialize them all at every save
-  // only to fail again. A single failure is retried by the next save, as a
-  // dropped connection's is no fault of the annotations.
+  // the rest of the session fits in many times over, and a write that fails
+  // for the annotations themselves (a value that cannot be cloned, or one
+  // past a browser's limits) fails again: retrying would serialize them all
+  // at every save to no end. A single failure is retried by the next save,
+  // as a dropped connection's is no fault of the annotations.
   private annotationsHeldBack = false;
   /** Failed writes of the annotations record in a row, other than over the quota. */
   private annotationsFailures = 0;

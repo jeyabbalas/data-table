@@ -2843,6 +2843,62 @@ export class TableBody {
   }
 
   /**
+   * The `__rowid__` of the row at `position` (0-based, in the table as
+   * sorted and filtered) when the body holds the row, else `null`. Annotation
+   * navigation reads the rows around the cursor this way before it asks
+   * DuckDB. `null` throughout the scroll back to the top that a filter change
+   * animates: the rows held then are the old filters'.
+   *
+   * @internal
+   */
+  cachedRowId(position: number): number | null {
+    const rowId = this.isAnimatingScroll
+      ? undefined
+      : this.rowDataCache.get(position)?.[ROWID_COLUMN];
+    return typeof rowId === 'number' ? rowId : null;
+  }
+
+  /**
+   * The position of the row whose `__rowid__` is `rowId`, when the body holds
+   * it, else `null`; see {@link cachedRowId}.
+   *
+   * @internal
+   */
+  cachedPositionOf(rowId: number): number | null {
+    if (this.isAnimatingScroll) return null;
+    for (const [position, row] of this.rowDataCache) {
+      if (row[ROWID_COLUMN] === rowId) return position;
+    }
+    return null;
+  }
+
+  /**
+   * Whether every row's position is its `__rowid__`: no filter, no sort, and
+   * the dense `__rowid__` the range fast path reads by still holds.
+   *
+   * @internal
+   */
+  rowIdsArePositions(): boolean {
+    return this.useRowidFastPath(this.state.sortColumns.get(), this.state.filters.get());
+  }
+
+  /**
+   * End the scroll back to the top that a filter change animates, now: the
+   * view jumps to the top and the new filters' rows load. For a scroll to
+   * somewhere else, which the animation would undo.
+   *
+   * @internal
+   */
+  cancelScrollAnimation(): void {
+    if (!this.isAnimatingScroll) return;
+    if (this.scrollAnimationId !== null) cancelAnimationFrame(this.scrollAnimationId);
+    this.scrollAnimationId = null;
+    this.isAnimatingScroll = false;
+    this.virtualScroller.scrollToRow(0, 'start');
+    this.invalidateCacheAndRefresh();
+  }
+
+  /**
    * Check if the table body has been destroyed
    */
   isDestroyed(): boolean {

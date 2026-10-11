@@ -4,8 +4,10 @@
  * Exposed on the {@link DataTable} facade as `table.annotations`. Annotations
  * are app-authored metadata (validation errors, QC rule violations, notes),
  * NOT user-authored mutations — so they live outside `TableState` and do not
- * participate in undo/redo. Persistence flows through the existing
- * `SessionSnapshot` pipeline (v5+).
+ * participate in undo/redo. They are saved with the session, in a database
+ * of their own, `dt-annotations`, which the `SessionStore` writes only when
+ * they have changed; a custom session store still receives them in the
+ * snapshot's `annotations`.
  *
  * Row and cell annotations key on `rowId` (a `number`, converted from the
  * `bigint` `__rowid__` column the loaders synthesize at load time). Every
@@ -344,8 +346,10 @@ function highestShown(mask: number): AnnotationSeverity | null {
  * facade as `table.annotations`. Provides CRUD, lookups (`getByRow` /
  * `getByColumn` / `getByCell`), severity-tier filtering, JSON I/O
  * (`toJSON` / `loadJSON`), and a `change` event channel. Annotations live
- * outside `TableState` (no undo/redo) and persist independently into
- * `SessionSnapshot.annotations` (v5+).
+ * outside `TableState` (no undo/redo) and persist with the session, in a
+ * database of their own, `dt-annotations`, which the `SessionStore` writes
+ * only when they have changed; a custom session store still receives them
+ * in the snapshot's `annotations`.
  *
  * Lookups:
  * - `getByRow(rowId)`: that row's row- and cell-scope annotations, in
@@ -903,6 +907,12 @@ export class AnnotationStore {
    * with `kind: 'filterChanged'` and an empty `ids` array so renderers
    * reapply. The flag state is also captured in `SessionSnapshot.annotationSeverityFilter`
    * so toggles survive a page reload.
+   *
+   * The flags also set the severities annotation navigation visits by
+   * default: `actions.nextAnnotation` and `actions.previousAnnotation`
+   * without `severities`, and the `F8` and `Alt+↓` / `Alt+↑` keys, skip
+   * the annotations of a severity hidden here, as the table paints none of
+   * them.
    */
   setSeverityFilter(patch: Partial<SeverityFilter>): void {
     let changed = false;

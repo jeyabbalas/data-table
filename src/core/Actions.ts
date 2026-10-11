@@ -1641,6 +1641,13 @@ export class StateActions {
   /**
    * Get the complete WHERE clause SQL for all active filters.
    * Convenience method for downstream apps that need the raw SQL string.
+   *
+   * An annotated filter's SQL ({@link StateActions.showAnnotatedRows})
+   * reads an internal temporary table of the annotated rows, which the
+   * table keeps current lazily: it can trail the annotations in the store
+   * by a moment, does not exist until the table first needs it, and lives
+   * only on the table's own DuckDB connection. Run elsewhere, or before
+   * then, the clause fails or keeps the rows of annotations since changed.
    */
   getFiltersSQL(): string {
     return filtersToWhereClause(this.state.filters.get());

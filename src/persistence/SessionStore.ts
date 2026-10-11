@@ -248,9 +248,14 @@ function coerceLoadedSnapshotWithStatus(raw: unknown): CoerceResult {
 
 /**
  * A session record as stored: with a marker in place of the annotations
- * kept in their own record.
+ * kept in their own record, and, saved without annotations, the owner of a
+ * record it named before and that may still be stored, for a later load to
+ * delete.
  */
-type StoredSessionRecord = SessionSnapshot & { __annotations?: unknown };
+type StoredSessionRecord = SessionSnapshot & {
+  __annotations?: unknown;
+  __annotationsDropped?: unknown;
+};
 
 /** A record this store saw land: as its head describes it, with its file's token. */
 interface LandedRecord extends AnnotationsRecordEntry {
@@ -263,8 +268,27 @@ interface PendingRecord {
   owner: string;
   count: number;
   token: number;
-  /** Settles once the write has: with the record, or `null` when it failed. */
+  /** Settles once its annotations transaction has: with the record, or `null` when it failed. */
   landed: Promise<LandedRecord | null>;
+}
+
+/** The connections an operation runs on: those open when it was asked for. */
+interface Connections {
+  db: IDBDatabase;
+  annotationsDb: IDBDatabase | null;
+}
+
+/**
+ * Connections closed under this store (another tab upgraded or deleted
+ * their database, the browser dropped them) or by a {@link
+ * SessionStore.close} once the operations asked for before it had ended:
+ * no new transaction can start on one.
+ */
+const closedConnections = new WeakSet<IDBDatabase>();
+
+/** `db`, or `null` when it is closed. */
+function usable(db: IDBDatabase | null): IDBDatabase | null {
+  return db !== null && !closedConnections.has(db) ? db : null;
 }
 
 /** What this store knows of a table's stored records: see `SessionStore.tables`. */
@@ -284,7 +308,17 @@ interface TableRecords {
    * own keeps them.
    */
   unattached: boolean;
-  /** The write of an annotations record under way, if any. */
+  /**
+   * The owner of a record the stored session record stopped naming, which
+   * may still be stored: a session saved without annotations names it
+   * (`__annotationsDropped`) until it is deleted, so that a later load
+   * deletes it should this store not get to.
+   */
+  dropped: string | null;
+  /**
+   * The write of an annotations record under way, from its start until the
+   * session record naming it has landed, if any.
+   */
   pending: PendingRecord | null;
   /**
    * Counts `saveSync` and `delete` calls: an asynchronous save asked for
@@ -358,24 +392,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The fields of a session record that say what it holds of its annotations. */
+const ANNOTATION_FIELDS = ['annotations', '__annotations', '__annotationsDropped'] as const;
+
 /**
  * The session record for `snapshot`: every field but its annotations, which
  * are left out unless given here, as a marker naming their record or as a
- * file it holds itself.
+ * file it holds itself; and `dropped`, the owner of a record it no longer
+ * names.
  */
 function sessionRecordOf(
   snapshot: SessionSnapshot,
   annotations?: { marker: AnnotationsMarker } | { embed: AnnotationFile },
+  dropped?: string | null,
 ): StoredSessionRecord {
   const record: Record<string, unknown> = {};
   for (const key of Object.keys(snapshot)) {
-    if (key === 'annotations' || key === '__annotations') continue;
+    if ((ANNOTATION_FIELDS as readonly string[]).includes(key)) continue;
     record[key] = (snapshot as unknown as Record<string, unknown>)[key];
   }
   if (annotations !== undefined) {
     if ('marker' in annotations) record['__annotations'] = annotations.marker;
     else record['annotations'] = annotations.embed;
   }
+  if (dropped) record['__annotationsDropped'] = dropped;
   return record as unknown as StoredSessionRecord;
 }
 
@@ -415,8 +455,9 @@ function putSessionRecordKeeping(
     const stored: unknown = request.result;
     const kept: Record<string, unknown> = { ...record };
     if (isPlainObject(stored)) {
-      if (stored['annotations'] !== undefined) kept['annotations'] = stored['annotations'];
-      if (stored['__annotations'] !== undefined) kept['__annotations'] = stored['__annotations'];
+      for (const key of ANNOTATION_FIELDS) {
+        if (stored[key] !== undefined) kept[key] = stored[key];
+      }
     }
     if (named !== undefined) {
       // What the record put above names, or nothing stored to keep.
@@ -429,6 +470,36 @@ function putSessionRecordKeeping(
       }
     }
     sessions.put(kept);
+  };
+  return transactionDone(tx);
+}
+
+/**
+ * Put `record` naming the annotations `marker` names, as the session record,
+ * enqueued now, in a transaction that reads the stored record first: when
+ * that one names another record than `known`, the one this store last saw
+ * it name (another tab's, written since), `record` is put again with that
+ * record as the fallback, which the annotations write `marker` names keeps.
+ * A page torn down before the read comes back saves it with `known` as the
+ * fallback. Throws when it cannot be enqueued, otherwise settles with the
+ * transaction.
+ */
+function putSessionRecordNaming(
+  db: IDBDatabase,
+  record: StoredSessionRecord,
+  marker: AnnotationsMarker,
+  known: { owner: string } | null,
+): Promise<void> {
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  const sessions = tx.objectStore(STORE_NAME);
+  const request = sessions.get(record.tableName as string);
+  sessions.put({ ...record, __annotations: marker });
+  request.onsuccess = () => {
+    const stored = isPlainObject(request.result)
+      ? readAnnotationsMarker(request.result['__annotations'])
+      : null;
+    if (stored === null || stored.owner === known?.owner || stored.owner === marker.owner) return;
+    sessions.put({ ...record, __annotations: markerNaming(marker, stored) });
   };
   return transactionDone(tx);
 }
@@ -463,6 +534,11 @@ function fileFieldsOf(file: AnnotationFile): AnnotationsRecordEntry['file'] {
   return fields as AnnotationsRecordEntry['file'];
 }
 
+/** `entry` as a head keeps it: its owner, its counts and its file, not what it kept itself. */
+function entryOf(entry: AnnotationsRecordEntry): AnnotationsRecordEntry {
+  return { owner: entry.owner, count: entry.count, chunks: entry.chunks, file: entry.file };
+}
+
 /** Whether `db`, a `dt-annotations` connection, has the stores this version writes. */
 function hasAnnotationStores(db: IDBDatabase): boolean {
   return (
@@ -495,18 +571,21 @@ function deleteChunksExcept(
 
 /**
  * Enqueue, in a new transaction of `db`, `file` as `tableName`'s annotations
- * record under `owner`: delete the table's chunks but those of the records
- * kept, put the file's annotations in chunks, then the head, naming the new
- * record and listing the kept ones as `previous`. All of it lands or, should
- * a request fail, none of it, and the old head and chunks stay whole.
+ * record under `owner`: read the head, put the file's annotations in chunks,
+ * then put the head naming the new record and listing the records it keeps
+ * as `previous`. All of it lands or, should a request fail, none of it, and
+ * the old head and chunks stay whole.
  *
- * With `keep`, the head is read first, in the same transaction, and `keep`
- * says which of the records it describes to keep; each chunk is then put from
- * the previous put's `onsuccess`, which keeps the transaction active, so the
- * structured clone of a million annotations runs in a hundred short tasks
- * rather than one long one. With `kept`, nothing is read and every put is
- * enqueued at once, as a page being hidden needs; a put that cannot be
- * enqueued throws, the transaction aborted.
+ * With `keep`, `keep` says which of the records the head describes to keep,
+ * and the chunks of every other owner are deleted first; each chunk is then
+ * put from the previous put's `onsuccess`, which keeps the transaction
+ * active, so the structured clone of a million annotations runs in a hundred
+ * short tasks rather than one long one. With `kept`, every chunk put and
+ * the head put, keeping `kept`, are enqueued at once, as a page being hidden
+ * needs, and nothing is deleted; once the head is read, it is put again
+ * keeping the records it describes instead, should they be others (another
+ * tab's, written since), as the stored session record may name one of them.
+ * A put that cannot be enqueued then throws, the transaction aborted.
  *
  * Resolves with the chunks written and the records kept, once committed.
  */
@@ -544,14 +623,15 @@ function putAnnotationsRecord(
       // Finished already.
     }
   };
-  // Put the next chunk, or the head after the last; return the chunk's request.
-  const putNext = (): IDBRequest | null => {
-    if (start < annotations.length) {
-      const end = annotationChunkEnd(annotations, start);
-      const request = chunks.put(annotations.slice(start, end), [tableName, owner, index++]);
-      start = end;
-      return request;
-    }
+  // Put the next chunk and return its request, or `null` after the last.
+  const putChunk = (): IDBRequest | null => {
+    if (start >= annotations.length) return null;
+    const end = annotationChunkEnd(annotations, start);
+    const request = chunks.put(annotations.slice(start, end), [tableName, owner, index++]);
+    start = end;
+    return request;
+  };
+  const putHead = (): void => {
     const head: AnnotationsHead = {
       format: ANNOTATIONS_RECORD_FORMAT,
       owner,
@@ -561,39 +641,54 @@ function putAnnotationsRecord(
       ...(kept.length > 0 ? { previous: kept } : {}),
     };
     heads.put(head, tableName);
-    return null;
   };
-  const begin = (keep: AnnotationsRecordEntry[]): IDBRequest | null => {
-    kept = keep;
-    deleteChunksExcept(
-      chunks,
-      tableName,
-      keep.map((entry) => entry.owner),
-    );
-    return putNext();
-  };
+  const keeping = (entries: AnnotationsRecordEntry[]): AnnotationsRecordEntry[] =>
+    entries.filter((entry) => entry.owner !== owner).map(entryOf);
   const step = (): void => {
     try {
-      const request = putNext();
-      if (request !== null) request.onsuccess = step;
+      const request = putChunk();
+      if (request === null) putHead();
+      else request.onsuccess = step;
     } catch (error) {
       abort(error);
     }
   };
   try {
+    const headRequest = heads.get(tableName);
     if ('keep' in records) {
-      const headRequest = heads.get(tableName);
       headRequest.onsuccess = () => {
         try {
-          const request = begin(records.keep(readAnnotationsHead(headRequest.result)));
-          if (request !== null) request.onsuccess = step;
+          kept = keeping(records.keep(readAnnotationsHead(headRequest.result)));
+          deleteChunksExcept(
+            chunks,
+            tableName,
+            kept.map((entry) => entry.owner),
+          );
+          step();
         } catch (error) {
           abort(error);
         }
       };
     } else {
-      let request = begin(records.kept);
-      while (request !== null) request = putNext();
+      headRequest.onsuccess = () => {
+        try {
+          const head = readAnnotationsHead(headRequest.result);
+          const described = head === null ? [] : keeping(headEntries(head));
+          const owners = (entries: AnnotationsRecordEntry[]): string =>
+            entries
+              .map((entry) => entry.owner)
+              .sort()
+              .join(' ');
+          if (owners(described) === owners(kept)) return;
+          kept = described;
+          putHead();
+        } catch (error) {
+          abort(error);
+        }
+      };
+      kept = keeping(records.kept);
+      while (putChunk() !== null);
+      putHead();
     }
   } catch (error) {
     abort(error);
@@ -692,53 +787,56 @@ function readNamedRecord(
 /**
  * Once the session record names `owner`'s record alone, drop the records its
  * head kept: their chunks and its `previous`. Nothing when another write has
- * replaced the head since.
+ * replaced the head since. Rejects, and never throws, when the transaction
+ * fails or cannot start.
  */
 function dropKeptRecords(db: IDBDatabase, tableName: string, owner: string): Promise<void> {
-  const tx = db.transaction([ANNOTATIONS_STORE_NAME, CHUNKS_STORE_NAME], 'readwrite');
-  const heads = tx.objectStore(ANNOTATIONS_STORE_NAME);
-  const request = heads.get(tableName);
-  request.onsuccess = () => {
-    const head = readAnnotationsHead(request.result);
-    if (head === null || head.owner !== owner || head.previous === undefined) return;
-    deleteChunksExcept(tx.objectStore(CHUNKS_STORE_NAME), tableName, [owner]);
-    const whole: AnnotationsHead = {
-      format: head.format,
-      owner: head.owner,
-      count: head.count,
-      chunks: head.chunks,
-      file: head.file,
+  try {
+    const tx = db.transaction([ANNOTATIONS_STORE_NAME, CHUNKS_STORE_NAME], 'readwrite');
+    const heads = tx.objectStore(ANNOTATIONS_STORE_NAME);
+    const request = heads.get(tableName);
+    request.onsuccess = () => {
+      const head = readAnnotationsHead(request.result);
+      if (head === null || head.owner !== owner || head.previous === undefined) return;
+      deleteChunksExcept(tx.objectStore(CHUNKS_STORE_NAME), tableName, [owner]);
+      heads.put({ format: head.format, ...entryOf(head) } satisfies AnnotationsHead, tableName);
     };
-    heads.put(whole, tableName);
-  };
-  return transactionDone(tx);
+    return transactionDone(tx);
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 
 /**
  * Delete `tableName`'s annotations record, its head and its chunks, when its
  * head names `owner`'s: a record another write or a newer version made is
- * left alone. Pass no owner to delete it whatever it is.
+ * left alone. Pass no owner to delete it whatever it is. Rejects, and never
+ * throws, when the transaction fails or cannot start.
  */
 function deleteAnnotationsRecord(
   db: IDBDatabase,
   tableName: string,
   owner?: string,
 ): Promise<void> {
-  const tx = db.transaction([ANNOTATIONS_STORE_NAME, CHUNKS_STORE_NAME], 'readwrite');
-  const heads = tx.objectStore(ANNOTATIONS_STORE_NAME);
-  const remove = (): void => {
-    heads.delete(tableName);
-    tx.objectStore(CHUNKS_STORE_NAME).delete(tableChunks(tableName));
-  };
-  if (owner === undefined) {
-    remove();
-  } else {
-    const request = heads.get(tableName);
-    request.onsuccess = () => {
-      if (readAnnotationsHead(request.result)?.owner === owner) remove();
+  try {
+    const tx = db.transaction([ANNOTATIONS_STORE_NAME, CHUNKS_STORE_NAME], 'readwrite');
+    const heads = tx.objectStore(ANNOTATIONS_STORE_NAME);
+    const remove = (): void => {
+      heads.delete(tableName);
+      tx.objectStore(CHUNKS_STORE_NAME).delete(tableChunks(tableName));
     };
+    if (owner === undefined) {
+      remove();
+    } else {
+      const request = heads.get(tableName);
+      request.onsuccess = () => {
+        if (readAnnotationsHead(request.result)?.owner === owner) remove();
+      };
+    }
+    return transactionDone(tx);
+  } catch (error) {
+    return Promise.reject(error);
   }
-  return transactionDone(tx);
 }
 
 // --- SessionStore class ---
@@ -863,7 +961,7 @@ export class SessionStore {
    */
   private annotationsUnavailable = false;
   private opening: Promise<boolean> | null = null;
-  /** Counts {@link close} calls: an operation a close overtook keeps and records nothing. */
+  /** Counts {@link close} calls: an open a close overtook keeps nothing it opened. */
   private generation = 0;
   private readonly onLoadIssue: SessionStoreOptions['onLoadIssue'];
   /**
@@ -874,6 +972,11 @@ export class SessionStore {
    * save it overtook stops where it is, the newer state being written.
    */
   private readonly tables = new Map<string, TableRecords>();
+  /**
+   * The last operation on each table that a {@link close} let end before it
+   * closed the connections: the table's next operation waits for it.
+   */
+  private readonly closing = new Map<string, Promise<void>>();
 
   constructor(options?: SessionStoreOptions) {
     this.onLoadIssue = options?.onLoadIssue;
@@ -955,6 +1058,7 @@ export class SessionStore {
   private attachSessions(db: IDBDatabase): void {
     this.db = db;
     const release = (): void => {
+      closedConnections.add(db);
       if (this.db === db) this.db = null;
     };
     db.onversionchange = () => {
@@ -967,6 +1071,7 @@ export class SessionStore {
   private attachAnnotations(db: IDBDatabase): void {
     this.annotationsDb = db;
     const release = (): void => {
+      closedConnections.add(db);
       if (this.annotationsDb !== db) return;
       this.annotationsDb = null;
       // The records may be gone, or rewritten by another version.
@@ -983,6 +1088,11 @@ export class SessionStore {
     return this.isOpen() ? true : this.open();
   }
 
+  /** The connections open now, which an operation asked for now runs on; `null` when none is. */
+  private connections(): Connections | null {
+    return this.db === null ? null : { db: this.db, annotationsDb: this.annotationsDb };
+  }
+
   private table(tableName: string): TableRecords {
     let table = this.tables.get(tableName);
     if (table === undefined) {
@@ -990,10 +1100,12 @@ export class SessionStore {
         landed: undefined,
         embedded: false,
         unattached: false,
+        dropped: null,
         pending: null,
         overtakes: 0,
-        tail: Promise.resolve(),
+        tail: this.closing.get(tableName) ?? Promise.resolve(),
       };
+      this.closing.delete(tableName);
       this.tables.set(tableName, table);
     }
     return table;
@@ -1025,8 +1137,9 @@ export class SessionStore {
    * identity: by its `annotations` array and that array's length, so an
    * edit made in place, to a file this store wrote or loaded, is not seen
    * (an annotation pushed onto the array is). Saves of one table run one at
-   * a time, in call order. When `dt-annotations` could not be opened, the
-   * annotations stay in the session record.
+   * a time, in call order, and a {@link close} lets those asked for before
+   * it end. When `dt-annotations` could not be opened, the annotations stay
+   * in the session record.
    *
    * Rejects with the underlying `DOMException` (typically
    * `QuotaExceededError`) when IDB IS available but the session record's
@@ -1042,27 +1155,31 @@ export class SessionStore {
     const tableName = snapshot.tableName;
     const table = this.table(tableName);
     const overtakes = table.overtakes;
-    const generation = this.generation;
     if (!(await this.ensureOpen())) return;
+    const connections = this.connections();
+    if (connections === null) return;
     // A synchronous save since has the newer state written; a delete, none.
-    const stale = (): boolean => table.overtakes !== overtakes || generation !== this.generation;
-    return this.inTurn(table, () => this.saveInTurn(snapshot, tableName, table, stale));
+    const stale = (): boolean => table.overtakes !== overtakes;
+    return this.inTurn(table, () =>
+      this.saveInTurn(snapshot, tableName, table, connections, stale),
+    );
   }
 
   private async saveInTurn(
     snapshot: SessionSnapshot,
     tableName: string,
     table: TableRecords,
+    connections: Connections,
     stale: () => boolean,
   ): Promise<void> {
-    const db = this.db;
+    const db = usable(connections.db);
     if (db === null || stale()) return;
     const annotations = snapshotAnnotationsOf(snapshot);
     if (annotations.kind === 'held' || (annotations.kind === 'none' && keepsUnattached(table))) {
       await putSessionRecordKeeping(db, sessionRecordOf(snapshot));
       return;
     }
-    const annotationsDb = this.annotationsDb;
+    const annotationsDb = usable(connections.annotationsDb);
     if (annotationsDb === null) {
       // As before `dt-annotations`: the session record holds them itself.
       const file = annotations.kind === 'file' ? annotations.file() : undefined;
@@ -1071,7 +1188,7 @@ export class SessionStore {
         await putSessionRecordKeeping(db, sessionRecordOf(snapshot));
         return;
       }
-      await putSessionRecord(db, sessionRecordOf(snapshot, file && { embed: file }));
+      await putSessionRecord(db, sessionRecordOf(snapshot, file && { embed: file }, table.dropped));
       if (stale()) return;
       table.landed = null;
       table.embedded = file !== undefined;
@@ -1111,7 +1228,11 @@ export class SessionStore {
     await this.writeAnnotations(snapshot, tableName, table, db, annotationsDb, file, stale);
   }
 
-  /** Save a session that has no annotations: the record it named goes. */
+  /**
+   * Save a session that has no annotations: the record it named goes, and
+   * the session record names it as dropped until it has, for a later load
+   * to delete it should this not get to.
+   */
   private async saveWithoutAnnotations(
     snapshot: SessionSnapshot,
     tableName: string,
@@ -1121,15 +1242,18 @@ export class SessionStore {
     stale: () => boolean,
   ): Promise<void> {
     const landed = table.landed;
-    await putSessionRecord(db, sessionRecordOf(snapshot));
+    const dropped = landed ? landed.owner : table.dropped;
+    await putSessionRecord(db, sessionRecordOf(snapshot, undefined, dropped));
     if (stale()) return;
     table.landed = null;
     table.embedded = false;
-    if (!landed) return;
+    table.dropped = dropped;
+    if (dropped === null) return;
     try {
-      await deleteAnnotationsRecord(annotationsDb, tableName, landed.owner);
+      await deleteAnnotationsRecord(annotationsDb, tableName, dropped);
+      if (table.dropped === dropped) table.dropped = null;
     } catch {
-      // Left behind: the next write replaces it.
+      // Named as dropped in the session record: a later save or load deletes it.
     }
   }
 
@@ -1185,24 +1309,27 @@ export class SessionStore {
       token,
     };
     settle(record);
-    if (table.pending === pending) table.pending = null;
-    // A synchronous save since wrote a newer session record, naming this
-    // record or another, and records what it names.
-    if (stale()) return;
-    const fallback = written.kept.find((entry) => entry.owner === before?.owner) ?? written.kept[0];
-    await putSessionRecord(
-      db,
-      sessionRecordOf(snapshot, { marker: markerNaming(record, fallback) }),
-    );
+    try {
+      // A synchronous save since wrote a newer session record, naming this
+      // record or another, and records what it names.
+      if (stale()) return;
+      const fallback =
+        written.kept.find((entry) => entry.owner === before?.owner) ?? written.kept[0];
+      await putSessionRecord(
+        db,
+        sessionRecordOf(snapshot, { marker: markerNaming(record, fallback) }),
+      );
+    } finally {
+      // Until the session record naming it lands, a synchronous save names
+      // this record rather than writing the annotations again.
+      if (table.pending === pending) table.pending = null;
+    }
     if (stale()) return;
     table.landed = record;
     table.embedded = false;
     table.unattached = false;
-    try {
-      await dropKeptRecords(annotationsDb, tableName, owner);
-    } catch {
-      // The next write drops them.
-    }
+    table.dropped = null;
+    await dropKeptRecords(annotationsDb, tableName, owner).catch(() => undefined);
   }
 
   /**
@@ -1213,13 +1340,15 @@ export class SessionStore {
    * by the browser during page teardown.
    *
    * Both go at once: the session record names the new annotations with the
-   * record it named before as their fallback, which their write keeps, so a
-   * page that goes before they land restores that one. When the asynchronous
-   * write of the same annotations is under way, the session record names it
-   * instead of writing them again; an asynchronous save this overtakes
-   * writes nothing more. When the stored session record names annotations
-   * this store does not know of, the annotations go in the session record
-   * itself.
+   * record it named before as their fallback, and their write keeps every
+   * record the head describes, so a page that goes before they land
+   * restores that one. When another tab has written the table's annotations
+   * since, the session record, which reads the stored one first, takes that
+   * tab's record as the fallback instead. When the asynchronous write of the
+   * same annotations is under way, the session record names it instead of
+   * writing them again; an asynchronous save this overtakes writes nothing
+   * more. When the stored session record names annotations this store does
+   * not know of, the annotations go in the session record itself.
    *
    * No-op if the database hasn't been opened yet or `tableName` is null.
    * Re-throws synchronously if `transaction()` / `put()` throws — typically
@@ -1237,7 +1366,6 @@ export class SessionStore {
     const tableName = snapshot.tableName;
     const table = this.table(tableName);
     const overtakes = ++table.overtakes;
-    const generation = this.generation;
     const annotations = snapshotAnnotationsOf(snapshot);
     const annotationsDb = this.annotationsDb;
     const landed = table.landed;
@@ -1245,27 +1373,32 @@ export class SessionStore {
 
     // How the session record is put, and what it says of its annotations.
     let put: () => Promise<void> = () => putSessionRecordKeeping(db, session);
-    let after: Pick<TableRecords, 'embedded'> & { landed?: TableRecords['landed'] } = {
-      embedded: table.embedded,
-    };
+    let after: {
+      embedded: boolean;
+      landed?: TableRecords['landed'];
+      dropped?: string | null;
+    } = { embedded: table.embedded };
     let landing: Promise<LandedRecord | null> | null = null;
     let annotationsError: { error: unknown } | null = null;
     // A record this store knows, and the session record it names.
     const known = annotationsDb !== null && !table.embedded ? landed : undefined;
     if (annotations.kind === 'none') {
       if (!keepsUnattached(table)) {
-        put = () => putSessionRecord(db, session);
-        after = { embedded: false, landed: null };
+        const dropped = landed ? landed.owner : table.dropped;
+        const record = sessionRecordOf(snapshot, undefined, dropped);
+        put = () => putSessionRecord(db, record);
+        after = { embedded: false, landed: null, dropped };
       }
     } else if (annotations.kind === 'file') {
+      const pending = table.pending;
       if (known && known.token === annotations.token) {
         put = () => putSessionRecordKeeping(db, session, known);
-      } else if (known !== undefined && table.pending?.token === annotations.token) {
+      } else if (known !== undefined && pending !== null && pending.token === annotations.token) {
         // The write under way holds them: name it.
-        const marker = markerNaming(table.pending, known);
-        put = () => putSessionRecord(db, { ...session, __annotations: marker });
-        landing = table.pending.landed;
-        after = { embedded: false };
+        const marker = markerNaming(pending, known);
+        put = () => putSessionRecordNaming(db, session, marker, known);
+        landing = pending.landed;
+        after = { embedded: false, dropped: null };
       } else {
         const file = annotations.file();
         if (file === undefined) {
@@ -1273,10 +1406,13 @@ export class SessionStore {
         } else if (annotationsDb === null || known === undefined) {
           // In the session record itself: nothing to name, and nothing lost
           // should the page go before it lands.
-          put = () => putSessionRecord(db, { ...session, annotations: file });
+          const record = sessionRecordOf(snapshot, { embed: file }, table.dropped);
+          put = () => putSessionRecord(db, record);
           after = { embedded: true, landed: null };
         } else {
-          // Write them now, all at once, keeping the record the session names.
+          // Write them now, all at once, keeping the record the session
+          // record names and, once the head is read, every other it
+          // describes: the stored session record may name any of them.
           const owner = newAnnotationsOwner();
           const count = Array.isArray(file.annotations) ? file.annotations.length : 0;
           try {
@@ -1284,7 +1420,7 @@ export class SessionStore {
               kept: known ? [known] : [],
             });
             const marker = markerNaming({ owner, count }, known);
-            put = () => putSessionRecord(db, { ...session, __annotations: marker });
+            put = () => putSessionRecordNaming(db, session, marker, known);
             const fields = fileFieldsOf(file);
             landing = written.then(
               (done): LandedRecord => ({
@@ -1297,7 +1433,7 @@ export class SessionStore {
               () => null,
             );
             table.pending = { owner, count, token: annotations.token, landed: landing };
-            after = { embedded: false };
+            after = { embedded: false, dropped: null };
           } catch (error) {
             annotationsError = { error };
           }
@@ -1315,16 +1451,20 @@ export class SessionStore {
     // Recorded once both have settled, before the table's next operation.
     const settled = Promise.allSettled([written, landing]).then(([session, record]) => {
       if (table.pending !== null && table.pending.landed === landing) table.pending = null;
-      if (table.overtakes !== overtakes || generation !== this.generation) return;
-      if (session.status === 'rejected') return;
+      if (table.overtakes !== overtakes || session.status === 'rejected') return;
       table.embedded = after.embedded;
       if (after.landed !== undefined) table.landed = after.landed;
       if (record.status === 'fulfilled' && record.value) table.landed = record.value;
       if (after.landed !== undefined || landing !== null) table.unattached = false;
-      // The record the session record named no longer: dropped, unless
-      // another write has replaced it since.
-      if (after.landed === null && landed && annotationsDb !== null) {
-        return deleteAnnotationsRecord(annotationsDb, tableName, landed.owner).catch(
+      if (after.dropped !== undefined) table.dropped = after.dropped;
+      // The record the session record no longer names: deleted, unless
+      // another write has replaced it since. A close lets this end first.
+      const dropped = after.dropped;
+      if (dropped && annotationsDb !== null) {
+        return deleteAnnotationsRecord(annotationsDb, tableName, dropped).then(
+          () => {
+            if (table.dropped === dropped) table.dropped = null;
+          },
           () => undefined,
         );
       }
@@ -1349,32 +1489,37 @@ export class SessionStore {
    * (`PERSISTENCE_ANNOTATIONS_DROPPED`), as is a `DataTable` that restores
    * the snapshot, which warns. Annotations saved in the session record
    * itself — by versions before the record, or by a custom store — win over
-   * any record. A load waits for the table's saves asked for before it.
+   * any record. A record a session saved without annotations stopped naming
+   * is deleted, if it is still stored. A load waits for the table's saves
+   * asked for before it.
    */
   async load(tableName: string): Promise<SessionSnapshot | null> {
     if (!(await this.ensureOpen())) return null;
+    const connections = this.connections();
+    if (connections === null) return null;
     const table = this.table(tableName);
-    return this.inTurn(table, () => this.loadInTurn(tableName, table));
+    return this.inTurn(table, () => this.loadInTurn(tableName, table, connections));
   }
 
   private async loadInTurn(
     tableName: string,
     table: TableRecords,
+    connections: Connections,
   ): Promise<SessionSnapshot | null> {
-    const db = this.db;
+    const db = usable(connections.db);
     if (db === null) return null;
     const overtakes = table.overtakes;
-    const generation = this.generation;
     // What a synchronous save or a delete while this reads wrote is newer
     // than what it read.
     const record = (
       landed: TableRecords['landed'],
-      state: Partial<Pick<TableRecords, 'embedded' | 'unattached'>> = {},
+      state: Partial<Pick<TableRecords, 'embedded' | 'unattached' | 'dropped'>> = {},
     ): void => {
-      if (table.overtakes !== overtakes || generation !== this.generation) return;
+      if (table.overtakes !== overtakes) return;
       table.landed = landed;
       table.embedded = state.embedded ?? false;
       table.unattached = state.unattached ?? false;
+      table.dropped = state.dropped ?? null;
     };
 
     const read = await readRecord(db, STORE_NAME, tableName);
@@ -1393,9 +1538,23 @@ export class SessionStore {
       return null;
     }
 
-    const { __annotations: marker, ...snapshot } = result.snapshot as StoredSessionRecord;
+    const {
+      __annotations: marker,
+      __annotationsDropped: droppedValue,
+      ...snapshot
+    } = result.snapshot as StoredSessionRecord;
+    const annotationsDb = usable(connections.annotationsDb);
     if (snapshot.annotations !== undefined || marker === undefined) {
-      record(null, { embedded: snapshot.annotations !== undefined });
+      // A record the session stopped naming, which may be stored still.
+      let dropped = typeof droppedValue === 'string' && droppedValue !== '' ? droppedValue : null;
+      if (dropped !== null && annotationsDb !== null) {
+        const deleted = await deleteAnnotationsRecord(annotationsDb, tableName, dropped).then(
+          () => true,
+          () => false,
+        );
+        if (deleted) dropped = null;
+      }
+      record(null, { embedded: snapshot.annotations !== undefined, dropped });
       return snapshot;
     }
 
@@ -1411,7 +1570,6 @@ export class SessionStore {
     };
     const named = readAnnotationsMarker(marker);
     if (named === null) return dropped('invalid');
-    const annotationsDb = this.annotationsDb;
     if (annotationsDb === null) return dropped('unavailable', named.count);
     const stored = await readNamedRecord(annotationsDb, tableName, named);
     if (!stored.ok) return dropped(stored.reason, named.count);
@@ -1439,22 +1597,21 @@ export class SessionStore {
     const table = this.table(tableName);
     table.overtakes++;
     if (!(await this.ensureOpen())) return;
+    const connections = this.connections();
+    if (connections === null) return;
     return this.inTurn(table, async () => {
-      const db = this.db;
+      const db = usable(connections.db);
       if (db === null) return;
       // Nothing a synchronous save makes meanwhile names the records going.
       table.landed = undefined;
       table.embedded = false;
       table.unattached = false;
-      const annotationsDb = this.annotationsDb;
-      let annotations: Promise<unknown> = Promise.resolve();
-      if (annotationsDb !== null) {
-        try {
-          annotations = deleteAnnotationsRecord(annotationsDb, tableName).catch(() => undefined);
-        } catch {
-          // Left behind: no session record names it.
-        }
-      }
+      table.dropped = null;
+      const annotationsDb = usable(connections.annotationsDb);
+      const annotations =
+        annotationsDb === null
+          ? Promise.resolve()
+          : deleteAnnotationsRecord(annotationsDb, tableName).catch(() => undefined);
       const [deleted] = await Promise.all([deleteRecord(db, STORE_NAME, tableName), annotations]);
       if (deleted && table.landed === undefined) table.landed = null;
     });
@@ -1477,19 +1634,36 @@ export class SessionStore {
     });
   }
 
-  /** Close both database connections and reset state. */
+  /**
+   * Close both database connections and reset state, once the operations
+   * asked for before have ended: a save under way, or waiting its turn,
+   * still lands, as `DataTable.destroy()` needs of the saves it leaves. An
+   * operation asked for after opens the databases again.
+   */
   close(): void {
     this.generation++;
-    if (this.db) {
-      this.db.close();
-      this.db = null;
-    }
-    if (this.annotationsDb) {
-      this.annotationsDb.close();
-      this.annotationsDb = null;
-    }
+    const connections = [this.db, this.annotationsDb];
+    this.db = null;
+    this.annotationsDb = null;
     this.annotationsUnavailable = false;
-    this.tables.clear();
     this.opening = null;
+    const ending: Promise<void>[] = [];
+    for (const [tableName, table] of this.tables) {
+      ending.push(table.tail);
+      this.closing.set(tableName, table.tail);
+    }
+    this.tables.clear();
+    const closeConnections = (): void => {
+      for (const connection of connections) {
+        if (connection === null) continue;
+        closedConnections.add(connection);
+        connection.close();
+      }
+      for (const [tableName, tail] of this.closing) {
+        if (ending.includes(tail)) this.closing.delete(tableName);
+      }
+    };
+    if (ending.length === 0) closeConnections();
+    else void Promise.all(ending).then(closeConnections);
   }
 }

@@ -41,12 +41,20 @@
  * the session record naming them, with the record it named before as its
  * fallback; and once that too has committed, a small transaction drops what
  * the head kept. A save whose annotations do not land keeps the stored
- * session record's annotations as they are. So the stored session record
- * names a whole record at every point, and a reload, a crash or a failed
- * write restores the last annotations that landed, at worst older than the
- * rest of the session. Two tabs that write one table's annotations at the
- * same moment can still lose them: neither sees the other's records until
- * its own write has begun.
+ * session record's annotations as they are. A synchronous save, for a page
+ * being hidden, enqueues both at once: its annotations keep every record
+ * the head describes, and its session record takes the record the stored
+ * one names as the fallback. So the stored session record names a whole
+ * record at every point, and a reload, a crash or a failed write restores
+ * the last annotations that landed, at worst older than the rest of the
+ * session. Two tabs that write one table's annotations at the same moment
+ * can still lose them: neither sees the other's records until its own write
+ * has begun.
+ *
+ * A session saved without annotations names the record it stopped naming,
+ * as `__annotationsDropped`, until that record is deleted, which the save
+ * does once its session record has landed: a load that finds such a record
+ * still stored deletes it, should the save not have got to.
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';

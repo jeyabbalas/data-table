@@ -23,7 +23,10 @@
  *   loadJSON('replace') onto 1M    3.0 s    → 0.65 s
  *   clear('all')                   RangeError → 0.1 ms (34 ms with a listener)
  *
- * Budgets allow for CI runners several times slower than an M1, plus noise.
+ * Budgets allow for CI runners several times slower than an M1, plus noise:
+ * a per-call budget is about five times the M1's figure, which a loaded
+ * machine came within a factor of two of, and a pass over the store would
+ * still miss by a hundred.
  */
 
 import { runInNewContext } from 'node:vm';
@@ -147,12 +150,12 @@ describeIfPerf('AnnotationStore at 1M annotations (opt-in via RUN_ANNOTATION_PER
     store.getByRow(0); // builds the by-row index of cells once
     const byRow = cells.map(([r]) => time(() => store.getByRow(r))[0]);
     const byColumn = columns.slice(0, 100).map((c) => time(() => store.getByColumn(c))[0]);
-    expect(median(byCell)).toBeLessThan(0.05);
-    expect(median(byRow)).toBeLessThan(0.05);
+    expect(median(byCell)).toBeLessThan(0.25);
+    expect(median(byRow)).toBeLessThan(0.25);
     expect(median(byColumn)).toBeLessThan(3);
   });
 
-  it('summaries and masks: < 2 µs per call on average', () => {
+  it('summaries and masks: < 10 µs per call on average', () => {
     const summary = createScopeSummary();
     const rand = mulberry32(9);
     const probes = Array.from(
@@ -169,23 +172,23 @@ describeIfPerf('AnnotationStore at 1M annotations (opt-in via RUN_ANNOTATION_PER
       }
     });
     expect(sink).toBeGreaterThan(0);
-    expect((ms * 1_000) / (probes.length * 4)).toBeLessThan(2);
+    expect((ms * 1_000) / (probes.length * 4)).toBeLessThan(10);
     const [build] = time(() => store.annotatedRows());
     expect(build).toBeLessThan(1_000);
     const [lookups] = time(() => {
       for (const [r] of probes) sink += store.annotatedRowMask(r);
     });
-    expect((lookups * 1_000) / probes.length).toBeLessThan(2);
+    expect((lookups * 1_000) / probes.length).toBeLessThan(10);
   });
 
-  it('remove ×1 p50 < 0.2 ms, removeMany(100) < 20 ms', () => {
+  it('remove ×1 p50 < 1 ms, removeMany(100) < 20 ms', () => {
     const ids = store.getAll().map((a) => a.id);
     const rand = mulberry32(11);
     const single = Array.from(
       { length: 21 },
       () => time(() => store.remove(ids[(rand() * ids.length) | 0]!))[0],
     );
-    expect(median(single)).toBeLessThan(0.2);
+    expect(median(single)).toBeLessThan(1);
     const batch = Array.from({ length: 100 }, () => ids[(rand() * ids.length) | 0]!);
     const [ms] = time(() => store.removeMany(batch));
     expect(ms).toBeLessThan(20);

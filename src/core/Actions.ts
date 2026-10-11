@@ -285,6 +285,7 @@ export class StateActions {
   private onRelationSettledCallback?: (() => void) | undefined;
   private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
   private onRestoreIssueCallback?: ((issue: RestoreIssue) => void) | undefined;
+  private onDataClearedCallback?: ((kind: 'load' | 'clear') => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
   /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
@@ -409,14 +410,31 @@ export class StateActions {
 
   /**
    * Set a callback told what a load's restore of a saved session left out,
-   * having restored the rest: today, annotations `loadJSON` refused. The
-   * facade reports each as a `warning` event.
+   * having restored the rest: today, annotations the session store could not
+   * attach to the session, or that `loadJSON` refused. The facade reports
+   * each as a `warning` event.
    *
    * @internal
    */
   setOnRestoreIssue(callback: (issue: RestoreIssue) => void): void {
     this.throwIfDestroyed('setOnRestoreIssue');
     this.onRestoreIssueCallback = callback;
+  }
+
+  /**
+   * Set a callback run in the turn of a load (`'load'`), once the worker has
+   * loaded the new data and before the restore of its saved session, or
+   * after a failed load that keeps no data, and in the turn of
+   * {@link clearData} (`'clear'`): the facade empties there what belongs to
+   * the data the state no longer holds, its annotations and its own presets.
+   * In the turn, a load that a newer one superseded leaves nothing it
+   * restored to the table that replaces it.
+   *
+   * @internal
+   */
+  setOnDataCleared(callback: (kind: 'load' | 'clear') => void): void {
+    this.throwIfDestroyed('setOnDataCleared');
+    this.onDataClearedCallback = callback;
   }
 
   /**
@@ -1031,6 +1049,7 @@ export class StateActions {
       this.lastSelectedIndex = null;
       this.undoManager?.clear();
       this.initialSnapshot = null;
+      this.onDataClearedCallback?.('clear');
       const manager = this.derivedManager;
       if (manager) {
         this.derivedManager = null;
@@ -1138,8 +1157,9 @@ export class StateActions {
         restoreState();
         this.lastSelectedIndex = anchor;
         if (undoStacks) this.undoManager?.loadStacks(undoStacks.undoStack, undoStacks.redoStack);
-      } else if (replacedInPlace) {
-        this.onBaseTableReplacedCallback?.(replaced);
+      } else {
+        if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+        if (!this.destroyed) this.onDataClearedCallback?.('load');
       }
       throw err;
     }
@@ -1160,6 +1180,9 @@ export class StateActions {
       await this.abandonIfDestroyed(result.tableName);
     }
 
+    // What belongs to the data replaced goes, before the new table is named.
+    this.onDataClearedCallback?.('load');
+
     // Update state with schema from loader result
     this.state.tableName.set(result.tableName);
     this.state.totalRows.set(result.rowCount);
@@ -1170,11 +1193,13 @@ export class StateActions {
     this.state.baseTableName.set(result.tableName);
     this.state.derivedColumns.set([]);
 
-    // Restore session if a store is provided and a snapshot exists
-    if (options.sessionStore) {
+    // Restore session if a store is provided and a snapshot exists. A load
+    // superseded by a newer load or a clear restores none: the data it
+    // loaded is already going.
+    if (options.sessionStore && epoch === this.loadEpoch) {
       const snapshot = await options.sessionStore.load(result.tableName);
       this.throwIfDestroyed('loadData');
-      if (snapshot) {
+      if (snapshot && epoch === this.loadEpoch) {
         // What the load set up, to go back to if the snapshot cannot be read.
         const loaded = captureSnapshot(this.state);
         const loadedTooltips = this.state.columnHeaderTooltips.get();

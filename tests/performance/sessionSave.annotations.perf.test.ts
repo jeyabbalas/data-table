@@ -1,7 +1,8 @@
 /**
  * What a session save costs with a million annotations when only the sort
  * changed: the annotations are neither serialized nor cloned again, and the
- * session record is the only write. Before they had a record of their own,
+ * session record is the only write, after a read of their record's head (has
+ * another tab written them since?). Before they had a record of their own,
  * every save did both. And a reload restores them without writing them back.
  *
  * Gated by `RUN_ANNOTATION_PERF=1` (`npm run test:perf` sets it): building
@@ -15,17 +16,22 @@
  *
  * Measured on an M1 Pro, Node 22:
  *
- *   a sort-change save, before (toJSON + clone of every annotation)   ~1.2 s
- *   a sort-change save, after (the session record alone)              0.18 ms
- *     of which the annotations' part (`currentAnnotationFile`)        0.4 µs
- *   the first save, which writes the record in 100 chunks             ~1 s
- *     its longest task                                                30 ms
- *   a reload: load (the head and one `getAll` of the chunks)          ~1.3 s
- *             restore (`loadJSON` and the adopting `toJSON`)          ~1.1 s
- *             its first save, with no annotations written             ~2 ms
+ *   a sort-change save, before (toJSON + clone of every annotation)   ~1.2-1.9 s
+ *   a sort-change save, after (a read of the head, the session record) 0.8 ms
+ *     of which the annotations' part (`annotationsToken`)             0.4 µs
+ *   the first save, which writes the record in 100 chunks             ~1.3 s
+ *     its longest task                                                28 ms
+ *   a reload: load (the head and one `getAll` of the chunks)          ~1.3-2 s
+ *             restore (`loadJSON`, adopting the file's token)         ~1.2 s
+ *             its first save, with no annotations written             ~1 ms
  *
- * In Chromium the same write takes 0.48 s with no task over 13 ms, and the
- * load 0.57 s, of which `getAll`'s 0.52 s is one task.
+ * In Chromium the same write takes 0.43-0.51 s with no task over 14 ms, a
+ * sort-change save 0.3 ms, and the load 0.37-0.68 s, of which `getAll`'s
+ * 0.33-0.64 s is one task. `saveSync` of a changed million, for a page being
+ * hidden, enqueues it all in one task of 0.32 s. A reload in the middle of
+ * the chained write, between its two commits, during its cleanup, or right
+ * after a `saveSync` whose annotations do not land restores the last
+ * annotations that landed.
  */
 import 'fake-indexeddb/auto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -34,7 +40,7 @@ import type { NewAnnotation } from '@/annotations/types';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
-import { currentAnnotationFile } from '@/persistence/annotationPersistence';
+import { annotationsToken } from '@/persistence/annotationPersistence';
 import { restoreStateFromSnapshot, snapshotFromState } from '@/persistence/serialization';
 import { SessionStore } from '@/persistence/SessionStore';
 
@@ -151,7 +157,7 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     const lookups: number[] = [];
     for (let i = 0; i < 101; i++) {
       const start = performance.now();
-      currentAnnotationFile(annotations);
+      annotationsToken(annotations);
       lookups.push(performance.now() - start);
     }
 
@@ -160,7 +166,10 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     for (let i = 0; i < 5; i++) {
       state.sortColumns.set([{ column: `c${i}`, direction: i % 2 ? 'desc' : 'asc' }]);
       const start = performance.now();
-      const snapshot = snapshotFromState(state, undefined, undefined, annotations);
+      // As AutoSave takes it for a `SessionStore`: the file only if written.
+      const snapshot = snapshotFromState(state, undefined, undefined, annotations, {
+        lazyAnnotations: true,
+      });
       const taken = performance.now();
       await store.save(snapshot);
       snapshots.push(taken - start);
@@ -179,7 +188,7 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     console.log(
       `[sessionSave 1M] first save (writes the record) ${firstSaveMs.toFixed(0)} ms, ` +
         `its longest task ${firstSaveLongestMs.toFixed(0)} ms; ` +
-        `currentAnnotationFile median ${(median(lookups) * 1000).toFixed(1)} µs; ` +
+        `annotationsToken median ${(median(lookups) * 1000).toFixed(1)} µs; ` +
         `snapshot median ${median(snapshots).toFixed(2)} ms; ` +
         `sort-change save median ${median(saves).toFixed(2)} ms; ` +
         `old per-save toJSON + clone ${oldSaveMs.toFixed(0)} ms`,
@@ -212,7 +221,11 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     const put = vi.spyOn(IDBObjectStore.prototype, 'put');
     nextState.sortColumns.set([{ column: 'c1', direction: 'asc' }]);
     start = performance.now();
-    await reloaded.save(snapshotFromState(nextState, undefined, undefined, nextAnnotations));
+    await reloaded.save(
+      snapshotFromState(nextState, undefined, undefined, nextAnnotations, {
+        lazyAnnotations: true,
+      }),
+    );
     const saveMs = performance.now() - start;
     const annotationPuts = put.mock.contexts.filter(
       (ctx) => (ctx as IDBObjectStore).name === 'annotations',
@@ -223,7 +236,7 @@ describeIfPerf('session save with 1M annotations (opt-in via RUN_ANNOTATION_PERF
     console.log(
       `[sessionSave 1M] reload: load ${loadMs.toFixed(0)} ms ` +
         `(longest task ${loadLongestMs.toFixed(0)} ms); ` +
-        `restore (loadJSON + adopt) ${restoreMs.toFixed(0)} ms; ` +
+        `restore (loadJSON and adopt) ${restoreMs.toFixed(0)} ms; ` +
         `first save after it ${saveMs.toFixed(2)} ms`,
     );
     expect(annotationPuts).toBe(0);

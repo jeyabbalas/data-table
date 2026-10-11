@@ -8,7 +8,8 @@
  * and persisted alongside the table state so they survive browser refreshes.
  *
  * @example
- * import { AutoSave, SessionStore } from '@jeyabbalas/data-table';
+ * import { SessionStore } from '@jeyabbalas/data-table';
+ * import { AutoSave } from '@jeyabbalas/data-table/advanced';
  *
  * const store = new SessionStore();
  * await store.open();
@@ -26,9 +27,10 @@ import { PersistenceError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import { settleSnapshotAnnotations } from './annotationPersistence';
 import { classifyPersistenceFailure, isAnnotationsWriteFailure } from './persistenceErrors';
 import { snapshotFromState } from './serialization';
-import type { SessionStore } from './SessionStore';
+import { SessionStore } from './SessionStore';
 import type { SessionSnapshot } from './types';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
@@ -92,6 +94,12 @@ export class AutoSave {
   private annotationsHeldBack = false;
   /** Failed writes of the annotations record in a row, other than over the quota. */
   private annotationsFailures = 0;
+  /**
+   * The snapshots of the asynchronous saves under way. A `SessionStore` takes
+   * a snapshot's annotations only when it writes them, which
+   * {@link settleAnnotations} makes it do at once.
+   */
+  private readonly saving = new Set<SessionSnapshot>();
 
   constructor(
     private state: TableState,
@@ -193,11 +201,25 @@ export class AutoSave {
     // registers `window.addEventListener('beforeunload', …)` synchronously
     // at module load — its handler runs before createDataTable's async
     // init reaches enable() and wires up AutoSave's own flush.
-    // Safe in every call site: loadData calls disable() before resetTableState
-    // so the flush captures fully-settled pre-load state; clearSession's
-    // subsequent IDB delete runs after this sync put (same-store
-    // transactions serialise) so the net result is still deleted.
-    this.flushPendingSave();
+    this.disableWith('saveSync');
+  }
+
+  /**
+   * {@link disable}, with the debounced save pending, if any, written
+   * through the asynchronous save (`'save'`), whose writes of a million
+   * annotations take many short tasks, through the synchronous one
+   * (`'saveSync'`), as a page being hidden needs, or dropped (`'drop'`).
+   * `loadData` saves the data it replaces asynchronously, and
+   * `clearSession`, which deletes the session, drops it.
+   *
+   * @internal
+   */
+  disableWith(pending: 'save' | 'saveSync' | 'drop'): void {
+    if (this.timer !== null) {
+      this.clearTimer();
+      if (pending === 'save') this.save();
+      else if (pending === 'saveSync') this.saveSync();
+    }
 
     for (const unsub of this.unsubscribes) {
       unsub();
@@ -228,6 +250,17 @@ export class AutoSave {
     }
   }
 
+  /**
+   * Have the asynchronous saves under way take their annotations now, if
+   * they have not yet: before the annotation store is emptied for other
+   * data, which would leave them none to write.
+   *
+   * @internal
+   */
+  settleAnnotations(): void {
+    settleSnapshotAnnotations(this.saving);
+  }
+
   /** Permanently disable auto-save and clean up. */
   destroy(): void {
     this.disable();
@@ -255,19 +288,25 @@ export class AutoSave {
     if (this.state.tableName.get() == null) return;
 
     const snapshot = this.snapshot();
+    this.saving.add(snapshot);
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
       if (result && typeof result.then === 'function') {
         result.then(
           () => {
+            this.saving.delete(snapshot);
             this.annotationsFailures = 0;
           },
           (cause: unknown) => {
+            this.saving.delete(snapshot);
             this.reportError(cause);
           },
         );
+      } else {
+        this.saving.delete(snapshot);
       }
     } catch (cause) {
+      this.saving.delete(snapshot);
       this.reportError(cause);
     }
   }
@@ -297,6 +336,9 @@ export class AutoSave {
       this.annotationStore,
       {
         annotations: !this.annotationsHeldBack,
+        // A `SessionStore` takes the annotations' file only to write it; a
+        // custom store gets it as it is now.
+        lazyAnnotations: this.store instanceof SessionStore,
       },
     );
   }

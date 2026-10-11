@@ -190,8 +190,9 @@ write saves the session record naming the annotations it named before.
   before it end, those asked for in the same task included, then closes the
   connections; one asked for after it opens the databases again, once those
   have ended. So `destroy()`, which closes a store the table owns, never
-  drops a save under way, and a table mounted again on the same name, with a
-  store of its own, reads what those saves wrote.
+  drops a save under way, nor a `clearSession()` called just before it, and
+  a table mounted again on the same name, with a store of its own, reads
+  what those saves wrote.
 - `loadData()` writes the save it had pending, of the data it replaces,
   asynchronously; `clearSession()` drops its pending save, the session going
   anyway. Auto-save stays off while any load or clear runs, and a load that
@@ -399,6 +400,11 @@ Effect:
 - A `loadData()` still in flight when `clearSession()` is called lands
   first, and it is its table that is emptied, and its snapshot that is
   deleted. That load fires no `loadComplete`.
+- `clearSession()` and `destroy()` called one after the other, as a "reset
+  and close" button does, still delete the session and its annotations, and
+  `clearSession()` resolves: the in-memory state goes with the table. It
+  rejects with `DestroyedError` only when a `loadData()` in flight landed a
+  table of its own first, whose session it did not get to delete.
 
 After `clearSession()`, the table is fresh. Call `loadData()` to re-populate
 it (or pass a new `source` and mount a new table).

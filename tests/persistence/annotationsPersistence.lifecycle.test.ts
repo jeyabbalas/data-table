@@ -527,3 +527,27 @@ describe('AutoSave around a load or a clear', () => {
     sessionStore.close();
   });
 });
+
+describe('clearSession() and destroy() in one task', () => {
+  it('deletes the session and its annotations, and resolves', async () => {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], 'b.csv'),
+      tableName: 'B',
+      ...BARE,
+    });
+    table.actions.toggleSort('id');
+    table.annotations.add({ id: 'x', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(async () => expect(await rawAnnotations('B')).toBeDefined(), {
+      timeout: 3000,
+    });
+    // A "reset and close" button.
+    const cleared = table.clearSession();
+    await table.destroy();
+    await expect(cleared).resolves.toBeUndefined();
+    expect(await rawSession('B')).toBeUndefined();
+    expect(await rawAnnotations('B')).toBeUndefined();
+    expect(await rawChunks('B')).toEqual([]);
+  }, 10_000);
+});

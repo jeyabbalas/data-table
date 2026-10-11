@@ -218,18 +218,21 @@ export class AutoSave {
    * through the asynchronous save (`'save'`), whose writes of a million
    * annotations take many short tasks, through the synchronous one
    * (`'saveSync'`), as a page being hidden needs, or dropped (`'drop'`).
-   * `'saveSync'` also writes the state of an asynchronous save under way,
-   * which the page could take with it. `loadData` saves the data it replaces
-   * asynchronously, and `clearSession`, which deletes the session, drops it.
+   * `'saveSync'` also writes, while enabled, the state of an asynchronous
+   * save under way, which the page could take with it: not once disabled,
+   * as `clearSession` leaves it, whose saves under way are for a session
+   * going. `loadData` saves the data it replaces asynchronously, and
+   * `clearSession`, which deletes the session, drops it.
    *
    * @internal
    */
   disableWith(pending: 'save' | 'saveSync' | 'drop'): void {
     const scheduled = this.timer !== null;
+    const enabled = this.unsubscribes.length > 0;
     this.clearTimer();
     try {
       if (pending === 'save' && scheduled) this.save();
-      if (pending === 'saveSync' && (scheduled || this.inFlight > 0)) this.saveSync();
+      if (pending === 'saveSync' && (scheduled || (enabled && this.inFlight > 0))) this.saveSync();
     } finally {
       for (const unsub of this.unsubscribes) {
         unsub();

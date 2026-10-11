@@ -76,7 +76,8 @@ On mount:
    filter keeps the annotated rows of the table it comes back to
 4. Subsequent mutations auto-save on a debounced timer
 
-On unmount (call `table.destroy()`): the auto-save flushes a final snapshot.
+On unmount (call `table.destroy()`): the auto-save flushes a final snapshot,
+and a save under way still lands.
 
 ### `tableName` determines the session key
 
@@ -171,23 +172,36 @@ write saves the session record naming the annotations it named before.
 - A save after the annotations change takes 0.43–0.51 s at a million in
   Chromium, 100 chunks, with no task over 16 ms.
 - `saveSync()`, which runs only from `destroy()` and when the page is hidden
-  or unloaded, enqueues all of it at once, the session record naming the new
-  annotations with their fallback kept: one task of 0.32 s for a changed
-  million. An asynchronous save it overtakes writes nothing more.
+  or unloaded, enqueues all of it at once: the chunks and the head, keeping
+  every record the stored head describes and deleting none, and the session
+  record naming them, which reads the stored one in the same transaction and,
+  when another tab has written the table's annotations since, takes that
+  tab's record as its fallback. One task of 0.32 s for a changed million. It
+  covers a save under way too: when that save is writing the same
+  annotations, `saveSync()` names its write rather than writing them again,
+  a session record of 0–1 ms. An asynchronous save it overtakes writes
+  nothing more.
 - A reload restores the annotations and writes nothing back until they
   change. Reading a million took 0.37–0.8 s in Chromium, most of it one
   `getAll` of the chunks, and restoring them 0.70–0.73 s.
 - A table's saves, loads and deletes run one at a time, in call order; a
-  `saveSync()` and a `delete()` stop the older asynchronous saves.
+  `saveSync()` and a `delete()` stop the older asynchronous saves. `close()`
+  lets the operations asked for before it end, then closes the connections;
+  one asked for after it opens the databases again, once those have ended.
+  So `destroy()`, which closes a store the table owns, never drops a save
+  under way.
 - `loadData()` writes the save it had pending, of the data it replaces,
   asynchronously; `clearSession()` drops its pending save, the session going
   anyway. Auto-save stays off while any load or clear runs, and a load that
   a newer load or a clear supersedes restores nothing.
 - Emptying the store (`table.annotations.clear()`) deletes its record at the
-  next save. A record this version cannot attach (a newer format, an
-  unreadable one, a file `loadJSON` refused), or one an older version's
-  `clearSession()` left behind, stays until the table has annotations to
-  write.
+  next save. Until the record is deleted, the session record names it as
+  dropped (`__annotationsDropped`, which `load()` strips): should the save not
+  get to delete it, as when the page goes first, a later load does, unless a
+  write has replaced it since. A record this version cannot attach (a newer
+  format, an unreadable one, a file `loadJSON` refused), or one an older
+  version's `clearSession()` left behind, stays until the table has
+  annotations to write.
 
 The chunks are there because Chromium refuses any single IndexedDB value
 over 133,169,152 bytes (127 MiB), and a million annotations of about 167
@@ -242,8 +256,13 @@ reload starts their saves again.
 
 **Custom stores.** An object of your own passed as
 `persistence.sessionStore` receives whole snapshots, annotations included:
-a new `annotations` file at each save, as in 0.9. Treat it as read-only.
-Annotations inside the session records it returns are restored as they are.
+the same `annotations` file object from save to save while the annotations
+do not change, and a new one once they do, where 0.9 built a new one at each
+save. So does a `SessionStore` whose `save` or `saveSync` is not the
+library's own, a subclass's override or a wrapper, which may copy a snapshot
+after an `await`. Treat the file as read-only: it holds the annotation
+store's own objects. Annotations inside the session records it returns are
+restored as they are.
 
 ## Opting out
 
@@ -294,7 +313,7 @@ Both tables share a single IDB connection; each keeps its own snapshot
 ```ts
 await t1.destroy();
 await t2.destroy();
-sharedStore.close(); // release the IDB connection
+sharedStore.close(); // lets the saves under way finish, then releases the IDB connections
 ```
 
 See also the [Multi-table guide](./multi-table.md) for patterns sharing

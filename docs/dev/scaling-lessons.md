@@ -164,12 +164,18 @@ What made them slow, and the rule each one gives:
    annotations now live in their own database, written only when the
    store's content is not what the session store last wrote or read.
    Telling is O(1): a token per content revision and table name, which a
-   snapshot carries without the file; the file is built only when a write,
-   or a custom store, reads it, and nothing keeps it after. Two databases
+   snapshot carries without the file; the file is built only when a write
+   reads it. A custom store, which can tell unchanged annotations only by
+   identity, gets one file per content, the same object until the content
+   changes; so does a `SessionStore` whose `save` or `saveSync` is wrapped
+   or overridden, which may copy a snapshot after an `await`. Two databases
    cannot be written atomically, so the order makes up for it: the
    annotations first, then the session record naming them, with the record
    it named before as its fallback, then a cleanup. A reload restores the
-   last annotations that landed.
+   last annotations that landed. A save of many steps must also outlive its
+   caller: a store that closes lets the operations asked before it finish,
+   and a page hidden mid-save writes a session record naming the write under
+   way rather than writing the annotations again.
 4. **Know the platform's ceilings.** `push(...ids)` spreads its argument onto
    the stack and threw `RangeError` from about 125,000 ids; a V8 `Map` holds
    2²⁴ (about 16.7 million) entries; Chromium refuses an IndexedDB value over

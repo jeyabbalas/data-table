@@ -242,7 +242,8 @@ at a time without ever calling `terminate()`.
 
 Closing the store before destroying tables is benign (auto-save may skip a
 final flush) but not fatal — `SessionStore.saveSync()` silently no-ops on a
-closed DB.
+closed DB. Closed after them, the store lets the saves their `destroy()`
+calls left under way finish before it releases its connections.
 
 ## Per-instance visualization registry
 

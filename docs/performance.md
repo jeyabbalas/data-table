@@ -293,12 +293,12 @@ one, in ways each kept bounded (see
   table opens them. A load that fails is said in the live region and
   reported as an `error` event coded `CHUNK_LOAD_FAILED`, and the next open
   asks for the chunk again, which Chrome answers with the same failure until
-  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.44 kB,
-  the `ExtractColumnPanel` chunk 4.98 kB, the `TreeView` chunk the two share
-  2.80 kB, and the `extractExpression` chunk 2.78 kB, which both panels and
+  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.48 kB,
+  the `ExtractColumnPanel` chunk 4.99 kB, the `TreeView` chunk the two share
+  2.80 kB, and the `extractExpression` chunk 2.79 kB, which both panels and
   `actions.addNestedFieldColumn` load. The shared chunk every table loads is
-  100.88 kB, the stylesheet 22.87 kB, the root entry 11.05 kB and `/advanced`
-  2.15 kB (`.size-limit.cjs` holds the caps).
+  114.33 kB, the stylesheet 23.52 kB, the root entry 11.78 kB and `/advanced`
+  2.16 kB (`.size-limit.cjs` holds the caps).
 - **Value reads and exports.** `getCellValue`, `getColumnValues` and the CSV
   and JSON exports read nested values as exact JSON text, and none of those
   reads goes through the query cache, which must not keep megabytes of text.
@@ -404,7 +404,9 @@ rows the grid holds, or by binary search when the view is neither filtered
 nor sorted, in under 2 ms; otherwise its SQL search takes from about 0.1 s
 to 1.3 s on ten million rows, by the sort and the filters. Under an
 annotated filter it first waits for the view to catch up with a change,
-0.4–0.7 s at a million annotated rows. The numbers are in
+0.4–0.7 s at a million annotated rows, and, when the change took the
+cursor's row out of the view, for the query that finds the gap the row
+left, up to about 90 ms. The numbers are in
 [Annotations at a million](#annotations-at-a-million).
 
 **Implication:** a million annotations are practical. Add them with one
@@ -748,7 +750,9 @@ As of 0.10.0, with the source of each:
   deep sorted block waits behind that fetch, as DuckDB runs one query at a
   time: about 1.2 s at row 7,000,000. Under the annotated filter, a jump
   right after a change to the annotations first waits for the view to
-  refresh, 0.4–0.7 s at a million annotated rows.
+  refresh, 0.4–0.7 s at a million annotated rows, and, when the change took
+  the cursor's row out of the view, for the query that finds the gap the
+  row left: up to about 90 ms deep in ten million rows.
 - **The annotated filter at a million annotated rows.** Each of its queries
   reads the table of annotated rows (`src/filters/FilterSQL.ts`). On ten
   million rows, the filtered count took 0.34 s in Node's DuckDB-WASM (72 ms
@@ -970,14 +974,14 @@ among the rows the grid held), `revealRow` 2 ms unsorted and 1.1–1.2 s
 sorted. With 1,000 annotated rows, every jump is SQL; see
 [Known slow paths](#known-slow-paths).
 
-The table above was measured before an unsorted SQL search counted the
-rows before the row it finds in the view as it is, rather than reckoning
-its position from the cursor's. In Node's DuckDB-WASM on the same 10,000,000
-rows, that count takes about 91 ms near row 9,000,000 with a million
-annotated rows, 40 ms with a thousand, and 20 ms under a range filter;
-near row 100,000, under 3 ms. Under the annotated filter, a jump right
+An unsorted SQL search places the row it finds by counting the rows
+between the cursor's row and it. Under the annotated filter, a jump right
 after a change to the annotations first waits for the view to refresh,
-0.4–0.7 s at a million annotated rows. The navigator's chunk is 4.47 kB.
+0.4–0.7 s at a million annotated rows. When the change took the cursor's
+row out of the view, finding the gap the row left takes one query once the
+count is in, up to about 90 ms deep in ten million rows with a million
+annotated rows, which the cursor waits for before it moves there. The
+navigator's chunk is 4.60 kB.
 
 **The annotated filter.** In Node's DuckDB-WASM, on 10,000,000 rows: for
 1,000,000 annotated rows, building the statement took 56 ms and building the
@@ -1002,6 +1006,7 @@ refreshes, and no refresh when a change keeps the same rows.
 | A save after a sort change (it reads the head, writes nothing to `dt-annotations`)     | 0.2–0.3 ms                                |
 | A save after the annotations change (100 chunks and the head, then the session record) | 0.43–0.51 s, longest task 11–16 ms        |
 | `saveSync()` on page hide, the annotations changed                                     | one task of 0.32 s                        |
+| `saveSync()` on page hide, a save of the same annotations under way                    | 0–1 ms: a session record naming its write |
 | A reload's read of the annotations                                                     | 0.37–0.8 s, its `getAll` one task         |
 | Their restore                                                                          | 0.70–0.73 s, all 1,000,000 back, in order |
 | The reload's next save                                                                 | the session record only                   |
@@ -1017,7 +1022,12 @@ neither the old table nor its table of annotated rows; `clearSession` took
 a reload in the middle of a save (between its chunks, between its two
 commits, during its cleanup), right after a `saveSync()`, or after a
 `saveSync()` whose annotations' transaction was aborted, restored the last
-annotations that had landed each time, and reported nothing.
+annotations that had landed each time, and reported nothing. With a write
+of the million under way, a `destroy()` that left the page open let the
+write finish after `close()`, and the reload restored all of it with the
+sort; a `destroy()` or a hide as the page went restored the last state
+that had landed. No `PERSISTENCE_ANNOTATIONS_DROPPED` came up in any of
+these.
 
 Before, every save serialized and cloned every annotation: about 1.2 s at a
 million in Node, after any sort, filter or width change. In Node with
@@ -1071,28 +1081,30 @@ size. At 0.9.0 (`main` at `6b784f43`, 7 October 2026) the root entry was
 
 | Budget                                                             | Size      | Cap     |
 | ------------------------------------------------------------------ | --------- | ------- |
-| Root entry · ESM                                                   | 11.80 kB  | 12.1 kB |
-| `/advanced` entry · ESM                                            | 2.15 kB   | 2.25 kB |
+| Root entry · ESM                                                   | 11.78 kB  | 12.1 kB |
+| `/advanced` entry · ESM                                            | 2.16 kB   | 2.25 kB |
 | Stylesheet                                                         | 23.52 kB  | 23.7 kB |
-| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 113.43 kB | 117 kB  |
+| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 114.33 kB | 117 kB  |
 | Lazy `SQLFilterModal` chunk                                        | 2.55 kB   | 2.6 kB  |
 | Lazy `DerivedColumnModal` chunk                                    | 3.80 kB   | 3.95 kB |
 | Lazy `DerivedColumnEditPanel` chunk                                | 3.22 kB   | 3.3 kB  |
 | Lazy `FilterPresetPanel` chunk                                     | 2.69 kB   | 2.7 kB  |
-| Lazy CodeMirror editor chunk                                       | 5.21 kB   | 5.5 kB  |
+| Lazy CodeMirror editor chunk                                       | 5.20 kB   | 5.5 kB  |
 | Lazy `extractExpression` chunk                                     | 2.79 kB   | 2.95 kB |
-| Lazy `ValueInspector` chunk                                        | 8.43 kB   | 8.9 kB  |
+| Lazy `ValueInspector` chunk                                        | 8.48 kB   | 8.9 kB  |
 | Lazy `ExtractColumnPanel` chunk                                    | 4.99 kB   | 5.3 kB  |
 | Lazy `TreeView` chunk                                              | 2.80 kB   | 2.85 kB |
-| Lazy `AnnotationNavigator` chunk                                   | 4.47 kB   | 4.7 kB  |
+| Lazy `AnnotationNavigator` chunk                                   | 4.60 kB   | 4.7 kB  |
 | Lazy `AnnotatedRowsTable` chunk                                    | 2.74 kB   | 2.85 kB |
 
 The budget still named "lazy ExportDialog chunk" measures the shared
 `VisualizationRegistry-*` chunk, which holds most of the table: header,
 body, keyboard navigation. The root entry imports it, so every table loads
 it up front; the dialogs and panels below it load the first time one opens,
-annotation navigation the first time it runs, and the table of annotated
-rows the first time an annotated filter or a navigation needs it.
+annotation navigation the first time it runs or a refresh of the annotated
+view looks for the cursor's row beyond the rows the grid holds, and the
+table of annotated rows the first time an annotated filter or a navigation
+needs it.
 Parquet export runs in DuckDB's worker (`COPY TO`), not in a chunk of its
 own. ESM only: the CJS bundles were dropped in 0.4.0.
 

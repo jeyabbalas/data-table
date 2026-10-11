@@ -20,18 +20,18 @@
  * Current baseline (brotli, re-measured with annotations at scale, under
  * Vite 8.3.0 / rolldown 1.2.10, which, like rolldown 1.0.1 before it,
  * inlines the shared ModalHost code into each modal consumer):
- *   root entry · ESM               11.80 kB   →  12.1 kB cap (2.5 %)
- *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
+ *   root entry · ESM               11.84 kB   →  12.1 kB cap (2.2 %)
+ *   advanced entry · ESM            2.14 kB   →   2.25 kB cap (5.1 %)
  *   stylesheet                     23.52 kB   →  23.7 kB cap (0.8 %)
- *   lazy ExportDialog chunk       114.94 kB   → 117 kB   cap (1.8 %)
+ *   lazy ExportDialog chunk       114.89 kB   → 117 kB   cap (1.8 %)
  *   lazy SQLFilterModal chunk       2.55 kB   →   2.6 kB cap (2.0 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
- *   lazy DerivedColumnEditPanel     3.21 kB   →   3.3 kB cap (2.8 %)
- *   lazy FilterPresetPanel          2.68 kB   →   2.7 kB cap (0.7 %)
- *   lazy CodeMirror editor          5.20 kB   →   5.5 kB cap (5.8 %)
+ *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
+ *   lazy FilterPresetPanel          2.66 kB   →   2.7 kB cap (1.5 %)
+ *   lazy CodeMirror editor          5.21 kB   →   5.5 kB cap (5.6 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
  *   lazy ValueInspector chunk       8.47 kB   →   8.9 kB cap (5.1 %)
- *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
+ *   lazy ExtractColumnPanel chunk   4.99 kB   →   5.3 kB cap (6.2 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
  *   lazy AnnotationNavigator chunk  4.80 kB   →   5.0 kB cap (4.2 %)
  *   lazy AnnotatedRowsTable chunk   2.73 kB   →   2.85 kB cap (4.4 %)
@@ -65,7 +65,7 @@
  * option, and the default worker's typed failures (RT-07) took it from
  * 11.05 to 11.53 kB, and the cap to 12.1 kB. Annotations at scale (the
  * navigation option, the wiring of the annotated-rows table and the
- * annotations' own persistence) took it to 11.80 kB.
+ * annotations' own persistence) took it to 11.84 kB.
  *
  * Advanced entry history. Removing the deprecated `VisualizationFactory`
  * took it from 2.50 to 2.32 kB, and the cap from 2.6 to 2.45 kB. The rest of
@@ -125,7 +125,8 @@
  * closing session store finishing what it was asked) left it at 114.33 kB,
  * and those of a fourth (a navigation waiting for the view's new count,
  * the cursor's row kept or learned through a change of the view, one
- * queue of a table's operations for every session store) at 114.94 kB.
+ * queue of a table's operations for every session store), with those of a
+ * fifth, at 114.89 kB.
  *
  * AnnotatedRowsTable chunk history. New with the annotated-rows filter, at
  * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with

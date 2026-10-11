@@ -294,11 +294,11 @@ one, in ways each kept bounded (see
   reported as an `error` event coded `CHUNK_LOAD_FAILED`, and the next open
   asks for the chunk again, which Chrome answers with the same failure until
   the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.47 kB,
-  the `ExtractColumnPanel` chunk 4.98 kB, the `TreeView` chunk the two share
+  the `ExtractColumnPanel` chunk 4.99 kB, the `TreeView` chunk the two share
   2.80 kB, and the `extractExpression` chunk 2.79 kB, which both panels and
   `actions.addNestedFieldColumn` load. The shared chunk every table loads is
-  114.94 kB, the stylesheet 23.52 kB, the root entry 11.80 kB and `/advanced`
-  2.15 kB (`.size-limit.cjs` holds the caps).
+  114.89 kB, the stylesheet 23.52 kB, the root entry 11.84 kB and `/advanced`
+  2.14 kB (`.size-limit.cjs` holds the caps).
 - **Value reads and exports.** `getCellValue`, `getColumnValues` and the CSV
   and JSON exports read nested values as exact JSON text, and none of those
   reads goes through the query cache, which must not keep megabytes of text.
@@ -1088,24 +1088,24 @@ budgets are in [Annotations at a million](#annotations-at-a-million). Each scrol
 their caps, and fails when one passes it. The worker script
 (`assets/worker-*.js`) and two chunks under 0.5 kB have no budget. The
 sizes below are the baseline `.size-limit.cjs` records, re-measured with the
-0.10.0 annotation work on 10 October 2026; each cap is 0.7–6.4 % above its
+0.10.0 annotation work on 10 October 2026; each cap is 0.8–6.2 % above its
 size. At 0.9.0 (`main` at `6b784f43`, 7 October 2026) the root entry was
 11.05 kB, the stylesheet 22.87 kB and the shared chunk 100.88 kB.
 
 | Budget                                                             | Size      | Cap     |
 | ------------------------------------------------------------------ | --------- | ------- |
-| Root entry · ESM                                                   | 11.80 kB  | 12.1 kB |
-| `/advanced` entry · ESM                                            | 2.15 kB   | 2.25 kB |
+| Root entry · ESM                                                   | 11.84 kB  | 12.1 kB |
+| `/advanced` entry · ESM                                            | 2.14 kB   | 2.25 kB |
 | Stylesheet                                                         | 23.52 kB  | 23.7 kB |
-| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 114.94 kB | 117 kB  |
+| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 114.89 kB | 117 kB  |
 | Lazy `SQLFilterModal` chunk                                        | 2.55 kB   | 2.6 kB  |
 | Lazy `DerivedColumnModal` chunk                                    | 3.80 kB   | 3.95 kB |
-| Lazy `DerivedColumnEditPanel` chunk                                | 3.21 kB   | 3.3 kB  |
-| Lazy `FilterPresetPanel` chunk                                     | 2.68 kB   | 2.7 kB  |
-| Lazy CodeMirror editor chunk                                       | 5.20 kB   | 5.5 kB  |
+| Lazy `DerivedColumnEditPanel` chunk                                | 3.22 kB   | 3.3 kB  |
+| Lazy `FilterPresetPanel` chunk                                     | 2.66 kB   | 2.7 kB  |
+| Lazy CodeMirror editor chunk                                       | 5.21 kB   | 5.5 kB  |
 | Lazy `extractExpression` chunk                                     | 2.79 kB   | 2.95 kB |
 | Lazy `ValueInspector` chunk                                        | 8.47 kB   | 8.9 kB  |
-| Lazy `ExtractColumnPanel` chunk                                    | 4.98 kB   | 5.3 kB  |
+| Lazy `ExtractColumnPanel` chunk                                    | 4.99 kB   | 5.3 kB  |
 | Lazy `TreeView` chunk                                              | 2.80 kB   | 2.85 kB |
 | Lazy `AnnotationNavigator` chunk                                   | 4.80 kB   | 5.0 kB  |
 | Lazy `AnnotatedRowsTable` chunk                                    | 2.73 kB   | 2.85 kB |

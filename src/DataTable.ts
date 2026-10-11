@@ -1369,7 +1369,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         instanceId,
         colorSchemeSource: tableContainer.getElement(),
         messages,
-        // An annotated filter's rows, as the annotations in the store say.
+        // The filtered rows an annotated filter keeps, as the annotations
+        // in the store say.
         beforeExport: (signal) => actions.ensureFiltersFresh(signal),
       });
       tableContainer.getPortalTarget().appendChild(exportDialog.getElement());

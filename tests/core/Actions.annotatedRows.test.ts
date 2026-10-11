@@ -161,15 +161,14 @@ describe('reads of the filtered rows under an annotated filter', () => {
     await expect(read).resolves.toEqual(Int32Array.from([4]));
   });
 
-  it('and before a read of the selected rows', async () => {
-    const { state, actions, queries, fresh } = withSource();
+  it('not before a read of the selected rows: the positions selected in the view as it shows them', async () => {
+    const { state, actions, queries, ensureFresh } = withSource();
     actions.showAnnotatedRows();
     state.selectedRows.set(new Set([0]));
     const read = actions.getColumnValues('age', { scope: 'selected' });
     await drain();
-    expect(queries).toHaveLength(0);
-    fresh.resolve('__dt_annot_orders__');
-    await drain();
+    expect(ensureFresh).not.toHaveBeenCalled();
+    expect(queries).toHaveLength(1);
     queries[0]!.deferred.resolve([]);
     await expect(read).resolves.toBeDefined();
   });

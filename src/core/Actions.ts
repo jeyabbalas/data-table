@@ -2892,9 +2892,10 @@ export class StateActions {
    * positional order within the current filter/sort view (same semantics as
    * the export "selected rows" scope) — not strict selection insertion order.
    * With an annotated filter in force ({@link StateActions.showAnnotatedRows}),
-   * a `'filtered'` or `'selected'` read keeps the rows the annotations in
-   * the store single out, even in the moment before the view catches up
-   * with a change to them.
+   * a `'filtered'` read keeps the rows the annotations in the store single
+   * out, even in the moment before the view catches up with a change to
+   * them. A `'selected'` read takes the rows at the selected positions in
+   * the view as it shows them, which that catching up could change.
    *
    * Numeric columns materialize into the narrowest sensible typed array:
    * - DuckDB `BIGINT` / `UBIGINT` / `HUGEINT` / `UHUGEINT` → `BigInt64Array`
@@ -2995,8 +2996,10 @@ export class StateActions {
     }
 
     // The rows an annotated filter keeps are read from the table of
-    // annotated rows, which can trail the store by a moment.
-    if (scope !== 'all') {
+    // annotated rows, which can trail the store by a moment. Not for the
+    // selected rows: they are positions in the view as it shows them, and
+    // bringing that table up to date would put other rows there.
+    if (scope === 'filtered') {
       try {
         await this.ensureFiltersFresh(signal);
       } finally {

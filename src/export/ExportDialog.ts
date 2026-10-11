@@ -85,10 +85,11 @@ export interface ExportDialogOptions {
   /** Resolved i18n strings. Defaults to English. */
   messages?: Strings | undefined;
   /**
-   * Awaited before an export or a copy of the filtered or selected rows
-   * reads them, with the export's signal: what the filters read is brought
-   * up to date first, such as an annotated filter's table of annotated
-   * rows. A rejection fails the export as its own error would.
+   * Awaited before an export or a copy of the filtered rows reads them,
+   * with the export's signal: what the filters read is brought up to date
+   * first, such as an annotated filter's table of annotated rows. A
+   * rejection fails the export as its own error would. Not for the
+   * selected rows, which are positions in the view as it shows them.
    *
    * @internal
    */
@@ -810,12 +811,14 @@ export class ExportDialog {
   }
 
   /**
-   * Before an export or a copy of the filtered or selected rows, bring what
-   * the filters read up to date (`beforeExport`). Cancelled meanwhile, it
-   * fails as a cancelled export does, which shows no error.
+   * Before an export or a copy of the filtered rows, bring what the filters
+   * read up to date (`beforeExport`). Cancelled meanwhile, it fails as a
+   * cancelled export does, which shows no error. The selected rows are
+   * read as the view shows them: they are positions in it, which bringing
+   * it up to date could give to other rows.
    */
   private async prepareRows(scope: ExportScope, signal: AbortSignal): Promise<void> {
-    if (scope === 'all' || !this.beforeExport) return;
+    if (scope !== 'filtered' || !this.beforeExport) return;
     try {
       await this.beforeExport(signal);
     } catch (error) {

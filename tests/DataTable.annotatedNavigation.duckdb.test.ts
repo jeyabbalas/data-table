@@ -625,6 +625,61 @@ describe('the row the cursor is on, through a change of the view (real DuckDB)',
     // The first kept row after the row that left: row 401, at the gap.
     await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
   });
+
+  /**
+   * Add the derived column `twice`, which nothing filters or sorts by, while
+   * the in-place refresh `change` set off fetches its rows, held until the
+   * column is in.
+   */
+  async function addedDuringRefresh(m: Mounted, change: () => void): Promise<void> {
+    m.holdRows();
+    try {
+      change();
+      // The sync lands, and the refresh's fetch of the rows waits.
+      await vi.waitFor(() => expect(m.held()).toBeGreaterThan(0), { timeout: 5_000 });
+      const added = m.table.actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'twice',
+        expression: 'id * 2',
+      });
+      await vi.waitFor(() => expect(m.table.state.derivedColumns.get()).toHaveLength(1), {
+        timeout: 5_000,
+      });
+      m.release();
+      expect((await added).success).toBe(true);
+    } finally {
+      m.release();
+    }
+  }
+
+  it('a derived column added while a refresh fetches the rows: the cursor follows its row all the same', async () => {
+    const m = await mount([2, 5, 7, 9]);
+    m.table.actions.setFocusedCell({ row: 1, column: 'grp' }); // row 5
+    await addedDuringRefresh(m, () =>
+      m.table.annotations.add({ scope: 'row', rowId: 3, severity: 'warning', message: 'row 3' }),
+    );
+    await m.settled(5);
+    expect(await m.order()).toEqual([2, 3, 5, 7, 9]);
+    // Row 5 is at position 2 now, in the body built for the new column.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 2, column: 'grp' });
+    expect(renderedRowId(m.table, 2)).toBe(5);
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 7, row: 3 });
+  });
+
+  it('…and from a gap: the cursor goes to where the gap is now, and Shift+F8 back from the row that left', async () => {
+    const m = await mount([2, 5, 7, 9]);
+    m.table.actions.setFocusedCell({ row: 1, column: 'grp' }); // row 5
+    m.table.annotations.remove(m.ids.get(5)!);
+    await m.settled(3); // [2, 7, 9], at the gap row 5 left, where row 7 is
+    await addedDuringRefresh(m, () =>
+      m.table.annotations.add({ scope: 'row', rowId: 1, severity: 'warning', message: 'row 1' }),
+    );
+    await m.settled(4);
+    expect(await m.order()).toEqual([1, 2, 7, 9]);
+    // The gap is two rows in now, where row 7 is.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 2, column: 'grp' });
+    await expectLanded(m, await m.table.actions.previousAnnotation(), { rowId: 2, row: 1 });
+  });
 });
 
 describe('a gap off-screen, searched in SQL (real DuckDB)', () => {

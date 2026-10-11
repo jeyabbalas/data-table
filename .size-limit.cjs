@@ -34,7 +34,7 @@
  *   lazy ExtractColumnPanel chunk   4.97 kB   →   5.3 kB cap (6.6 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
  *   lazy AnnotationNavigator chunk  4.30 kB   →   4.5 kB cap (4.7 %)
- *   lazy AnnotatedRowsTable chunk   2.25 kB   →   2.35 kB cap (4.4 %)
+ *   lazy AnnotatedRowsTable chunk   2.73 kB   →   2.85 kB cap (4.4 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -121,7 +121,11 @@
  * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with
  * the annotation store, loaded the first time an annotated filter comes into
  * force or something reads that table (navigation, a filtered export,
- * `getColumnValues`).
+ * `getColumnValues`). A sync that compares the new rows with the ones the
+ * table holds, refreshing the view only when the rows the filter keeps
+ * change, that drops only the cached results that read the table, and that
+ * is not retried while it keeps failing took it to 2.73 kB, and the cap
+ * from 2.35 to 2.85 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -265,6 +269,6 @@ module.exports = [
   {
     name: 'lazy AnnotatedRowsTable chunk · ESM',
     path: 'dist/AnnotatedRowsTable-*.js',
-    limit: '2.35 kB',
+    limit: '2.85 kB',
   },
 ];

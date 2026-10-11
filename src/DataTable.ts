@@ -1652,11 +1652,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
     emitter.emit('loadStart', { source: sourceLabel });
-    // Disable auto-save while loading so we don't capture the transient
-    // half-initialized state. A save it had pending, of the data this
-    // replaces, is written as any other is, in many short tasks.
-    lifecycleChanges++;
-    autoSave?.disableWith('save');
     const targetTableName = loadOpts?.tableName;
     if (targetTableName) loadingTableNames.push(targetTableName);
     // `getLoadEpoch()` counts loads and clears: one asked for after this
@@ -1665,6 +1660,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     const superseded = (): boolean => loadEpoch !== null && actions.getLoadEpoch() !== loadEpoch;
     let failed = false;
     try {
+      // Disable auto-save while loading so we don't capture the transient
+      // half-initialized state. A save it had pending, of the data this
+      // replaces, is written as any other is, in many short tasks. In the
+      // `try`, so that the `finally` turns it on again whatever happens.
+      lifecycleChanges++;
+      autoSave?.disableWith('save');
       // A bad source option fails the load here, as loadError, and leaves
       // the table as it was: everything below clears it for the new data.
       validateSourceOptions(loadOpts?.sourceOptions);
@@ -1928,9 +1929,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // baseTableName takes precedence so the same snapshot is shared between
   // the base table and any VIEW derived from it.
   async function clearSession(): Promise<void> {
-    lifecycleChanges++;
-    autoSave?.disableWith('drop');
     try {
+      lifecycleChanges++;
+      autoSave?.disableWith('drop');
       const key = state.baseTableName.get() ?? state.tableName.get();
       if (sessionStore && key) await sessionStore.delete(key);
       // If destroy() raced ahead while we were awaiting the IDB delete, drop

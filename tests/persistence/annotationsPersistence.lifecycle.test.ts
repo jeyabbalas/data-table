@@ -6,8 +6,9 @@
  * load's turn, just before its restore, so a load superseded while it ran
  * restores nothing into the table that replaces it; AutoSave runs again only
  * once no load or clear is in flight, so no save lands over a session being
- * read; and a load turned away for its source options keeps the annotations
- * without ever emptying the store.
+ * read; a load turned away for its source options keeps the annotations
+ * without ever emptying the store; and `destroy()` lets the saves under way
+ * land.
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,8 +16,15 @@ import { createDataTable, type DataTable } from '@/index';
 import { LoadError } from '@/core/errors';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { AutoSave } from '@/persistence/AutoSave';
 import { SessionStore } from '@/persistence/SessionStore';
-import { deleteDatabase, plant, rawSession, sessionSnapshot } from '../helpers/sessionDatabases';
+import {
+  deleteDatabase,
+  holdAnnotationsDb,
+  plant,
+  rawSession,
+  sessionSnapshot,
+} from '../helpers/sessionDatabases';
 
 beforeAll(() => {
   if (!window.ResizeObserver) {
@@ -403,5 +411,72 @@ describe('a load turned away for its source options, under the annotated filter'
     expect(syncs.length).toBeGreaterThan(0);
     // Every rebuild of the annotated rows has row 3 (`3 * 8 + 1`: an error).
     for (const sql of syncs) expect(sql).toContain("string_split('25'");
+  });
+});
+
+describe('destroy() with a save under way', () => {
+  it('lets it land, with the state asked for after it, in the store it owns', async () => {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    const save = vi.spyOn(SessionStore.prototype, 'save');
+    const saveSync = vi.spyOn(SessionStore.prototype, 'saveSync');
+    // The annotations write waits, as behind a long one.
+    const blocker = await holdAnnotationsDb();
+    table.annotations.add({ id: 'new', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    table.actions.toggleSort('id');
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 3000 });
+
+    await table.destroy();
+    // The state the saves were writing, written at once.
+    expect(saveSync).toHaveBeenCalledTimes(1);
+    await blocker.release();
+    await Promise.allSettled(save.mock.results.map((result) => result.value as Promise<void>));
+    save.mockRestore();
+
+    await vi.waitFor(async () =>
+      expect((await rawSession('A'))?.['__annotations']).toMatchObject({ count: 1 }),
+    );
+    const reader = new SessionStore();
+    const snapshot = await reader.load('A');
+    reader.close();
+    expect(snapshot?.sortColumns).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(snapshot?.annotations?.annotations.map((a) => a.id)).toEqual(['new']);
+  }, 10_000);
+});
+
+describe('AutoSave around a load or a clear', () => {
+  it('runs again after one whose start threw', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    // AutoSave is turned off, and then something throws.
+    const disableWith = AutoSave.prototype.disableWith;
+    vi.spyOn(AutoSave.prototype, 'disableWith').mockImplementationOnce(function (
+      this: AutoSave,
+      pending,
+    ) {
+      disableWith.call(this, pending);
+      throw new Error('disable failed');
+    });
+    await expect(table.loadData(new File([''], 'b.csv'), { tableName: 'B' })).rejects.toThrow(
+      'disable failed',
+    );
+    const save = vi.spyOn(sessionStore, 'save');
+    table.actions.toggleSort('id');
+    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 3000 });
+    sessionStore.close();
   });
 });

@@ -576,22 +576,37 @@ sibling of `TableState` rather than a field on it, for two reasons:
    with 10 000 entries.
 2. **Independent change channel.** The store emits its own
    `change` event — `kind: 'added' | 'updated' | 'removed' | 'cleared'
-| 'filterChanged'`, plus the affected `ids[]`. The rendering layer
-   (`TableBody` / `ColumnHeader`) subscribes to this event and
-   invalidates only the affected rows / cells / headers, never the
-   whole grid.
+| 'filterChanged'`, plus the affected `ids[]` and, when someone listens,
+   the affected annotations themselves (and, for `updated`, each as it was).
 
-Internally the store keeps four indexes — `byId`, `byRow`,
-`byColumn`, `byCell` — so `getByRow` / `getByColumn` / `getByCell` are
-O(1) regardless of total annotation count. `getByCell(rowId, column)`
-returns the union of row + column + cell annotations, sorted by
-severity → `createdAt` → insertion order, so the popover always shows
-the most-relevant entry first.
+Internally the store keeps each annotation as one entry in an
+insertion-ordered `Map` by id, and indexes it by its scope: row-scope by
+`rowId`, column-scope by column, cell-scope by column and then `rowId`. A
+lookup costs what it returns, never a pass over the store: `getByCell(rowId,
+column)` is the exact intersection — the row's row-scope, the column's
+column-scope and that cell's own annotations — sorted by severity →
+`createdAt` → insertion order, so the popover shows the most relevant entry
+first. `remove` is O(1), `clear('all')` swaps in empty indexes, and a
+million annotations take about 258 bytes each.
 
-The store auto-persists into [`SessionSnapshot`](#persistence-sessionstore--autosave)`.annotations`
-(v5+) via `AutoSave`. A single shared
+The grid hears the store through **one** subscription per table, the
+`AnnotationOverlay` that `TableContainer` builds before the session's
+`AutoSave` and app code can subscribe, so their listeners see the DOM already
+up to date. Each change goes to the body, to the headers of the columns it
+touched, and to the popover. Rendering asks the store for O(1) summaries — per
+row, per column (cached per store revision), per cell — and writes only the
+classes and counts that differ, so a scroll step costs the same at a million
+annotations as at none, and a change far from the view touches no DOM.
+
+Annotations persist with the session but apart from it: `SessionStore` keeps
+them in a second IndexedDB database, `dt-annotations`, as a head and chunks,
+written only when they change, and before the session record that names
+them, so a reload restores the last annotations that landed (see
+[Session persistence](../guides/session-persistence.md#annotations-in-a-database-of-their-own)).
+A single shared
 [`AnnotationPopover`](../../src/table/AnnotationPopover.ts) instance is
-reused across hover targets — created lazily, anchored on demand,
+reused across hover targets — created lazily, anchored on demand, capped at
+five annotations per section, refreshed in place on a change, and
 dismissed on `Escape` / blur / scroll / click outside. The
 [`ColumnHeaderTooltipPopover`](../../src/table/ColumnHeaderTooltipPopover.ts)
 is constructed and torn down alongside it but anchors on the
@@ -602,7 +617,20 @@ together.
 flags that the rendering layer reads, but the underlying data is
 unchanged. `getAll` / `getByRow` / `getByColumn` / `getByCell` always
 return the full set; clearing a severity in the filter only changes
-what gets painted (or popped).
+what gets painted (or popped), and which severities `F8` visits.
+
+Two features read the annotations through DuckDB, by a temporary table of a
+table's annotated rows (`__dt_annot_<base table>__`, `AnnotatedRowsTable`,
+a lazy chunk): the `annotated` filter, whose rows are
+`"__rowid__" IN (SELECT "__rowid__" FROM …)`, and annotation navigation
+(`AnnotationNavigator`, another lazy chunk), which finds the next annotated
+row of a sorted or filtered view. The table is built only when one of them
+reads it and rebuilt whole, in one statement, when the annotations change.
+Until it lands, an `actions.addReadGate` gate holds the grid's fetches, the
+row count, the charts and the stats panels, as a derived-column change does,
+so no query reads a table that does not exist yet. Navigation tries the
+cheap answers first — the cursor's row, the rows the grid holds, a binary
+search when the view is neither filtered nor sorted — before it queries.
 
 ## Stats panel coordination (`StatsPanelCoordinator`)
 

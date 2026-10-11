@@ -41,7 +41,7 @@ Every event is strongly typed. The full map lives at
 | `loadError`       | `{ error: Error }`                               | A load failed. `error` is always a `DataTableError` subclass.                                                                                                                                                                                                                                                                                                                                                 |
 | `error`           | `{ error: DataTableError, source }`              | Any recoverable typed error — see [Errors](#errors-warnings-and-load-failures).                                                                                                                                                                                                                                                                                                                               |
 | `warning`         | `{ code, message, details? }`                    | Non-fatal degradation (e.g., missing stylesheet, IndexedDB unavailable).                                                                                                                                                                                                                                                                                                                                      |
-| `filterChange`    | `{ filters, filteredRowCount, totalRowCount }`   | Active filter list changes. Fires once `filteredRowCount` is known, without waiting for the column charts to refetch.                                                                                                                                                                                                                                                                                         |
+| `filterChange`    | `{ filters, filteredRowCount, totalRowCount }`   | Active filter list changes, or, with an annotated filter in force, the rows it keeps change with the annotations (same `filters`, new count). Fires once `filteredRowCount` is known, without waiting for the column charts to refetch.                                                                                                                                                                       |
 | `sortChange`      | `{ sortColumns }`                                | Sort order changes.                                                                                                                                                                                                                                                                                                                                                                                           |
 | `selectionChange` | `{ selectedRows: Set<number> }`                  | The selection is set: a click, `Enter`, `selectRow` / `selectAll` / `clearSelection`, or a load, which empties it. Not fired by filter or sort changes.                                                                                                                                                                                                                                                       |
 | `columnChange`    | `{ visibleColumns, pinnedColumns, columnOrder }` | Column visibility, pin state, or order changes.                                                                                                                                                                                                                                                                                                                                                               |
@@ -60,17 +60,21 @@ no `columnName` also fires when an undo or redo, `resetToInitial()` or
 
 ### Annotation events (separate channel)
 
-Annotation mutations don't flow through the main event bus — they live on `table.annotations.on('change', handler)`. The payload is `{ kind: 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'; ids: string[] }`. Subscribe there for fine-grained reactions:
+Annotation mutations don't flow through the main event bus — they live on `table.annotations.on('change', handler)`. The payload is `{ kind: 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'; ids: string[]; annotations?: Annotation[]; previous?: Annotation[] }`: `annotations` holds the affected annotations (as they were, for `removed` and `cleared`), and `previous`, for `updated`, each as it was before. Events fire synchronously, after the change, and only when something changed; `loadJSON(file, 'replace')` fires `cleared`, then `added`. Subscribe there for fine-grained reactions:
 
 ```ts
-const off = table.annotations.on('change', ({ kind, ids }) => {
+const off = table.annotations.on('change', ({ kind, ids, annotations }) => {
   if (kind === 'filterChanged') {
     // setSeverityFilter() flipped a flag; re-render whatever lists annotations.
   } else {
-    // ids[] is the list of annotation IDs affected by this mutation.
+    // ids[] is the list of annotation IDs affected by this mutation,
+    // annotations[] the annotations themselves, in the same order.
+    console.log(kind, ids.length, annotations?.[0]?.message);
   }
 });
 ```
+
+Moving the cursor to an annotation, with `F8` or `actions.nextAnnotation`, fires no event of its own: `nextAnnotation` resolves to where it landed. Showing only the annotated rows (`actions.showAnnotatedRows`) is a filter change, and fires `filterChange`; so does the view refreshing in place, with the same filters and the new count, when a change to the annotations changes which rows it keeps.
 
 See the [annotations guide](./annotations.md) for the full lifecycle.
 

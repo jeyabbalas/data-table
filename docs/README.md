@@ -22,18 +22,18 @@ need a walkthrough, a reference, or a troubleshooting playbook.
 ## Guides (task-oriented)
 
 - [Loading data](./guides/loading-data.md) — File / URL / Blob / ArrayBuffer, format detection, progress; nested (list, struct, map) and JSON columns
-- [Filters](./guides/filters.md) — seven filter types, programmatic construction, matching nested values, serialization
+- [Filters](./guides/filters.md) — eight filter types, programmatic construction, matching nested values, serialization
 - [Derived columns](./guides/derived-columns.md) — SQL-expression and pre-computed vector columns, dependency-aware replacement, nested fields as columns
-- [Annotations](./guides/annotations.md) — programmatic row/column/cell overlays, severity tiers, intersection popover, JSON round-trip
+- [Annotations](./guides/annotations.md) — programmatic row/column/cell overlays, severity tiers, popover, JSON round-trip, `F8` navigation, the annotated-rows filter, a million annotations
 - [Column-header tooltips](./guides/column-header-tooltips.md) — structured popover for column metadata, XSS-safe by construction
 - [Events](./guides/events.md) — event catalog, lifecycle ordering, error discrimination
 - [Visualizations](./guides/visualizations.md) — built-ins and custom class registration
 - [Stats panels](./guides/stats-panels.md) — replace the column-header `.dt-col-stats` slot with your own rendering and DuckDB queries
 - [SQL editor primitives](./guides/sql-editor-primitives.md) — assemble a CodeMirror SQL editor outside the data table; live or literal schema, theming control, function-list customization
-- [Session persistence](./guides/session-persistence.md) — IndexedDB lifecycle, sync-save, custom store
+- [Session persistence](./guides/session-persistence.md) — IndexedDB lifecycle, annotations in a database of their own, sync-save, custom store
 - [Theming](./guides/theming.md) — complete `--dt-*` CSS variable reference, dark mode, per-instance overrides
 - [Internationalization (i18n)](./guides/i18n.md) — `Strings` interface, `DeepPartial` overrides, function-typed strings
-- [Accessibility](./guides/accessibility.md) — keyboard map, ARIA surface, the value inspector's dialog and tree, screen-reader testing recipes
+- [Accessibility](./guides/accessibility.md) — keyboard map, ARIA surface, the value inspector's dialog and tree, annotation navigation and its announcements, screen-reader testing recipes
 - [Multi-table dashboards](./guides/multi-table.md) — shared presets and storage across instances
 - [CSP and offline deployments](./guides/csp-and-offline.md) — custom worker factory, self-hosted WASM
 - [Filter presets](./guides/filter-presets.md) — save / load / export / import JSON

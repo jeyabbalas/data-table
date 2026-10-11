@@ -67,8 +67,9 @@ Use the **Feature request** issue template. Before proposing:
    suite.
 
    The opt-in performance gate `npm run test:perf` (sets
-   `RUN_DUCKDB_PERF=1` and `RUN_LIFECYCLE_STRESS=1`) is for nightly /
-   manual runs — not required per PR.
+   `RUN_DUCKDB_PERF=1`, `RUN_LIFECYCLE_STRESS=1` and
+   `RUN_ANNOTATION_PERF=1`) is for nightly / manual runs — not required per
+   PR.
 
 5. Add a changeset describing the change:
 

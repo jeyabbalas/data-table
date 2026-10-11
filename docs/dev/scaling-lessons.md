@@ -119,6 +119,88 @@ Fix these when harvesting the corresponding piece:
   keep plan references out of source comments.
 - Write the feature-interaction tests (the checklist above) before the mechanism they protect.
 
+## Annotations at a million (0.10.0)
+
+Annotations had been tested at 10,000. Measured at 100,000 and 1,000,000 on
+0.9.0's code, they were the slowest part of a table at the target shapes,
+though nothing about them touched DuckDB:
+
+| At 1M annotations (store: Node 22, M1 Pro) | 0.9.0                        | 0.10.0                |
+| ------------------------------------------ | ---------------------------- | --------------------- |
+| `addMany`                                  | 4.95 s                       | 0.77–0.88 s           |
+| Heap per annotation                        | 572 B                        | 258 B                 |
+| `getByCell` / `getByRow`, median           | 856 µs / 48 ms               | 2–2.6 µs / about 2 µs |
+| `removeMany` of 100                        | 5.4 s                        | 0.38–0.45 ms          |
+| `clear('all')`                             | `RangeError` from about 125K | 0.1 ms                |
+| A save after a sort change                 | about 1.2 s (Node)           | 0.2–0.3 ms (Chromium) |
+
+| At 100K annotations, a scroll step | 0.9.0 (Chrome, demo) | 0.10.0 (headless Chromium) |
+| ---------------------------------- | -------------------- | -------------------------- |
+| 10K rows × 1,000 columns           | 1.3 s                | 5.8 ms (4.7 ms with none)  |
+| 10M rows × 9 columns               | 1.43 s               | 2.9 ms (2.2 ms with none)  |
+
+The two harnesses differ (the 0.9.0 figures include the demo's dev server),
+so read the ratio, not the milliseconds. At a million, the 0.10.0 scroll step
+stays within 2 ms of the table with none. [Performance → Annotations at a
+million](../performance.md#annotations-at-a-million) has the full tables.
+
+What made them slow, and the rule each one gives:
+
+1. **A per-cell renderer query must be O(1) in the store's size.** Every
+   render asked the store for `getByRow`, `getByColumn` and `getByCell` per
+   mounted cell, then filtered the arrays by scope and severity, and each
+   lookup collected and sorted from an insertion-order array of the whole
+   store. A 1,000-column table renders some 350 cells. The renderer now asks
+   for an O(1), allocation-free summary per row, per column (cached per store
+   revision) and per cell, and writes only the class tokens that differ. A
+   change touches the rendered elements with its keys, an off-screen one none.
+2. **One subscription per table, not per header.** The body and every
+   column header subscribed to the store: 1,001 listeners per change on a
+   1,000-column table, each re-reading its share. One `AnnotationOverlay` per
+   table now routes each change to the parts it touches.
+3. **Persistence must not re-clone unchanged data.** The session record
+   carried `annotations.toJSON()`, so a filter, sort or width change cloned
+   every annotation again a second later (104 ms per 100,000 in Chrome). The
+   annotations now live in their own database, written only when the
+   store's content is not what the session store last wrote or read.
+   Telling is O(1): a token per content revision and table name, which a
+   snapshot carries without the file; the file is built only when a write,
+   or a custom store, reads it, and nothing keeps it after. Two databases
+   cannot be written atomically, so the order makes up for it: the
+   annotations first, then the session record naming them, with the record
+   it named before as its fallback, then a cleanup. A reload restores the
+   last annotations that landed.
+4. **Know the platform's ceilings.** `push(...ids)` spreads its argument onto
+   the stack and threw `RangeError` from about 125,000 ids; a V8 `Map` holds
+   2²⁴ (about 16.7 million) entries; Chromium refuses an IndexedDB value over
+   133,169,152 bytes (127 MiB), which a million annotations in one value
+   pass; and V8 keeps a string built by concatenation as a rope of its parts
+   for as long as it lives (264 bytes per 30-character id, against 56 flat).
+5. **Removing must not renumber.** Removing one annotation spliced the
+   insertion-order array and renumbered what followed it: 43 ms a remove at a
+   million, 430 s for `clear('column')`. Insertion order is now the `Map`'s
+   own, and a remove is O(1).
+6. **Yield to the next task without a timer.** The grid's fetches, the row
+   count, the stats panels, navigation and the chunked build of the
+   annotated rows waited for the next task with `setTimeout(0)`, after a
+   derived-column change or at the annotated filter's read gate. Chrome
+   throttles a background tab's timers to one a second, and a chain of them
+   to one a minute after five minutes hidden: a million-annotation session
+   restored in a hidden tab with the annotated filter on waited about 18 s
+   on them. They post to a `MessageChannel` instead (`src/core/nextTask.ts`),
+   which is not throttled.
+
+How it was held: a seeded model test runs random operations against a
+brute-force model of the documented behaviour and compares every lookup,
+summary, payload and `toJSON` after each; scan guards swap `Map` and `Set`
+for counting subclasses to show a lookup, update or remove visits only what
+it returns; the browser spec checks every rendered cell and header against
+an in-page oracle built from `getAll()`. Default runs assert those counts,
+and wall-clock budgets sit behind `RUN_ANNOTATION_PERF=1`, as above. Manual
+checks ran in a hidden Chrome window, where a message-channel scheduler stood
+in for `requestAnimationFrame`, so they timed script, style and layout but
+not paint; the headless Chromium tables are the reference.
+
 ## Worth harvesting from the archive
 
 - `f0b10d6`: the end of Phases 0–2 (harness, single-pass load, lazy charts). It merged into main

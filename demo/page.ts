@@ -11,7 +11,8 @@ declare const __DT_VERSION__: string;
 initThemeSwitch();
 document.getElementById('version')!.textContent = __DT_VERSION__;
 
-// The table takes Ctrl or Cmd for these; an Apple keyboard says ⌘.
+// The table takes Ctrl or Cmd for these; an Apple keyboard says ⌘. Alt is
+// the key an Apple keyboard calls Option, ⌥.
 const platform =
   (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
   navigator.platform;
@@ -19,5 +20,9 @@ if (/mac|iphone|ipad|ipod/i.test(platform)) {
   for (const key of document.querySelectorAll<HTMLElement>('kbd[data-mod]')) {
     key.textContent = '⌘';
     key.title = 'Command';
+  }
+  for (const key of document.querySelectorAll<HTMLElement>('kbd[data-alt]')) {
+    key.textContent = '⌥';
+    key.title = 'Option';
   }
 }

@@ -34,8 +34,8 @@ These changes can break an integration:
    payloads gain `annotations` and `previous`.
 4. `loadJSON` refuses a file that repeats an `id`.
 5. `update` keeps `severity` and `message` given as `undefined`.
-6. The popover lists five annotations per section and leaves out the
-   severities the severity filter hides.
+6. The popover lists five annotations per section, leaves out the
+   severities the severity filter hides, and no longer covers its cell.
 7. Annotations persist in a second IndexedDB database: `0.9` restores a
    `0.10` session without its annotations.
 8. `SessionStoreOptions.onLoadIssue` receives a second kind of issue.
@@ -272,13 +272,17 @@ is hidden opens no popover, and the cell keeps its native `title`. The
 popover scrolls past `min(24rem, 100vh − 8px)`, is a tab stop
 (`tabindex="0"`) while it overflows, and updates in place when its
 annotations change, where `0.9` listed everything and hid on every change.
+It opens below its anchor when it fits there, else on the side with more
+room, its height capped to that room (96 px at least), where `0.9` moved a
+tall popover up until it fit the window, over the cell it describes.
 `AnnotationPopover.show(anchor, annotations)` keeps its signature and caps
 its sections too; it leaves out hidden severities when given the new
 `severityFilter` option, as `createDataTable` gives it.
 
 **Who is affected.** Tests and screenshots that count the popover's entries,
-or expect a hidden severity in it; code that relied on the popover listing
-every annotation as the place users read them all.
+expect a hidden severity in it, or expect it where `0.9` put it; code that
+relied on the popover listing every annotation as the place users read them
+all.
 
 **Why.** A cell can hold thousands of annotations, and the popover is a
 tooltip: listing them all rendered thousands of elements on hover. A
@@ -305,8 +309,11 @@ its version, 1, and `SNAPSHOT_VERSION` stays 5, so `0.9` tabs keep opening it.
   console warning. Once `0.9` saves that session, it writes the record
   without the marker that names the annotations, and `0.10` then restores it
   without them too.
-- When `0.10` cannot restore the annotations a session names, it restores
-  the rest and emits a `warning` coded `PERSISTENCE_ANNOTATIONS_DROPPED`.
+- The annotations are written before the session record that names them,
+  and the record names the earlier ones as a fallback, so a reload restores
+  the last annotations that landed. When `0.10` can restore neither, it
+  restores the rest and emits a `warning` coded
+  `PERSISTENCE_ANNOTATIONS_DROPPED`.
 
 **Who is affected.** Apps that may run `0.9` and `0.10` against the same
 origin, such as a staged rollout or a rollback. Tools that read
@@ -343,8 +350,8 @@ Its parameter is a union of the two.
 
 **Who is affected.** Code that passes its own `onLoadIssue` to a
 `SessionStore` and reads `issue.details.version` without narrowing on
-`issue.code`: it no longer compiles, and would read `undefined` for the new
-issue.
+`issue.code`: in TypeScript it no longer compiles, and in JavaScript it reads
+`undefined` for the new issue.
 
 **Before**
 
@@ -376,10 +383,12 @@ finds each handler.
 ## Non-breaking but recommended
 
 - **Leave `F8` and `Alt+↑` / `Alt+↓` to the table, or turn them off.** With
-  focus in a table that has annotations, `F8` / `Shift+F8` and `Alt+↓` /
-  `Alt+↑` go to the next and previous annotation and take the key. A page
-  that binds them should pass `annotationNavigation: false`, and call
-  `actions.nextAnnotation()` from its own controls. See
+  focus in a table whose store holds row or cell annotations, and whose
+  severity filter shows at least one severity, `F8` / `Shift+F8` and
+  `Alt+↓` / `Alt+↑` go to the next and previous annotation and take the
+  key; otherwise the key stays the page's. A page that binds them should
+  pass `annotationNavigation: false`, and call `actions.nextAnnotation()`
+  from its own controls. See
   [Annotations → Navigating annotations](../guides/annotations.md#navigating-annotations).
 - **Translate the new strings.** `messages.annotations` is new: the
   severities' names, the popover's titles and counts, and the navigation
@@ -394,8 +403,9 @@ finds each handler.
   event; a returned annotation is the stored object, and changing it directly
   is not seen by the indexes, the grid or the session: call `update`.
 - **Listen for `PERSISTENCE_ANNOTATIONS_DROPPED`.** A reload can restore a
-  session without its annotations, when a save was cut short or another tab
-  saved the same table. Re-apply them from your own source on that warning.
+  session without its annotations: when two tabs wrote the same table's
+  annotations at the same moment, another tab cleared the session, or the
+  record cannot be read. Re-apply them from your own source on that warning.
 
 ## Other behaviour changes
 
@@ -430,15 +440,23 @@ and error handlers can see them.
 ### Filters, persistence and queries
 
 - **`filterChange` fires when the annotated rows change** under an annotated
-  filter, with the same `filters` and the new count.
-- **`getColumnValues` with `scope: 'filtered'` or `'selected'`, and the export
-  dialog, wait** for the table of annotated rows to catch up with the store
-  under an annotated filter.
+  filter: when a change to the annotations changes the rows it keeps, once
+  the view has refreshed, with the same `filters` and the new count. The
+  view refreshes in place, keeping the scroll position, and the cursor
+  follows its row. A change that keeps the same rows fires nothing.
+- **`getColumnValues` with `scope: 'filtered'`, and an export of the
+  filtered rows, wait** for the table of annotated rows to catch up with the
+  store under an annotated filter. `scope: 'selected'` and an export of the
+  selected rows read the selected positions as the view shows them.
 - **A failed save of the annotations alone is reported** as an `error` with
   `source: 'persistence'` and `details.record: 'annotations'`, and the session
-  keeps saving; a quota error on them, or a second failure in a row, stops
-  only their saves. See
+  keeps saving, naming the annotations that landed before; a quota error on
+  them, or a second failure in a row, stops only their saves. See
   [Session persistence](../guides/session-persistence.md#annotations-in-a-database-of-their-own).
+- **`loadData()` writes a pending save asynchronously, and `clearSession()`
+  drops it,** where `0.9` wrote both in one synchronous task. Auto-save stays
+  off while a load or a clear runs, and a load that a newer one supersedes
+  restores no session.
 - **`WorkerBridge` stores no result of a query that a `clearQueryCache()`
   overtook.** The caller still gets its result; the next identical query runs
   again.

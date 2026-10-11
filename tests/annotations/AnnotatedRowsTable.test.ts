@@ -373,10 +373,14 @@ describe('AnnotatedRowsTable — what a change under the filter refreshes', () =
     await settle();
     harness.invalidated.mockClear();
     harness.clearQueryCache.mockClear();
-    /** New content, and its sync landed. */
+    /**
+     * New content, and its sync landed. The view's sync waits as long as
+     * the last one took, which the test's own pace sets: wait for it to go.
+     */
     const change = async (pairs: [number, number][]): Promise<void> => {
+      const sent = harness.syncs().length;
       harness.store.set(pairs);
-      await settle();
+      await vi.waitFor(() => expect(harness.syncs()).toHaveLength(sent + 1));
       harness.syncs().at(-1)!.deferred.resolve([]);
       await settle();
     };
@@ -384,7 +388,7 @@ describe('AnnotatedRowsTable — what a change under the filter refreshes', () =
   }
 
   it('content with every row and mask as the table holds them sends nothing', async () => {
-    const { store, syncs, onRefresh, invalidated } = await live();
+    const { store, table, syncs, onRefresh, invalidated } = await live();
     // Another list, the same rows and masks, and rowIds no row has.
     store.set([
       [-1, 1],
@@ -393,6 +397,8 @@ describe('AnnotatedRowsTable — what a change under the filter refreshes', () =
       [2.5, 4],
       [3, 4],
     ]);
+    // Current, once that content has been looked at, with nothing sent.
+    await expect(table.ensureFresh()).resolves.toBe('__dt_annot_t__');
     await settle();
     expect(syncs()).toHaveLength(1);
     expect(onRefresh).not.toHaveBeenCalled();

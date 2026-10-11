@@ -419,8 +419,10 @@ export class TableContainer {
   private keyboardNavigator: KeyboardNavigator | null = null;
 
   // Annotation navigation, a lazy chunk: built the first time
-  // `actions.nextAnnotation`, `previousAnnotation` or `revealRow` runs, and
-  // the promise of it while its chunk loads.
+  // `actions.nextAnnotation`, `previousAnnotation` or `revealRow` runs, or
+  // the first time the annotated view looks for the cursor's row beyond the
+  // rows the body holds (see followCursorRow and learnCursorRow); and the
+  // promise of it while its chunk loads.
   private annotationNavigator: AnnotationNavigator | Promise<AnnotationNavigator> | null = null;
   // The filters whose cycle `createDataTable` last said had settled (their
   // row count is in state), and the navigations waiting for the filters in
@@ -3081,8 +3083,9 @@ export class TableContainer {
 
   /**
    * The table's annotation navigator: its chunk loaded, and the navigator
-   * built, on first use, and the navigator itself from then on. A chunk that
-   * did not load is asked for again the next time, as the panels' are.
+   * built, on first use, by a navigation or by the annotated view looking
+   * for the cursor's row, and the navigator itself from then on. A chunk
+   * that did not load is asked for again the next time, as the panels' are.
    */
   private loadAnnotationNavigator(): AnnotationNavigator | Promise<AnnotationNavigator> {
     if (this.annotationNavigator) return this.annotationNavigator;

@@ -5,7 +5,9 @@
  * `actions.revealRow` and the `F8` / `Alt+↓` keys run.
  *
  * A chunk of its own: `TableContainer` loads it the first time navigation
- * runs, so a table that never navigates never downloads it.
+ * runs, or the first time it asks where the cursor's row is beyond the rows
+ * the grid holds, under an annotated filter (see `locate` and `rowIdAt`).
+ * A table that does neither never downloads it.
  *
  * The next annotated row is found cheapest first:
  *

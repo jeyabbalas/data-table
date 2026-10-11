@@ -892,6 +892,61 @@ describe('filter equality — valueType', () => {
   });
 });
 
+// --- Annotated filters in equality ---
+
+describe('filter equality — annotated', () => {
+  const withFilters = (...filters: Filter[]) => createTestSnapshot({ filters });
+  const annotated = (severities?: ('error' | 'warning' | 'info')[], table = 't'): Filter => ({
+    type: 'annotated',
+    column: '__annotated__',
+    ...(severities ? { severities } : {}),
+    table,
+  });
+
+  it('equal when they keep the same rows: the same table, by the same severities', () => {
+    expect(snapshotsEqual(withFilters(annotated()), withFilters(annotated()))).toBe(true);
+    // None, empty and all three are every severity.
+    expect(snapshotsEqual(withFilters(annotated()), withFilters(annotated([])))).toBe(true);
+    expect(
+      snapshotsEqual(
+        withFilters(annotated()),
+        withFilters(annotated(['info', 'error', 'warning'])),
+      ),
+    ).toBe(true);
+    // In any order.
+    expect(
+      snapshotsEqual(
+        withFilters(annotated(['error', 'warning'])),
+        withFilters(annotated(['warning', 'error'])),
+      ),
+    ).toBe(true);
+  });
+
+  it('different for other severities or another table', () => {
+    expect(snapshotsEqual(withFilters(annotated()), withFilters(annotated(['error'])))).toBe(false);
+    expect(
+      snapshotsEqual(withFilters(annotated(['error'])), withFilters(annotated(['warning']))),
+    ).toBe(false);
+    expect(snapshotsEqual(withFilters(annotated()), withFilters(annotated(undefined, 'u')))).toBe(
+      false,
+    );
+  });
+
+  it('applySnapshot writes the filters only when the rows they keep differ', () => {
+    const state = setupState();
+    state.filters.set([annotated(['warning', 'error'])]);
+    const cb = vi.fn();
+    state.filters.subscribe(cb);
+
+    applySnapshot(state, withFilters(annotated(['error', 'warning'])));
+    expect(cb).not.toHaveBeenCalled();
+
+    applySnapshot(state, withFilters(annotated(['error'])));
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(state.filters.get()).toEqual([annotated(['error'])]);
+  });
+});
+
 // --- derivedColumnsEqual tests ---
 
 describe('derivedColumnsEqual', () => {

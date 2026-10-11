@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Load from URL</title>
+    <title>Load from URL · Data Table examples</title>
+    <!-- Light or dark as picked in the demo; the system's otherwise. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('dt-demo-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.dtColorScheme = theme;
+        }
+      } catch (e) {
+        /* storage unavailable */
+      }
+    </script>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       html,
       body {
@@ -14,32 +26,19 @@
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
-      }
-      header {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid #ddd;
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-      }
-      header h1 {
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--dt-text);
       }
       #progress {
-        flex: 1;
-        height: 8px;
-        background: #eee;
-        border-radius: 4px;
+        flex: 0 1 260px;
+        height: 6px;
         overflow: hidden;
+        border-radius: 999px;
+        background: var(--ex-pressed);
       }
       #progress > span {
         display: block;
         height: 100%;
         width: 0%;
+        border-radius: inherit;
         background: var(--dt-primary, #2563eb);
         transition: width 120ms ease;
       }
@@ -50,9 +49,20 @@
     </style>
   </head>
   <body>
-    <header>
-      <h1>Load from URL (<a href="../">back</a>)</h1>
-      <div id="progress"><span></span></div>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">02</span> Load from URL</h1>
+      <div id="progress" aria-hidden="true"><span></span></div>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/02-load-from-url"
+        rel="noopener"
+        >Source ↗</a
+      >
+      <p class="ex-lede">
+        100,000 NYC taxi trips, fetched as Parquet. The bar follows the table's
+        <code>loadStart</code>, <code>loadProgress</code> and <code>loadComplete</code> events.
+      </p>
     </header>
     <div id="table"></div>
     <script type="module" src="./main.ts"></script>

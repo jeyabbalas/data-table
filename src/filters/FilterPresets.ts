@@ -36,6 +36,7 @@ import type { Signal } from '../core/Signal';
 import type { SortColumn } from '../core/types';
 import { serializeFilter, deserializeFilter } from '../persistence/SessionStore';
 import type { SerializedFilter } from '../persistence/types';
+import { ANNOTATED_FILTER_COLUMN, isAnnotationSeverity } from './annotatedFilters';
 import type { FilterPreset, FilterPresetCollection } from './FilterPresetTypes';
 import type { Filter } from './FilterTypes';
 
@@ -64,6 +65,7 @@ const KNOWN_FILTER_TYPES = new Set([
   'not-null',
   'pattern',
   'raw-sql',
+  'annotated',
 ]);
 
 /**
@@ -281,6 +283,20 @@ export class FilterPresetManager {
             )
               typeInvalid = true;
             break;
+          case 'annotated': {
+            // Severities this version does not know would keep rows by
+            // annotations the filter was not written for. The table it
+            // names is the one it was saved on; a load reads the table's own.
+            const severities = fObj['severities'];
+            if (
+              fObj['column'] !== ANNOTATED_FILTER_COLUMN ||
+              (severities !== undefined &&
+                (!Array.isArray(severities) || !severities.every(isAnnotationSeverity))) ||
+              (fObj['table'] !== undefined && typeof fObj['table'] !== 'string')
+            )
+              typeInvalid = true;
+            break;
+          }
           // null, not-null, point: no additional required fields
         }
         const knownValueTypes = KNOWN_VALUE_TYPES[fObj['type']];

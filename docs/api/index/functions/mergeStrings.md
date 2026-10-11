@@ -8,7 +8,7 @@
 
 > **mergeStrings**(`base`, `overrides?`): [`Strings`](../interfaces/Strings.md)
 
-Defined in: [core/Strings.ts:1153](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/Strings.ts#L1153)
+Defined in: [core/Strings.ts:1253](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L1253)
 
 Deep-merge `overrides` into a copy of `base`. Missing keys inherit from
 `base`; functions in `overrides` replace `base` functions wholesale; nested
@@ -232,6 +232,119 @@ Column-header aria-label fragments.
 (`column`) => `string`
 
 #### a11y.unpinColumnTitle?
+
+`string`
+
+#### annotations?
+
+\{ `navigation?`: \{ `hiddenColumn?`: (`column`) => `string`; `landed?`: (`row`, `total`, `place`, `severity`, `message`, `more`) => `string`; `noMoreAbove?`: `string`; `noMoreBelow?`: `string`; `noneShown?`: `string`; `wrappedToFirst?`: (`landed`) => `string`; `wrappedToLast?`: (`landed`) => `string`; \}; `popover?`: \{ `cellTitle?`: `string`; `columnTitle?`: `string`; `hiddenBySeverityFilter?`: (`count`) => `string`; `moreEntries?`: (`count`) => `string`; `rowTitle?`: `string`; \}; `severityNames?`: \{ `error?`: `string`; `info?`: `string`; `warning?`: `string`; \}; \}
+
+#### annotations.navigation?
+
+\{ `hiddenColumn?`: (`column`) => `string`; `landed?`: (`row`, `total`, `place`, `severity`, `message`, `more`) => `string`; `noMoreAbove?`: `string`; `noMoreBelow?`: `string`; `noneShown?`: `string`; `wrappedToFirst?`: (`landed`) => `string`; `wrappedToLast?`: (`landed`) => `string`; \}
+
+What the live region says when `F8` / `Shift+F8` (`Alt+↓` / `Alt+↑`),
+`actions.nextAnnotation` or `actions.previousAnnotation` move the
+cursor to an annotation, or find none to move to.
+
+#### annotations.navigation.hiddenColumn?
+
+(`column`) => `string`
+
+`landed`'s place for a column the table hides: "age (hidden)".
+
+#### annotations.navigation.landed?
+
+(`row`, `total`, `place`, `severity`, `message`, `more`) => `string`
+
+Where the cursor landed: "Row 1,204 of 9,880,000, age: error, value
+200 exceeds maximum 150, and 2 more". `row` counts from 1 in the
+view, of `total`; `place` is the cell's column (or `hiddenColumn`'s
+words), `null` for the row's own annotations; `severity` (a
+`severityNames` entry) and `message` are the first annotation's,
+`null` when there is none; `more` counts the others there.
+
+#### annotations.navigation.noMoreAbove?
+
+`string`
+
+Nothing further up, and the search does not go round.
+
+#### annotations.navigation.noMoreBelow?
+
+`string`
+
+Nothing further down, and the search does not go round.
+
+#### annotations.navigation.noneShown?
+
+`string`
+
+No annotation of the severities sought in the rows the filters show.
+
+#### annotations.navigation.wrappedToFirst?
+
+(`landed`) => `string`
+
+`landed`, after going round from the last annotation to the first.
+
+#### annotations.navigation.wrappedToLast?
+
+(`landed`) => `string`
+
+`landed`, after going round from the first annotation to the last.
+
+#### annotations.popover?
+
+\{ `cellTitle?`: `string`; `columnTitle?`: `string`; `hiddenBySeverityFilter?`: (`count`) => `string`; `moreEntries?`: (`count`) => `string`; `rowTitle?`: `string`; \}
+
+The popover that lists the annotations of a cell or a column header.
+
+#### annotations.popover.cellTitle?
+
+`string`
+
+Title of the section listing the cell's own annotations.
+
+#### annotations.popover.columnTitle?
+
+`string`
+
+Title of the section listing the column's annotations.
+
+#### annotations.popover.hiddenBySeverityFilter?
+
+(`count`) => `string`
+
+Counts a section's annotations the severity filter hides, which it leaves out.
+
+#### annotations.popover.moreEntries?
+
+(`count`) => `string`
+
+A section lists five annotations at most; this line counts the rest.
+
+#### annotations.popover.rowTitle?
+
+`string`
+
+Title of the section listing the row's annotations.
+
+#### annotations.severityNames?
+
+\{ `error?`: `string`; `info?`: `string`; `warning?`: `string`; \}
+
+A severity's name, wherever one is shown or announced.
+
+#### annotations.severityNames.error?
+
+`string`
+
+#### annotations.severityNames.info?
+
+`string`
+
+#### annotations.severityNames.warning?
 
 `string`
 
@@ -644,7 +757,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 #### filters?
 
-\{ `activeFiltersLabel?`: `string`; `applyButton?`: `string`; `ariaLabels?`: \{ `dateFilterMode?`: (`column`) => `string`; `endDate?`: (`column`) => `string`; `filterMode?`: (`column`) => `string`; `filterValue?`: (`column`) => `string`; `fromTime?`: (`column`) => `string`; `intervalFilter?`: (`column`) => `string`; `maxValue?`: (`column`) => `string`; `minValue?`: (`column`) => `string`; `nullFilter?`: (`column`) => `string`; `removeFilter?`: (`column`) => `string`; `startDate?`: (`column`) => `string`; `toTime?`: (`column`) => `string`; `uuidFilterMode?`: (`column`) => `string`; `uuidValue?`: (`column`) => `string`; \}; `booleanOptions?`: \{ `false?`: `string`; `null?`: `string`; `true?`: `string`; \}; `chipDescriptions?`: \{ `anyValue?`: `string`; `inSet?`: (`list`, `includeNull`) => `string`; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: (`list`, `includeNull`) => `string`; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `sqlColumn?`: `string`; `valueListMore?`: (`rest`) => `string`; \}; `clearAllButton?`: `string`; `clearButton?`: `string`; `closePanelLabel?`: `string`; `dateOperators?`: \{ `after?`: `string`; `before?`: `string`; `between?`: `string`; `equals?`: `string`; `onOrAfter?`: `string`; `onOrBefore?`: `string`; \}; `expressionFilterLabel?`: `string`; `expressionFilterTooltip?`: `string`; `labels?`: \{ `from?`: `string`; `to?`: `string`; \}; `nullToggle?`: \{ `any?`: `string`; `isNotNull?`: `string`; `isNull?`: `string`; \}; `numericOperators?`: \{ `between?`: `string`; `equals?`: `string`; `greaterThan?`: `string`; `greaterThanOrEqual?`: `string`; `lessThan?`: `string`; `lessThanOrEqual?`: `string`; `notEquals?`: `string`; \}; `panelTitle?`: `string`; `panelTitleForColumn?`: (`column`) => `string`; `placeholders?`: \{ `intervalFilter?`: `string`; `max?`: `string`; `min?`: `string`; `stringFilter?`: `string`; `uuidFilter?`: `string`; `value?`: `string`; \}; `presetsButtonLabel?`: `string`; `presetsButtonTooltip?`: `string`; `sqlFilter?`: \{ `applyButton?`: `string`; `closeLabel?`: `string`; `conditionLabel?`: `string`; `createTitle?`: `string`; `editorPlaceholder?`: `string`; `editTitle?`: `string`; `labelFieldLabel?`: `string`; `labelHint?`: `string`; `labelPlaceholder?`: `string`; `removeButton?`: `string`; `removeConfirmText?`: `string`; `updateButton?`: `string`; `validationResult?`: (`matchCount`) => `string`; \}; `stringModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `exact?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `uuidModes?`: \{ `contains?`: `string`; `exact?`: `string`; \}; `validation?`: \{ `regexInvalid?`: `string`; `regexTooLong?`: `string`; `regexUnsupported?`: `string`; `uuidInvalid?`: `string`; \}; \}
+\{ `activeFiltersLabel?`: `string`; `applyButton?`: `string`; `ariaLabels?`: \{ `dateFilterMode?`: (`column`) => `string`; `endDate?`: (`column`) => `string`; `filterMode?`: (`column`) => `string`; `filterValue?`: (`column`) => `string`; `fromTime?`: (`column`) => `string`; `intervalFilter?`: (`column`) => `string`; `maxValue?`: (`column`) => `string`; `minValue?`: (`column`) => `string`; `nullFilter?`: (`column`) => `string`; `removeFilter?`: (`column`) => `string`; `startDate?`: (`column`) => `string`; `toTime?`: (`column`) => `string`; `uuidFilterMode?`: (`column`) => `string`; `uuidValue?`: (`column`) => `string`; \}; `booleanOptions?`: \{ `false?`: `string`; `null?`: `string`; `true?`: `string`; \}; `chipDescriptions?`: \{ `annotatedColumn?`: `string`; `anySeverity?`: `string`; `anyValue?`: `string`; `inSet?`: (`list`, `includeNull`) => `string`; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: (`list`, `includeNull`) => `string`; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `severityList?`: (`names`) => `string`; `sqlColumn?`: `string`; `valueListMore?`: (`rest`) => `string`; \}; `clearAllButton?`: `string`; `clearButton?`: `string`; `closePanelLabel?`: `string`; `dateOperators?`: \{ `after?`: `string`; `before?`: `string`; `between?`: `string`; `equals?`: `string`; `onOrAfter?`: `string`; `onOrBefore?`: `string`; \}; `expressionFilterLabel?`: `string`; `expressionFilterTooltip?`: `string`; `labels?`: \{ `from?`: `string`; `to?`: `string`; \}; `nullToggle?`: \{ `any?`: `string`; `isNotNull?`: `string`; `isNull?`: `string`; \}; `numericOperators?`: \{ `between?`: `string`; `equals?`: `string`; `greaterThan?`: `string`; `greaterThanOrEqual?`: `string`; `lessThan?`: `string`; `lessThanOrEqual?`: `string`; `notEquals?`: `string`; \}; `panelTitle?`: `string`; `panelTitleForColumn?`: (`column`) => `string`; `placeholders?`: \{ `intervalFilter?`: `string`; `max?`: `string`; `min?`: `string`; `stringFilter?`: `string`; `uuidFilter?`: `string`; `value?`: `string`; \}; `presetsButtonLabel?`: `string`; `presetsButtonTooltip?`: `string`; `sqlFilter?`: \{ `applyButton?`: `string`; `closeLabel?`: `string`; `conditionLabel?`: `string`; `createTitle?`: `string`; `editorPlaceholder?`: `string`; `editTitle?`: `string`; `labelFieldLabel?`: `string`; `labelHint?`: `string`; `labelPlaceholder?`: `string`; `removeButton?`: `string`; `removeConfirmText?`: `string`; `updateButton?`: `string`; `validationResult?`: (`matchCount`) => `string`; \}; `stringModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `exact?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `uuidModes?`: \{ `contains?`: `string`; `exact?`: `string`; \}; `validation?`: \{ `regexInvalid?`: `string`; `regexTooLong?`: `string`; `regexUnsupported?`: `string`; `uuidInvalid?`: `string`; \}; \}
 
 #### filters.activeFiltersLabel?
 
@@ -736,9 +849,21 @@ aria-labels on the filter field controls.
 
 #### filters.chipDescriptions?
 
-\{ `anyValue?`: `string`; `inSet?`: (`list`, `includeNull`) => `string`; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: (`list`, `includeNull`) => `string`; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `sqlColumn?`: `string`; `valueListMore?`: (`rest`) => `string`; \}
+\{ `annotatedColumn?`: `string`; `anySeverity?`: `string`; `anyValue?`: `string`; `inSet?`: (`list`, `includeNull`) => `string`; `isNotNull?`: `string`; `isNull?`: `string`; `notInSet?`: (`list`, `includeNull`) => `string`; `patternModes?`: \{ `contains?`: `string`; `endsWith?`: `string`; `regex?`: `string`; `startsWith?`: `string`; \}; `pointPrefix?`: `string`; `rangeSeparator?`: `string`; `severityList?`: (`names`) => `string`; `sqlColumn?`: `string`; `valueListMore?`: (`rest`) => `string`; \}
 
 Strings used by `formatFilter()` for chip descriptions.
+
+#### filters.chipDescriptions.annotatedColumn?
+
+`string`
+
+Column label shown on the annotated-rows chip (`actions.showAnnotatedRows`).
+
+#### filters.chipDescriptions.anySeverity?
+
+`string`
+
+The annotated-rows chip's description when it keeps every severity.
 
 #### filters.chipDescriptions.anyValue?
 
@@ -787,6 +912,13 @@ Strings used by `formatFilter()` for chip descriptions.
 #### filters.chipDescriptions.rangeSeparator?
 
 `string`
+
+#### filters.chipDescriptions.severityList?
+
+(`names`) => `string`
+
+The annotated-rows chip's description when it keeps some severities:
+their names (`annotations.severityNames`), most severe first.
 
 #### filters.chipDescriptions.sqlColumn?
 

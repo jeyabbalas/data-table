@@ -6,7 +6,7 @@
 
 # Interface: SerializedSetFilter
 
-Defined in: [persistence/types.ts:55](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L55)
+Defined in: [persistence/types.ts:60](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/persistence/types.ts#L60)
 
 JSON-safe form of [SetFilter](SetFilter.md); values pass through `serializeValue`.
 
@@ -16,7 +16,7 @@ JSON-safe form of [SetFilter](SetFilter.md); values pass through `serializeValue
 
 > **column**: `string`
 
-Defined in: [persistence/types.ts:57](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L57)
+Defined in: [persistence/types.ts:62](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/persistence/types.ts#L62)
 
 ***
 
@@ -24,7 +24,7 @@ Defined in: [persistence/types.ts:57](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **includeNull?**: `boolean`
 
-Defined in: [persistence/types.ts:59](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L59)
+Defined in: [persistence/types.ts:64](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/persistence/types.ts#L64)
 
 ***
 
@@ -32,7 +32,7 @@ Defined in: [persistence/types.ts:59](https://github.com/jeyabbalas/data-table/b
 
 > **type**: `"set"`
 
-Defined in: [persistence/types.ts:56](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L56)
+Defined in: [persistence/types.ts:61](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/persistence/types.ts#L61)
 
 ***
 
@@ -40,7 +40,7 @@ Defined in: [persistence/types.ts:56](https://github.com/jeyabbalas/data-table/b
 
 > **values**: `unknown`[]
 
-Defined in: [persistence/types.ts:58](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L58)
+Defined in: [persistence/types.ts:63](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/persistence/types.ts#L63)
 
 ***
 
@@ -48,6 +48,6 @@ Defined in: [persistence/types.ts:58](https://github.com/jeyabbalas/data-table/b
 
 > `optional` **valueType?**: `"text"`
 
-Defined in: [persistence/types.ts:61](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/persistence/types.ts#L61)
+Defined in: [persistence/types.ts:66](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/persistence/types.ts#L66)
 
 As [SetFilter.valueType](SetFilter.md#valuetype): `'text'` compares the column's DuckDB text.

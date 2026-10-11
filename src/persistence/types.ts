@@ -15,7 +15,12 @@ import type {
   VectorDataType,
 } from '../derived/types';
 import type { FilterPreset } from '../filters/FilterPresetTypes';
-import type { NullFilter, PatternFilter, RawSQLFilter } from '../filters/FilterTypes';
+import type {
+  AnnotatedFilter,
+  NullFilter,
+  PatternFilter,
+  RawSQLFilter,
+} from '../filters/FilterTypes';
 
 /** Current snapshot schema version — bump when the shape changes */
 export const SNAPSHOT_VERSION = 5;
@@ -76,7 +81,7 @@ export interface SerializedNotSetFilter {
  * by {@link SessionStore}, {@link FilterPresetManager}, and any consumer
  * round-tripping filter state through their own storage (URL params, cloud
  * sync). Filters whose runtime form is already JSON-safe (`NullFilter`,
- * `PatternFilter`, `RawSQLFilter`) flow through unchanged.
+ * `PatternFilter`, `RawSQLFilter`, `AnnotatedFilter`) flow through unchanged.
  */
 export type SerializedFilter =
   | SerializedRangeFilter
@@ -85,7 +90,8 @@ export type SerializedFilter =
   | SerializedNotSetFilter
   | NullFilter
   | PatternFilter
-  | RawSQLFilter;
+  | RawSQLFilter
+  | AnnotatedFilter;
 
 // Re-export derived column types from their canonical location
 export type DerivedColumnDef = _DerivedColumnDef;

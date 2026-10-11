@@ -6,18 +6,32 @@
 
 # Interface: CreateDataTableOptions
 
-Defined in: [DataTable.ts:141](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L141)
+Defined in: [DataTable.ts:138](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L138)
 
 Options accepted by [createDataTable](../functions/createDataTable.md). All feature toggles default
 to `true`; pass `false` (or a configuration object) to customize.
 
 ## Properties
 
+### annotationNavigation?
+
+> `optional` **annotationNavigation?**: `boolean`
+
+Defined in: [DataTable.ts:268](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L268)
+
+`F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` move the cursor to the next and
+previous annotation (of the severities the severity filter shows), and
+the live region says what is there. Default: `true`. Pass `false` to
+leave those keys to the page; `actions.nextAnnotation`,
+`actions.previousAnnotation` and `actions.revealRow` work either way.
+
+***
+
 ### bridge?
 
 > `optional` **bridge?**: [`WorkerBridge`](../classes/WorkerBridge.md)
 
-Defined in: [DataTable.ts:269](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L269)
+Defined in: [DataTable.ts:275](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L275)
 
 Share a WorkerBridge across tables. If omitted, one is created and owned by this table.
 
@@ -27,7 +41,7 @@ Share a WorkerBridge across tables. If omitted, one is created and owned by this
 
 > `optional` **bridgeOptions?**: [`WorkerBridgeOptions`](WorkerBridgeOptions.md)
 
-Defined in: [DataTable.ts:271](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L271)
+Defined in: [DataTable.ts:277](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L277)
 
 Options for the owned WorkerBridge (ignored if `bridge` is supplied).
 
@@ -37,7 +51,7 @@ Options for the owned WorkerBridge (ignored if `bridge` is supplied).
 
 > `optional` **classPrefix?**: `string`
 
-Defined in: [DataTable.ts:276](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L276)
+Defined in: [DataTable.ts:282](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L282)
 
 CSS class prefix. Default: `'dt'`.
 
@@ -47,7 +61,7 @@ CSS class prefix. Default: `'dt'`.
 
 > `optional` **colorScheme?**: [`ColorScheme`](../type-aliases/ColorScheme.md)
 
-Defined in: [DataTable.ts:350](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L350)
+Defined in: [DataTable.ts:356](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L356)
 
 Initial light/dark theme selector. Defaults to `'auto'` (follows
 `prefers-color-scheme`). Pass `'light'` or `'dark'` to force a theme per
@@ -60,7 +74,7 @@ runtime.
 
 > **container**: `HTMLElement`
 
-Defined in: [DataTable.ts:162](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L162)
+Defined in: [DataTable.ts:159](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L159)
 
 Element that will host the table. The library takes full ownership of its
 contents.
@@ -88,7 +102,7 @@ rows and logs a console warning. See "Sizing the container" in the README.
 
 > `optional` **derivedColumns?**: `boolean`
 
-Defined in: [DataTable.ts:227](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L227)
+Defined in: [DataTable.ts:224](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L224)
 
 Show the derived-column UI: the "+" button at the table's right edge,
 the f(x) edit icon on every derived-column header, and "extract field →
@@ -111,7 +125,7 @@ Default: `true`.
 
 > `optional` **editorFactory?**: [`ExpressionEditorFactory`](../type-aliases/ExpressionEditorFactory.md)
 
-Defined in: [DataTable.ts:291](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L291)
+Defined in: [DataTable.ts:297](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L297)
 
 Custom expression editor factory (replaces the CodeMirror-based default).
 
@@ -121,7 +135,7 @@ Custom expression editor factory (replaces the CodeMirror-based default).
 
 > `optional` **exportDialog?**: `boolean`
 
-Defined in: [DataTable.ts:262](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L262)
+Defined in: [DataTable.ts:259](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L259)
 
 Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`.
 
@@ -131,7 +145,7 @@ Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`.
 
 > `optional` **expressionFilter?**: `boolean`
 
-Defined in: [DataTable.ts:209](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L209)
+Defined in: [DataTable.ts:206](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L206)
 
 Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `true`.
 
@@ -141,7 +155,7 @@ Enable the "Expression" (raw SQL) filter button in the filter bar. Default: `tru
 
 > `optional` **fetchBlockSize?**: `number`
 
-Defined in: [DataTable.ts:321](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L321)
+Defined in: [DataTable.ts:327](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L327)
 
 Rows fetched per scroll block. Default: 128. Clamped to [16, 1024].
 
@@ -160,7 +174,7 @@ smaller transfers.
 
 > `optional` **headerHeight?**: `number`
 
-Defined in: [DataTable.ts:308](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L308)
+Defined in: [DataTable.ts:314](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L314)
 
 Header height in pixels. Default: 120. Applied as the header row's
 `min-height` and published as the `--dt-header-height` custom property.
@@ -173,7 +187,7 @@ plots have nowhere to draw.
 
 > `optional` **instanceId?**: `string`
 
-Defined in: [DataTable.ts:289](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L289)
+Defined in: [DataTable.ts:295](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L295)
 
 Identifier mixed into element IDs so multiple tables on the same page
 don't collide on `aria-labelledby` / `aria-activedescendant` targets.
@@ -192,7 +206,7 @@ to predict element IDs.
 
 > `optional` **messages?**: `object`
 
-Defined in: [DataTable.ts:360](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L360)
+Defined in: [DataTable.ts:366](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L366)
 
 Override user-facing strings (button labels, placeholders, aria-live
 announcements, stats templates). Every key is optional; missing leaves
@@ -661,6 +675,199 @@ Column-header aria-label fragments.
 ##### a11y.unpinColumnTitle?
 
 > `optional` **unpinColumnTitle?**: `string`
+
+#### annotations?
+
+> `optional` **annotations?**: `object`
+
+##### annotations.navigation?
+
+> `optional` **navigation?**: `object`
+
+What the live region says when `F8` / `Shift+F8` (`Alt+↓` / `Alt+↑`),
+`actions.nextAnnotation` or `actions.previousAnnotation` move the
+cursor to an annotation, or find none to move to.
+
+##### annotations.navigation.hiddenColumn?
+
+> `optional` **hiddenColumn?**: (`column`) => `string`
+
+`landed`'s place for a column the table hides: "age (hidden)".
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
+##### annotations.navigation.landed?
+
+> `optional` **landed?**: (`row`, `total`, `place`, `severity`, `message`, `more`) => `string`
+
+Where the cursor landed: "Row 1,204 of 9,880,000, age: error, value
+200 exceeds maximum 150, and 2 more". `row` counts from 1 in the
+view, of `total`; `place` is the cell's column (or `hiddenColumn`'s
+words), `null` for the row's own annotations; `severity` (a
+`severityNames` entry) and `message` are the first annotation's,
+`null` when there is none; `more` counts the others there.
+
+###### Parameters
+
+###### row
+
+`number`
+
+###### total
+
+`number`
+
+###### place
+
+`string` \| `null`
+
+###### severity
+
+`string` \| `null`
+
+###### message
+
+`string` \| `null`
+
+###### more
+
+`number`
+
+###### Returns
+
+`string`
+
+##### annotations.navigation.noMoreAbove?
+
+> `optional` **noMoreAbove?**: `string`
+
+Nothing further up, and the search does not go round.
+
+##### annotations.navigation.noMoreBelow?
+
+> `optional` **noMoreBelow?**: `string`
+
+Nothing further down, and the search does not go round.
+
+##### annotations.navigation.noneShown?
+
+> `optional` **noneShown?**: `string`
+
+No annotation of the severities sought in the rows the filters show.
+
+##### annotations.navigation.wrappedToFirst?
+
+> `optional` **wrappedToFirst?**: (`landed`) => `string`
+
+`landed`, after going round from the last annotation to the first.
+
+###### Parameters
+
+###### landed
+
+`string`
+
+###### Returns
+
+`string`
+
+##### annotations.navigation.wrappedToLast?
+
+> `optional` **wrappedToLast?**: (`landed`) => `string`
+
+`landed`, after going round from the first annotation to the last.
+
+###### Parameters
+
+###### landed
+
+`string`
+
+###### Returns
+
+`string`
+
+##### annotations.popover?
+
+> `optional` **popover?**: `object`
+
+The popover that lists the annotations of a cell or a column header.
+
+##### annotations.popover.cellTitle?
+
+> `optional` **cellTitle?**: `string`
+
+Title of the section listing the cell's own annotations.
+
+##### annotations.popover.columnTitle?
+
+> `optional` **columnTitle?**: `string`
+
+Title of the section listing the column's annotations.
+
+##### annotations.popover.hiddenBySeverityFilter?
+
+> `optional` **hiddenBySeverityFilter?**: (`count`) => `string`
+
+Counts a section's annotations the severity filter hides, which it leaves out.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
+##### annotations.popover.moreEntries?
+
+> `optional` **moreEntries?**: (`count`) => `string`
+
+A section lists five annotations at most; this line counts the rest.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
+##### annotations.popover.rowTitle?
+
+> `optional` **rowTitle?**: `string`
+
+Title of the section listing the row's annotations.
+
+##### annotations.severityNames?
+
+> `optional` **severityNames?**: `object`
+
+A severity's name, wherever one is shown or announced.
+
+##### annotations.severityNames.error?
+
+> `optional` **error?**: `string`
+
+##### annotations.severityNames.info?
+
+> `optional` **info?**: `string`
+
+##### annotations.severityNames.warning?
+
+> `optional` **warning?**: `string`
 
 #### common?
 
@@ -1525,6 +1732,18 @@ aria-labels on the filter field controls.
 
 Strings used by `formatFilter()` for chip descriptions.
 
+##### filters.chipDescriptions.annotatedColumn?
+
+> `optional` **annotatedColumn?**: `string`
+
+Column label shown on the annotated-rows chip (`actions.showAnnotatedRows`).
+
+##### filters.chipDescriptions.anySeverity?
+
+> `optional` **anySeverity?**: `string`
+
+The annotated-rows chip's description when it keeps every severity.
+
 ##### filters.chipDescriptions.anyValue?
 
 > `optional` **anyValue?**: `string`
@@ -1600,6 +1819,23 @@ Strings used by `formatFilter()` for chip descriptions.
 ##### filters.chipDescriptions.rangeSeparator?
 
 > `optional` **rangeSeparator?**: `string`
+
+##### filters.chipDescriptions.severityList?
+
+> `optional` **severityList?**: (`names`) => `string`
+
+The annotated-rows chip's description when it keeps some severities:
+their names (`annotations.severityNames`), most severe first.
+
+###### Parameters
+
+###### names
+
+`string`[]
+
+###### Returns
+
+`string`
 
 ##### filters.chipDescriptions.sqlColumn?
 
@@ -3000,7 +3236,7 @@ Spoken name of the VARIANT type.
 
 > `optional` **persistence?**: `boolean` \| \{ `sessionStore?`: [`SessionStore`](../classes/SessionStore.md); \}
 
-Defined in: [DataTable.ts:197](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L197)
+Defined in: [DataTable.ts:194](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L194)
 
 Persist UI state (filters, sort, columns, derived columns) to IndexedDB
 and auto-restore on next mount. Pass `{ sessionStore }` to reuse an
@@ -3012,7 +3248,7 @@ existing store across tables. Default: `true`.
 
 > `optional` **portalTarget?**: `HTMLElement`
 
-Defined in: [DataTable.ts:267](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L267)
+Defined in: [DataTable.ts:273](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L273)
 
 Where fixed-position modals mount. Default: `document.body`.
 
@@ -3022,7 +3258,7 @@ Where fixed-position modals mount. Default: `document.body`.
 
 > `optional` **prefetch?**: `boolean`
 
-Defined in: [DataTable.ts:342](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L342)
+Defined in: [DataTable.ts:348](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L348)
 
 Speculatively fetch one block beyond the viewport in the current
 scroll direction while the fetch pipeline is idle. Default: `true`.
@@ -3038,7 +3274,7 @@ shares its DuckDB worker with heavier analytical queries).
 
 > `optional` **presets?**: `boolean` \| \{ `manager?`: [`FilterPresetManager`](../classes/FilterPresetManager.md); \}
 
-Defined in: [DataTable.ts:203](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L203)
+Defined in: [DataTable.ts:200](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L200)
 
 Enable the "Presets" button for saving/loading named filter sets.
 Pass `{ manager }` to reuse an existing preset manager. Default: `true`.
@@ -3049,7 +3285,7 @@ Pass `{ manager }` to reuse an existing preset manager. Default: `true`.
 
 > `optional` **rowCacheRows?**: `number`
 
-Defined in: [DataTable.ts:332](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L332)
+Defined in: [DataTable.ts:338](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L338)
 
 Maximum rows held in the in-memory row cache. Default: 2048 (rounded
 up to whole blocks, floor 4 blocks).
@@ -3066,7 +3302,7 @@ how often previously seen blocks are re-fetched.
 
 > `optional` **rowHeight?**: `number`
 
-Defined in: [DataTable.ts:301](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L301)
+Defined in: [DataTable.ts:307](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L307)
 
 Row height in pixels. Default: 32.
 
@@ -3082,7 +3318,7 @@ CSS-only change would move the rows and not the scroller.
 
 > `optional` **source?**: `string` \| `File` \| `Blob` \| `ArrayBuffer`
 
-Defined in: [DataTable.ts:168](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L168)
+Defined in: [DataTable.ts:165](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L165)
 
 Optional initial data source. If omitted, call
 `table.loadData(source, { tableName, sourceFormat, sourceOptions })` later.
@@ -3093,7 +3329,7 @@ Optional initial data source. If omitted, call
 
 > `optional` **sourceFormat?**: [`DataFormat`](../type-aliases/DataFormat.md)
 
-Defined in: [DataTable.ts:174](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L174)
+Defined in: [DataTable.ts:171](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L171)
 
 Override the format detected from `source` (e.g., if its URL has no
 extension). Applies to `source` only; pass `sourceFormat` to
@@ -3105,7 +3341,7 @@ extension). Applies to `source` only; pass `sourceFormat` to
 
 > `optional` **sourceOptions?**: [`SourceOptions`](SourceOptions.md)
 
-Defined in: [DataTable.ts:181](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L181)
+Defined in: [DataTable.ts:178](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L178)
 
 How `source` is read, per format: a CSV delimiter, header or null
 strings, the rows sampled to detect types, the Parquet columns to load,
@@ -3118,7 +3354,7 @@ only; pass `sourceOptions` to `table.loadData()` for a later load.
 
 > `optional` **statsPanelRegistry?**: [`StatsPanelRegistry`](../classes/StatsPanelRegistry.md)
 
-Defined in: [DataTable.ts:259](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L259)
+Defined in: [DataTable.ts:256](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L256)
 
 Per-instance stats panel registry. Register a [BaseStatsPanel](../../advanced/classes/BaseStatsPanel.md)
 subclass to replace the library's built-in two-line stats display in
@@ -3137,7 +3373,7 @@ for tables that don't opt in.
 
 > `optional` **strictBrowserCheck?**: `boolean`
 
-Defined in: [DataTable.ts:370](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L370)
+Defined in: [DataTable.ts:376](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L376)
 
 When `true`, probe for required browser APIs before attempting worker
 init. Rejects with [WorkerInitError](../classes/WorkerInitError.md) (`code: 'WORKER_UNSUPPORTED'`,
@@ -3152,7 +3388,7 @@ dedicated "unsupported browser" screen instead of a half-mounted table.
 
 > `optional` **tableName?**: `string`
 
-Defined in: [DataTable.ts:188](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L188)
+Defined in: [DataTable.ts:185](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L185)
 
 Table name used inside DuckDB for `source`, which is also the key its
 saved session is stored under. Auto-generated if omitted. Applies to
@@ -3165,9 +3401,9 @@ loads under a generated name, so no saved session is restored.
 
 > `optional` **undoRedo?**: `boolean`
 
-Defined in: [DataTable.ts:206](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L206)
+Defined in: [DataTable.ts:203](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L203)
 
-Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
+Enable undo/redo (Cmd/Ctrl+Z; Cmd/Ctrl+Shift+Z or Ctrl+Y to redo). Default: `true`.
 
 ***
 
@@ -3175,7 +3411,7 @@ Enable undo/redo (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z). Default: `true`.
 
 > `optional` **visualizationRegistry?**: [`VisualizationRegistry`](../classes/VisualizationRegistry.md)
 
-Defined in: [DataTable.ts:245](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L245)
+Defined in: [DataTable.ts:242](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L242)
 
 Per-instance visualization registry. Use this to register custom
 visualizations (or override built-ins) without affecting other tables
@@ -3188,7 +3424,7 @@ is used.
 
 > `optional` **visualizations?**: `boolean`
 
-Defined in: [DataTable.ts:237](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/DataTable.ts#L237)
+Defined in: [DataTable.ts:234](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/DataTable.ts#L234)
 
 Enable auto-attached column header visualizations (histograms, value counts). Default: `true`.
 

@@ -181,6 +181,15 @@ export interface Strings {
       };
       /** Column label shown on raw-sql chips. */
       sqlColumn: string;
+      /** Column label shown on the annotated-rows chip (`actions.showAnnotatedRows`). */
+      annotatedColumn: string;
+      /** The annotated-rows chip's description when it keeps every severity. */
+      anySeverity: string;
+      /**
+       * The annotated-rows chip's description when it keeps some severities:
+       * their names (`annotations.severityNames`), most severe first.
+       */
+      severityList: (names: string[]) => string;
     };
 
     /** SQL (raw WHERE) filter modal. */
@@ -433,6 +442,66 @@ export interface Strings {
     columnLayoutCancelled: (column: string) => string;
     /** Live-region: Enter (or leaving the grid) committed the gesture. */
     columnLayoutCommitted: (column: string) => string;
+  };
+
+  // =========================================
+  // Annotations — popover, navigation
+  // =========================================
+  annotations: {
+    /** A severity's name, wherever one is shown or announced. */
+    severityNames: {
+      error: string;
+      warning: string;
+      info: string;
+    };
+    /** The popover that lists the annotations of a cell or a column header. */
+    popover: {
+      /** Title of the section listing the row's annotations. */
+      rowTitle: string;
+      /** Title of the section listing the column's annotations. */
+      columnTitle: string;
+      /** Title of the section listing the cell's own annotations. */
+      cellTitle: string;
+      /** A section lists five annotations at most; this line counts the rest. */
+      moreEntries: (count: number) => string;
+      /** Counts a section's annotations the severity filter hides, which it leaves out. */
+      hiddenBySeverityFilter: (count: number) => string;
+    };
+    /**
+     * What the live region says when `F8` / `Shift+F8` (`Alt+↓` / `Alt+↑`),
+     * `actions.nextAnnotation` or `actions.previousAnnotation` move the
+     * cursor to an annotation, or find none to move to.
+     */
+    navigation: {
+      /**
+       * Where the cursor landed: "Row 1,204 of 9,880,000, age: error, value
+       * 200 exceeds maximum 150, and 2 more". `row` counts from 1 in the
+       * view, of `total`; `place` is the cell's column (or `hiddenColumn`'s
+       * words), `null` for the row's own annotations; `severity` (a
+       * `severityNames` entry) and `message` are the first annotation's,
+       * `null` when there is none; `more` counts the others there.
+       */
+      landed: (
+        row: number,
+        total: number,
+        place: string | null,
+        severity: string | null,
+        message: string | null,
+        more: number,
+      ) => string;
+      /** `landed`'s place for a column the table hides: "age (hidden)". */
+      hiddenColumn: (column: string) => string;
+      /** `landed`, after going round from the last annotation to the first. */
+      wrappedToFirst: (landed: string) => string;
+      /** `landed`, after going round from the first annotation to the last. */
+      wrappedToLast: (landed: string) => string;
+      /** Nothing further down, and the search does not go round. */
+      noMoreBelow: string;
+      /** Nothing further up, and the search does not go round. */
+      noMoreAbove: string;
+      /** No annotation of the severities sought in the rows the filters show. */
+      noneShown: string;
+    };
   };
 
   // =========================================
@@ -806,6 +875,9 @@ export const defaultStrings: Strings = {
         regex: 'matches',
       },
       sqlColumn: 'SQL',
+      annotatedColumn: 'Annotated rows',
+      anySeverity: 'any severity',
+      severityList: (names) => names.join(', '),
     },
 
     sqlFilter: {
@@ -1010,6 +1082,34 @@ export const defaultStrings: Strings = {
     columnMoveBlockedPinned: (column) => `${column} is pinned and cannot be moved`,
     columnLayoutCancelled: (column) => `${column} layout cancelled, width and position restored`,
     columnLayoutCommitted: (column) => `${column} layout committed`,
+  },
+
+  annotations: {
+    severityNames: {
+      error: 'error',
+      warning: 'warning',
+      info: 'info',
+    },
+    popover: {
+      rowTitle: 'Row',
+      columnTitle: 'Column',
+      cellTitle: 'Cell',
+      moreEntries: (count) => `+${count.toLocaleString()} more`,
+      hiddenBySeverityFilter: (count) => `${count.toLocaleString()} hidden by the severity filter`,
+    },
+    navigation: {
+      landed: (row, total, place, severity, message, more) =>
+        `Row ${row.toLocaleString()} of ${total.toLocaleString()}` +
+        (place ? `, ${place}` : '') +
+        (severity ? `: ${severity}${message ? `, ${message}` : ''}` : '') +
+        (more > 0 ? `, and ${more.toLocaleString()} more` : ''),
+      hiddenColumn: (column) => `${column} (hidden)`,
+      wrappedToFirst: (landed) => `Wrapped to the first annotation. ${landed}`,
+      wrappedToLast: (landed) => `Wrapped to the last annotation. ${landed}`,
+      noMoreBelow: 'No more annotations below',
+      noMoreAbove: 'No more annotations above',
+      noneShown: 'No annotations shown',
+    },
   },
 
   statistics: {

@@ -23,7 +23,13 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { NESTED_EXAMPLE, installProbes, loadExample, openDemo } from './helpers/demo';
+import {
+  NESTED_EXAMPLE,
+  installProbes,
+  loadExample,
+  openDemo,
+  tallDemoTable,
+} from './helpers/demo';
 import {
   type CellRef,
   activeItem,
@@ -148,6 +154,8 @@ test('opens on a nested or JSON cell from a double click, F2 or its inspect icon
   const errors = watchConsoleErrors(page);
   await openDemo(page);
   await loadExample(page, NESTED_EXAMPLE);
+  // Rows 0 to DEMO_ROW in view at once, and a grid taller than the window.
+  await tallDemoTable(page);
   const root = tableRoot('demo');
 
   await test.step('a double click on a list', async () => {

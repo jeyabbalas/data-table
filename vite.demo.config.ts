@@ -51,12 +51,19 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  // SheetJS reads the demo's Excel workbooks, imported only by a worker the
+  // demo starts for the first one. Found that late, it would be optimized
+  // then, and the dev server would reload the page in the middle of the load.
+  optimizeDeps: {
+    include: ['xlsx', 'xlsx/dist/cpexcel.full.mjs'],
+  },
   build: {
     outDir: 'demo-dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {
         index: resolve(__dirname, 'index.html'),
+        'shortcuts/index': resolve(__dirname, 'shortcuts/index.html'),
         'examples/index': resolve(__dirname, 'examples/index.html'),
         ...Object.fromEntries(
           EXAMPLES.map((name) => [

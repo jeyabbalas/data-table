@@ -5,9 +5,9 @@ import baseConfig from './vitest.config.ts';
  * Perf / memory-stress vitest config — single-flag entry point for nightly
  * or manual runs. Extends the base config, narrows `include` to
  * `tests/performance/**`, and raises `testTimeout` so the opt-in suites
- * (`RUN_DUCKDB_PERF=1`, `RUN_LIFECYCLE_STRESS=1`) have headroom for the
- * 1M-row generation, 10k-annotation insert, and 1000-cycle create/destroy
- * scenarios.
+ * (`RUN_DUCKDB_PERF=1`, `RUN_LIFECYCLE_STRESS=1`, `RUN_ANNOTATION_PERF=1`)
+ * have headroom for the 1M-row generation, the 1M-annotation store and
+ * session save, and 1000-cycle create/destroy scenarios.
  *
  * It spreads the base config instead of calling `mergeConfig`, which
  * concatenates arrays: merged, `include` kept the base `tests/**` glob and

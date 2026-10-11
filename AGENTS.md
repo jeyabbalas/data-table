@@ -27,14 +27,15 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 ### SUPPORTS
 
 - Loading CSV, JSON, or Parquet from `File`, `string` (URL), `ArrayBuffer`, or `Blob` (src/DataTable.ts:164-168).
-- Seven filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql` (src/filters/FilterTypes.ts:8–204). Point, set and not-set filters take `valueType: 'text'`, which compares `CAST(col AS VARCHAR)`: how a nested value is matched exactly. A range filter takes `valueType: 'time'`, which compares `CAST(col AS TIME)`: how a `TIME WITH TIME ZONE` column is compared by its time of day, as its chart and filter panel do.
+- Eight filter types — `range`, `point`, `set`, `not-set`, `null`/`not-null`, `pattern`, `raw-sql`, `annotated` (src/filters/FilterTypes.ts:10–256). Point, set and not-set filters take `valueType: 'text'`, which compares `CAST(col AS VARCHAR)`: how a nested value is matched exactly. A range filter takes `valueType: 'time'`, which compares `CAST(col AS TIME)`: how a `TIME WITH TIME ZONE` column is compared by its time of day, as its chart and filter panel do. An `annotated` filter keeps the rows with annotations, of the severities it names; add it with `actions.showAnnotatedRows()` (src/filters/annotatedFilters.ts).
 - Derived columns — SQL-expression columns _and_ precomputed vector columns; `addDerivedColumn` / `updateDerivedColumn` / `replaceDerivedColumn` (same-name with dependent re-validation), and `addNestedFieldColumn(column, path, options?)`, which adds one part of a nested or JSON column (a struct field, list element, map value, JSON key, a list's length) as an expression column right after it; in the UI, a nested or JSON column header's extract button and the value inspector's "Add as column" do the same, both part of the `derivedColumns` UI. An expression must give one value for each row: `unnest(…)` and a bare aggregate (`sum(price)`) are refused. Names are unique ignoring ASCII letter case, as DuckDB binds them, on a session restore, an undo and a redo too (src/derived/types.ts, src/derived/DerivedColumnManager.ts, src/core/Actions.ts, src/core/columnNames.ts, src/table/ExtractColumnPanel.ts).
 - Stable synthetic `__rowid__` (BIGINT, hidden by default) + `actions.getColumnValues(name, opts?)` for read-only column export (`Int32Array` / `Float64Array` / `BigInt64Array` / `unknown[]`), and `actions.getCellValue(rowId, column)` for one cell. Both are exact: every `BIGINT`…`UHUGEINT` digit, a `DECIMAL` as the double nearest its value, nested values as arrays, objects, `Map`s and `{ [tag]: value }` (src/core/types.ts, src/core/Actions.ts).
-- Programmatic row / column / cell annotations on `table.annotations.*` — severity tiers, intersection lookup, JSON I/O, IndexedDB persistence, intersection popover (src/annotations/AnnotationStore.ts).
+- Programmatic row / column / cell annotations on `table.annotations.*` — severity tiers, lookups by row, column and exact cell intersection (`getByCell`), JSON I/O, a change event carrying the affected annotations, a popover of five per scope, IndexedDB persistence in a database of their own (`dt-annotations`, in chunks, written only when they change). Tested at a million annotations: lookups in microseconds, a scroll step within 2 ms of a table with none (src/annotations/AnnotationStore.ts, src/persistence/annotationPersistence.ts).
+- Annotation navigation — `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` go to the next / previous annotation in the view as filtered and sorted and announce it; `actions.nextAnnotation` / `previousAnnotation` / `revealRow(rowId, column?)` do the same from code; `actions.showAnnotatedRows()` / `hideAnnotatedRows()` show only the annotated rows. The `annotationNavigation` option (default `true`) gates the keys, which the table takes only while its store holds row or cell annotations and its severity filter shows a severity. Under an annotated filter the view refreshes in place when the rows it keeps change, and the cursor follows its row (src/annotations/AnnotationNavigator.ts, src/annotations/AnnotatedRowsTable.ts, src/core/Actions.ts).
 - Programmatic column-header tooltips via `actions.setColumnHeaderTooltip` — XSS-safe structured popover for JSON-Schema-style metadata (src/core/Actions.ts, src/core/columnHeaderTooltip.ts).
 - Filter presets (save/load/export/import) — built-in UI + `FilterPresetManager` (src/index.ts:83–84).
 - Session persistence to IndexedDB (filters, sort, columns, derived columns, presets, undo/redo, annotations, column-header tooltips) (src/persistence/SessionStore.ts).
-- Column visibility, reorder, resize, pin — all undoable (src/core/Actions.ts).
+- Column visibility, reorder, resize, pin — all undoable (src/core/Actions.ts). Hidden columns, like active filters, show as chips in one row that scrolls sideways however many there are, and the row glides to the chips a change adds (src/table/HiddenColumnsGutter.ts, src/filters/FilterBar.ts, src/core/ChipStrip.ts).
 - Histograms and value-counts in column headers, and a non-null / null summary bar for nested columns; subclassable via `BaseVisualization` (src/visualizations/BaseVisualization.ts).
 - Nested columns — LIST, fixed-size ARRAY, STRUCT, MAP, UNION and VARIANT load as `type: 'nested'` (`originalType` holds the DuckDB type; JSON stays `'string'`). Cells show DuckDB's text, bounded to 32 items and 1,000 graphemes; sorting goes by value; headers show a type outline (`[integer]`, `struct(3)`); CSV and the clipboard write standard JSON, JSON export real structures, Parquet the native type. A value inspector shows any non-NULL nested or JSON cell's whole value as a keyboard tree, with Copy JSON: `F2` on the cursor, a double click, or the cell's inspect icon; `table.container.openValueInspector({ row, column })` from code, on a row the grid has rendered (`false` otherwise; a `true` still opens nothing when the user moves on first) (src/table/ValueInspector.ts). `parseDuckDBType` and `isNestedType` are on `/advanced` (src/core/duckdbType.ts, src/data/valueSql.ts, src/core/jsonTree.ts; [`docs/guides/loading-data.md#nested-and-json-columns`](./docs/guides/loading-data.md#nested-and-json-columns)).
 - Custom column-stats panels via `BaseStatsPanel` + per-instance `StatsPanelRegistry` — replace the `.dt-col-stats` slot with your own DOM and DuckDB queries (src/visualizations/BaseStatsPanel.ts, src/visualizations/StatsPanelRegistry.ts, src/visualizations/StatsPanelCoordinator.ts).
@@ -42,7 +43,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 - Exports to CSV, JSON, Parquet, or clipboard (src/export/\*).
 - Internationalization via `messages: DeepPartial<Strings>` (src/core/Strings.ts).
 - Light/dark themes (manual + `prefers-color-scheme`), CSS-variable theming (src/styles/data-table.css).
-- WCAG-oriented accessibility (ARIA grid on `.dt-grid`, `aria-activedescendant` cursor, keyboard nav, live region). A loaded table is a constant five tab stops — filter bar, grid, header scroller, body scroller, hidden-columns gutter — regardless of column count, hidden columns or active filters; a nested cell's inspect icon adds none, and `F2` on such a cell opens the value inspector, a `role="dialog"` holding a WAI-ARIA tree; a nested or JSON column header's extract button is one more control in its `F2` cycle, not a tab stop (src/table/KeyboardNavigator.ts, src/core/RovingTabindex.ts, src/table/TreeView.ts).
+- WCAG-oriented accessibility (ARIA grid on `.dt-grid`, `aria-activedescendant` cursor, keyboard nav, live region). A loaded table is a constant five tab stops inside `.dt-root` — filter bar, grid, header scroller, body scroller, hidden-columns gutter — regardless of column count, hidden columns or active filters, plus the "+" add-column button after it while the `derivedColumns` UI is on (the default); a nested cell's inspect icon adds none, nor does `F8`, and `F2` on such a cell opens the value inspector, a `role="dialog"` holding a WAI-ARIA tree; a nested or JSON column header's extract button is one more control in its `F2` cycle, not a tab stop (src/table/KeyboardNavigator.ts, src/core/RovingTabindex.ts, src/table/TreeView.ts, src/derived/AddColumnButton.ts).
 - **Keyboard column resize and reorder** via `Shift+F2` from the header cursor — column layout mode: `←`/`→` resize by 16px (clamped 50–500), `Shift`+`←`/`→` move the column, `Home`/`End` hit the width bounds, `Backspace` resets, `Enter` commits, `Escape` restores both width and position. The whole gesture is one undo entry. Nothing becomes focusable, so the tab-stop census is unchanged; the resize handle (`role="separator"`) and the drag handle stay out of `ColumnHeader.getControls()` and the `F2` cycle on purpose (src/table/KeyboardNavigator.ts, src/table/ColumnHeader.ts).
 - Multi-table on one page with shared `WorkerBridge`, `SessionStore`, `FilterPresetManager`.
 - CSP/offline deployment — DuckDB-WASM's files served from your own origin (`bridgeOptions.duckdbBundles`, relative URLs resolved against the page; copied from `@duckdb/duckdb-wasm` pinned to exactly `1.33.1-dev57.0`), DuckDB's `icu`, `parquet` and `json` extensions mirrored (`custom_extension_repository`), under a policy with `'wasm-unsafe-eval'` and `worker-src 'self' blob:` and no `'unsafe-eval'` (src/data/WorkerBridge.ts, src/worker/duckdb.ts; run by tests/browser/self-hosted-bundles.spec.ts; [`docs/guides/csp-and-offline.md`](./docs/guides/csp-and-offline.md)).
@@ -70,7 +71,7 @@ For deeper reference, open [`docs/api-reference.md`](./docs/api-reference.md). F
 Ask these **before writing integration code**, in order. The first answer often rules out later questions.
 
 1. **Data source shape.** `File` (user-uploaded), URL `string`, `ArrayBuffer`, or `Blob`? Is the source static, polled, or streamed? A CSV in an unusual dialect (`;` between fields, no header row, `NA` for missing values), or a Parquet file of which only some columns are needed? Those go in `sourceOptions` ([`docs/guides/loading-data.md#how-a-source-is-read`](./docs/guides/loading-data.md#how-a-source-is-read)). Lists, structs, maps or JSON in it? They load as `type: 'nested'` (JSON as `'string'`), which changes what a custom chart or stats panel receives; see [pitfall 13](#5-common-pitfalls).
-2. **Volume.** Approximate rows × columns at peak. Above ~5M rows expect noticeable UI latency. The loaded table must fit in browser memory — about 2.5 GiB, or 200K rows × 1,000 numeric columns — and large Parquet files should arrive as a `File`, `Blob`, or URL, not an `ArrayBuffer` ([`docs/guides/loading-data.md#large-parquet-files`](./docs/guides/loading-data.md#large-parquet-files)).
+2. **Volume.** Approximate rows × columns at peak, and annotations if any: a million are tested, and V8 caps a store near 16.7 million. Above ~5M rows expect noticeable UI latency. The loaded table must fit in browser memory — about 2.5 GiB, or 200K rows × 1,000 numeric columns — and large Parquet files should arrive as a `File`, `Blob`, or URL, not an `ArrayBuffer` ([`docs/guides/loading-data.md#large-parquet-files`](./docs/guides/loading-data.md#large-parquet-files)).
 3. **Mount point and height.** Which `HTMLElement` does the table mount into (`container` takes an element, not a selector), and where does that element's height come from — an explicit `height`, a `flex: 1; min-height: 0` child, a grid track? It must be bounded. If the answer is "it grows with its content", fix that before writing any other integration code; see [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 4. **Persistence.** Should filters/sort/columns survive page reloads? Default: yes (IndexedDB). Say so if the user wants incognito-clean behavior.
 5. **SSR / CSP.** Next.js / Nuxt / Remix? A strict CSP forbidding `cdn.jsdelivr.net`? These drive code layout and `bridgeOptions`.
@@ -383,7 +384,7 @@ if (!result.success) {
 
 Use `replaceDerivedColumn` (no rename, structured error) when an end-user edits an existing expression. Use `updateDerivedColumn` for renames. The `derivedChange` event fires with `kind: 'replaced'` and `columnName: 'tip_pct'` on success.
 
-### (k) Annotations — CRUD, JSON round-trip, severity filter
+### (k) Annotations — CRUD, JSON round-trip, severity filter, navigation
 
 ```ts
 table.annotations.add({
@@ -395,28 +396,43 @@ table.annotations.add({
   code: 'JSON_SCHEMA_MAXIMUM',
 });
 
+// One event for the batch; all or nothing (a malformed entry or a taken id throws).
 table.annotations.addMany([
   { scope: 'row', rowId: 5, severity: 'warning', message: '…' },
   { scope: 'column', column: 'tip_amount', severity: 'error', message: '…' },
 ]);
 
-// Intersection: row + column + cell at (rowId, column), sorted by severity.
+// Exact intersection: row 0's row annotations + age's column annotations
+// + the (0, age) cell's own, sorted by severity.
 const here = table.annotations.getByCell(0, 'age');
 
-// Fires on every mutation including bulk operations and severity-filter flips.
-const off = table.annotations.on('change', ({ kind, ids }) => {
-  console.log(kind, ids.length); // 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'
+// Fires on every mutation that changes something, bulk ones once, and on severity-filter flips.
+const off = table.annotations.on('change', ({ kind, ids, annotations }) => {
+  console.log(kind, ids.length, annotations?.[0]); // 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'
 });
 
 // Hide info-level annotations visually without touching the data.
 table.annotations.setSeverityFilter({ info: false });
 
 // JSON round-trip — preserves unknown top-level and per-annotation fields.
+// 'replace' fires 'cleared', then 'added'.
 const file = table.annotations.toJSON();
 table.annotations.loadJSON(file, 'replace');
+
+// Navigation — what F8 / Shift+F8 (Alt+↓ / Alt+↑) run, in the view as filtered and sorted.
+const landed = await table.actions.nextAnnotation({ severities: ['error'] });
+if (landed) console.log(landed.rowId, landed.row, landed.column, landed.annotations[0]?.message);
+await table.actions.previousAnnotation(); // the severities the severity filter shows
+
+// An issue list: take the user to an annotation's row and cell.
+const shown = await table.actions.revealRow(5, 'age'); // null when the filters hide row 5
+
+// Show only the rows with errors or warnings (an `annotated` filter); one undo entry each.
+table.actions.showAnnotatedRows({ severities: ['error', 'warning'] });
+table.actions.hideAnnotatedRows();
 ```
 
-Annotations live outside `TableState` (no undo/redo participation) but auto-persist into `SessionSnapshot.annotations` (v5+). For multi-table apps, the file's `tableName` is set automatically.
+Annotations live outside `TableState` (no undo/redo participation) but persist with the session, in an IndexedDB database of their own (`dt-annotations`), written only when they change and before the session record that names them, so a reload restores the last that landed; a reload that cannot restore them emits a `warning` coded `PERSISTENCE_ANNOTATIONS_DROPPED` and restores the rest. For multi-table apps, the file's `tableName` is set automatically. `nextAnnotation`, `previousAnnotation` and `revealRow` run one at a time: a newer call, a cursor move or a filter, sort or table change rejects the one running with `QueryError` `QUERY_ABORTED`. A store holds about 16.7 million annotations (V8's `Map` limit); a million are tested ([`docs/guides/annotations.md#annotations-at-scale`](./docs/guides/annotations.md#annotations-at-scale)).
 
 ### (l) Column-header tooltip — structured popover
 
@@ -580,23 +596,24 @@ table.on('derivedChange', refresh);
 
 All values source `src/DataTable.ts:137-371`.
 
-| Option               | Default         | Notes                                                                                            |
-| -------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
-| `persistence`        | `true`          | IndexedDB session snapshot.                                                                      |
-| `presets`            | `true`          | Filter preset UI + storage.                                                                      |
-| `undoRedo`           | `true`          | Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z.                                                                    |
-| `expressionFilter`   | `true`          | Raw-SQL filter button.                                                                           |
-| `visualizations`     | `true`          | Column header histograms / value counts / nested summary bars.                                   |
-| `exportDialog`       | `true`          | CSV/JSON/Parquet export dialog.                                                                  |
-| `rowHeight`          | `32`            | Pixels. Published as `--dt-row-height`; set it here, not in CSS.                                 |
-| `headerHeight`       | `120`           | Pixels — ≥ 96 recommended when visualizations are on. Published as `--dt-header-height`.         |
-| `fetchBlockSize`     | `128`           | Rows fetched per scroll block. Clamped to 16–1024.                                               |
-| `rowCacheRows`       | `2048`          | In-memory row cache size. Rounded up to whole blocks, 4-block floor.                             |
-| `prefetch`           | `true`          | Direction-aware: one block beyond the viewport while the fetch pipeline is idle.                 |
-| `classPrefix`        | `'dt'`          | CSS class prefix.                                                                                |
-| `colorScheme`        | `'auto'`        | Follow `prefers-color-scheme`.                                                                   |
-| `portalTarget`       | `document.body` | Where modals mount.                                                                              |
-| `strictBrowserCheck` | `false`         | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing. |
+| Option                 | Default         | Notes                                                                                              |
+| ---------------------- | --------------- | -------------------------------------------------------------------------------------------------- |
+| `persistence`          | `true`          | IndexedDB session snapshot.                                                                        |
+| `presets`              | `true`          | Filter preset UI + storage.                                                                        |
+| `undoRedo`             | `true`          | Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Ctrl+Y.                                                              |
+| `expressionFilter`     | `true`          | Raw-SQL filter button.                                                                             |
+| `visualizations`       | `true`          | Column header histograms / value counts / nested summary bars.                                     |
+| `annotationNavigation` | `true`          | `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` go to annotations. The navigation actions work either way. |
+| `exportDialog`         | `true`          | CSV/JSON/Parquet export dialog.                                                                    |
+| `rowHeight`            | `32`            | Pixels. Published as `--dt-row-height`; set it here, not in CSS.                                   |
+| `headerHeight`         | `120`           | Pixels — ≥ 96 recommended when visualizations are on. Published as `--dt-header-height`.           |
+| `fetchBlockSize`       | `128`           | Rows fetched per scroll block. Clamped to 16–1024.                                                 |
+| `rowCacheRows`         | `2048`          | In-memory row cache size. Rounded up to whole blocks, 4-block floor.                               |
+| `prefetch`             | `true`          | Direction-aware: one block beyond the viewport while the fetch pipeline is idle.                   |
+| `classPrefix`          | `'dt'`          | CSS class prefix.                                                                                  |
+| `colorScheme`          | `'auto'`        | Follow `prefers-color-scheme`.                                                                     |
+| `portalTarget`         | `document.body` | Where modals mount.                                                                                |
+| `strictBrowserCheck`   | `false`         | When `true`, `createDataTable()` rejects with `WORKER_UNSUPPORTED` if required APIs are missing.   |
 
 **Container height is not an option.** There is no `height`, `maxHeight`, `minHeight`, `autoHeight`, or `fitToContainer`. `rowHeight` and `headerHeight` size the table's _contents_; the mount container's own height comes from host CSS and nothing else. Note the reverse for those two: they are options, not CSS knobs. The library writes `--dt-row-height` / `--dt-header-height` onto `.dt-root` inline from the option values (`src/table/TableContainer.ts:createRootElement`), so overriding either token in a stylesheet is a no-op — the scroller's row arithmetic runs in JS and could not see it anyway. The scroller measures it (`src/table/VirtualScroller.ts:353`) to derive how many rows exist in the DOM at all, so leaving it unbounded is a correctness problem, not a cosmetic one — see pitfall 1 below and [`README.md#sizing-the-container`](./README.md#sizing-the-container).
 
@@ -661,6 +678,8 @@ All values source `src/DataTable.ts:137-371`.
 14. **Reading nested values through `bridge.query`.** Arrow corrupts a `DECIMAL` or `HUGEINT` inside a list or struct (`[1.25, 2.50]` arrives as `[6.2e-322, 0]`), hands one under a MAP or UNION over as a `Uint32Array` of its unscaled integer's words (`MAP {'a': 1.25}` as `{ a: Uint32Array [125, 0, 0, 0] }`), reads an `INTERVAL` as an `Int32Array`, reads a date or timestamp inside a STRUCT, MAP or UNION with its own getter, so that a `TIMESTAMP` there holding `infinity`, or a year past 287396 or before 283458 BC, fails the read (`9223372036854775 is not safe to convert to a number`) and a `DATE` `infinity` reads as `185542587100800000`, and cannot carry a VARIANT (`Unsupported Arrow type VARIANT`). Use `actions.getColumnValues` / `getCellValue`, or select `CAST(to_json(c) AS VARCHAR)`, which writes `infinity` as `"infinity"`; a VARIANT as `CAST(c AS JSON)`, and a type holding one (`VARIANT[]`, `STRUCT(v VARIANT)`) as `CAST(CAST(c AS VARIANT) AS JSON)`, since `to_json` writes a VARIANT as a string (`"42"`, `["42"]`) and fails on some types holding one (see the `WorkerBridge.query` JSDoc, src/data/WorkerBridge.ts).
 
 15. **An exact filter on a nested or JSON column without `valueType: 'text'`.** `{ type: 'point', column: 'tags', value: '[red' }` makes DuckDB cast the text to `VARCHAR[]`, a Conversion Error that fails every grid query until the filter goes; on a JSON column, any text that is not JSON does the same (`Conversion Error: Malformed JSON`). With `valueType: 'text'` it compares `CAST(col AS VARCHAR)` and simply matches nothing. The filter panel sets it on nested and JSON columns; a filter added in code must set it itself. A session restore (its filters and its undo and redo entries) and a loaded or imported preset give an exact filter on a JSON column `valueType: 'text'` when it has none, since one saved before 0.9 lacks it; a derived JSON column's restored filters stay as saved, and `addFilter` changes nothing (src/filters/jsonFilters.ts).
+
+16. **Changing an annotation object in place.** `get`, the lookups and the change payloads hand out the stored objects, unfrozen. `annotation.severity = 'error'` on one changes nothing the store's indexes, the grid or the session see; call `table.annotations.update(id, { severity: 'error' })`, which returns a new object. A `rowId` is a `number`: convert a `__rowid__` from `getColumnValues` with `Number(...)`, as a `bigint` is refused (`ANNOTATION_INVALID_SHAPE`). And `getByCell(rowId, column)` is that one cell's intersection; `getByRow` and `getByColumn` collect the cell annotations of a whole row or column (src/annotations/AnnotationStore.ts).
 
 ---
 
@@ -769,7 +788,7 @@ If the initial load fails, `createDataTable()` first tears down what it built, a
 
 - **Examples index** — [`examples/README.md`](./examples/README.md) (14 single-feature examples)
   - [`10-column-export`](./examples/10-column-export/) — `getColumnValues` + synthetic `__rowid__`
-  - [`11-annotations`](./examples/11-annotations/) — `table.annotations.*` CRUD, JSON I/O, rendering, severity filter
+  - [`11-annotations`](./examples/11-annotations/) — `table.annotations.*` CRUD, JSON I/O, rendering, severity filter; 100,000 annotations at a click, next / previous, the annotated rows, and an issue list that calls `revealRow`
   - [`12-column-header-tooltips`](./examples/12-column-header-tooltips/) — structured tooltip popover, XSS-safe
   - [`13-custom-stats-panel`](./examples/13-custom-stats-panel/) — `BaseStatsPanel` subclass + `StatsPanelRegistry`; numeric `n · μ · σ` via custom `AVG` / `STDDEV_POP` query, categorical top-value with percentage
   - [`14-standalone-sql-editor`](./examples/14-standalone-sql-editor/) — two host-built CodeMirror SQL editors (filter SQL composer + derived expression composer) sharing live schema via `actions.getCompletionContext()`; refresh on `derivedChange` via `Compartment.reconfigure()`

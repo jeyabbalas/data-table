@@ -17,6 +17,10 @@
              div.dt-annotation-body
                div.dt-annotation-message
                div.dt-annotation-meta
+         p.dt-annotation-popover__more, p.dt-annotation-popover__hidden
+
+   It scrolls past `max-height`, without chaining to the page: a page
+   scroll would move the anchor away and close it.
 */
 
 .dt-annotation-popover {
@@ -33,6 +37,9 @@
   font-family: var(--dt-font-family);
   font-size: var(--dt-font-size, 0.875rem);
   line-height: 1.4;
+  max-height: min(24rem, calc(100vh - 8px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: none;
 }
 
@@ -124,4 +131,11 @@
   margin-top: 0.15rem;
   font-size: var(--dt-font-size-xs, 0.7rem);
   color: var(--dt-text-tertiary);
+}
+
+.dt-annotation-popover__more,
+.dt-annotation-popover__hidden {
+  margin: 0.3rem 0 0;
+  font-size: var(--dt-font-size-xs, 0.7rem);
+  color: var(--dt-text-secondary);
 }

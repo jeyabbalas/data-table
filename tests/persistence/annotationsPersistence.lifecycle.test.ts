@@ -1,0 +1,586 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * Loads that overlap, and the saves around them. What belongs to the data a
+ * load replaces (its annotations, the table's own presets) goes in the
+ * load's turn, just before its restore, so a load superseded while it ran
+ * restores nothing into the table that replaces it; AutoSave runs again only
+ * once no load or clear is in flight, so no save lands over a session being
+ * read; a load turned away for its source options keeps the annotations
+ * without ever emptying the store; and `destroy()` lets the saves under way
+ * land.
+ */
+import 'fake-indexeddb/auto';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDataTable, type DataTable } from '@/index';
+import { DestroyedError, LoadError } from '@/core/errors';
+import type { ColumnSchema } from '@/core/types';
+import type { WorkerBridge } from '@/data/WorkerBridge';
+import { AutoSave } from '@/persistence/AutoSave';
+import { SessionStore } from '@/persistence/SessionStore';
+import {
+  deleteDatabase,
+  holdAnnotationsDb,
+  plant,
+  rawAnnotations,
+  rawChunks,
+  rawSession,
+  sessionSnapshot,
+} from '../helpers/sessionDatabases';
+
+beforeAll(() => {
+  if (!window.ResizeObserver) {
+    window.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
+
+const schema: ColumnSchema[] = [
+  { name: 'id', type: 'integer', nullable: false, originalType: 'INTEGER' },
+  { name: 'name', type: 'string', nullable: true, originalType: 'VARCHAR' },
+];
+
+function makeBridge(): WorkerBridge {
+  return {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    query: vi.fn().mockResolvedValue([]),
+    loadData: vi.fn(async (_source: unknown, options?: { tableName?: string }) => ({
+      tableName: options?.tableName ?? 'A',
+      rowCount: 0,
+      schema,
+    })),
+    exportToBuffer: vi.fn().mockResolvedValue(new Uint8Array()),
+    clearQueryCache: vi.fn(),
+    dropTable: vi.fn().mockResolvedValue(undefined),
+    terminate: vi.fn(),
+    isInitialized: vi.fn().mockReturnValue(true),
+  } as unknown as WorkerBridge;
+}
+
+const BARE = {
+  presets: false,
+  undoRedo: false,
+  expressionFilter: false,
+  visualizations: false,
+  exportDialog: false,
+} as const;
+
+const tables: DataTable[] = [];
+
+function container(): HTMLElement {
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  return el;
+}
+
+async function mount(options: Parameters<typeof createDataTable>[0]): Promise<DataTable> {
+  const table = await createDataTable(options);
+  tables.push(table);
+  return table;
+}
+
+/** Save a session for `tableName`, as a table of it shows it, on a page of its own. */
+async function savedSession(
+  tableName: string,
+  edit: (table: DataTable) => void,
+  options: Partial<Parameters<typeof createDataTable>[0]> = {},
+): Promise<void> {
+  const sessionStore = new SessionStore();
+  await sessionStore.open();
+  const table = await createDataTable({
+    container: container(),
+    bridge: makeBridge(),
+    persistence: { sessionStore },
+    source: new File([''], `${tableName}.csv`),
+    tableName,
+    ...BARE,
+    ...options,
+  });
+  edit(table);
+  // destroy() flushes the pending save.
+  await table.destroy();
+  sessionStore.close();
+}
+
+/**
+ * Load A, held at the worker until B's load is asked for: A's load is
+ * superseded by B's, and its turn runs first.
+ */
+async function loadAThenB(table: DataTable, bridge: WorkerBridge): Promise<void> {
+  let releaseA!: () => void;
+  const gate = new Promise<void>((resolve) => (releaseA = resolve));
+  vi.mocked(bridge.loadData).mockImplementationOnce(async () => {
+    await gate;
+    return { tableName: 'A', rowCount: 0, schema };
+  });
+  const loadA = table.loadData(new File([''], 'a.csv'), { tableName: 'A' }).catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const loadB = table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+  releaseA();
+  await loadA;
+  await loadB;
+}
+
+beforeEach(async () => {
+  await deleteDatabase('dt-sessions');
+  await deleteDatabase('dt-annotations');
+});
+
+afterEach(async () => {
+  for (const table of tables.splice(0)) if (!table.isDestroyed()) await table.destroy();
+  document.body.innerHTML = '';
+  vi.restoreAllMocks();
+});
+
+describe('a load superseded while it runs', () => {
+  it('restores nothing into the table that replaces it, which saves none of it', async () => {
+    await savedSession('A', (a) =>
+      a.annotations.add({ id: 'from-A', scope: 'row', rowId: 0, severity: 'error', message: 'A' }),
+    );
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const bridge = makeBridge();
+    const table = await mount({
+      container: container(),
+      bridge,
+      persistence: { sessionStore },
+      ...BARE,
+    });
+    const load = vi.spyOn(sessionStore, 'load');
+
+    // The user picks another file before A finishes loading. B has no saved session.
+    await loadAThenB(table, bridge);
+    expect(table.state.tableName.get()).toBe('B');
+    expect(table.annotations.count()).toBe(0);
+    // A's session was not even read.
+    expect(load.mock.calls.map(([name]) => name)).toEqual(['B']);
+
+    await table.destroy();
+    const reader = new SessionStore();
+    expect((await reader.load('B'))?.annotations).toBeUndefined();
+    expect((await reader.load('A'))?.annotations?.annotations.map((a) => a.id)).toEqual(['from-A']);
+    reader.close();
+    sessionStore.close();
+  });
+
+  it('leaves the table’s own presets to the table that replaces it', async () => {
+    await plant('dt-sessions', {
+      ...sessionSnapshot({ tableName: 'A', columnOrder: ['id', 'name'] }),
+      filterPresets: [{ id: 'p1', name: 'from A', filters: [], createdAt: 0, updatedAt: 0 }],
+    });
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const bridge = makeBridge();
+    const table = await mount({
+      container: container(),
+      bridge,
+      persistence: { sessionStore },
+      ...BARE,
+      presets: true,
+    });
+    await loadAThenB(table, bridge);
+    expect(table.state.tableName.get()).toBe('B');
+    table.actions.toggleSort('id');
+    await table.destroy();
+    const reader = new SessionStore();
+    const savedB = await reader.load('B');
+    expect(savedB?.sortColumns).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(savedB?.filterPresets).toBeUndefined();
+    reader.close();
+    sessionStore.close();
+  });
+
+  it('does not run AutoSave while the next load reads its session', async () => {
+    await savedSession('B', (b) => {
+      b.actions.toggleSort('id');
+      b.annotations.add({ id: 'from-B', scope: 'row', rowId: 0, severity: 'error', message: 'B' });
+    });
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    // Reading B's session takes a while, as a large annotations record does.
+    const realLoad = sessionStore.load.bind(sessionStore);
+    vi.spyOn(sessionStore, 'load').mockImplementation(async (name: string) => {
+      if (name === 'B') await new Promise((resolve) => setTimeout(resolve, 1500));
+      return realLoad(name);
+    });
+    const save = vi.spyOn(sessionStore, 'save');
+    const bridge = makeBridge();
+    const table = await mount({
+      container: container(),
+      bridge,
+      persistence: { sessionStore },
+      ...BARE,
+    });
+    await loadAThenB(table, bridge);
+    expect(table.state.tableName.get()).toBe('B');
+    expect(save).not.toHaveBeenCalled();
+    expect(table.state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(table.annotations.getAll().map((a) => a.id)).toEqual(['from-B']);
+    sessionStore.close();
+  }, 10_000);
+
+  it('saves nothing over the record the next load reads, which later saves keep naming', async () => {
+    await savedSession('B', (b) =>
+      b.annotations.add({ id: 'from-B', scope: 'row', rowId: 0, severity: 'error', message: 'B' }),
+    );
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    // The chunks of a large record take a while to come back.
+    const getAll = IDBObjectStore.prototype.getAll;
+    vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore['getAll']>
+    ) {
+      const request = getAll.apply(this, args);
+      if (this.name !== 'chunks') return request;
+      let handler: ((ev: Event) => void) | null = null;
+      request.addEventListener('success', (ev) => {
+        setTimeout(() => handler?.(ev), 1500);
+      });
+      Object.defineProperty(request, 'onsuccess', {
+        configurable: true,
+        get: () => null,
+        set: (fn) => {
+          handler = fn;
+        },
+      });
+      return request;
+    });
+    const bridge = makeBridge();
+    const table = await mount({
+      container: container(),
+      bridge,
+      persistence: { sessionStore },
+      ...BARE,
+    });
+    await loadAThenB(table, bridge);
+    vi.mocked(IDBObjectStore.prototype.getAll).mockRestore();
+    expect(table.annotations.getAll().map((a) => a.id)).toEqual(['from-B']);
+
+    // A later change saves the session; the annotations are those it read.
+    table.actions.toggleSort('id');
+    await table.destroy();
+    sessionStore.close();
+
+    const warnings: unknown[] = [];
+    const reload = new SessionStore({ onLoadIssue: (issue) => warnings.push(issue) });
+    const saved = await reload.load('B');
+    expect(saved?.sortColumns).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(saved?.annotations?.annotations.map((a) => a.id)).toEqual(['from-B']);
+    expect(warnings).toEqual([]);
+    reload.close();
+  }, 10_000);
+});
+
+describe('the save a load or a clear finds pending', () => {
+  it('is written by a load through the asynchronous save', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    const save = vi.spyOn(sessionStore, 'save');
+    const saveSync = vi.spyOn(sessionStore, 'saveSync');
+    table.annotations.add({
+      id: 'pending',
+      scope: 'row',
+      rowId: 0,
+      severity: 'error',
+      message: 'm',
+    });
+    table.actions.toggleSort('id');
+
+    await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+    expect(saveSync).not.toHaveBeenCalled();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]![0].tableName).toBe('A');
+    await save.mock.results[0]!.value;
+    const reader = new SessionStore();
+    const savedA = await reader.load('A');
+    expect(savedA?.sortColumns).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(savedA?.annotations?.annotations.map((a) => a.id)).toEqual(['pending']);
+    reader.close();
+    sessionStore.close();
+  });
+
+  it('keeps the annotations it was asked with, though the load empties the store before it writes them', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    // The table's saves wait for a slow one under way.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const realSave = sessionStore.save.bind(sessionStore);
+    vi.spyOn(sessionStore, 'save').mockImplementation(async (snapshot) => {
+      await held;
+      return realSave(snapshot);
+    });
+    table.annotations.add({ id: 'kept', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+    expect(table.annotations.count()).toBe(0);
+    release();
+    await vi.waitFor(async () =>
+      expect((await rawSession('A'))?.['__annotations']).toMatchObject({ count: 1 }),
+    );
+    const reader = new SessionStore();
+    expect((await reader.load('A'))?.annotations?.annotations.map((a) => a.id)).toEqual(['kept']);
+    reader.close();
+    sessionStore.close();
+  });
+
+  it('is dropped by clearSession', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    const save = vi.spyOn(sessionStore, 'save');
+    const saveSync = vi.spyOn(sessionStore, 'saveSync');
+    table.annotations.add({ scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await table.clearSession();
+    expect(save).not.toHaveBeenCalled();
+    expect(saveSync).not.toHaveBeenCalled();
+    expect(table.annotations.count()).toBe(0);
+    expect(await rawSession('A')).toBeUndefined();
+    sessionStore.close();
+  });
+});
+
+describe('a load turned away for its source options, under the annotated filter', () => {
+  it('never empties the store, so no sync reads it empty', async () => {
+    const HELPER = '__dt_annot_data__';
+    const log: string[] = [];
+    const bridge = makeBridge();
+    vi.mocked(bridge.query).mockImplementation(async (sql: string) => {
+      log.push(sql);
+      if (/^SELECT COUNT\(\*\) as cnt/.test(sql)) return [{ cnt: 1 }];
+      return [];
+    });
+    vi.mocked(bridge.loadData).mockResolvedValue({ tableName: 'data', rowCount: 1000, schema });
+    const table = await mount({
+      container: container(),
+      bridge,
+      source: new File(['a\n1'], 'data.csv'),
+      tableName: 'data',
+      ...BARE,
+      persistence: false,
+    });
+    table.annotations.add({ scope: 'row', rowId: 3, severity: 'error', message: 'row' });
+    const shown = new Promise<void>((resolve) => {
+      const off = table.on('filterChange', () => {
+        off();
+        resolve();
+      });
+    });
+    table.actions.showAnnotatedRows();
+    await shown;
+    await table.container.whenBodyReady();
+    log.length = 0;
+    const counts: number[] = [];
+    table.annotations.on('change', () => counts.push(table.annotations.count()));
+
+    vi.mocked(bridge.loadData).mockRejectedValueOnce(
+      new LoadError('bad delimiter', { code: 'LOAD_INVALID_OPTIONS' }),
+    );
+    await expect(table.loadData('a\n1\n', { tableName: 'data' })).rejects.toMatchObject({
+      code: 'LOAD_INVALID_OPTIONS',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(table.annotations.count()).toBe(1);
+    expect(counts).toEqual([]);
+    const syncs = log.filter((sql) => sql.startsWith(`CREATE OR REPLACE TEMP TABLE "${HELPER}"`));
+    expect(syncs.length).toBeGreaterThan(0);
+    // Every rebuild of the annotated rows has row 3 (`3 * 8 + 1`: an error).
+    for (const sql of syncs) expect(sql).toContain("string_split('25'");
+  });
+});
+
+describe('destroy() with a save under way', () => {
+  /** A table on `name` with the store it owns, the default. */
+  const ownTable = (name: string): Promise<DataTable> =>
+    mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], `${name}.csv`),
+      tableName: name,
+      ...BARE,
+    });
+
+  it('a new table on the same name, mounted at once, restores what it was writing', async () => {
+    const table = await ownTable('A');
+    const save = vi.spyOn(SessionStore.prototype, 'save');
+    const blocker = await holdAnnotationsDb();
+    table.annotations.add({ id: 'new', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    table.actions.toggleSort('id');
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    save.mockRestore();
+    await table.destroy();
+    // A route change back: the table again, at once.
+    const again = ownTable('A');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await blocker.release();
+    const second = await again;
+    expect(second.state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(second.annotations.getAll().map((a) => a.id)).toEqual(['new']);
+  }, 10_000);
+
+  it('a new table on the old name, after a load and a destroy, restores what the load saved', async () => {
+    const table = await ownTable('A');
+    const blocker = await holdAnnotationsDb();
+    // Within the debounce: the load writes the save it finds pending.
+    table.annotations.add({ id: 'new', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    table.actions.toggleSort('id');
+    await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+    await table.destroy();
+    const again = ownTable('A');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await blocker.release();
+    const second = await again;
+    expect(second.state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(second.annotations.getAll().map((a) => a.id)).toEqual(['new']);
+  }, 10_000);
+
+  it('lets it land, with the state asked for after it, in the store it owns', async () => {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    const save = vi.spyOn(SessionStore.prototype, 'save');
+    const saveSync = vi.spyOn(SessionStore.prototype, 'saveSync');
+    // The annotations write waits, as behind a long one.
+    const blocker = await holdAnnotationsDb();
+    table.annotations.add({ id: 'new', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    table.actions.toggleSort('id');
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 3000 });
+
+    await table.destroy();
+    // The state the saves were writing, written at once.
+    expect(saveSync).toHaveBeenCalledTimes(1);
+    await blocker.release();
+    await Promise.allSettled(save.mock.results.map((result) => result.value as Promise<void>));
+    save.mockRestore();
+
+    await vi.waitFor(async () =>
+      expect((await rawSession('A'))?.['__annotations']).toMatchObject({ count: 1 }),
+    );
+    const reader = new SessionStore();
+    const snapshot = await reader.load('A');
+    reader.close();
+    expect(snapshot?.sortColumns).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(snapshot?.annotations?.annotations.map((a) => a.id)).toEqual(['new']);
+  }, 10_000);
+});
+
+describe('AutoSave around a load or a clear', () => {
+  it('runs again after one whose start threw', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    // AutoSave is turned off, and then something throws.
+    const disableWith = AutoSave.prototype.disableWith;
+    vi.spyOn(AutoSave.prototype, 'disableWith').mockImplementationOnce(function (
+      this: AutoSave,
+      pending,
+    ) {
+      disableWith.call(this, pending);
+      throw new Error('disable failed');
+    });
+    await expect(table.loadData(new File([''], 'b.csv'), { tableName: 'B' })).rejects.toThrow(
+      'disable failed',
+    );
+    const save = vi.spyOn(sessionStore, 'save');
+    table.actions.toggleSort('id');
+    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 3000 });
+    sessionStore.close();
+  });
+});
+
+describe('clearSession() and destroy() in one task', () => {
+  it('deletes the session and its annotations, and resolves', async () => {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], 'b.csv'),
+      tableName: 'B',
+      ...BARE,
+    });
+    table.actions.toggleSort('id');
+    table.annotations.add({ id: 'x', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(async () => expect(await rawAnnotations('B')).toBeDefined(), {
+      timeout: 3000,
+    });
+    // A "reset and close" button.
+    const cleared = table.clearSession();
+    await table.destroy();
+    await expect(cleared).resolves.toBeUndefined();
+    expect(await rawSession('B')).toBeUndefined();
+    expect(await rawAnnotations('B')).toBeUndefined();
+    expect(await rawChunks('B')).toEqual([]);
+  }, 10_000);
+
+  /** A table whose sort is saved, its store then closed by another tab's delete of dt-annotations. */
+  async function savedThenClosedUnder(name: string): Promise<DataTable> {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], `${name}.csv`),
+      tableName: name,
+      ...BARE,
+    });
+    table.actions.toggleSort('id');
+    await vi.waitFor(async () => expect((await rawSession(name))?.['sortColumns']).toBeDefined(), {
+      timeout: 3000,
+    });
+    // The store's connection to it closes, as on versionchange: the
+    // session store must open the databases again for its next operation.
+    await deleteDatabase('dt-annotations');
+    return table;
+  }
+
+  it('rejects, the session left, when the close refuses a delete waiting to open the databases', async () => {
+    const table = await savedThenClosedUnder('C');
+    const cleared = table.clearSession();
+    await table.destroy();
+    await expect(cleared).rejects.toBeInstanceOf(DestroyedError);
+    expect((await rawSession('C'))?.['sortColumns']).toEqual([{ column: 'id', direction: 'asc' }]);
+  }, 10_000);
+
+  it('deletes without destroy() when the delete opens the databases again', async () => {
+    const table = await savedThenClosedUnder('D');
+    await table.clearSession();
+    expect(await rawSession('D')).toBeUndefined();
+  }, 10_000);
+});

@@ -111,7 +111,10 @@ export type TableEvents = {
 
   /**
    * Fired on any change to the active filter list, once `filteredRowCount`
-   * is known, without waiting for the column charts to refetch.
+   * is known, without waiting for the column charts to refetch. Also fired,
+   * with the same filters, when the rows an annotated filter keeps change
+   * with the annotations (`actions.showAnnotatedRows`), once their count is
+   * known.
    */
   filterChange: {
     filters: readonly Filter[];

@@ -6,7 +6,7 @@
 
 # Class: AnnotationPopover
 
-Defined in: [table/AnnotationPopover.ts:113](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L113)
+Defined in: [table/AnnotationPopover.ts:179](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L179)
 
 Shared, body-portalled popover singleton that renders the intersection of
 row, column, and cell annotations on hover / focus of an annotated grid
@@ -19,7 +19,7 @@ one and threads it to every renderer that emits annotation tints.
 
 > **new AnnotationPopover**(`options?`): `AnnotationPopover`
 
-Defined in: [table/AnnotationPopover.ts:130](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L130)
+Defined in: [table/AnnotationPopover.ts:203](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L203)
 
 #### Parameters
 
@@ -37,7 +37,7 @@ Defined in: [table/AnnotationPopover.ts:130](https://github.com/jeyabbalas/data-
 
 > **cancelGraceHide**(): `void`
 
-Defined in: [table/AnnotationPopover.ts:256](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L256)
+Defined in: [table/AnnotationPopover.ts:411](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L411)
 
 Cancel a pending grace-period hide (user moved pointer back in time).
 
@@ -51,7 +51,7 @@ Cancel a pending grace-period hide (user moved pointer back in time).
 
 > **destroy**(): `void`
 
-Defined in: [table/AnnotationPopover.ts:264](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L264)
+Defined in: [table/AnnotationPopover.ts:419](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L419)
 
 Tear down the popover and remove its element from the DOM.
 
@@ -65,7 +65,7 @@ Tear down the popover and remove its element from the DOM.
 
 > **getId**(): `string`
 
-Defined in: [table/AnnotationPopover.ts:161](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L161)
+Defined in: [table/AnnotationPopover.ts:252](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L252)
 
 Element id for the popover. Anchors write this into `aria-describedby`.
 
@@ -79,7 +79,7 @@ Element id for the popover. Anchors write this into `aria-describedby`.
 
 > **hide**(): `void`
 
-Defined in: [table/AnnotationPopover.ts:223](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L223)
+Defined in: [table/AnnotationPopover.ts:376](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L376)
 
 Dismiss the popover and detach all listeners. Idempotent.
 
@@ -93,7 +93,7 @@ Dismiss the popover and detach all listeners. Idempotent.
 
 > **isOpen**(): `boolean`
 
-Defined in: [table/AnnotationPopover.ts:173](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L173)
+Defined in: [table/AnnotationPopover.ts:264](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L264)
 
 `true` if the popover is open against any anchor.
 
@@ -107,7 +107,7 @@ Defined in: [table/AnnotationPopover.ts:173](https://github.com/jeyabbalas/data-
 
 > **isOpenFor**(`anchor`): `boolean`
 
-Defined in: [table/AnnotationPopover.ts:166](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L166)
+Defined in: [table/AnnotationPopover.ts:257](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L257)
 
 `true` if the popover is currently anchored to `anchor`.
 
@@ -127,7 +127,7 @@ Defined in: [table/AnnotationPopover.ts:166](https://github.com/jeyabbalas/data-
 
 > **scheduleGraceHide**(): `void`
 
-Defined in: [table/AnnotationPopover.ts:246](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L246)
+Defined in: [table/AnnotationPopover.ts:401](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L401)
 
 Start a grace-period timer that hides the popover unless cancelled.
 
@@ -141,11 +141,12 @@ Start a grace-period timer that hides the popover unless cancelled.
 
 > **show**(`anchor`, `annotations`): `void`
 
-Defined in: [table/AnnotationPopover.ts:182](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/table/AnnotationPopover.ts#L182)
+Defined in: [table/AnnotationPopover.ts:285](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/AnnotationPopover.ts#L285)
 
-Display the popover anchored to `anchor` with the given annotations.
-Re-rendering happens inline on every call so consumers don't need to
-diff annotation changes themselves.
+Display the popover anchored to `anchor`, listing `annotations` by scope
+(row, then column, then cell), each scope in the order given, five at
+most each. Annotations the severity filter hides are left out; when it
+hides every one, or `annotations` is empty, the popover hides instead.
 
 #### Parameters
 
@@ -155,7 +156,7 @@ diff annotation changes themselves.
 
 ##### annotations
 
-[`Annotation`](../../index/type-aliases/Annotation.md)[]
+readonly [`Annotation`](../../index/type-aliases/Annotation.md)[]
 
 #### Returns
 

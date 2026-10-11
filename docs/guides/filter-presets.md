@@ -158,7 +158,7 @@ fileInput.addEventListener('change', async (e) => {
 behaviors:
 
 - **Validation.** Rejects invalid JSON, missing `version`, non-array `presets`, malformed entries. Each problem surfaces in `errors` as a descriptive string.
-- **Per-filter validation.** Each filter's `type` must be one of the known discriminants; required fields are checked per type (e.g., `range` needs `min` and `max`).
+- **Per-filter validation.** Each filter's `type` must be one of the known discriminants; required fields are checked per type (e.g., `range` needs `min` and `max`). An `annotated` filter needs the column `'__annotated__'`, severities this version knows (`'error'`, `'warning'`, `'info'`), and a `table` that is a string when it has one: a severity it does not know would keep rows by annotations the filter was not written for.
 - **New IDs assigned on import.** Imported presets get new UUIDs to avoid collisions with existing ones.
 - **Partial success OK.** A preset with some invalid filters is imported with those filters skipped and an error logged. A preset with _zero_ valid filters is rejected entirely.
 - **Unknown filter types are silently dropped.** If a future library version adds a new filter type and you import a preset with it from a newer export, the unknown filter is skipped rather than failing the whole import. That's deliberate for forward compatibility.
@@ -248,14 +248,14 @@ manager.presets.subscribe((presets) => {
 - **`save()` throws on empty name.** A name trimmed to empty string is rejected with `ConfigurationError`.
 - **`rename()` on empty name is a no-op.** Unlike `save`, rename silently skips — the built-in panel uses this to avoid accidentally clearing names.
 - **Loading a preset clears all existing filters.** It's a replace, not a merge. If you want to merge, read the preset's filters and call `addFilter` per entry yourself.
-- **Presets don't track which table saved them.** If you save in one table and load in another, no compatibility check is done. Encode the source table in the preset name, or wrap `load` in your own guard.
+- **Presets don't track which table saved them.** If you save in one table and load in another, no compatibility check is done. Encode the source table in the preset name, or wrap `load` in your own guard. An `annotated` filter names the table it was saved on, but a load points it at the annotated rows of the table it is loaded on.
 - **Import assigns fresh UUIDs.** A preset exported with id `abc` becomes a preset with id `xyz` after import. Don't rely on ID stability across sessions.
 - **Session persistence-disabled mode.** Presets evaporate on reload unless you export them. The preset panel's "Export" button is your friend.
 - **Large preset collections.** `exportToJSON()` stringifies the entire list; a hundred presets with complex filters can run to kilobytes. That's fine for sharing; it's just worth knowing for quota-conscious IDB storage.
 
 ## Related
 
-- Filters: [Filters guide](./filters.md) for the seven filter types each preset contains
+- Filters: [Filters guide](./filters.md) for the eight filter types each preset contains
 - Multi-table: [Multi-table dashboards](./multi-table.md) for shared preset patterns
 - Session persistence: [Session persistence guide](./session-persistence.md) for how presets survive reloads
 - API reference: [`FilterPresetManager`](../api-reference.md#filter-presets)

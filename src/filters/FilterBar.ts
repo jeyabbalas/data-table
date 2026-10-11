@@ -6,6 +6,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { ChipStrip, nearestSurvivingKey } from '../core/ChipStrip';
 import { RovingTabindex } from '../core/RovingTabindex';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
@@ -36,19 +37,27 @@ export interface FilterBarOptions {
  * FilterBar renders a horizontal bar of filter chips showing all active filters.
  * It auto-shows when filters are present and collapses when empty.
  *
+ * The chips sit in one row, in the order the filters were added, which
+ * scrolls sideways once it is wider than the table, with "Clear all",
+ * "Expression" and "Presets" pinned at its end. A chip that adding a filter
+ * puts out of view is scrolled into view, smoothly; changing or removing a
+ * filter scrolls nothing.
+ *
  * The bar is a `role="toolbar"` with the APG roving-tabindex treatment, so it
  * is a single tab stop however many chips it holds: `←` / `→` move between the
  * chips' remove buttons, "Clear all", "Expression" and "Presets", `Home` /
- * `End` jump to the ends, and the movement wraps.
+ * `End` jump to the ends, and the movement wraps. Removing a filter with its
+ * chip's own button leaves the stop, and focus, on the chip next to it.
  *
  * @example
  * import { FilterBar } from '@jeyabbalas/data-table/advanced';
  *
- * const bar = new FilterBar(parentEl, state, actions, {
+ * const bar = new FilterBar(state, actions, {
  *   classPrefix: 'dt',
  *   alwaysShow: false,
  *   onFilterRemove: (column) => console.log('cleared', column),
  * });
+ * parentEl.appendChild(bar.getElement());
  * // unmount:
  * bar.destroy();
  *
@@ -66,7 +75,11 @@ export class FilterBar {
   private expressionBtn!: HTMLButtonElement;
   private presetsBtn!: HTMLButtonElement;
   private chips: FilterChip[] = [];
+  private readonly strip: ChipStrip;
   private readonly roving: RovingTabindex;
+  /** The filtered columns the chips show, in order; `null` before the first render. */
+  private columns: string[] | null = null;
+  private chipsByColumn = new Map<string, HTMLElement>();
   private unsubscribe: (() => void) | null = null;
   private destroyed = false;
   private readonly prefix: string;
@@ -83,9 +96,20 @@ export class FilterBar {
     this.chipsContainer = this.element.querySelector(`.${this.prefix}-filter-chips`)!;
     this.clearAllButton = this.element.querySelector(`.${this.prefix}-filter-clear-all`)!;
 
-    // The bar is a single row (`.dt-filter-bar` is a non-wrapping flex), so
-    // only the horizontal arrows move the stop.
-    this.roving = new RovingTabindex(this.element, { orientation: 'horizontal' });
+    this.strip = new ChipStrip({
+      scroller: this.element.querySelector(`.${this.prefix}-filter-scroll`)!,
+      end: this.element.querySelector(`.${this.prefix}-filter-actions`)!,
+      chipFor: (column) => this.chipsByColumn.get(column),
+      chipOf: (el) => this.chipOf(el),
+    });
+
+    // The bar is a single row, so only the horizontal arrows move the stop.
+    // A remove button sits at its chip's end: the strip reveals the whole
+    // chip, clear of the sticky buttons at the row's end.
+    this.roving = new RovingTabindex(this.element, {
+      orientation: 'horizontal',
+      reveal: (control) => this.strip.reveal(control),
+    });
 
     // Subscribe to filter changes
     this.unsubscribe = this.state.filters.subscribe((filters) => {
@@ -104,8 +128,16 @@ export class FilterBar {
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', this.messages.filters.activeFiltersLabel);
 
+    // The row that scrolls holds the bar's buttons as well as the chips, so
+    // that the toolbar's one tab stop is always inside it (see ChipStrip).
+    const scroll = document.createElement('div');
+    scroll.className = `${this.prefix}-filter-scroll`;
+
     const chips = document.createElement('div');
     chips.className = `${this.prefix}-filter-chips`;
+
+    const actions = document.createElement('div');
+    actions.className = `${this.prefix}-filter-actions`;
 
     const clearAll = document.createElement('button');
     clearAll.className = `${this.prefix}-filter-clear-all`;
@@ -154,11 +186,13 @@ export class FilterBar {
       if (!this.destroyed) this.options.onPresetsClick?.();
     });
 
+    actions.appendChild(clearAll);
+    actions.appendChild(this.expressionBtn);
+    actions.appendChild(this.presetsBtn);
+    scroll.appendChild(chips);
+    scroll.appendChild(actions);
     bar.appendChild(label);
-    bar.appendChild(chips);
-    bar.appendChild(clearAll);
-    bar.appendChild(this.expressionBtn);
-    bar.appendChild(this.presetsBtn);
+    bar.appendChild(scroll);
 
     return bar;
   }
@@ -170,10 +204,25 @@ export class FilterBar {
     // `document.activeElement` has already fallen back to `<body>`.
     const hadFocus =
       document.activeElement instanceof Node && this.element.contains(document.activeElement);
+    // Likewise which chip holds the stop: every chip is rebuilt below.
+    const stopColumn = this.columnOf(this.roving.getActiveControl());
+    const before = this.columns;
 
     this.render(filters);
 
-    this.roving.refresh({ restoreFocus: hadFocus });
+    const after = this.columns ?? [];
+    const heir =
+      stopColumn !== null && before
+        ? nearestSurvivingKey(before, stopColumn, new Set(after))
+        : null;
+    const fallback = heir !== null ? this.removeButtonOf(heir) : null;
+    this.roving.refresh({ restoreFocus: hadFocus, fallback });
+
+    // The first render shows what is there; only later ones add chips.
+    if (before) {
+      const shown = new Set(before);
+      this.strip.revealAdded(after.filter((column) => !shown.has(column)));
+    }
   }
 
   private render(filters: Filter[]): void {
@@ -187,6 +236,10 @@ export class FilterBar {
     }
     this.chips = [];
     this.chipsContainer.innerHTML = '';
+    this.chipsByColumn.clear();
+    // A filter is keyed by its column: adding one on a filtered column
+    // replaces the filter in its place, which is a change, not an addition.
+    this.columns = filters.map((filter) => filter.column);
 
     if (filters.length === 0) {
       if (this.options.alwaysShow) {
@@ -223,22 +276,34 @@ export class FilterBar {
       const chip = new FilterChip(filter, () => this.handleRemove(filter.column), chipOptions);
       this.chips.push(chip);
       this.chipsContainer.appendChild(chip.getElement());
+      this.chipsByColumn.set(filter.column, chip.getElement());
     }
-
-    // Smooth-scroll to the rightmost chip so the latest addition is visible
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (!this.destroyed && this.chipsContainer.scrollWidth > this.chipsContainer.clientWidth) {
-          this.chipsContainer.scrollTo({
-            left: this.chipsContainer.scrollWidth,
-            behavior: 'smooth',
-          });
-        }
-      });
-    });
 
     // Show "Clear all" only when 2+ filters
     this.clearAllButton.style.display = filters.length >= 2 ? '' : 'none';
+  }
+
+  /** The column whose chip holds `control`, or `null` for any other control. */
+  private columnOf(control: HTMLElement | null): string | null {
+    if (!control) return null;
+    for (const [column, chip] of this.chipsByColumn) {
+      if (chip.contains(control)) return column;
+    }
+    return null;
+  }
+
+  /** The chip that holds `control`, or `null` for any other control. */
+  private chipOf(control: HTMLElement): HTMLElement | null {
+    const column = this.columnOf(control);
+    return column === null ? null : (this.chipsByColumn.get(column) ?? null);
+  }
+
+  private removeButtonOf(column: string): HTMLElement | null {
+    return (
+      this.chipsByColumn
+        .get(column)
+        ?.querySelector<HTMLElement>(`.${this.prefix}-filter-chip-remove`) ?? null
+    );
   }
 
   private handleRemove(column: string): void {
@@ -270,6 +335,7 @@ export class FilterBar {
     this.destroyed = true;
 
     this.roving.destroy();
+    this.strip.destroy();
 
     // Unsubscribe from state
     if (this.unsubscribe) {

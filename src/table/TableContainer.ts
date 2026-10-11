@@ -29,14 +29,17 @@
  * @see KeyboardNavigator
  */
 
+import type { AnnotatedRowsSource } from '../annotations/annotatedRowsSource';
+import type { AnnotatedRowsTable } from '../annotations/AnnotatedRowsTable';
+import type { AnnotationNavigator } from '../annotations/AnnotationNavigator';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import type { NestedFieldColumnOptions, StateActions } from '../core/Actions';
-import { ConfigurationError, type DataTableError } from '../core/errors';
+import { ConfigurationError, DataTableError, QueryError } from '../core/errors';
 import { resolveInstanceId } from '../core/instanceId';
 import { isAnyModalOpen } from '../core/ModalHost';
-import type { TableState } from '../core/State';
+import { effectiveRowCount, type TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
-import type { ColumnSchema } from '../core/types';
+import type { ColumnSchema, Filter, SortColumn } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
 import type { ColorScheme } from '../DataTable';
 import { AddColumnButton } from '../derived/AddColumnButton';
@@ -49,6 +52,7 @@ import type { FilterPresetPanel } from '../filters/FilterPresetPanel';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { SQLFilterModal } from '../filters/SQLFilterModal';
 import { columnTypeLabel } from '../nested/typeOutline';
+import { AnnotationOverlay } from './AnnotationOverlay';
 import type { AnnotationPopover } from './AnnotationPopover';
 import { ColumnHeader } from './ColumnHeader';
 import type { ColumnHeaderTooltipPopover } from './ColumnHeaderTooltipPopover';
@@ -123,8 +127,9 @@ export interface TableContainerOptions {
   messages?: Strings | undefined;
   /**
    * Shared annotation store. When provided, `TableBody` and every
-   * `ColumnHeader` subscribe to it so annotations render inline (tint +
-   * popover) without requiring a full `render()`.
+   * `ColumnHeader` render its annotations inline (tint + popover), and the
+   * container hears its changes, once for the whole grid, to keep them up
+   * to date without a `render()`.
    */
   annotations?: AnnotationStore | undefined;
   /**
@@ -158,12 +163,125 @@ export interface TableContainerOptions {
   /**
    * Called with a failure nothing else hears of: a panel that loads on
    * first use, the value inspector or the extract panel, whose chunk did
-   * not download. The error is a `ConfigurationError` with code
-   * `CHUNK_LOAD_FAILED`, `details.panel` (`'valueInspector'` or
-   * `'extractPanel'`) and the import's error as `cause`; the live region
-   * says it too. `createDataTable` emits it as the table's `error` event.
+   * not download; the chunk that keeps an annotated filter's table of
+   * annotated rows; or the annotation navigator's, for a navigation the
+   * keys started (one the actions start rejects with it). The error is a
+   * `ConfigurationError` with code `CHUNK_LOAD_FAILED`, `details.panel`
+   * (`'valueInspector'`, `'extractPanel'`, `'annotatedRows'` or
+   * `'annotationNavigator'`) and the import's error as `cause`; for a
+   * panel, the live region says it too. `createDataTable` emits it as the
+   * table's `error` event. A search the keys started that fails otherwise
+   * comes here too.
    */
   onError?: ((error: DataTableError) => void) | undefined;
+  /**
+   * `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` go to the next and previous
+   * annotation (default: true). `actions.nextAnnotation`,
+   * `actions.previousAnnotation` and `actions.revealRow` work either way. A
+   * failure of a search the keys start is reported through `onError`. The
+   * facade passes its own `annotationNavigation` option.
+   */
+  annotationNavigation?: boolean | undefined;
+  /**
+   * Called when the annotated rows an annotated filter in force keeps
+   * changed with the annotations, once the body is fetching its rows again
+   * in place: for the row count, charts and stats panels to follow. Returns
+   * a promise that settles once the row count is in: the cursor goes back
+   * to its row once the rows and the count are.
+   *
+   * @internal
+   */
+  onAnnotatedRowsChange?: (() => Promise<void> | void) | undefined;
+  /**
+   * Called with the error a sync of the DuckDB table of annotated rows
+   * failed with.
+   *
+   * @internal
+   */
+  onAnnotatedRowsError?: ((error: DataTableError) => void) | undefined;
+}
+
+/**
+ * The source of annotated rows of a table built without an annotation store,
+ * which has no rows for navigation to search.
+ */
+const NO_ANNOTATED_ROWS: AnnotatedRowsSource = {
+  ensureFresh: () =>
+    Promise.reject(new QueryError('No annotations to search', { code: 'NO_TABLE' })),
+};
+
+/** A cell of the grid: a row's position in the view, and a column. */
+type GridCell = { readonly row: number; readonly column: string };
+
+/**
+ * An in-place refresh of the rows an annotated filter keeps (see
+ * `TableContainer.refreshAnnotatedView`): the cursor it found (`origin`),
+ * and the cursor now, which the new row count may have moved up to the
+ * last row meanwhile; the `__rowid__` of the row the cursor follows, `null`
+ * when there is none to follow; and what aborts its query for that row's
+ * place in the view.
+ */
+interface AnnotatedRefresh {
+  readonly origin: GridCell | null;
+  cursor: GridCell | null;
+  readonly rowId: number | null;
+  readonly controller: AbortController;
+}
+
+/**
+ * The cursor after an in-place refresh took its row out of the view: see
+ * `TableContainer.cursorGap`.
+ */
+interface CursorGap {
+  readonly cell: GridCell;
+  readonly rowId: number;
+  readonly pos: number;
+}
+
+/** What the rows of the view, and their order, are made of. */
+interface ViewParts {
+  readonly filters: readonly Filter[];
+  readonly sort: readonly SortColumn[];
+  readonly tableName: string | null;
+  readonly schema: readonly ColumnSchema[];
+}
+
+const viewParts = (state: TableState): ViewParts => ({
+  filters: state.filters.get(),
+  sort: state.sortColumns.get(),
+  tableName: state.tableName.get(),
+  schema: state.schema.get(),
+});
+
+const sameView = (a: ViewParts, b: ViewParts): boolean =>
+  a.filters === b.filters &&
+  a.sort === b.sort &&
+  a.tableName === b.tableName &&
+  a.schema === b.schema;
+
+/**
+ * Whether the view `now` has the rows of the view `was`, in the same order,
+ * provably: the same filters and sort over the same data, under another
+ * relation or schema, as when a derived column is added, edited or
+ * removed, neither naming a derived column, whose values may have changed.
+ * A raw SQL filter can name any column. The sort is compared key by key: a
+ * derived column's removal sets it anew, with the same keys when none named
+ * the column.
+ */
+function keepsRows(was: ViewParts, now: ViewParts): boolean {
+  const sameSort =
+    was.sort.length === now.sort.length &&
+    was.sort.every(
+      (key, i) => key.column === now.sort[i]!.column && key.direction === now.sort[i]!.direction,
+    );
+  if (was.filters !== now.filters || !sameSort || !was.tableName || !now.tableName) return false;
+  const derived = new Set(
+    [...was.schema, ...now.schema].filter((c) => c.isDerived).map((c) => c.name),
+  );
+  return (
+    !now.filters.some((f) => f.type === 'raw-sql' || derived.has(f.column)) &&
+    !now.sort.some((s) => derived.has(s.column))
+  );
 }
 
 /** The panels and modals the table opens, one at a time, named as their fields are. */
@@ -194,8 +312,11 @@ interface RunningExtract {
  */
 interface PanelRequest {
   readonly panel: PanelName;
-  /** The value inspector's: the cell asked for. */
-  readonly cell?: { readonly row: number; readonly column: string } | undefined;
+  /**
+   * The value inspector's: the cell asked for, which follows its row through
+   * an in-place refresh of the annotated rows.
+   */
+  cell?: GridCell | undefined;
   /** The value inspector's: whether focus was in the table when it was asked for. */
   readonly focusInTable?: boolean | undefined;
 }
@@ -297,6 +418,58 @@ export class TableContainer {
   // Keyboard navigation / shortcuts
   private keyboardNavigator: KeyboardNavigator | null = null;
 
+  // Annotation navigation, a lazy chunk: built the first time
+  // `actions.nextAnnotation`, `previousAnnotation` or `revealRow` runs, or
+  // the first time the annotated view looks for the cursor's row beyond the
+  // rows the body holds (see followCursorRow and learnCursorRow); and the
+  // promise of it while its chunk loads.
+  private annotationNavigator: AnnotationNavigator | Promise<AnnotationNavigator> | null = null;
+  // The filters whose cycle `createDataTable` last said had settled (their
+  // row count is in state), and the navigations waiting for the filters in
+  // state to settle. `null` until it says so, and outside it: nothing waits.
+  private settledFilters: readonly Filter[] | null = null;
+  private filterCycleWaiters: (() => void)[] = [];
+  // The DuckDB table of annotated rows an annotated filter reads, kept
+  // current with the annotation store: a lazy chunk, loaded the first time
+  // an annotated filter of this table comes into force or a reader asks for
+  // the table. What reads it goes through the source, which loads it.
+  private annotatedRows: AnnotatedRowsTable | null = null;
+  private annotatedRowsLoad: Promise<AnnotatedRowsTable> | null = null;
+  private annotatedRowsSource: AnnotatedRowsSource | null = null;
+  // Its chunk did not load: the reads it held go ahead, until the filters
+  // change and it is asked for again
+  private annotatedRowsFailed = false;
+  // The in-place refresh of the rows an annotated filter keeps, until it
+  // settles or a newer one starts: the cursor it found, and that cursor's
+  // row, which the cursor follows once the rows are back. See
+  // refreshAnnotatedView.
+  private annotatedRefresh: AnnotatedRefresh | null = null;
+  // Moves with each in-place refresh: a position navigation saw before one
+  // may hold another row after it.
+  private annotatedViewVersion = 0;
+  // Settles once the latest in-place refresh has: its rows, its count, and
+  // the cursor back on its row.
+  private annotatedViewSettled: Promise<void> = Promise.resolve();
+  // The cursor, after an in-place refresh took its row out of the view: the
+  // row that left, by `__rowid__`, and the gap it left, `pos` rows into the
+  // view, where the cursor is (on the last row, when the gap is past it).
+  // Navigation searches from the gap. It holds while the cursor is that very
+  // cell, until a change of the view.
+  private cursorGap: CursorGap | null = null;
+  // The row the cursor is on, by `__rowid__`: noted when the cursor is put
+  // there, or, the row still loading then, once it renders. An in-place
+  // refresh follows that row when the body no longer holds it, as after the
+  // user scrolled far from the cursor. For `cell`, the cursor it was noted
+  // for, only. A change of the view that may have put another row there
+  // forgets it, and learns the row there now: from the body, or, the user
+  // having scrolled far from the cursor, by a query (see learnCursorRow).
+  private cursorRow: { readonly cell: GridCell; rowId: number | null } | null = null;
+  // Aborts that query, once the row it learns is noted otherwise.
+  private cursorRowQuery: AbortController | null = null;
+  // Set while the table moves the cursor itself, to follow its row through
+  // an in-place refresh: a navigation waiting for that refresh goes on.
+  private followingRow = false;
+
   // True while `.dt-grid` carries the ARIA grid semantics. Flipped by
   // `applyGridSemantics()` from render(); read by the aria-rowcount /
   // aria-colcount / aria-activedescendant writers so they never annotate a
@@ -306,6 +479,10 @@ export class TableContainer {
 
   // Every sideways scroll of the header and body, and the sync between them
   private readonly columnWindow: ColumnWindowController;
+
+  // The grid's one subscriber to the annotation store, when there is one:
+  // the body and the headers it builds leave their annotations to it.
+  private readonly annotationOverlay: AnnotationOverlay | null;
 
   // ARIA live region for screen reader announcements
   private liveRegion: HTMLElement | null = null;
@@ -351,6 +528,9 @@ export class TableContainer {
       rowCacheRows: undefined as unknown as number,
       prefetch: undefined as unknown as boolean,
       onError: undefined as unknown as (error: DataTableError) => void,
+      annotationNavigation: true,
+      onAnnotatedRowsChange: undefined as unknown as () => void,
+      onAnnotatedRowsError: undefined as unknown as (error: DataTableError) => void,
       ...options,
       // Always qualified, never taken verbatim: a caller-supplied `instanceId`
       // reused across two tables would mint identical cell ids and leave both
@@ -507,6 +687,19 @@ export class TableContainer {
       onBodyResize: () => this.tableBody?.getVirtualScroller().refresh(),
     });
 
+    // Before anything else hears the annotation store, so the grid is up to
+    // date when the session's auto-save and app code hear of a change.
+    const annotations = this.resolvedOptions.annotations;
+    this.annotationOverlay = annotations
+      ? new AnnotationOverlay({
+          store: annotations,
+          getBody: () => this.tableBody,
+          getHeader: (column) => this.headersByColumn.get(column),
+          getHeaders: () => this.columnHeaders,
+          popover: this.resolvedOptions.annotationPopover,
+        })
+      : null;
+
     // Set up resize observer
     this.resizeObserver = this.setupResizeObserver();
 
@@ -545,11 +738,370 @@ export class TableContainer {
         getBridge: () => this.bridge,
         announce: (message) => this.announce(message),
         messages: this.messages,
+        navigateAnnotations:
+          this.resolvedOptions.annotationNavigation !== false
+            ? (direction) => this.navigateAnnotations(direction)
+            : undefined,
       });
+    }
+    if (this.actions && this.bridge) {
+      this.actions.setAnnotationNavigation(() => this.loadAnnotationNavigator());
+    }
+
+    // The DuckDB table of annotated rows, which an annotated filter keeps
+    // rows by, in a chunk of its own. Until the chunk is in, the reads an
+    // annotated filter of this table makes wait, as nothing has built its
+    // table, and asking for them starts the load; the table then holds them
+    // itself until its first sync lands.
+    if (actions && this.bridge && this.resolvedOptions.annotations) {
+      const load = (): void => void this.loadAnnotatedRows().catch(() => undefined);
+      this.unsubscribes.push(
+        actions.addReadGate({
+          isOpen: () => {
+            if (!this.awaitsAnnotatedRows()) return true;
+            load();
+            return false;
+          },
+        }),
+        this.state.filters.subscribe(() => {
+          this.annotatedRowsFailed = false;
+          if (this.awaitsAnnotatedRows()) load();
+        }),
+      );
+      // A change of the view ends an in-place refresh running, and what
+      // was known of the cursor: the row it is on, and the gap it stands
+      // at. Not when the view provably keeps its rows in their order, as
+      // for a derived column added that nothing filters or sorts by: the
+      // cursor's place still names its row, and a refresh running still
+      // follows its row, in the body built for the new relation if one is.
+      let seen = viewParts(this.state);
+      const viewChanged = (): void => {
+        const was = seen;
+        seen = viewParts(this.state);
+        // Each part it is made of says so, after a batch that set several.
+        if (sameView(was, seen) || keepsRows(was, seen)) return;
+        this.annotatedRefresh?.controller.abort();
+        this.annotatedRefresh = null;
+        this.cursorGap = null;
+        this.noteCursorRow(this.state.focusedCell.get(), null);
+        void this.learnCursorRow();
+      };
+      this.unsubscribes.push(
+        this.state.filters.subscribe(viewChanged),
+        this.state.sortColumns.subscribe(viewChanged),
+        this.state.tableName.subscribe(viewChanged),
+        this.state.schema.subscribe(viewChanged),
+        // The table's own moves note the row they follow themselves.
+        this.state.focusedCell.subscribe((cell) => {
+          if (!this.followingRow) this.noteCursorRow(cell);
+        }),
+      );
+      this.annotatedRowsSource = {
+        ensureFresh: (signal) => this.loadAnnotatedRows().then((rows) => rows.ensureFresh(signal)),
+      };
+      actions.setAnnotatedRowsSource(this.annotatedRowsSource);
     }
 
     // Initial render
     this.render();
+  }
+
+  /**
+   * Whether an annotated filter of this table's base table is in force
+   * while the chunk that builds its table of annotated rows is not in.
+   */
+  private awaitsAnnotatedRows(): boolean {
+    if (this.annotatedRows || this.annotatedRowsFailed || this.destroyed) return false;
+    const base = this.state.baseTableName.get() ?? this.state.tableName.get();
+    return this.state.filters.get().some((f) => f.type === 'annotated' && f.table === base);
+  }
+
+  /**
+   * The DuckDB table of annotated rows, built once its chunk is in. Once
+   * annotations change the rows an annotated filter keeps, it has the view
+   * refreshed in place (see {@link refreshAnnotatedView}). A load that
+   * fails is not kept, so the next need asks for the chunk again; the
+   * failure is reported, and the reads it held go ahead.
+   */
+  private loadAnnotatedRows(): Promise<AnnotatedRowsTable> {
+    const loading = (this.annotatedRowsLoad ??= import('../annotations/AnnotatedRowsTable').then(
+      ({ AnnotatedRowsTable }) => {
+        if (this.destroyed) throw new QueryError('Operation aborted', { code: 'QUERY_ABORTED' });
+        this.annotatedRows ??= new AnnotatedRowsTable({
+          state: this.state,
+          actions: this.actions!,
+          bridge: this.bridge!,
+          store: this.resolvedOptions.annotations!,
+          onRefresh: () => this.refreshAnnotatedView(),
+          onError: (error) => this.resolvedOptions.onAnnotatedRowsError?.(error),
+        });
+        // Its own gate holds the reads from here on.
+        this.actions?.readGateOpened();
+        return this.annotatedRows;
+      },
+      (cause: unknown) => {
+        if (this.annotatedRowsLoad === loading) this.annotatedRowsLoad = null;
+        const error = new ConfigurationError(
+          `The annotatedRows chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { code: 'CHUNK_LOAD_FAILED', cause, details: { panel: 'annotatedRows' } },
+        );
+        if (!this.destroyed) {
+          this.annotatedRowsFailed = true;
+          this.resolvedOptions.onError?.(error);
+          this.actions?.readGateOpened();
+        }
+        throw error;
+      },
+    ));
+    return loading;
+  }
+
+  /**
+   * Refresh the view in place, as a sync that changed the rows an annotated
+   * filter keeps asks: the body fetches the rows in view again, keeping the
+   * scroll position, and the facade counts them again.
+   *
+   * The cursor follows its row, which is noted now: at a gap a refresh left
+   * (see `cursorGap`), the row that left it; the row the body holds at the
+   * cursor, or, the user having scrolled far from it, the one noted when
+   * the cursor was put there, or learned since the view changed (see
+   * `cursorRow`); or the row a refresh still running follows, whose rows
+   * are not back. Once the rows in view are back, a cursor whose row is
+   * among them goes to it at once, before a key can act from the row now in
+   * its place. Else, once the count is in, one query says where the row
+   * stands: off the rows held, or past the view's old end, the cursor goes
+   * to it; gone from the view, the cursor goes to the gap it left, where
+   * the first row after it is now (or, past the last row, to the last), and
+   * navigation searches from that gap. Nothing scrolls. Nothing follows if
+   * the cursor moved meanwhile, a newer refresh started or the view changed
+   * in a way that may move rows, nor when the cursor's row is not known:
+   * the cursor stays where it is, and the row there is learned for the next
+   * refresh. A change that moves none, as a derived column added that
+   * nothing filters or sorts by, lets the follow go on, in the body built
+   * for it.
+   */
+  private refreshAnnotatedView(): void {
+    const body = this.tableBody;
+    this.annotatedViewVersion++;
+    const running = this.annotatedRefresh;
+    running?.controller.abort();
+    const cursor = this.state.focusedCell.get();
+    const carried = running !== null && running.cursor === cursor;
+    let rowId: number | null = null;
+    if (cursor && cursor.row >= 0) {
+      rowId = carried
+        ? running.rowId
+        : (this.cursorGapAt(cursor)?.rowId ??
+          body?.cachedRowId(cursor.row) ??
+          (this.cursorRow?.cell === cursor ? this.cursorRow.rowId : null));
+    }
+    const refresh: AnnotatedRefresh = {
+      origin: carried ? running.origin : cursor,
+      cursor,
+      rowId,
+      controller: new AbortController(),
+    };
+    this.annotatedRefresh = refresh;
+    body?.refresh();
+    const recounted = this.resolvedOptions.onAnnotatedRowsChange?.();
+    // Settled once the cursor is placed and the count is in, both of which
+    // a navigation reads, though the cursor may be placed before the count.
+    // The count settles however its cycle ends: superseded, failed, or the
+    // table destroyed.
+    const settled = (): void => undefined;
+    this.annotatedViewSettled = Promise.all([
+      this.followCursorRow(refresh, recounted),
+      recounted,
+    ]).then(settled, settled);
+  }
+
+  /**
+   * The cursor following its row through the in-place refresh `refresh`;
+   * see {@link refreshAnnotatedView}. Never rejects: a query that fails
+   * leaves the cursor where it is.
+   */
+  private async followCursorRow(
+    refresh: AnnotatedRefresh,
+    recounted: Promise<void> | void,
+  ): Promise<void> {
+    try {
+      // The rows in view back: those the body fetches again, or, a body
+      // built meanwhile for a relation that keeps the view's rows (see
+      // `viewChanged` in the constructor), those it fetches first.
+      await this.whenBodyReady();
+      if (!this.isFollowing(refresh)) return;
+      // Among the rows fetched, it is below the old row count and the new:
+      // the count cannot move the cursor from it, so it need not be waited for.
+      const held = this.tableBody!.cachedPositionOf(refresh.rowId!);
+      if (held !== null) {
+        this.placeCursor(refresh, held, null);
+        return;
+      }
+      await recounted;
+      if (!this.isFollowing(refresh)) return;
+      const navigator = await this.loadAnnotationNavigator();
+      if (!this.isFollowing(refresh)) return;
+      const { before, shown } = await navigator.locate(refresh.rowId!, refresh.controller.signal);
+      if (!this.isFollowing(refresh)) return;
+      const last = effectiveRowCount(this.state) - 1;
+      if (shown) this.placeCursor(refresh, before, null);
+      else if (last >= 0) this.placeCursor(refresh, Math.min(before, last), before);
+    } catch {
+      // Aborted by a newer refresh or a change of the view, or failed: the
+      // cursor stays where it is.
+    } finally {
+      if (this.annotatedRefresh === refresh) {
+        // Not placed: which row the cursor is on is not known, until it is
+        // learned (see learnCursorRow).
+        this.annotatedRefresh = null;
+        const cursor = this.state.focusedCell.get();
+        if (this.cursorGapAt(cursor)) this.cursorGap = null;
+        if (cursor === refresh.cursor) {
+          this.noteCursorRow(cursor, null);
+          void this.learnCursorRow();
+        }
+      }
+    }
+  }
+
+  /**
+   * Whether `refresh` has a cursor to follow still: no newer refresh
+   * started, nor a change of the view that may have moved rows (see
+   * `viewChanged` in the constructor), the cursor not moved meanwhile, its
+   * row known, and a body to follow it in.
+   */
+  private isFollowing(refresh: AnnotatedRefresh): boolean {
+    return (
+      !this.destroyed &&
+      this.annotatedRefresh === refresh &&
+      refresh.cursor !== null &&
+      refresh.rowId !== null &&
+      this.tableBody !== null &&
+      this.state.focusedCell.get() === refresh.cursor
+    );
+  }
+
+  /**
+   * End `refresh` with the cursor at `row`, in its column: its row's new
+   * position, or, given `gap`, the row having left the view, where the gap
+   * it left is (`gap` rows into the view; on the last row when the gap is
+   * past it). The table's own move, which a navigation waiting for the
+   * refresh does not take for the user's. What waits on the cursor's cell,
+   * or shows it, follows the row: an open of the value inspector asked for
+   * there, and the inspector itself. At a gap, the open is dropped, and the
+   * inspector stays on the value it shows.
+   */
+  private placeCursor(refresh: AnnotatedRefresh, row: number, gap: number | null): void {
+    this.annotatedRefresh = null;
+    const cursor = refresh.cursor!;
+    if (row !== cursor.row) {
+      this.followingRow = true;
+      try {
+        this.actions?.setFocusedCell({ row, column: cursor.column });
+      } finally {
+        this.followingRow = false;
+      }
+    }
+    const placed = this.state.focusedCell.get();
+    this.cursorGap =
+      gap !== null && placed ? { cell: placed, rowId: refresh.rowId!, pos: gap } : null;
+    // On its row; at a gap, on the row after it, once that renders.
+    this.noteCursorRow(placed, gap === null ? refresh.rowId : null);
+
+    const from = refresh.origin ?? cursor;
+    const at = (cell: GridCell | null | undefined): boolean =>
+      cell != null && cell.row === from.row && cell.column === from.column;
+    const to = gap === null ? row : null;
+    if (at(this.pendingInspect)) {
+      this.pendingInspect = to === null ? null : { row: to, column: from.column };
+    }
+    const request = this.panelRequest;
+    if (request?.panel === 'valueInspector' && at(request.cell)) {
+      if (to === null) this.panelRequest = null;
+      else request.cell = { row: to, column: from.column };
+    }
+    const shown = this.valueInspector?.getShown();
+    if (to !== null && shown && shown.row === from.row) this.valueInspector!.moveTo(to);
+  }
+
+  /**
+   * Note the row `cell`, the cursor, is on (see `cursorRow`): `rowId` when
+   * given, else the row the body holds there, if it does yet; one still
+   * loading is noted once it renders.
+   */
+  private noteCursorRow(
+    cell: GridCell | null,
+    rowId: number | null = cell ? (this.tableBody?.cachedRowId(cell.row) ?? null) : null,
+  ): void {
+    this.cursorRowQuery?.abort();
+    this.cursorRowQuery = null;
+    this.cursorRow = cell && cell.row >= 0 ? { cell, rowId } : null;
+  }
+
+  /** After a render: a cursor row still loading when it was noted, once it is there. */
+  private fillCursorRow(): void {
+    const noted = this.cursorRow;
+    if (!noted || noted.rowId !== null || noted.cell !== this.state.focusedCell.get()) return;
+    noted.rowId = this.tableBody?.cachedRowId(noted.cell.row) ?? null;
+  }
+
+  /**
+   * Under an annotated filter, learn the row the cursor is on, which the
+   * table has just forgotten (see `cursorRow`), so that the next in-place
+   * refresh can follow it: once the rows in view are back, the body's row
+   * there, or, the user having scrolled far from the cursor, one query for
+   * it. The row is noted only while the cursor is still there and the row
+   * not noted otherwise, and when no in-place refresh changed the view
+   * while the query ran. Never rejects: a query that fails leaves the row
+   * unknown, and the cursor where it is at the next refresh.
+   */
+  private async learnCursorRow(): Promise<void> {
+    const noted = this.cursorRow;
+    if (!noted || !this.state.filters.get().some((f) => f.type === 'annotated')) return;
+    const controller = new AbortController();
+    this.cursorRowQuery = controller;
+    const learning = (): boolean =>
+      !controller.signal.aborted &&
+      this.cursorRow === noted &&
+      noted.rowId === null &&
+      this.state.focusedCell.get() === noted.cell;
+    try {
+      await this.whenBodyReady();
+      if (!learning()) return;
+      noted.rowId = this.tableBody?.cachedRowId(noted.cell.row) ?? null;
+      if (noted.rowId !== null) return;
+      const navigator = await this.loadAnnotationNavigator();
+      if (!learning()) return;
+      const version = this.annotatedViewVersion;
+      const rowId = await navigator.rowIdAt(noted.cell.row, controller.signal);
+      if (learning() && this.annotatedViewVersion === version) noted.rowId = rowId;
+    } catch {
+      // Aborted, or failed: the row stays unknown.
+    } finally {
+      if (this.cursorRowQuery === controller) this.cursorRowQuery = null;
+    }
+  }
+
+  /** The gap `cell` stands at, while it is the cursor an in-place refresh left there; see `cursorGap`. */
+  private cursorGapAt(cell: GridCell | null): CursorGap | null {
+    const gap = this.cursorGap;
+    return gap && cell && gap.cell === cell ? gap : null;
+  }
+
+  /**
+   * Resolves once the in-place refreshes of the rows an annotated filter
+   * keeps have settled: the rows in view fetched again, their count in, and
+   * the cursor back on its row. At once when none is running. Navigation
+   * waits for it, so that the positions it reads are the view's.
+   *
+   * @internal
+   */
+  async whenAnnotatedViewSettled(): Promise<void> {
+    let settling: Promise<void>;
+    do {
+      settling = this.annotatedViewSettled;
+      await settling;
+    } while (settling !== this.annotatedViewSettled && !this.destroyed);
   }
 
   // =========================================
@@ -1221,6 +1773,10 @@ export class TableContainer {
       this.state.tableName.subscribe(() => this.closeForTable(closeInspector)),
       this.state.selectedRows.subscribe(closeInspector),
       this.state.focusedCell.subscribe((cell) => {
+        // The table's own move, following the cursor's row through an
+        // in-place refresh: what waits on the cell, or shows it, follows the
+        // row too (see placeCursor).
+        if (this.followingRow) return;
         const elsewhere = (at: { row: number; column: string }): boolean =>
           cell?.row !== at.row || cell.column !== at.column;
         const pending = this.pendingInspect;
@@ -1245,14 +1801,25 @@ export class TableContainer {
           ? this.state.filteredRows.get()
           : this.state.totalRows.get();
       if (focusedCell.row >= rowCount) {
-        if (rowCount === 0) {
-          this.actions?.clearFocusedCell();
-        } else {
-          this.actions?.setFocusedCell({
-            row: rowCount - 1,
-            column: focusedCell.column,
-          });
+        // The cursor an in-place refresh of the annotated rows follows: the
+        // refresh still puts it where its row is, or at the gap its row left.
+        const following = this.annotatedRefresh;
+        const refresh =
+          following?.cursor === focusedCell && following.rowId !== null ? following : null;
+        this.followingRow = refresh !== null;
+        try {
+          if (rowCount === 0) {
+            this.actions?.clearFocusedCell();
+          } else {
+            this.actions?.setFocusedCell({
+              row: rowCount - 1,
+              column: focusedCell.column,
+            });
+          }
+        } finally {
+          this.followingRow = false;
         }
+        if (refresh) refresh.cursor = this.state.focusedCell.get();
       }
     });
     this.unsubscribes.push(unsubFocusClamp);
@@ -1336,6 +1903,7 @@ export class TableContainer {
           messages: this.messages,
           showDerivedEditIcon: this.resolvedOptions.showDerivedColumnEditIcon !== false,
           annotations: this.resolvedOptions.annotations,
+          annotationSync: this.annotationOverlay ? 'owner' : undefined,
           annotationPopover: this.resolvedOptions.annotationPopover,
           columnHeaderTooltipPopover: this.resolvedOptions.columnHeaderTooltipPopover,
           announce: (message) => this.announce(message),
@@ -1634,6 +2202,7 @@ export class TableContainer {
               mountedColumns: this.columnWindow.mountedColumns,
               // headerHeight no longer needed - body scroll only contains body
               annotations: this.resolvedOptions.annotations,
+              annotationSync: this.annotationOverlay ? 'owner' : undefined,
               annotationPopover: this.resolvedOptions.annotationPopover,
               messages: this.messages,
               fetchBlockSize: this.resolvedOptions.fetchBlockSize,
@@ -1642,6 +2211,7 @@ export class TableContainer {
               onRowsRendered: () => {
                 this.syncActiveDescendant();
                 this.openPendingInspect();
+                this.fillCursorRow();
               },
               // Where the body parks real DOM focus when it is about to detach the
               // row holding it. Passed explicitly rather than rediscovered with
@@ -2476,6 +3046,138 @@ export class TableContainer {
     }
   }
 
+  // =========================================
+  // Annotation navigation
+  // =========================================
+
+  /**
+   * `F8` and its siblings: start a navigation when there are annotations to
+   * go to, and say whether the key was taken. There are when the store
+   * holds a row or cell annotation (a column annotation singles out no row)
+   * and the severity filter shows a severity, which the keys go to; else
+   * the key is the page's, and nothing is said. A navigation dropped for a
+   * newer one, a cursor move or a view change is the user's doing; any
+   * other failure goes to the `onError` option.
+   */
+  private navigateAnnotations(direction: 'next' | 'previous'): boolean {
+    const actions = this.actions;
+    const store = this.resolvedOptions.annotations;
+    if (!actions || !store || !this.state.tableName.get()) return false;
+    if (store.countOfScope('row') + store.countOfScope('cell') === 0) return false;
+    const shown = store.getSeverityFilter();
+    if (!shown.error && !shown.warning && !shown.info) return false;
+    (direction === 'next' ? actions.nextAnnotation() : actions.previousAnnotation()).catch(
+      (error: unknown) => {
+        if (this.destroyed) return;
+        if (error instanceof DataTableError) {
+          if (error.code !== 'QUERY_ABORTED') this.resolvedOptions.onError?.(error);
+          return;
+        }
+        // An error the library did not raise, as from a bridge of the app's
+        // own: reported as a query that failed, with it as the cause.
+        this.resolvedOptions.onError?.(
+          new QueryError(error instanceof Error ? error.message : String(error), {
+            code: 'QUERY_RUNTIME',
+            cause: error,
+          }),
+        );
+      },
+    );
+    return true;
+  }
+
+  /**
+   * The table's annotation navigator: its chunk loaded, and the navigator
+   * built, on first use, by a navigation or by the annotated view looking
+   * for the cursor's row, and the navigator itself from then on. A chunk
+   * that did not load is asked for again the next time, as the panels' are.
+   */
+  private loadAnnotationNavigator(): AnnotationNavigator | Promise<AnnotationNavigator> {
+    if (this.annotationNavigator) return this.annotationNavigator;
+    const loading = import('../annotations/AnnotationNavigator').then(
+      ({ AnnotationNavigator }) => {
+        const { actions, bridge } = this;
+        if (this.destroyed || !actions || !bridge) {
+          throw new QueryError('The table is destroyed', { code: 'NO_TABLE' });
+        }
+        const store = this.resolvedOptions.annotations ?? null;
+        return (this.annotationNavigator = new AnnotationNavigator({
+          state: this.state,
+          actions,
+          bridge,
+          store,
+          source: this.annotatedRowsSource ?? NO_ANNOTATED_ROWS,
+          messages: this.messages,
+          getTableBody: () => this.tableBody,
+          whenFilterCycleSettled: (signal) => this.whenFilterCycleSettled(signal),
+          whenAnnotatedViewSettled: () => this.whenAnnotatedViewSettled(),
+          viewVersion: () => this.annotatedViewVersion,
+          cursorGap: () => {
+            const gap = this.cursorGapAt(this.state.focusedCell.get());
+            return gap && { rowId: gap.rowId, pos: gap.pos };
+          },
+          isFollowingRow: () => this.followingRow,
+          revealColumn: (column) => void this.columnWindow.revealColumn(column),
+          closeOverlays: () => {
+            this.resolvedOptions.annotationPopover?.hide();
+            this.pendingInspect = null;
+            if (this.panelRequest?.panel === 'valueInspector') this.panelRequest = null;
+            this.valueInspector?.close();
+          },
+          announce: (message) => this.announce(message),
+        }));
+      },
+      (cause: unknown) => {
+        throw new ConfigurationError(
+          `The annotationNavigator chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { code: 'CHUNK_LOAD_FAILED', cause, details: { panel: 'annotationNavigator' } },
+        );
+      },
+    );
+    this.annotationNavigator = loading;
+    loading.catch(() => {
+      if (this.annotationNavigator === loading) this.annotationNavigator = null;
+    });
+    return loading;
+  }
+
+  /**
+   * Say that the filter cycle of `filters` has settled: their row count is
+   * in `state.filteredRows`, and the grid's scroll range follows it.
+   * `createDataTable` calls it from its crossfilter coordinator. Navigation
+   * waits for the filters in state to settle before it scrolls; a container
+   * nobody calls this on does not wait.
+   *
+   * @internal
+   */
+  filterCycleSettled(filters: readonly Filter[]): void {
+    this.settledFilters = filters;
+    if (filters !== this.state.filters.get()) return;
+    for (const resolve of this.filterCycleWaiters.splice(0)) resolve();
+  }
+
+  /**
+   * Resolves once the filters in state have settled; see
+   * {@link filterCycleSettled}. A wait `signal` aborts is dropped: its
+   * navigation has stopped waiting.
+   */
+  private whenFilterCycleSettled(signal?: AbortSignal): Promise<void> {
+    const settled = this.settledFilters;
+    if (settled === null || settled === this.state.filters.get()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const drop = (): void => {
+        const index = this.filterCycleWaiters.indexOf(waiter);
+        if (index !== -1) this.filterCycleWaiters.splice(index, 1);
+      };
+      const waiter = (): void => {
+        signal?.removeEventListener('abort', drop);
+        resolve();
+      };
+      signal?.addEventListener('abort', drop, { once: true });
+      this.filterCycleWaiters.push(waiter);
+    });
+  }
+
   /**
    * Where fixed-position modals owned by this table mount. Returns the
    * `portalTarget` option if supplied, otherwise `document.body`. Exposed
@@ -2629,6 +3331,18 @@ export class TableContainer {
   }
 
   /**
+   * The DuckDB table of the annotated rows, for what reads it: the
+   * annotated filter and annotation navigation. Its `ensureFresh` loads the
+   * table's chunk first, the first time. `null` without an annotation store,
+   * actions and a bridge.
+   *
+   * @internal
+   */
+  getAnnotatedRows(): AnnotatedRowsSource | null {
+    return this.annotatedRowsSource;
+  }
+
+  /**
    * Get all column header instances, one per visible column, in order.
    * Useful for accessing visualization containers in each header.
    *
@@ -2661,6 +3375,23 @@ export class TableContainer {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+
+    // First, so no annotation change reaches a part being torn down
+    this.annotationOverlay?.destroy();
+
+    // Stop syncing the annotated rows, and let nothing wait for them: the
+    // gate held for their chunk goes with the subscriptions below. The
+    // queries for where the cursor's row is now, and for which row it is on,
+    // are aborted.
+    this.annotatedRows?.destroy();
+    this.annotatedRows = null;
+    this.annotatedRefresh?.controller.abort();
+    this.annotatedRefresh = null;
+    this.cursorRowQuery?.abort();
+    if (this.annotatedRowsSource) {
+      this.actions?.setAnnotatedRowsSource(null);
+      this.annotatedRowsSource = null;
+    }
 
     // Destroy all column headers
     this.destroyColumnHeaders();
@@ -2754,6 +3485,20 @@ export class TableContainer {
       this.keyboardNavigator.destroy();
       this.keyboardNavigator = null;
     }
+
+    // Abort a navigation running, and leave the actions none to run
+    const navigator = this.annotationNavigator;
+    this.annotationNavigator = null;
+    if (navigator instanceof Promise) {
+      void navigator.then(
+        (built) => built.destroy(),
+        () => undefined,
+      );
+    } else {
+      navigator?.destroy();
+    }
+    this.filterCycleWaiters = [];
+    if (this.actions && this.bridge) this.actions.setAnnotationNavigation(null);
 
     // Stop syncing and scrolling the header and body
     this.columnWindow.destroy();

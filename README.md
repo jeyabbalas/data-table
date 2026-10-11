@@ -5,6 +5,11 @@ Built on [DuckDB WASM](https://duckdb.org/docs/api/wasm/overview) — all
 analytics run entirely in the browser, so no data ever leaves the user's
 machine.
 
+**[Try the live demo](https://jeyabbalas.github.io/data-table/)**: open a CSV,
+JSON or Parquet file, or an Excel workbook, which the demo converts, and
+explore it. See also the [examples](https://jeyabbalas.github.io/data-table/examples/)
+and the [keyboard shortcuts](https://jeyabbalas.github.io/data-table/shortcuts/).
+
 - Per-column visualizations (histograms, value counts, date/time histograms)
   with brush/click crossfilter; nested columns get a non-null / null summary
   bar, which does not filter
@@ -22,8 +27,9 @@ machine.
   value inspector that shows a whole value as a keyboard tree (`F2` or
   double-click) and copies it as JSON, and an extract button that turns any
   field into a column of its own (`actions.addNestedFieldColumn` in code)
-- Programmatic row / column / cell annotations — severity tiers, intersection
-  popover, JSON round-trip, session-persisted
+- Programmatic row / column / cell annotations — severity tiers, a popover,
+  JSON round-trip, session-persisted, tested at a million; `F8` goes from one
+  to the next, and a filter shows only the annotated rows
 - Programmatic column-header tooltips — XSS-safe structured popover
   (title / description / items + enum chips)
 - Custom column-stats panels — replace the built-in two-line stats
@@ -316,15 +322,16 @@ Check `table.isDestroyed()` in long-lived closures before calling them.
 
 All features are on by default; pass `false` or a config object to customize:
 
-| Option             | Default | Notes                                                                                           |
-| ------------------ | ------- | ----------------------------------------------------------------------------------------------- |
-| `persistence`      | `true`  | Auto-save filters/sort/columns to IndexedDB                                                     |
-| `presets`          | `true`  | Show the "Presets" button for saving filter sets                                                |
-| `undoRedo`         | `true`  | Ctrl/Cmd+Z and Ctrl+Y keyboard shortcuts                                                        |
-| `expressionFilter` | `true`  | Show the "Expression" (raw SQL) filter button                                                   |
-| `derivedColumns`   | `true`  | Show the "+", `f(x)` and nested/JSON extract buttons, and the value inspector's "Add as column" |
-| `visualizations`   | `true`  | Auto-attach column header charts (histograms, value counts, …)                                  |
-| `exportDialog`     | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal                                       |
+| Option                 | Default | Notes                                                                                           |
+| ---------------------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `persistence`          | `true`  | Auto-save filters/sort/columns to IndexedDB                                                     |
+| `presets`              | `true`  | Show the "Presets" button for saving filter sets                                                |
+| `undoRedo`             | `true`  | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl+Y keyboard shortcuts                                      |
+| `expressionFilter`     | `true`  | Show the "Expression" (raw SQL) filter button                                                   |
+| `derivedColumns`       | `true`  | Show the "+", `f(x)` and nested/JSON extract buttons, and the value inspector's "Add as column" |
+| `visualizations`       | `true`  | Auto-attach column header charts (histograms, value counts, …)                                  |
+| `exportDialog`         | `true`  | `table.openExportDialog()` opens a CSV/JSON/Parquet modal                                       |
+| `annotationNavigation` | `true`  | `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` go to the next / previous annotation                    |
 
 For the full options surface (mounting, worker, UI, customization), see
 [docs/api-reference.md#createdatatableoptions](./docs/api-reference.md#createdatatableoptions).
@@ -432,8 +439,9 @@ when DuckDB does not start.
 
 The grid targets WCAG 2.1 AA: `role="grid"` with `aria-rowcount` /
 `aria-colcount`, a single cursor published via `aria-activedescendant` and
-driven by the arrow keys (plus `F2` to reach a column's controls and
-`Shift+F2` to resize and reorder one), a tab order that doesn't grow with
+driven by the arrow keys (plus `F2` to reach a column's controls,
+`Shift+F2` to resize and reorder one, and `F8` to go to the next
+annotation), a tab order that doesn't grow with
 column count, polite `aria-live` announcements on filter/sort/row-count
 changes, focus trap + escape-to-close on every modal, and `axe-core` as a CI
 gate. Known out-of-scope: in-cell editing, mobile touch gestures, RTL.

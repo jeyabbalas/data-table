@@ -23,7 +23,7 @@ Eight hand-authored rows with columns `name`, `role`, `team`, `joined`, `active`
 
 1. The table renders immediately — open DevTools ▸ Network and confirm no request is made for data (only the library bundle and the HTML page).
 2. Column types are inferred from the JSON values: `joined` becomes a numeric histogram, `active` a boolean value-counts, `role`/`team` categorical.
-3. Click column headers to sort; click filter icons to filter.
+3. Click a column's sort button to sort; click filter icons to filter.
 
 ## Why inline data?
 

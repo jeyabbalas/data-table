@@ -29,7 +29,8 @@ Opens Vite at `http://localhost:5173/data-table/` (the base path is set in `vite
 
 Available routes:
 
-- `/` — the full demo app (`index.html` at repo root), which is the richest working reference for the library.
+- `/` — the full demo app (`index.html` at repo root), which is the richest working reference for the library. Besides CSV, JSON and Parquet it opens Excel workbooks (`.xlsx`, `.xls`), converted in the browser with [SheetJS](https://sheetjs.com/) (a dev dependency, never part of the library), with a sheet picker for a workbook of several sheets.
+- `/shortcuts/` — every keyboard shortcut and mouse gesture of the table (`shortcuts/index.html`).
 - `/examples/` — the examples landing page (`examples/index.html`) linking to each runnable example.
 - `/examples/NN-name/` — individual examples (`examples/01-minimal/` … `examples/14-standalone-sql-editor/`), each with its own `index.html`, `main.ts`, and `README.md`.
 
@@ -38,7 +39,7 @@ The dev server also serves data, at the server's root rather than under the `/da
 - `/fixtures/*` — the test datasets in `tests/fixtures/datasets/`, by their path there: `http://localhost:5173/fixtures/parquet/nested-stress-tests.parquet`. The demo's example chips name the copies on GitHub's `main`; in development they load these instead, so they work offline, and a fixture added on a branch works before it reaches `main`.
 - `/large-data/*` — files in a local `tmp-large-data/` directory at the repository root, streamed from disk, so a 1 GB file is not read into memory. The directory is not in the repository: create it, with a `.gitignore` containing `*` to keep its files out of commits, and put large files there, such as the 200,000-row × 1,000-column Parquet used for manual checks. Without the directory the route does not exist.
 
-Load either from the demo's URL box, or with a relative `?url=`, which the demo resolves against the page as `fetch` does: `http://localhost:5173/data-table/?url=/large-data/wide_200k_x_1000.parquet`.
+Load either from the demo's URL box, or with a relative `?url=`, which the demo resolves against the page: `http://localhost:5173/data-table/?url=/large-data/wide_200k_x_1000.parquet`. A workbook's link names its sheet too, as `&sheet=`.
 
 In development the demo also sets `window.__dtDemo`, whose `table` is the current `DataTable` (`null` before the first load), for browser tests and for trying the API from DevTools: `await window.__dtDemo.table.actions.getCellValue(0, 'tags')`. Production builds leave it out.
 
@@ -203,6 +204,7 @@ tests/                  # vitest suites mirroring src/
 examples/               # 14 runnable single-feature examples
 docs/                   # API reference, guides, concepts, integrations, troubleshooting
 demo/                   # integrated showcase app
+shortcuts/              # the demo's keyboard shortcuts page
 scripts/                # build-support scripts (check-css-vars.mjs, check-dts.mjs)
 vite.config.ts          # library build (targets dist/)
 vite.demo.config.ts     # demo + examples dev/build (targets demo-dist/)

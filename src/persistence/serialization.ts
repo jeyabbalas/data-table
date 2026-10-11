@@ -7,6 +7,7 @@
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { normalizeColumnHeaderTooltip } from '../core/columnHeaderTooltip';
+import { DataTableError } from '../core/errors';
 import { batch } from '../core/Signal';
 import {
   type TableState,
@@ -20,6 +21,14 @@ import type { VectorColumnDef } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { Filter } from '../filters/FilterTypes';
 import { normalizeRestoredFilters } from '../filters/restoredFilters';
+import {
+  adoptAnnotationFile,
+  annotationsDropOf,
+  holdBackSnapshotAnnotations,
+  noteAnnotationsRefused,
+  setSnapshotAnnotations,
+} from './annotationPersistence';
+import type { AnnotationFileCache, AnnotationsDropReason } from './annotationPersistence';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
@@ -72,7 +81,9 @@ export function deserializeStateSnapshot(
   const filters = s.filters
     .map(deserializeFilter)
     .filter(
-      (f): f is Filter => f !== null && (f.type === 'raw-sql' || effectiveValid.has(f.column)),
+      (f): f is Filter =>
+        f !== null &&
+        (f.type === 'raw-sql' || f.type === 'annotated' || effectiveValid.has(f.column)),
     );
 
   const sortColumns = s.sortColumns.filter((sc) => effectiveValid.has(sc.column));
@@ -151,6 +162,53 @@ export function deserializeStateSnapshot(
 
 // ── Session snapshot (full table state + optional undo stacks) ────────
 
+/** Options for {@link snapshotFromState}. */
+export interface SnapshotOptions {
+  /**
+   * Whether the snapshot carries the annotations themselves (default `true`);
+   * the severity filter is captured either way. `AutoSave` turns it off once
+   * the annotations no longer fit in the IndexedDB quota, and a
+   * `SessionStore` then leaves the stored ones as they are.
+   */
+  annotations?: boolean;
+  /**
+   * Whether the annotations' file is taken only when the snapshot's
+   * `annotations` is first read (default `false`), which a `SessionStore`
+   * that finds them unchanged never does. Read once the annotation store's
+   * content has changed, it is `undefined`, and a `SessionStore` saves the
+   * snapshot as if they were held back. `AutoSave` asks for it when it saves
+   * to a `SessionStore`.
+   */
+  lazyAnnotations?: boolean;
+  /**
+   * Without `lazyAnnotations`, the file to hand out: the same object while
+   * the annotations do not change.
+   *
+   * @internal
+   */
+  annotationFiles?: AnnotationFileCache | undefined;
+}
+
+/**
+ * Part of a saved session that its restore left out, having restored the
+ * rest: today, annotations the session store could not attach to the
+ * snapshot (noted on it by `SessionStore.load`), or that
+ * `AnnotationStore.loadJSON` refused. The facade reports it as a `warning`
+ * event.
+ */
+export interface RestoreIssue {
+  code: 'PERSISTENCE_ANNOTATIONS_DROPPED';
+  tableName: string | null;
+  details: {
+    reason: AnnotationsDropReason;
+    /** How many annotations the session was saved with, when known. */
+    count?: number;
+    /** The refusal's `DataTableError.code`, for one that has a code. */
+    errorCode?: string;
+    errorMessage?: string;
+  };
+}
+
 /**
  * Capture the current TableState as a serializable SessionSnapshot.
  *
@@ -159,12 +217,17 @@ export function deserializeStateSnapshot(
  *
  * If an UndoManager is provided, its undo/redo stacks are serialized
  * and included in the snapshot for persistence across refreshes.
+ *
+ * The annotations' file carries the token of the annotation store's
+ * content, the same until it changes, which a `SessionStore` compares to
+ * tell whether to write them; a custom store must not change the file.
  */
 export function snapshotFromState(
   state: TableState,
   undoManager?: UndoManager,
   presetManager?: FilterPresetManager,
   annotationStore?: AnnotationStore,
+  options: SnapshotOptions = {},
 ): SessionSnapshot {
   const snapshot: SessionSnapshot = {
     version: SNAPSHOT_VERSION,
@@ -241,8 +304,17 @@ export function snapshotFromState(
     }
   }
 
-  if (annotationStore && annotationStore.count() > 0) {
-    snapshot.annotations = annotationStore.toJSON();
+  if (annotationStore) {
+    if (options.annotations !== false) {
+      setSnapshotAnnotations(
+        snapshot,
+        annotationStore,
+        options.lazyAnnotations === true,
+        options.annotationFiles,
+      );
+    } else if (annotationStore.count() > 0) {
+      holdBackSnapshotAnnotations(snapshot);
+    }
   }
 
   // Capture the severity filter only when the user has toggled at least one
@@ -274,7 +346,8 @@ export function snapshotFromState(
  * otherwise fail every query on text that is not JSON; a range filter on a
  * TIME WITH TIME ZONE column whose bounds have no offset compares the time
  * of day its column's chart shows; and a range filter's `valueType: 'time'`
- * on a column that is not TIME or TIME WITH TIME ZONE goes.
+ * on a column that is not TIME or TIME WITH TIME ZONE goes. An annotated
+ * filter keeps the annotated rows of this table, the one it is restored to.
  * Only the schema's columns are known here, not the derived columns the
  * snapshot brings back. The snapshot's column order is made
  * consistent ({@link consistentColumnOrder}): the visible columns as the
@@ -284,6 +357,9 @@ export function snapshotFromState(
  * undo and redo entries saved with the session are made consistent too.
  *
  * Does NOT restore tableName (it comes from data loading, not the snapshot).
+ *
+ * Annotations `loadJSON` refuses are left out and reported to `onIssue`;
+ * the rest of the session is restored either way.
  */
 export function restoreStateFromSnapshot(
   state: TableState,
@@ -291,6 +367,7 @@ export function restoreStateFromSnapshot(
   undoManager?: UndoManager,
   presetManager?: FilterPresetManager,
   annotationStore?: AnnotationStore,
+  onIssue?: (issue: RestoreIssue) => void,
 ): void {
   const schemaColumns = state.schema.get();
   if (schemaColumns.length === 0) return;
@@ -305,17 +382,22 @@ export function restoreStateFromSnapshot(
   }
 
   const allColumnNames = schemaColumns.map((c) => c.name);
+  // The table an annotated filter reads the annotated rows of: this one.
+  const baseTable = state.baseTableName.get() ?? state.tableName.get();
 
   // Filters: deserialize and drop stale column references.
-  // Raw SQL filters use synthetic column keys that aren't in the schema —
-  // they must bypass column validation to survive session restore.
+  // Raw SQL and annotated filters use synthetic column keys that aren't in
+  // the schema — they must bypass column validation to survive session restore.
   const filters = normalizeRestoredFilters(
     snapshot.filters
       .map(deserializeFilter)
       .filter(
-        (f): f is Filter => f !== null && (f.type === 'raw-sql' || validColumns.has(f.column)),
+        (f): f is Filter =>
+          f !== null &&
+          (f.type === 'raw-sql' || f.type === 'annotated' || validColumns.has(f.column)),
       ),
     schemaColumns,
+    baseTable,
   );
 
   // Sort: drop stale column references
@@ -425,7 +507,10 @@ export function restoreStateFromSnapshot(
     }
     const restore = (s: SerializedStateSnapshot): StateSnapshot => {
       const entry = deserializeStateSnapshot(s, validColumns, hydratedPool);
-      return { ...entry, filters: normalizeRestoredFilters(entry.filters, schemaColumns) };
+      return {
+        ...entry,
+        filters: normalizeRestoredFilters(entry.filters, schemaColumns, baseTable),
+      };
     };
     const deserialized = {
       undoStack: snapshot.undoStack.map(restore),
@@ -439,14 +524,39 @@ export function restoreStateFromSnapshot(
     presetManager.loadPresets(snapshot.filterPresets);
   }
 
-  // Restore annotations if present. A corrupt blob (e.g. from a manual edit
-  // of IndexedDB) must not block session restore for the rest of the state —
-  // match the "silently drop stale references" posture used above.
+  // Annotations the session store could not attach to the snapshot, which
+  // it noted on it: reported, whoever owns the store.
+  const drop = annotationsDropOf(snapshot);
+  if (drop !== undefined) {
+    onIssue?.({
+      code: 'PERSISTENCE_ANNOTATIONS_DROPPED',
+      tableName: snapshot.tableName,
+      details: {
+        reason: drop.reason,
+        ...(drop.count !== undefined ? { count: drop.count } : {}),
+      },
+    });
+  }
+
+  // Restore annotations if present. A file `loadJSON` refuses (a manual edit
+  // of IndexedDB, a newer file version) must not block session restore for
+  // the rest of the state: it is reported, and the store stays empty, while
+  // the stored record stays as it is until the table has annotations to
+  // write. An id the file repeats keeps its first annotation, as sessions
+  // saved before `loadJSON` refused repeats can hold some. The store then
+  // adopts the file it came from, so the next save writes no annotations
+  // until they change; with a repeat skipped, it writes them once, without
+  // it.
   if (annotationStore && snapshot.annotations) {
     try {
-      annotationStore.loadJSON(snapshot.annotations, 'replace');
-    } catch {
-      // Leave the store empty on any parse/shape failure.
+      const { skipped } = annotationStore.loadJSON(snapshot.annotations, {
+        mode: 'replace',
+        duplicates: 'skip',
+      });
+      if (skipped === 0) adoptAnnotationFile(annotationStore, snapshot.annotations);
+    } catch (error) {
+      noteAnnotationsRefused(snapshot.annotations);
+      onIssue?.(annotationsRefused(snapshot, error));
     }
   }
 
@@ -460,4 +570,16 @@ export function restoreStateFromSnapshot(
       // Leave the filter at all-true on any failure.
     }
   }
+}
+
+/** The issue for `snapshot`'s annotations, which `loadJSON` refused with `error`. */
+function annotationsRefused(snapshot: SessionSnapshot, error: unknown): RestoreIssue {
+  const annotations: unknown = snapshot.annotations?.annotations;
+  const details: RestoreIssue['details'] = {
+    reason: 'invalid',
+    errorMessage: error instanceof Error ? error.message : String(error),
+  };
+  if (Array.isArray(annotations)) details.count = annotations.length;
+  if (error instanceof DataTableError) details.errorCode = error.code;
+  return { code: 'PERSISTENCE_ANNOTATIONS_DROPPED', tableName: snapshot.tableName, details };
 }

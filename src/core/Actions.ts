@@ -6,7 +6,17 @@
  * external code to interact with the table state.
  */
 
+import type { AnnotatedRowsSource } from '../annotations/annotatedRowsSource';
 import type { AnnotationStore } from '../annotations/AnnotationStore';
+import type {
+  AnnotationNavigation,
+  AnnotationNavigationOptions,
+  AnnotationNavigationResult,
+  RevealRowOptions,
+  RevealRowResult,
+} from '../annotations/navigationTypes';
+import { ALL_SEVERITIES_MASK, severitiesOfMask } from '../annotations/severity';
+import type { AnnotationSeverity } from '../annotations/types';
 import { fetchCellJson, readJsonValue, rowIdLiteral } from '../data/cellValue';
 import { DataLoader, type DataLoaderOptions } from '../data/DataLoader';
 import { attachCacheInvalidation } from '../data/QueryCache';
@@ -16,10 +26,16 @@ import type { WorkerBridge } from '../data/WorkerBridge';
 import { DerivedColumnManager } from '../derived/DerivedColumnManager';
 import type { DerivedColumnDef, DerivedColumnInfo, CompletionContext } from '../derived/types';
 import { buildSelectedRowsQuery } from '../export/ExportQuery';
+import {
+  ANNOTATED_FILTER_COLUMN,
+  annotatedFilterMask,
+  isAnnotationSeverity,
+} from '../filters/annotatedFilters';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { filtersToWhereClause, quoteIdentifier } from '../filters/FilterSQL';
 import { normalizeRestoredFilters } from '../filters/restoredFilters';
 import { restoreStateFromSnapshot } from '../persistence/serialization';
+import type { RestoreIssue } from '../persistence/serialization';
 import type { SessionStore } from '../persistence/SessionStore';
 import { normalizeColumnHeaderTooltip, tooltipContentEquals } from './columnHeaderTooltip';
 import { collidingColumnName, columnNameKey } from './columnNames';
@@ -42,6 +58,7 @@ import {
   pinnedColumnsFirst,
 } from './State';
 import type {
+  AnnotatedFilter,
   Filter,
   FilterType,
   RawSQLFilter,
@@ -75,6 +92,20 @@ const SUPERSEDED = 'New data was loaded, or the table cleared, before the change
  */
 function supersededError(column: string): DerivedColumnError {
   return new DerivedColumnError(SUPERSEDED, { code: 'NOT_FOUND', details: { column } });
+}
+
+/**
+ * A condition that reads of the relation `state.tableName` names wait for,
+ * besides derived-column changes: see {@link StateActions.addReadGate}.
+ *
+ * @internal
+ */
+export interface ReadGate {
+  /**
+   * Whether the relation can be read now. Asked each time readability is,
+   * as each block the grid fetches asks, so it must be cheap.
+   */
+  isOpen(): boolean;
 }
 
 /**
@@ -253,6 +284,8 @@ export class StateActions {
   private unreadableRelationChanges = 0;
   private onRelationSettledCallback?: (() => void) | undefined;
   private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
+  private onRestoreIssueCallback?: ((issue: RestoreIssue) => void) | undefined;
+  private onDataClearedCallback?: ((kind: 'load' | 'clear') => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
   /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
@@ -273,7 +306,16 @@ export class StateActions {
    * the load is about to replace, or restore from a saved session.
    */
   private openLoads = 0;
+  /** Conditions reads of the relation wait for besides changes; see {@link addReadGate}. */
+  private readGates: ReadGate[] = [];
+  /** A read gate was found closed since they were last all open; see {@link readGateOpened}. */
+  private readGateFoundClosed = false;
+  /** Brings the annotated filter's table of annotated rows up to date; see {@link ensureFiltersFresh}. */
+  private annotatedRowsSource: AnnotatedRowsSource | null = null;
   private destroyed = false;
+  /** Loads the table UI's annotation navigation; see {@link setAnnotationNavigation}. */
+  private annotationNavigation:
+    (() => AnnotationNavigation | Promise<AnnotationNavigation>) | null = null;
 
   constructor(
     private state: TableState,
@@ -323,15 +365,17 @@ export class StateActions {
 
   /**
    * Whether a derived-column change is waiting on DuckDB, an add included, or
-   * waiting for its turn behind another (see {@link inTurn}). Charts and stats
-   * panels are built only when none is: one built meanwhile would be built
-   * again for the relation the changes leave. Whether reads of the relation
-   * `state.tableName` names can fail meanwhile is {@link isRelationReadable}.
+   * waiting for its turn behind another (see {@link inTurn}), or a read gate
+   * is closed (see {@link addReadGate}). Charts and stats panels are built
+   * only when none is: one built meanwhile would be built again for the
+   * relation the changes leave, or would query a table its filters read
+   * before it exists. Whether reads of the relation `state.tableName` names
+   * can fail meanwhile is {@link isRelationReadable}.
    *
    * @internal
    */
   isRelationChanging(): boolean {
-    return this.relationChanges > 0 || this.waitingTurns > 0;
+    return this.relationChanges > 0 || this.waitingTurns > 0 || this.readGateClosed();
   }
 
   /**
@@ -340,7 +384,8 @@ export class StateActions {
    * of the last change in line settles, before the state update that follows
    * a successful change; or, for a last change that waited for its turn and
    * then touched nothing in DuckDB (an undo of a filter, an add refused for
-   * its name), when it ends. Not between two changes in line.
+   * its name), when it ends; or when a read gate found closed opens (see
+   * {@link readGateOpened}). Not between two changes in line.
    *
    * @internal
    */
@@ -364,17 +409,47 @@ export class StateActions {
   }
 
   /**
+   * Set a callback told what a load's restore of a saved session left out,
+   * having restored the rest: today, annotations the session store could not
+   * attach to the session, or that `loadJSON` refused. The facade reports
+   * each as a `warning` event.
+   *
+   * @internal
+   */
+  setOnRestoreIssue(callback: (issue: RestoreIssue) => void): void {
+    this.throwIfDestroyed('setOnRestoreIssue');
+    this.onRestoreIssueCallback = callback;
+  }
+
+  /**
+   * Set a callback run in the turn of a load (`'load'`), once the worker has
+   * loaded the new data and before the restore of its saved session, or
+   * after a failed load that keeps no data, and in the turn of
+   * {@link clearData} (`'clear'`): the facade empties there what belongs to
+   * the data the state no longer holds, its annotations and its own presets.
+   * In the turn, a load that a newer one superseded leaves nothing it
+   * restored to the table that replaces it.
+   *
+   * @internal
+   */
+  setOnDataCleared(callback: (kind: 'load' | 'clear') => void): void {
+    this.throwIfDestroyed('setOnDataCleared');
+    this.onDataClearedCallback = callback;
+  }
+
+  /**
    * Whether the relation `state.tableName` names can be read as `state.schema`
    * describes it. Not while a derived-column change that can drop or rebuild
    * what those reads select from is waiting on DuckDB: a removal, an edit or
    * a replacement, an undo or redo, a reset, a restore. An add can not, and
    * the relation stays readable while one runs. Nor does a change waiting for
    * its turn: the relation in force can be read until its DuckDB work starts.
+   * Nor while a read gate is closed (see {@link addReadGate}).
    *
    * @internal
    */
   isRelationReadable(): boolean {
-    return this.unreadableRelationChanges === 0;
+    return this.unreadableRelationChanges === 0 && !this.readGateClosed();
   }
 
   /**
@@ -386,8 +461,62 @@ export class StateActions {
    * @internal
    */
   whenRelationReadable(): Promise<void> {
-    if (this.unreadableRelationChanges === 0) return Promise.resolve();
+    if (this.isRelationReadable()) return Promise.resolve();
     return new Promise((resolve) => this.readableWaiters.push(resolve));
+  }
+
+  /**
+   * Add a read gate. While it is closed, reads of the relation wait as they
+   * wait for a derived-column change that can drop or rebuild it:
+   * {@link isRelationReadable} does not hold and {@link isRelationChanging}
+   * does, so the grid's fetches, the filtered-row count, the charts' and the
+   * stats panels' updates wait, and no chart or panel is built. The gate is
+   * asked whenever readability is, so it can close with the state it reads,
+   * before the state's subscribers run. Its owner calls
+   * {@link readGateOpened} whenever it may have opened. Returns a function
+   * that removes the gate, which opens it.
+   *
+   * @internal
+   */
+  addReadGate(gate: ReadGate): () => void {
+    this.readGates.push(gate);
+    return () => {
+      const index = this.readGates.indexOf(gate);
+      if (index === -1) return;
+      this.readGates.splice(index, 1);
+      this.readGateOpened();
+    };
+  }
+
+  /**
+   * Tell the readers a read gate may have opened: once the relation can be
+   * read, the callers of {@link whenRelationReadable} resolve, and once
+   * nothing else is changing it, it is reported settled (see
+   * {@link setOnRelationSettled}). Does nothing unless a gate was found
+   * closed since the gates were last all open, so a gate's owner can call it
+   * whenever its gate may have opened. Works on a destroyed table too, so
+   * that no reader is left waiting.
+   *
+   * @internal
+   */
+  readGateOpened(): void {
+    if (!this.readGateFoundClosed || this.readGateClosed()) return;
+    this.readGateFoundClosed = false;
+    if (this.unreadableRelationChanges === 0) {
+      for (const resolve of this.readableWaiters.splice(0)) resolve();
+    }
+    this.notifyIfRelationSettled();
+  }
+
+  /** Whether a read gate is closed, noted for {@link readGateOpened} when one is. */
+  private readGateClosed(): boolean {
+    for (const gate of this.readGates) {
+      if (!gate.isOpen()) {
+        this.readGateFoundClosed = true;
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -411,7 +540,8 @@ export class StateActions {
       try {
         this.notifyIfRelationSettled();
       } finally {
-        if (this.unreadableRelationChanges === 0) {
+        // A closed read gate keeps them waiting: `readGateOpened` wakes them.
+        if (this.isRelationReadable()) {
           for (const resolve of this.readableWaiters.splice(0)) resolve();
         }
         if (this.relationChanges === 0) {
@@ -919,6 +1049,7 @@ export class StateActions {
       this.lastSelectedIndex = null;
       this.undoManager?.clear();
       this.initialSnapshot = null;
+      this.onDataClearedCallback?.('clear');
       const manager = this.derivedManager;
       if (manager) {
         this.derivedManager = null;
@@ -1026,8 +1157,9 @@ export class StateActions {
         restoreState();
         this.lastSelectedIndex = anchor;
         if (undoStacks) this.undoManager?.loadStacks(undoStacks.undoStack, undoStacks.redoStack);
-      } else if (replacedInPlace) {
-        this.onBaseTableReplacedCallback?.(replaced);
+      } else {
+        if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+        if (!this.destroyed) this.onDataClearedCallback?.('load');
       }
       throw err;
     }
@@ -1048,6 +1180,9 @@ export class StateActions {
       await this.abandonIfDestroyed(result.tableName);
     }
 
+    // What belongs to the data replaced goes, before the new table is named.
+    this.onDataClearedCallback?.('load');
+
     // Update state with schema from loader result
     this.state.tableName.set(result.tableName);
     this.state.totalRows.set(result.rowCount);
@@ -1058,11 +1193,13 @@ export class StateActions {
     this.state.baseTableName.set(result.tableName);
     this.state.derivedColumns.set([]);
 
-    // Restore session if a store is provided and a snapshot exists
-    if (options.sessionStore) {
+    // Restore session if a store is provided and a snapshot exists. A load
+    // superseded by a newer load or a clear restores none: the data it
+    // loaded is already going.
+    if (options.sessionStore && epoch === this.loadEpoch) {
       const snapshot = await options.sessionStore.load(result.tableName);
       this.throwIfDestroyed('loadData');
-      if (snapshot) {
+      if (snapshot && epoch === this.loadEpoch) {
         // What the load set up, to go back to if the snapshot cannot be read.
         const loaded = captureSnapshot(this.state);
         const loadedTooltips = this.state.columnHeaderTooltips.get();
@@ -1078,6 +1215,7 @@ export class StateActions {
               this.undoManager,
               options.presetManager,
               options.annotationStore,
+              this.onRestoreIssueCallback,
             );
             return true;
           } catch (err) {
@@ -1166,10 +1304,14 @@ export class StateActions {
   /**
    * Add or update a filter
    *
-   * If a filter for the same column exists, it will be replaced.
+   * If a filter for the same column exists, it will be replaced. An
+   * annotated filter is made to keep the annotated rows of this table (its
+   * `table` is set to the base table's name), and replaces the annotated
+   * filter in force: see {@link StateActions.showAnnotatedRows}.
    */
   addFilter(filter: Filter): void {
     this.throwIfDestroyed('addFilter');
+    if (filter.type === 'annotated') filter = this.ownAnnotatedFilter(filter);
     this.captureForUndo();
     const current = this.state.filters.get();
     const existingIndex = current.findIndex((f) => f.column === filter.column);
@@ -1241,7 +1383,8 @@ export class StateActions {
    * given `valueType: 'time'`, so that it compares the time of day its
    * column's chart shows rather than the instant; and a range filter's
    * `valueType: 'time'` on a column that is not TIME or TIME WITH TIME ZONE,
-   * where the cast would fail every query, goes.
+   * where the cast would fail every query, goes. An annotated filter keeps
+   * the annotated rows of this table, whichever table it was saved on.
    *
    * Columns the preset does not carry forward have lost their filter, so they
    * are notified — outside the suppression window, since the callback may
@@ -1254,7 +1397,9 @@ export class StateActions {
     this.suppressUndoCapture = true;
     try {
       batch(() => {
-        this.state.filters.set(normalizeRestoredFilters(filters, this.state.schema.get()));
+        this.state.filters.set(
+          normalizeRestoredFilters(filters, this.state.schema.get(), this.baseTable()),
+        );
         if (sortColumns) {
           this.state.sortColumns.set(sortColumns);
         }
@@ -1263,6 +1408,140 @@ export class StateActions {
       this.suppressUndoCapture = false;
     }
     this.notifyRemovedFilters(before, this.state.filters.get());
+  }
+
+  // =========================================
+  // Annotated Rows
+  // =========================================
+
+  /**
+   * Show only the rows that have annotations: the rows with a row-scope or a
+   * cell-scope annotation in `table.annotations`, of the severities given,
+   * or of any severity. Adds an annotated filter ({@link AnnotatedFilter}),
+   * which replaces the one in force, as one undo entry; asked for again with
+   * the same severities, it changes nothing. Its chip reads "Annotated rows"
+   * and "any severity", or the severities' names.
+   *
+   * The view follows the annotations: adding or removing one while the
+   * filter is on updates the view in place, keeping its scroll position and
+   * the cursor on its row, and fires `filterChange` with the same filters
+   * and the new count. When the cursor's row leaves the view, the cursor
+   * stays where it was, on the row that slid into its place, which
+   * {@link StateActions.nextAnnotation} (`F8`) goes to next. A column-scope
+   * annotation singles out no row. The severity filter
+   * (`annotations.setSeverityFilter`) changes which tints show, not which
+   * rows this shows.
+   *
+   * Synchronous, like `addFilter`. The rows, the count and the charts follow
+   * as they do for any filter change, once DuckDB holds the table's annotated
+   * rows, which takes a fraction of a second at a million of them.
+   *
+   * @param options.severities - Show the rows with annotations of these
+   *   severities. Left out or empty, the rows with annotations of any
+   *   severity.
+   *
+   * @example
+   * table.actions.showAnnotatedRows();
+   *
+   * @example
+   * // Only the rows with an error or a warning, and how many there are
+   * table.on('filterChange', ({ filteredRowCount }) => console.log(filteredRowCount));
+   * table.actions.showAnnotatedRows({ severities: ['error', 'warning'] });
+   *
+   * @throws `ConfigurationError` with `code: 'OPTIONS_INVALID'` when
+   *   `severities` is not a list of `'error'`, `'warning'` and `'info'`.
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  showAnnotatedRows(options: { severities?: AnnotationSeverity[] | undefined } = {}): void {
+    this.throwIfDestroyed('showAnnotatedRows');
+    const severities: unknown = options?.severities;
+    if (
+      severities !== undefined &&
+      !(Array.isArray(severities) && severities.every(isAnnotationSeverity))
+    ) {
+      throw new ConfigurationError(
+        "showAnnotatedRows: severities must be a list of 'error', 'warning' and 'info'.",
+        { code: 'OPTIONS_INVALID', details: { severities } },
+      );
+    }
+    // Each severity once, most severe first, and none for all three: the
+    // filter then reads as any other that shows the same rows.
+    const mask = annotatedFilterMask({
+      type: 'annotated',
+      column: ANNOTATED_FILTER_COLUMN,
+      severities: severities as AnnotationSeverity[] | undefined,
+    });
+    const filter = this.ownAnnotatedFilter({
+      type: 'annotated',
+      column: ANNOTATED_FILTER_COLUMN,
+      ...(mask === ALL_SEVERITIES_MASK ? {} : { severities: severitiesOfMask(mask) }),
+    });
+    const current = this.state.filters
+      .get()
+      .find((f): f is AnnotatedFilter => f.type === 'annotated');
+    if (current && current.table === filter.table && annotatedFilterMask(current) === mask) return;
+    this.addFilter(filter);
+  }
+
+  /**
+   * Stop showing only the annotated rows: remove the annotated filter that
+   * {@link StateActions.showAnnotatedRows} added, as one undo entry. With
+   * none in force, it changes nothing.
+   *
+   * @example
+   * table.actions.showAnnotatedRows();
+   * // …
+   * table.actions.hideAnnotatedRows();
+   *
+   * @throws `DestroyedError` if the table was destroyed.
+   */
+  hideAnnotatedRows(): void {
+    this.throwIfDestroyed('hideAnnotatedRows');
+    this.removeFilter(ANNOTATED_FILTER_COLUMN, 'annotated');
+  }
+
+  /**
+   * Set what keeps the annotated filter's table of annotated rows current
+   * (see {@link ensureFiltersFresh}). The table container sets it.
+   *
+   * @internal
+   */
+  setAnnotatedRowsSource(source: AnnotatedRowsSource | null): void {
+    this.annotatedRowsSource = source;
+  }
+
+  /**
+   * Resolves once the DuckDB tables the filters in force read are current:
+   * with an annotated filter in force, once its table of annotated rows
+   * holds the annotations the store holds now, which it can trail while the
+   * view waits to update in place. At once otherwise. For a read of the
+   * filtered rows that someone is waiting on, such as
+   * {@link getColumnValues} or an export.
+   *
+   * Rejects with a `QueryError` coded `QUERY_ABORTED` when `signal` aborts
+   * first or the table is replaced first, or with the error the update
+   * failed with.
+   *
+   * @internal
+   */
+  async ensureFiltersFresh(signal?: AbortSignal): Promise<void> {
+    const source = this.annotatedRowsSource;
+    if (!source || !this.state.filters.get().some((f) => f.type === 'annotated')) return;
+    await source.ensureFresh(signal);
+  }
+
+  /**
+   * `filter`, made to keep the annotated rows of this table's base table,
+   * under the key every annotated filter has.
+   */
+  private ownAnnotatedFilter(filter: AnnotatedFilter): AnnotatedFilter {
+    const table = this.baseTable() ?? filter.table;
+    return { ...filter, column: ANNOTATED_FILTER_COLUMN, ...(table ? { table } : {}) };
+  }
+
+  /** The table the data loaded into, under its derived-column view if it has one. */
+  private baseTable(): string | null {
+    return this.state.baseTableName.get() ?? this.state.tableName.get();
   }
 
   // =========================================
@@ -1387,6 +1666,13 @@ export class StateActions {
   /**
    * Get the complete WHERE clause SQL for all active filters.
    * Convenience method for downstream apps that need the raw SQL string.
+   *
+   * An annotated filter's SQL ({@link StateActions.showAnnotatedRows})
+   * reads an internal temporary table of the annotated rows, which the
+   * table keeps current lazily: it can trail the annotations in the store
+   * by a moment, does not exist until the table first needs it, and lives
+   * only on the table's own DuckDB connection. Run elsewhere, or before
+   * then, the clause fails or keeps the rows of annotations since changed.
    */
   getFiltersSQL(): string {
     return filtersToWhereClause(this.state.filters.get());
@@ -1429,7 +1715,7 @@ export class StateActions {
   }
 
   /**
-   * Add column to multi-sort (Shift+click behavior)
+   * Add column to multi-sort (Cmd/Ctrl+click on a sort button, Shift+Enter on a header)
    *
    * If column is already in sort, toggles its direction or removes it.
    */
@@ -2378,8 +2664,11 @@ export class StateActions {
               this.onFilterRemoveCallback?.(oldName);
             }
           } else {
+            // An annotated filter's key is no column's, and stays.
             this.state.filters.set(
-              filters.map((f) => (f.column === oldName ? { ...f, column: def.name } : f)),
+              filters.map((f) =>
+                f.type !== 'annotated' && f.column === oldName ? { ...f, column: def.name } : f,
+              ),
             );
           }
         } else if (typeChanged) {
@@ -2634,6 +2923,11 @@ export class StateActions {
    * `scope: 'filtered'`. For `scope: 'selected'` the values are returned in
    * positional order within the current filter/sort view (same semantics as
    * the export "selected rows" scope) — not strict selection insertion order.
+   * With an annotated filter in force ({@link StateActions.showAnnotatedRows}),
+   * a `'filtered'` read keeps the rows the annotations in the store single
+   * out, even in the moment before the view catches up with a change to
+   * them. A `'selected'` read takes the rows at the selected positions in
+   * the view as it shows them, which that catching up could change.
    *
    * Numeric columns materialize into the narrowest sensible typed array:
    * - DuckDB `BIGINT` / `UBIGINT` / `HUGEINT` / `UHUGEINT` → `BigInt64Array`
@@ -2731,6 +3025,18 @@ export class StateActions {
         code: 'INVALID_PAGINATION',
         details: { offset },
       });
+    }
+
+    // The rows an annotated filter keeps are read from the table of
+    // annotated rows, which can trail the store by a moment. Not for the
+    // selected rows: they are positions in the view as it shows them, and
+    // bringing that table up to date would put other rows there.
+    if (scope === 'filtered') {
+      try {
+        await this.ensureFiltersFresh(signal);
+      } finally {
+        this.throwIfDestroyed('getColumnValues');
+      }
     }
 
     const tbl = this.state.tableName.get();
@@ -3113,6 +3419,150 @@ export class StateActions {
   clearFocusedCell(): void {
     this.throwIfDestroyed('clearFocusedCell');
     this.state.focusedCell.set(null);
+  }
+
+  // =========================================
+  // Annotation navigation
+  // =========================================
+
+  /**
+   * Hand {@link nextAnnotation}, {@link previousAnnotation} and
+   * {@link revealRow} to the table's UI: `TableContainer` passes the loader
+   * of its navigator, and `null` when it is destroyed. Without one they
+   * reject with `NO_TABLE`.
+   *
+   * @internal
+   */
+  setAnnotationNavigation(
+    load: (() => AnnotationNavigation | Promise<AnnotationNavigation>) | null,
+  ): void {
+    this.annotationNavigation = load;
+  }
+
+  /**
+   * Move the cursor to the next annotation in the view, as filtered and
+   * sorted, and scroll it into view: the next annotated cell of the
+   * cursor's row, then the next row with row or cell annotations, on its
+   * first annotated visible cell (pinned columns first). A row whose
+   * annotations are its own, or in hidden columns, keeps the cursor's
+   * column. Column annotations single out no rows, and are not visited.
+   * Without a cursor, it goes to the first annotation. The live region
+   * says where it landed and what is there, as `F8` does.
+   *
+   * One navigation runs at a time: a newer call, a move of the cursor, or a
+   * change of the filters, the sort or the table aborts it. It waits for a
+   * filter change still counting its rows, and, under an annotated filter
+   * ({@link StateActions.showAnnotatedRows}), for the view to catch up with
+   * the annotations: right after the issue under the cursor is resolved, it
+   * goes to the row that slid into its place. Far from the cursor in a large
+   * sorted view, finding the row is a DuckDB query, some hundreds of
+   * milliseconds on ten million rows.
+   *
+   * @param options - Which severities to visit (default: those the severity
+   *   filter shows), whether to go round the end (default: `true`), and an
+   *   `AbortSignal`.
+   * @returns where the cursor went, with the annotations there; `null` when
+   *   no annotation of those severities is in the view (or, with
+   *   `wrap: false`, past the cursor).
+   *
+   * @example
+   * const landed = await table.actions.nextAnnotation();
+   * if (landed) console.log(landed.row, landed.column, landed.annotations[0]?.message);
+   *
+   * @example
+   * // Errors only, stopping at the last one.
+   * await table.actions.nextAnnotation({ severities: ['error'], wrap: false });
+   *
+   * @throws `QueryError` with `code: 'QUERY_ABORTED'` when a newer
+   *   navigation, a cursor move, a view change or `options.signal` aborts
+   *   it; `code: 'NO_TABLE'` when no table is loaded, or the table has no UI.
+   * @throws `ConfigurationError` with `code: 'OPTIONS_INVALID'` for a
+   *   severity that is not `'error'`, `'warning'` or `'info'`, or a `wrap`
+   *   that is not a boolean.
+   * @throws `DestroyedError` if the table was destroyed before the call.
+   */
+  nextAnnotation(
+    options?: AnnotationNavigationOptions,
+  ): Promise<AnnotationNavigationResult | null> {
+    return this.navigateAnnotations('nextAnnotation', (n) => n.next(options));
+  }
+
+  /**
+   * Move the cursor to the previous annotation in the view: the previous
+   * annotated cell of the cursor's row, then the previous row with row or
+   * cell annotations, on its last annotated visible cell. Without a cursor,
+   * it goes to the last annotation. Otherwise as {@link nextAnnotation},
+   * which `Shift+F8` is to `F8`.
+   *
+   * @example
+   * const landed = await table.actions.previousAnnotation({ severities: ['error', 'warning'] });
+   *
+   * @throws As {@link nextAnnotation}.
+   */
+  previousAnnotation(
+    options?: AnnotationNavigationOptions,
+  ): Promise<AnnotationNavigationResult | null> {
+    return this.navigateAnnotations('previousAnnotation', (n) => n.previous(options));
+  }
+
+  /**
+   * Scroll the row whose `__rowid__` is `rowId` into view in the view as
+   * filtered and sorted, and, with `focus` (the default), put the cursor on
+   * it: in `column`, else the cursor's column, else the first visible one,
+   * which comes into view too. For a list of issues that takes the user to
+   * each, where `rowId` is the annotation's or a value of `__rowid__`.
+   *
+   * It waits for a filter change still counting its rows, and runs as one
+   * navigation (see {@link nextAnnotation}): a newer one, a cursor move or
+   * a view change aborts it.
+   *
+   * @param rowId - A non-negative integer, as a number or a bigint.
+   * @param column - A column of the table; a hidden one leaves the cursor's.
+   * @param options - Where the row goes in the view (`align`, default
+   *   `'center'`), whether the cursor moves (`focus`, default `true`), and
+   *   an `AbortSignal`.
+   * @returns the row's position and the column shown; `null` when the
+   *   filters hide the row.
+   *
+   * @example
+   * // From an issue list: the cell a cell annotation is on.
+   * const shown = await table.actions.revealRow(issue.rowId, issue.column);
+   * if (shown === null) console.log('The filters hide that row');
+   *
+   * @example
+   * // Scroll a row to the top, leaving the cursor where it is.
+   * await table.actions.revealRow(42n, undefined, { align: 'start', focus: false });
+   *
+   * @throws `QueryError` with `code: 'INVALID_ROWID'` when `rowId` is not a
+   *   non-negative integer, or no row has it; `code: 'COLUMN_NOT_FOUND'`
+   *   when `column` is not in the schema; `code: 'NO_TABLE'` when no table
+   *   is loaded; `code: 'QUERY_ABORTED'` when it is aborted.
+   * @throws `ConfigurationError` with `code: 'OPTIONS_INVALID'` for an
+   *   `align` or `focus` it does not take.
+   * @throws `DestroyedError` if the table was destroyed before the call.
+   */
+  revealRow(
+    rowId: number | bigint,
+    column?: string,
+    options?: RevealRowOptions,
+  ): Promise<RevealRowResult | null> {
+    return this.navigateAnnotations('revealRow', (n) => n.reveal(rowId, column, options));
+  }
+
+  private navigateAnnotations<T>(
+    method: string,
+    run: (navigation: AnnotationNavigation) => Promise<T>,
+  ): Promise<T> {
+    try {
+      this.throwIfDestroyed(method);
+      const navigation = this.annotationNavigation?.();
+      if (!navigation) throw new QueryError('No table to navigate', { code: 'NO_TABLE' });
+      // Once loaded, it starts in this call, so that a cursor move right
+      // after aborts it. The first call starts when the chunk has loaded.
+      return navigation instanceof Promise ? navigation.then(run) : run(navigation);
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 }
 

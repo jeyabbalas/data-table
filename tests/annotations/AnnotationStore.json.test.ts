@@ -378,3 +378,64 @@ describe('AnnotationStore — JSON I/O', () => {
     });
   });
 });
+
+describe('AnnotationStore — loadJSON with an id the file repeats', () => {
+  let store: AnnotationStore;
+  const repeating: AnnotationFile = {
+    version: 1,
+    annotations: [
+      { id: 'a', scope: 'row', rowId: 0, severity: 'info', message: 'first' },
+      { id: 'b', scope: 'row', rowId: 1, severity: 'info', message: 'b' },
+      { id: 'a', scope: 'cell', rowId: 2, column: 'x', severity: 'error', message: 'second' },
+    ],
+  };
+
+  beforeEach(() => {
+    store = makeStore();
+    store.add({ id: 'seed', scope: 'row', rowId: 9, severity: 'info', message: 'seed' });
+  });
+
+  for (const mode of ['replace', 'merge'] as const) {
+    it(`throws ANNOTATION_DUPLICATE_ID at the repeat and changes nothing (${mode})`, () => {
+      let error: AnnotationError | undefined;
+      try {
+        store.loadJSON(repeating, mode);
+      } catch (e) {
+        error = e as AnnotationError;
+      }
+      expect(error).toBeInstanceOf(AnnotationError);
+      expect(error!.code).toBe('ANNOTATION_DUPLICATE_ID');
+      expect(error!.details).toEqual({ id: 'a', index: 2 });
+      expect(store.getAll().map((a) => a.id)).toEqual(['seed']);
+      expect(store.getByRow(0)).toEqual([]);
+    });
+  }
+
+  it("keeps the first occurrence and counts the rest with duplicates: 'skip'", () => {
+    const result = store.loadJSON(repeating, { mode: 'replace', duplicates: 'skip' });
+    expect(result).toEqual({ added: 2, skipped: 1 });
+    expect(store.getAll().map((a) => a.id)).toEqual(['a', 'b']);
+    expect(store.get('a')?.message).toBe('first');
+    expect(store.getByCell(2, 'x')).toEqual([]);
+  });
+
+  it("still refuses, when merging, an id the store holds, even with duplicates: 'skip'", () => {
+    const file: AnnotationFile = {
+      version: 1,
+      annotations: [
+        { id: 'n', scope: 'row', rowId: 0, severity: 'info', message: 'new' },
+        { id: 'seed', scope: 'row', rowId: 1, severity: 'info', message: 'clash' },
+      ],
+    };
+    expect(() => store.loadJSON(file, { mode: 'merge', duplicates: 'skip' })).toThrow(
+      AnnotationError,
+    );
+    expect(store.getAll().map((a) => a.id)).toEqual(['seed']);
+    const ok = store.loadJSON(
+      { version: 1, annotations: [repeating.annotations[0]!, repeating.annotations[2]!] },
+      { mode: 'merge', duplicates: 'skip' },
+    );
+    expect(ok).toEqual({ added: 1, skipped: 1 });
+    expect(store.getAll().map((a) => a.id)).toEqual(['seed', 'a']);
+  });
+});

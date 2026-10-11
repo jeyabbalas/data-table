@@ -13,6 +13,8 @@
  *   - `destroy()` calls `bridge.dropTable(state.baseTableName)` when the
  *     bridge is shared (`ownsBridge=false`). Skipped when we own the bridge —
  *     `bridge.terminate()` discards everything below.
+ *   - Each base table dropped takes the table of its annotated rows
+ *     (`__dt_annot_<table>__`) with it.
  *
  * Tests use a mocked bridge so we can spy on the exact `dropTable` calls;
  * the real DROP TABLE round-trip is covered by the loader integration tests
@@ -147,8 +149,8 @@ describe('loadData / destroy — drops previous base table', () => {
     });
     await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
 
-    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
-    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    // The base table, and the table of its annotated rows with it.
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['A'], ['__dt_annot_A__']]);
     await table.destroy();
   });
 
@@ -199,8 +201,8 @@ describe('loadData / destroy — drops previous base table', () => {
     });
     await table.loadData(new File([''], 'c.csv'), { tableName: 'C' });
 
-    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
-    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    // The base table, and the table of its annotated rows with it.
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['A'], ['__dt_annot_A__']]);
     await table.destroy();
   });
 
@@ -236,8 +238,8 @@ describe('loadData / destroy — drops previous base table', () => {
       schema: schemaB,
     });
     await table.loadData(new File([''], 'c.csv'), { tableName: 'C' });
-    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
-    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    // The base table, and the table of its annotated rows with it.
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['A'], ['__dt_annot_A__']]);
     await table.destroy();
   });
 
@@ -268,7 +270,7 @@ describe('loadData / destroy — drops previous base table', () => {
     finishA();
     await second;
     expect(table.state.tableName.get()).toBe('A');
-    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['Y']]);
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['Y'], ['__dt_annot_Y__']]);
     await table.destroy();
   });
 
@@ -282,8 +284,8 @@ describe('loadData / destroy — drops previous base table', () => {
     await expect(table.loadData(new File([''], 'b.parquet'))).rejects.toThrow('too big');
     await table.destroy();
 
-    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
-    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    // The base table, and the table of its annotated rows with it.
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['A'], ['__dt_annot_A__']]);
   });
 
   it('drops the base table on destroy() when the bridge is shared', async () => {
@@ -295,8 +297,8 @@ describe('loadData / destroy — drops previous base table', () => {
 
     // ownsBridge=false (we passed it in) → drop the base table, do NOT
     // terminate the worker.
-    expect(bridge.dropTable).toHaveBeenCalledTimes(1);
-    expect(bridge.dropTable).toHaveBeenCalledWith('A');
+    // The base table, and the table of its annotated rows with it.
+    expect(vi.mocked(bridge.dropTable).mock.calls).toEqual([['A'], ['__dt_annot_A__']]);
     expect(bridge.terminate).not.toHaveBeenCalled();
   });
 

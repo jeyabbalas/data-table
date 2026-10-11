@@ -74,6 +74,7 @@ export type {
   NullFilter,
   PatternFilter,
   RawSQLFilter,
+  AnnotatedFilter,
 } from '../filters/FilterTypes';
 
 /** Sort direction for a single column — ascending or descending. */

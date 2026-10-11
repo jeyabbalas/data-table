@@ -21,38 +21,43 @@ other tuning lever here, and it is by far the most common cause of a
 **Where the numbers come from.** This doc explains the limits from the
 architecture and shows how to measure your own workload. Most of its
 numbers were measured; the threshold tiers are reasoned, and so are a few
-round figures such as a worker's base memory and the annotation headroom.
+round figures such as a worker's base memory.
 [Reference numbers](#reference-numbers) collects the main measurements,
 each with where and when it was taken. What measures performance in this
 repository:
 
-- **`npm run test:perf`** runs the seven files in `tests/performance/`
-  with `RUN_DUCKDB_PERF=1` and `RUN_LIFECYCLE_STRESS=1` set
-  (`vitest.perf.config.ts`): 47 tests, in about 7 seconds on an Apple M1
-  Pro. Three files run only there. `benchmarks.duckdb.test.ts` times real
-  DuckDB, duckdb-wasm's Node build in `worker_threads`: its start-up,
-  loading the 100,000-row `nyc_taxi` fixtures from Parquet and CSV, cached
-  and uncached queries, range, set and pattern filters over 1M rows, and
-  200 `__rowid__`-range block fetches over 1.6M rows.
-  `nestedCells.bench.duckdb.test.ts` times the grid's reads of nested
-  columns over 200,000 rows, and `lifecycle-stress.test.ts` runs 1,000
-  create/destroy cycles. The other four files run in every `npm test` as
-  well: `memory-leaks.test.ts` (subscriptions, cache and row-cache bounds,
+- **`npm run test:perf`** runs the nine files in `tests/performance/`
+  with `RUN_DUCKDB_PERF=1`, `RUN_LIFECYCLE_STRESS=1` and
+  `RUN_ANNOTATION_PERF=1` set (`vitest.perf.config.ts`): 61 tests, in about
+  8.5 seconds on an Apple M1 Pro. Five files run only there.
+  `benchmarks.duckdb.test.ts` times real DuckDB, duckdb-wasm's Node build in
+  `worker_threads`: its start-up, loading the 100,000-row `nyc_taxi`
+  fixtures from Parquet and CSV, cached and uncached queries, range, set and
+  pattern filters over 1M rows, and 200 `__rowid__`-range block fetches over
+  1.6M rows. `nestedCells.bench.duckdb.test.ts` times the grid's reads of
+  nested columns over 200,000 rows, and `lifecycle-stress.test.ts` runs
+  1,000 create/destroy cycles. `annotations.scale.perf.test.ts` times the
+  annotation store at a million annotations, and checks the heap each takes,
+  and `sessionSave.annotations.perf.test.ts` a session save and reload with
+  a million, in fake-indexeddb. The other four files run in every `npm test`
+  as well: `memory-leaks.test.ts` (subscriptions, cache and row-cache bounds,
   a shared bridge outliving one of its tables, 1,000 filter changes with
   autosave, 100 create/destroy cycles), `annotations.bench.test.ts`
-  (`AnnotationStore` at 10,000 annotations), `scroll-handler.bench.test.ts`
-  (the scroll handler's per-event budget at 1M and 50M rows) and
-  `benchmarks.test.ts` (query-cache, SQL-generation and signal
-  micro-benchmarks).
-- **`npm run test:browser`** runs the Playwright suite: 32 spec files in
+  (`AnnotationStore` at 10,000 and 100,000 annotations),
+  `scroll-handler.bench.test.ts` (the scroll handler's per-event budget at
+  1M and 50M rows) and `benchmarks.test.ts` (query-cache, SQL-generation and
+  signal micro-benchmarks).
+- **`npm run test:browser`** runs the Playwright suite: 38 spec files in
   Chromium, served by the demo's dev server. Besides keyboard and contrast
   checks, its large-table specs work at full scale in a real browser
   engine (scroll extents at 1.6M and 2M rows, a fetch storm at 200,000
   rows, a sweep of 1,000 columns, charts across 300 columns, 200,000 rows
-  of nested values, Parquet `File` loads) and assert counts more than
-  times: header elements, mounted columns, live charts, the queries a
-  column change runs.
-- **`npm run size`** checks the brotli size of the 13 files in
+  of nested values, Parquet `File` loads, 110,000 annotations on 1,000
+  columns and 100,000 on a million rows, `F8` across two million rows) and
+  assert counts more than times: header elements, mounted columns, live
+  charts, the queries a column change runs, the store's listeners, the DOM
+  writes an off-screen annotation causes.
+- **`npm run size`** checks the brotli size of the 15 files in
   `.size-limit.cjs` (the entries, the stylesheet and the lazy chunks)
   against their caps; the worker script has no budget. See
   [Bundle-size budgets](#bundle-size-budgets).
@@ -288,12 +293,12 @@ one, in ways each kept bounded (see
   table opens them. A load that fails is said in the live region and
   reported as an `error` event coded `CHUNK_LOAD_FAILED`, and the next open
   asks for the chunk again, which Chrome answers with the same failure until
-  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.44 kB,
-  the `ExtractColumnPanel` chunk 4.98 kB, the `TreeView` chunk the two share
-  2.80 kB, and the `extractExpression` chunk 2.78 kB, which both panels and
+  the page reloads. Their brotli sizes: the `ValueInspector` chunk 8.47 kB,
+  the `ExtractColumnPanel` chunk 4.99 kB, the `TreeView` chunk the two share
+  2.80 kB, and the `extractExpression` chunk 2.79 kB, which both panels and
   `actions.addNestedFieldColumn` load. The shared chunk every table loads is
-  100.88 kB, the stylesheet 22.87 kB, the root entry 11.05 kB and `/advanced`
-  2.15 kB (`.size-limit.cjs` holds the caps).
+  114.89 kB, the stylesheet 23.52 kB, the root entry 11.84 kB and `/advanced`
+  2.14 kB (`.size-limit.cjs` holds the caps).
 - **Value reads and exports.** `getCellValue`, `getColumnValues` and the CSV
   and JSON exports read nested values as exact JSON text, and none of those
   reads goes through the query cache, which must not keep megabytes of text.
@@ -347,32 +352,68 @@ length). Prefer expression columns when feasible.
 
 Snapshots persist to IndexedDB on a debounced save. A snapshot includes
 the filters, sort, columns, derived columns, undo stack, vector
-value pool, and (in `SNAPSHOT_VERSION` 5+) the `annotations` overlay
-plus `columnHeaderTooltips`.
+value pool, `columnHeaderTooltips`, and (in `SNAPSHOT_VERSION` 5+) the
+`annotations` overlay. The annotations are stored apart, in the
+`dt-annotations` database, in chunks, and written only when they change, so
+a save after a sort, filter or width change copies the session record
+alone (see [Annotations](#annotations)).
 
 **Implication:** large vector columns plus deep undo stacks can push
-snapshots into megabytes. IDB quotas vary by browser (Safari ≈ 1 GB,
+snapshots into megabytes, and a million annotations take about 0.5 s to
+write after they change. IDB quotas vary by browser (Safari ≈ 1 GB,
 Chrome ≈ 60% of disk). For heavy use, monitor `navigator.storage.estimate()`.
 
 ### Annotations
 
-`AnnotationStore` keeps four secondary indexes (`byId`, `byRow`,
-`byColumn`, `byCell`), so `getByRow` / `getByColumn` / `getByCell` are
-O(1) regardless of total annotation count. `getByCell(rowId, column)`
-returns the row + column + cell union and sorts in O(k log k) on the
-small intersection — not a bottleneck.
+`AnnotationStore` keeps each annotation as one entry in an insertion-ordered
+`Map` by id, and indexes it by its scope: row-scope by `rowId`, column-scope
+by column, cell-scope by column and then `rowId`. No lookup, update or
+removal passes over the store: `get`, `update` and `remove` are O(1),
+`removeMany` is O(k), `getByCell`, `getByRow` and `getByColumn` are
+O(k log k) for the k they return, and `clear('all')` swaps in empty maps.
+`getAll`, `toJSON` and `loadJSON` are O(N). An annotation takes about 258
+bytes of heap at a million (Node 22), its id a flat 56-byte string. V8 caps a
+`Map` at 2²⁴ entries, so a store holds about 16.7 million annotations: past
+that, `add`, `addMany` and `loadJSON` throw a `RangeError` and leave the
+store as it was.
 
-Memory cost scales with the annotation count, not row × column count:
-each annotation is one small object (a few hundred bytes including
-indexes). Practical headroom up to ~50 000 annotations on commodity
-laptops; beyond that, `toJSON` size dominates and IndexedDB writes get
-heavier.
+The grid hears the store once per table and asks it for O(1) summaries: one
+per rendered row, one per column (cached per store revision), one per cell.
+It keeps what each element shows and writes only the classes and counts that
+differ, so a scroll step costs within 2 ms of one with no annotations, at a
+million. A change touches the rendered rows, cells and headers with its keys;
+one of more than 4,096 annotations, a `clear` or a severity-filter change
+re-reads what is rendered, and still writes only what differs. The popover
+lists five annotations per section.
 
-**Implication:** annotation-heavy apps (e.g. row-level JSON-Schema
-validation across 100 000-row tables) should batch additions via
-`addMany` (single `change` event), audit the `toJSON` size before
-enabling persistence, and prefer `clear(scope?)` over individual
-removals when wiping a category.
+Annotations persist in a database of their own, `dt-annotations`, in chunks
+of at most 10,000, written only when they change and before the session
+record that names them, so a reload restores the last that landed: a save
+after a sort costs 0.2–0.3 ms at a million, where every save used to
+serialize and clone them all (about 1.2 s, Node). The save after they change
+takes 0.43–0.51 s in Chromium, in tasks of 16 ms at most, and a reload's
+restore 0.70–0.73 s. A save holds no copy of them.
+
+Navigation (`F8`, `actions.nextAnnotation`) and the `annotated` filter read
+a DuckDB temporary table of the annotated rows, rebuilt in one statement
+when the annotations change: 0.38 s for a million annotated rows in Node's
+DuckDB-WASM, 0.64–0.7 s in Chrome. The rebuild drops only the cached query
+results that read that table, and the view under an annotated filter
+refreshes only when the rows it keeps change. Navigation answers from the
+rows the grid holds, or by binary search when the view is neither filtered
+nor sorted, in under 2 ms; otherwise its SQL search takes from about 0.1 s
+to 1.3 s on ten million rows, by the sort and the filters. Under an
+annotated filter it first waits for the view to catch up with a change,
+0.4–0.7 s at a million annotated rows, and, when the change took the
+cursor's row out of the view, for the query that finds the gap the row
+left, up to about 90 ms. The numbers are in
+[Annotations at a million](#annotations-at-a-million).
+
+**Implication:** a million annotations are practical. Add them with one
+`addMany` (about 0.8 s, one `change` event), clear a category with
+`clear(scope)`, and expect the costs that remain to land on changes, not on
+scrolling: the save after a change, the rebuild of the annotated-rows table
+under an annotated filter or for a sorted jump, and the restore on reload.
 
 **View-only filtering is free.** `setSeverityFilter({ info: false })`
 flips a boolean — it does not touch the store's data, just changes
@@ -669,7 +710,7 @@ remove the container if you need to.
 
 ## Known slow paths
 
-As of 0.9.0, with the source of each:
+As of 0.10.0, with the source of each:
 
 - **Deep pages of a sorted or filtered table.** Each block of a sorted or
   filtered view finds its rows with `LIMIT … OFFSET` over the sort keys and
@@ -697,6 +738,37 @@ As of 0.9.0, with the source of each:
   stops on, and at 200,000 rows they took seconds to arrive while their
   queries queued. A filter change refetches every live chart: 0.77 s and
   20 queries at 200,000 rows × 1,000 columns.
+- **Annotation jumps in a large sorted view.** `F8` finds the next
+  annotated row from the rows the grid holds when it can, in milliseconds.
+  Past them, in a sorted or filtered view, it queries DuckDB
+  (`src/annotations/AnnotationNavigator.ts`). In Chrome, on ten million rows
+  with a thousand annotated rows, a jump took 184–202 ms sorted on one
+  column, 1.2–1.3 s sorted on two, and 1.1–1.2 s filtered to three million
+  rows and sorted on two; the first jump, which also builds the table of
+  annotated rows, took 0.96 s and 3.0 s. `revealRow` in a sorted view counts
+  the rows before its row: 1.1–1.2 s there. A press while the grid fetches a
+  deep sorted block waits behind that fetch, as DuckDB runs one query at a
+  time: about 1.2 s at row 7,000,000. Under the annotated filter, a jump
+  right after a change to the annotations first waits for the view to
+  refresh, 0.4–0.7 s at a million annotated rows, and, when the change took
+  the cursor's row out of the view, for the query that finds the gap the
+  row left: up to about 90 ms deep in ten million rows, and 215–390 ms in
+  Node's DuckDB-WASM in a view sorted on a column, where it compares every
+  row with the one that left. Each refresh while the cursor stands at the
+  gap runs it again.
+- **The annotated filter at a million annotated rows.** Each of its queries
+  reads the table of annotated rows (`src/filters/FilterSQL.ts`). On ten
+  million rows, the filtered count took 0.34 s in Node's DuckDB-WASM (72 ms
+  for errors only); measured in Chrome while the filter was designed, the
+  count took 268–281 ms and a 128-row block at a deep offset 289–304 ms. A
+  change to the annotations that changes which rows the filter keeps
+  rebuilds the table and refreshes the view: 0.67 s from the change to
+  `filterChange` in headless Chromium. A change that keeps the same rows
+  refreshes nothing: it rebuilds the table alone when an annotated row's
+  severities changed, as navigation reads them all, and runs no query
+  otherwise. Each rebuild after a change to row or cell annotations
+  also lists the store's annotated rows again on the main thread, about
+  0.1 s at a million annotations.
 - **Large CSV and JSON exports.** They read the rows in batches of 10,000,
   each found with `LIMIT … OFFSET` over the view
   (`src/export/ExportQuery.ts`), and build the file as one string on the
@@ -734,8 +806,8 @@ As of 0.9.0, with the source of each:
 
 ## Reference numbers
 
-Measured for 0.9.0, or during the work that went into it, each with where
-and when. They describe those runs, not guarantees. The maintainer
+Measured for 0.9.0 and 0.10.0, or during the work that went into them, each
+with where and when. They describe those runs, not guarantees. The maintainer
 notes [Memory envelope](./dev/memory-envelope.md) and
 [Column virtualization](./dev/column-virtualization.md) keep the full
 records.
@@ -830,6 +902,154 @@ records name the browser, not the machine.
 - **Filters:** a filter took 0.5 s and 20 queries, where 0.8 took 4.4 s and
   2,002 queries. At 200,000 rows it took 0.77 s and 20 queries.
 
+### Annotations at a million
+
+Measured on 10 October 2026, during the 0.10.0 annotation work. "Before" is
+the code 0.9.0 shipped, which the 0.10.0 branch still had.
+
+**The store.** Node 22 on an Apple M1 Pro, 1,000,000 annotations (90% cell,
+9% row, 1% column, seeded, over 200,000 rows × 1,000 columns), timed by
+`annotations.scale.perf.test.ts` and by hand:
+
+| Operation                                  | Before                       | After                                |
+| ------------------------------------------ | ---------------------------- | ------------------------------------ |
+| `addMany` of 1,000,000                     | 4.95 s                       | 0.77–0.88 s                          |
+| Heap per annotation                        | 572 B                        | 258 B                                |
+| `getByCell`, median                        | 856 µs                       | 2–2.6 µs                             |
+| `getByRow` / `getByColumn`, median         | 48 / 62 ms                   | about 2 µs / 131–155 µs              |
+| `remove` of one                            | 43.5 ms                      | 5–6 µs                               |
+| `removeMany` of 100                        | 5.4 s                        | 0.38–0.45 ms                         |
+| `toJSON`                                   | 237 ms                       | 13–14 ms                             |
+| `loadJSON(file, 'replace')` onto 1,000,000 | 3.0 s                        | 0.65–0.73 s (0.95 s with a listener) |
+| `clear('all')`                             | `RangeError` from about 125K | 0.1 ms (32–34 ms with a listener)    |
+| `clear('column')` / `('row')` / `('cell')` | 430 s for `'column'`         | 8 / 41 / 26 ms                       |
+| One generated id                           | 264 B, 419 ms a million      | 56 B, 93 ms a million                |
+
+The per-scope summaries the grid reads take 50–150 ns a call. `getByRow`'s
+first call builds a by-row index of the cell annotations, 0.2 s and 24 bytes
+an annotation at a million, kept current from then on.
+
+**The grid.** Headless Chromium on an M-series Mac, with persistence and
+charts off, the same 90 / 9 / 1 mix, timed by `annotations-scale.spec.ts`
+under `RUN_ANNOTATION_PERF=1`. A scroll step is the synchronous render,
+style and layout over cached rows:
+
+| Table          | Annotations | Scroll step | `update()` in view | `add()` off-screen | Severity toggle | `addMany`        |
+| -------------- | ----------: | ----------: | -----------------: | -----------------: | --------------: | ---------------- |
+| 10,000 × 1,000 |           0 |      4.7 ms |             7.5 µs |               5 µs |         0.14 ms | —                |
+| 10,000 × 1,000 |     100,000 |      5.8 ms |             5.5 µs |             2.5 µs |         0.36 ms | 88 ms            |
+| 10,000 × 1,000 |   1,000,000 |      6.4 ms |             6.5 µs |            19.5 µs |         0.20 ms | 870 ms (900,000) |
+| 10,000,000 × 9 |           0 |      2.2 ms |               7 µs |               4 µs |         0.06 ms | —                |
+| 10,000,000 × 9 |     100,000 |      2.9 ms |             4.5 µs |               3 µs |         0.08 ms | 73 ms            |
+| 10,000,000 × 9 |   1,000,000 |      3.1 ms |             3.5 µs |             4.5 µs |         0.08 ms | 842 ms (900,000) |
+
+Before, in Chrome on the demo's dev server, a different harness: at 100,000
+annotations a scroll step took 1.3 s on the 1,000-column table and 1.43 s on
+the 10-million-row one, one `update()` 2.6 s and 1.09 s, and `addMany` 2.8 s
+and 1.37 s; with none, a scroll step took 25 and 17 ms there. Checked by hand
+in Chrome, in a hidden window, where script, style and layout were timed but
+not paint: on the 1,000-column table (about 414 cells and 1,000 headers
+mounted) the median scroll step was 6.8–7.9 ms with no annotations and
+7.6–7.9 ms with a million (90th percentile 8.4–9.3 and 9.0–9.2 ms), and on
+the 10-million-row one (216 cells) 3.3–4.1 and 4.0–4.1 ms; `addMany` of a
+million took 1.65 s and about 2.0 s, `clear('all')` 46 ms, a severity
+toggle 0.2–1.9 ms, and one `update()` or off-screen `add()` at most 0.3 ms.
+
+**Navigation.** Chrome, `deep-10m.parquet` (10,000,000 rows × 9 columns),
+1,000,000 annotated rows; the search alone, without the scroll and the
+render that follow it:
+
+| Search                                                             | Time                         |
+| ------------------------------------------------------------------ | ---------------------------- |
+| From the rows the grid holds, or by binary search                  | under 2 ms                   |
+| SQL, filtered, unsorted                                            | 210 ms                       |
+| SQL, filtered, unsorted, errors only                               | 107 ms                       |
+| SQL, sorted on `amount`                                            | 450 ms                       |
+| SQL, sorted on `city DESC, amount ASC`                             | 0.85–0.9 s                   |
+| SQL, filtered and sorted                                           | 0.83 s                       |
+| `revealRow`, a sorted view                                         | 90–360 ms                    |
+| Building the table of annotated rows                               | 0.64–0.7 s                   |
+| The cursor's row, when the grid no longer holds it (row 7,000,000) | 0.5 s filtered, 1.4 s sorted |
+
+By hand in Chrome, `F8` with a million annotations over 942,769 rows took
+3–9 ms unsorted and 2–10 ms sorted on `amount` (the next annotated row was
+among the rows the grid held), `revealRow` 2 ms unsorted and 1.1–1.2 s
+sorted. With 1,000 annotated rows, every jump is SQL; see
+[Known slow paths](#known-slow-paths).
+
+An unsorted SQL search places the row it finds by counting the rows
+between the cursor's row and it. Under the annotated filter, a jump right
+after a change to the annotations first waits for the view to refresh,
+0.4–0.7 s at a million annotated rows. When the change took the cursor's
+row out of the view, finding the gap the row left takes one query once the
+count is in, which the cursor waits for before it moves there; it runs
+again on each refresh while the cursor stands at the gap. In a view ordered
+by `__rowid__`, an unsorted one among them, it counts only the rows between
+the gap and the nearest row the grid holds. In Node's DuckDB-WASM, on ten
+million rows with a million annotated rows, it took about 23 ms at any
+depth with the gap among the rows held, against up to 105 ms at row
+9,000,000 counted from the start, as for a gap far from them (up to about
+90 ms in Chrome); sorted on a column, where it compares every row with the
+one that left, 215–390 ms. After a sort, or a change to a derived column
+the filters or the sort name, the table asks in the background for the row
+at the cursor's place when the grid does not hold it (the last row of the
+table above), so that the next refresh can follow that row. The
+navigator's chunk is 4.80 kB.
+
+**The annotated filter.** In Node's DuckDB-WASM, on 10,000,000 rows: for
+1,000,000 annotated rows, building the statement took 56 ms and building the
+table 0.38 s, and the filtered count 0.34 s (72 ms for errors only); for
+100,000, a rebuild took 50 ms and the count 41 ms. In headless Chromium on
+the same rows:
+
+| Annotated rows | `showAnnotatedRows` → `filterChange` | A change under it → `filterChange` | Switching severities | Longest main-thread task |
+| -------------: | ------------------------------------ | ---------------------------------- | -------------------- | ------------------------ |
+|        100,000 | 121 ms                               | 61 ms                              | 12 ms                | none over 50 ms          |
+|      1,000,000 | 0.67 s                               | 0.67 s                             | 75 ms                | about 120 ms             |
+
+The 120 ms task is the store listing its annotated rows after a change; the
+statement is built in steps of 100,000 rows, none over 11 ms. These figures
+predate two later changes: the cursor following its row as the view
+refreshes, and no refresh when a change keeps the same rows.
+
+**The session.** Chromium, 1,000,000 annotations, several runs:
+
+| Step                                                                                   | Time                                      |
+| -------------------------------------------------------------------------------------- | ----------------------------------------- |
+| A save after a sort change (it reads the head, writes nothing to `dt-annotations`)     | 0.2–0.3 ms                                |
+| A save after the annotations change (100 chunks and the head, then the session record) | 0.43–0.51 s, longest task 11–16 ms        |
+| `saveSync()` on page hide, the annotations changed                                     | one task of 0.32 s                        |
+| `saveSync()` on page hide, a save of the same annotations under way                    | 0–1 ms: a session record naming its write |
+| A reload's read of the annotations                                                     | 0.37–0.8 s, its `getAll` one task         |
+| Their restore                                                                          | 0.70–0.73 s, all 1,000,000 back, in order |
+| The reload's next save                                                                 | the session record only                   |
+
+Checked by hand in Chrome at a million, with its IndexedDB and DuckDB-WASM:
+the first save wrote the head and 100 chunks; a sort change and a severity
+toggle wrote the session record alone; a reload restored all 1,000,000
+with no warning, and its next save wrote the session record alone; the
+annotated filter for errors came back with its 325,151 rows. `loadData` of
+other data took 84 ms, and left no annotations, no annotated filter, and
+neither the old table nor its table of annotated rows; `clearSession` took
+94 ms, and left no session record, head or chunk. In Chromium at a million,
+a reload in the middle of a save (between its chunks, between its two
+commits, during its cleanup), right after a `saveSync()`, or after a
+`saveSync()` whose annotations' transaction was aborted, restored the last
+annotations that had landed each time, and reported nothing. With a write
+of the million under way, a `destroy()` that left the page open let the
+write finish after `close()`, and the reload restored all of it with the
+sort; a `destroy()` or a hide as the page went restored the last state
+that had landed. No `PERSISTENCE_ANNOTATIONS_DROPPED` came up in any of
+these.
+
+Before, every save serialized and cloned every annotation: about 1.2 s at a
+million in Node, after any sort, filter or width change. In Node with
+fake-indexeddb (`sessionSave.annotations.perf.test.ts`, three runs on an
+Apple M1 Pro), a sort-change save takes 0.12–0.14 ms, its read of the head
+included, the first write 0.94 s with its longest task 30 ms (one task of
+about 1.2 s before chunking), a reload's read 1.0–1.1 s and its restore
+0.89–0.95 s.
+
 ### The timed tests
 
 One run of `npm run test:perf`, on an Apple M1 Pro with 16 GB, Node 22,
@@ -850,44 +1070,53 @@ also fetches rows and refetches charts.
 | `COUNT(*)` under a starts-with pattern filter, 1M rows      | 4,000 ms  | 81 ms         |
 | 200 blocks of 128 rows by `__rowid__` range, over 1.6M rows | 5,000 ms  | 185 ms        |
 | `AnnotationStore.addMany` of 10,000 annotations             | 250 ms    | 44 ms         |
-| 1,000 `getByCell` lookups among 10,000 annotations          | 500 ms    | 162 ms        |
+| 1,000 `getByCell` lookups among 10,000 annotations          | 1,500 ms  | 162 ms        |
 
 The range filter's rows sit together at the start of its table, so DuckDB
-skips almost all of it. Each scroll-handler test ran 1,000 events in 5 to
+skips almost all of it. The two annotation rows timed 0.9.0's store; 0.10.0's
+takes about 6 ms and 15 ms for them (the test file's medians, M1 Pro), and
+the file adds five cases at 100,000 annotations. The million-annotation
+budgets are in [Annotations at a million](#annotations-at-a-million). Each scroll-handler test ran 1,000 events in 5 to
 18 ms, setup included, against budgets of 1 ms an event at the median and
 16.6 ms at the 99th percentile. The nested-cell medians are under
 [Nested columns](#nested-columns).
 
 ### Bundle-size budgets
 
-`npm run size` checks the brotli-compressed size of the 13 files in
+`npm run size` checks the brotli-compressed size of the 15 files in
 `.size-limit.cjs` (the entries, the stylesheet and the lazy chunks) against
 their caps, and fails when one passes it. The worker script
 (`assets/worker-*.js`) and two chunks under 0.5 kB have no budget. The
-sizes below are the ones CI measured on `main` at `6b784f43` on 7 October
-2026, after the 0.9.0 "nice to have" fixes; each cap is 0.4–6.4 % above
-its size.
+sizes below are the baseline `.size-limit.cjs` records, re-measured with the
+0.10.0 annotation work on 10 October 2026; each cap is 0.8–6.2 % above its
+size. At 0.9.0 (`main` at `6b784f43`, 7 October 2026) the root entry was
+11.05 kB, the stylesheet 22.87 kB and the shared chunk 100.88 kB.
 
 | Budget                                                             | Size      | Cap     |
 | ------------------------------------------------------------------ | --------- | ------- |
-| Root entry · ESM                                                   | 11.05 kB  | 11.4 kB |
-| `/advanced` entry · ESM                                            | 2.15 kB   | 2.25 kB |
-| Stylesheet                                                         | 22.87 kB  | 23.7 kB |
-| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 100.88 kB | 104 kB  |
-| Lazy `SQLFilterModal` chunk                                        | 2.56 kB   | 2.6 kB  |
+| Root entry · ESM                                                   | 11.84 kB  | 12.1 kB |
+| `/advanced` entry · ESM                                            | 2.14 kB   | 2.25 kB |
+| Stylesheet                                                         | 23.52 kB  | 23.7 kB |
+| Shared `VisualizationRegistry-*` chunk ("lazy ExportDialog chunk") | 114.89 kB | 117 kB  |
+| Lazy `SQLFilterModal` chunk                                        | 2.55 kB   | 2.6 kB  |
 | Lazy `DerivedColumnModal` chunk                                    | 3.80 kB   | 3.95 kB |
 | Lazy `DerivedColumnEditPanel` chunk                                | 3.22 kB   | 3.3 kB  |
-| Lazy `FilterPresetPanel` chunk                                     | 2.69 kB   | 2.7 kB  |
-| Lazy CodeMirror editor chunk                                       | 5.19 kB   | 5.5 kB  |
-| Lazy `extractExpression` chunk                                     | 2.78 kB   | 2.95 kB |
-| Lazy `ValueInspector` chunk                                        | 8.44 kB   | 8.9 kB  |
-| Lazy `ExtractColumnPanel` chunk                                    | 4.98 kB   | 5.3 kB  |
+| Lazy `FilterPresetPanel` chunk                                     | 2.66 kB   | 2.7 kB  |
+| Lazy CodeMirror editor chunk                                       | 5.21 kB   | 5.5 kB  |
+| Lazy `extractExpression` chunk                                     | 2.79 kB   | 2.95 kB |
+| Lazy `ValueInspector` chunk                                        | 8.47 kB   | 8.9 kB  |
+| Lazy `ExtractColumnPanel` chunk                                    | 4.99 kB   | 5.3 kB  |
 | Lazy `TreeView` chunk                                              | 2.80 kB   | 2.85 kB |
+| Lazy `AnnotationNavigator` chunk                                   | 4.80 kB   | 5.0 kB  |
+| Lazy `AnnotatedRowsTable` chunk                                    | 2.73 kB   | 2.85 kB |
 
 The budget still named "lazy ExportDialog chunk" measures the shared
 `VisualizationRegistry-*` chunk, which holds most of the table: header,
 body, keyboard navigation. The root entry imports it, so every table loads
-it up front; the dialogs and panels below it load the first time one opens.
+it up front; the dialogs and panels below it load the first time one opens,
+annotation navigation the first time it runs or the annotated view looks
+for the cursor's row beyond the rows the grid holds, and the table of
+annotated rows the first time an annotated filter or a navigation needs it.
 Parquet export runs in DuckDB's worker (`COPY TO`), not in a chunk of its
 own. ESM only: the CJS bundles were dropped in 0.4.0.
 
@@ -904,12 +1133,12 @@ consumer-DX trade-off — open an issue if your environment requires it.
 
 ## How performance is tracked
 
-| Command                 | When it runs                                                      | What it guards                                                                                                            |
-| ----------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `npm run test:coverage` | CI's Test (Node 22) job, on every pull request and push to `main` | The four files of `tests/performance/` that need no flag: leaks, annotation budgets, the scroll handler, micro-benchmarks |
-| `npm run test:browser`  | CI's Browser accessibility suite job, on the same events          | Behaviour at scale in Chromium, and counts: header elements, mounted columns, live charts, queries per column change      |
-| `npm run size`          | CI's Bundle size budgets job, once the tests pass                 | The brotli size of the 13 files in `.size-limit.cjs` against their caps                                                   |
-| `npm run test:perf`     | By hand; no CI job runs it, and a pull request does not need it   | The DuckDB timing budgets and the 1,000-cycle create/destroy stress                                                       |
+| Command                 | When it runs                                                      | What it guards                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `npm run test:coverage` | CI's Test (Node 22) job, on every pull request and push to `main` | The four files of `tests/performance/` that need no flag: leaks, annotation budgets, the scroll handler, micro-benchmarks  |
+| `npm run test:browser`  | CI's Browser accessibility suite job, on the same events          | Behaviour at scale in Chromium, and counts: header elements, mounted columns, live charts, queries per column change       |
+| `npm run size`          | CI's Bundle size budgets job, once the tests pass                 | The brotli size of the 15 files in `.size-limit.cjs` against their caps                                                    |
+| `npm run test:perf`     | By hand; no CI job runs it, and a pull request does not need it   | The DuckDB timing budgets, the 1,000-cycle create/destroy stress, and the store and session saves at a million annotations |
 
 The timing budgets sit 3 to 417 times above the test durations in
 [The timed tests](#the-timed-tests), most of the DuckDB ones 16 to 95
@@ -927,9 +1156,14 @@ Not automated:
   on time: the value inspector opens within 3 s the first time and 1 s
   after that, and paints a bucket's 100 rows within 0.5 s
   (`value-inspector.spec.ts`), and at 200,000 rows the nested columns'
-  charts draw within a second of a jump to them (`nested-wide.spec.ts`);
-- filter and sort latency at 10M rows: the deepest table measured is
-  5M rows × 40 columns, so the tiers above that stay reasoned.
+  charts draw within a second of a jump to them (`nested-wide.spec.ts`).
+  `annotations-scale.spec.ts` times a scroll step, an `update()`, an
+  off-screen `add()` and a severity toggle against a table with no
+  annotations only with `RUN_ANNOTATION_PERF=1` set, which no CI job does;
+- filter and sort latency at 10M rows: the deepest table measured for them
+  is 5M rows × 40 columns, so the tiers above that stay reasoned. The
+  annotation work timed navigation and the annotated filter on 10M rows × 9
+  columns, not filters and sorts in general.
 
 If you measure something interesting about your workload, share it in an
 issue — it helps calibrate the thresholds here.

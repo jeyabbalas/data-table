@@ -19,7 +19,7 @@ export const WIDE_COLUMNS = 266;
  * The example chip of the nested-types fixture, 1,000 rows of lists,
  * structs, maps and JSON (`tests/fixtures/datasets/nested-stress-tests.*`).
  */
-export const NESTED_EXAMPLE = 'Nested types (Parquet)';
+export const NESTED_EXAMPLE = 'Nested types Parquet';
 
 /**
  * {@link NESTED_EXAMPLE}'s structs and its list of structs, side by side: all
@@ -194,14 +194,14 @@ export async function installProbes(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to the demo and wait for DuckDB WASM to finish booting — the
- * "Load File" button is disabled until then.
+ * Navigate to the demo and wait for it to settle: the "Open file" button is
+ * disabled while the demo restores a saved session.
  */
 export async function openDemo(page: Page): Promise<void> {
   await installProbes(page);
   await page.goto('./');
   await page.waitForFunction(
-    () => document.querySelector<HTMLButtonElement>('#load-file-btn')?.disabled === false,
+    () => document.querySelector<HTMLButtonElement>('#open-file-btn')?.disabled === false,
     undefined,
     { timeout: 90_000 },
   );
@@ -234,10 +234,10 @@ export async function loadCsv(page: Page, columns: number, rows = 200): Promise<
       const file = new File([lines.join('\n')], `wide${columns}.csv`, { type: 'text/csv' });
       const dt = new DataTransfer();
       dt.items.add(file);
+      // A picked file loads at once, as the file picker's change says.
       const input = document.querySelector<HTMLInputElement>('#file-input')!;
       input.files = dt.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      document.querySelector<HTMLButtonElement>('#load-file-btn')!.click();
     },
     { columns, rows },
   );
@@ -280,6 +280,20 @@ export async function loadExample(page: Page, name: string): Promise<void> {
     { timeout: 90_000 },
   );
   await page.waitForLoadState('networkidle').catch(() => undefined);
+  await settle(page);
+}
+
+/**
+ * Make the demo's table `height` px tall, taller than the window.
+ *
+ * The demo fits its table to the window, which at the test viewport is a
+ * short one: a panel that opens below a header has little room, and the
+ * page does not scroll. Specs that need room, or a grid taller than the
+ * window, as on a page that lays a long table out in its flow, call this
+ * first.
+ */
+export async function tallDemoTable(page: Page, height = 960): Promise<void> {
+  await page.addStyleTag({ content: `.workspace { flex: none; height: ${height}px; }` });
   await settle(page);
 }
 

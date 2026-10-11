@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Programmatic filters</title>
+    <title>Programmatic filters · Data Table examples</title>
+    <!-- Light or dark as picked in the demo; the system's otherwise. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('dt-demo-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.dtColorScheme = theme;
+        }
+      } catch (e) {
+        /* storage unavailable */
+      }
+    </script>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       html,
       body {
@@ -14,38 +26,6 @@
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
-        background: var(--dt-bg);
-        color: var(--dt-text);
-      }
-      header {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid var(--dt-border);
-        display: flex;
-        gap: 0.5rem;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      header h1 {
-        margin: 0 0.75rem 0 0;
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--dt-text);
-      }
-      header a {
-        color: var(--dt-primary);
-      }
-      button {
-        font: inherit;
-        padding: 0.35rem 0.75rem;
-        background: var(--dt-bg-tertiary);
-        color: var(--dt-text);
-        border: 1px solid var(--dt-border);
-        border-radius: 4px;
-        cursor: pointer;
-      }
-      button:hover {
-        background: color-mix(in srgb, var(--dt-bg-tertiary) 70%, var(--dt-text) 12%);
       }
       #table {
         flex: 1;
@@ -54,13 +34,27 @@
     </style>
   </head>
   <body>
-    <header>
-      <h1>Programmatic filters (<a href="../">back</a>)</h1>
-      <button id="btn-card">Paid by card</button>
-      <button id="btn-fare">Fare $10–$50</button>
-      <button id="btn-tip">Tip &gt; 20%</button>
-      <button id="btn-short">Trip &lt; 2 mi</button>
-      <button id="btn-clear">Clear all</button>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">03</span> Programmatic filters</h1>
+      <div class="ex-actions">
+        <button id="btn-card">Paid by card</button>
+        <button id="btn-fare">Fare $10–$50</button>
+        <button id="btn-tip">Tip &gt; 20%</button>
+        <button id="btn-short">Trip &lt; 2 mi</button>
+        <button id="btn-clear">Clear all</button>
+      </div>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/03-programmatic-filters"
+        rel="noopener"
+        >Source ↗</a
+      >
+      <p class="ex-lede">
+        Each button adds a filter with <code>actions.addFilter</code> or
+        <code>addRawSQLFilter</code>; the filters stack, and every change is logged from
+        <code>filterChange</code> to the console.
+      </p>
     </header>
     <div id="table"></div>
     <script type="module" src="./main.ts"></script>

@@ -1685,7 +1685,7 @@ export class ValueCounts extends BaseVisualization {
    * Handle keyboard events - ESC handled globally
    */
   protected handleKeyDown(_key: string): void {
-    // ESC key handling done at demo app level via LIFO stack
+    // Escape is handled by InteractionManager, LIFO across columns
   }
 
   // =========================================

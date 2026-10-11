@@ -3,112 +3,101 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Custom theme</title>
+    <title>Custom theme · Data Table examples</title>
+    <link rel="stylesheet" href="../examples.css" />
     <style>
       /* Page chrome only. The --dt-* overrides live in theme.css, imported
-         from main.ts after the library's stylesheet so cascade order wins. */
+         from main.ts after the library's stylesheet so cascade order wins.
+         This page has its own Light / Dark / Auto buttons, so it leaves out
+         the theme the other examples take from the demo. */
       html,
       body {
         margin: 0;
         padding: 0;
         height: 100%;
-        background: #fffbf5;
-        color: #1c1917;
       }
       body {
         display: flex;
         flex-direction: column;
-        font-family: system-ui, sans-serif;
       }
-      header {
-        padding: 0.5rem 1rem;
-        border-bottom: 1px solid #d6d3d1;
-        display: flex;
-        gap: 0.75rem;
-        align-items: center;
-      }
-      header h1 {
-        margin: 0 0.75rem 0 0;
-        font-size: 1rem;
-        font-weight: 600;
-      }
-      header a {
-        color: #9a3412;
-      }
-      button {
-        font: inherit;
-        padding: 0.35rem 0.75rem;
-        background: #fef3e2;
-        border: 1px solid #d6d3d1;
-        border-radius: 4px;
-        cursor: pointer;
-        color: #1c1917;
-      }
-      button:hover {
-        background: #fed7aa;
-      }
-      button[aria-pressed='true'] {
-        background: var(--dt-primary, #c2410c);
-        color: #fff;
-        border-color: var(--dt-primary, #c2410c);
-      }
-
-      /* Swap page chrome colors when the example switches to dark — explicit. */
-      body:has(.dt-root[data-dt-color-scheme='dark']) {
-        background: #1c1917;
-        color: #fafaf9;
-      }
-      body:has(.dt-root[data-dt-color-scheme='dark']) header {
-        border-bottom-color: #44403c;
-      }
-      body:has(.dt-root[data-dt-color-scheme='dark']) header a {
-        color: #fdba74;
-      }
-      body:has(.dt-root[data-dt-color-scheme='dark']) button {
-        background: #292524;
-        border-color: #44403c;
-        color: #fafaf9;
-      }
-      body:has(.dt-root[data-dt-color-scheme='dark']) button:hover {
-        background: #44403c;
-      }
-
-      /* Auto mode + system dark — flip the page chrome unless the user
-         explicitly opted back to light. The :not() guard mirrors the
-         library's opt-out semantic in src/styles/01-variables.css. */
-      @media (prefers-color-scheme: dark) {
-        body:has(.dt-root:not([data-dt-color-scheme='light'])) {
-          background: #1c1917;
-          color: #fafaf9;
-        }
-        body:has(.dt-root:not([data-dt-color-scheme='light'])) header {
-          border-bottom-color: #44403c;
-        }
-        body:has(.dt-root:not([data-dt-color-scheme='light'])) header a {
-          color: #fdba74;
-        }
-        body:has(.dt-root:not([data-dt-color-scheme='light'])) button {
-          background: #292524;
-          border-color: #44403c;
-          color: #fafaf9;
-        }
-        body:has(.dt-root:not([data-dt-color-scheme='light'])) button:hover {
-          background: #44403c;
-        }
-      }
-
       #table {
         flex: 1;
         min-height: 0;
       }
+
+      /* The shared page palette, in the theme's warm colors: cream and
+         terracotta, or warm stone in dark. `:root:root` outweighs the
+         shared stylesheet's dark rule, which follows the system rather than
+         this table. */
+      :root:root {
+        --ex-bg: #fdf6ec;
+        --ex-surface: #fffbf5;
+        --ex-hover: #fef3e2;
+        --ex-pressed: #fde4c8;
+        --ex-border: #ecdcc6;
+        --ex-border-strong: #d6c3a8;
+        --ex-text: #1c1917;
+        --ex-muted: #57534e;
+        --ex-accent: #c2410c;
+        --ex-code: #fef3e2;
+      }
+
+      /* Dark when the table is: picked with the buttons, or Auto on a dark
+         system. */
+      :root:root:has(.dt-root[data-dt-color-scheme='dark']) {
+        --ex-bg: #141210;
+        --ex-surface: #1c1917;
+        --ex-hover: #292524;
+        --ex-pressed: #44403c;
+        --ex-border: #292524;
+        --ex-border-strong: #44403c;
+        --ex-text: #fafaf9;
+        --ex-muted: #a8a29e;
+        --ex-accent: #fb923c;
+        --ex-code: #292524;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:root:has(.dt-root:not([data-dt-color-scheme='light'])) {
+          --ex-bg: #141210;
+          --ex-surface: #1c1917;
+          --ex-hover: #292524;
+          --ex-pressed: #44403c;
+          --ex-border: #292524;
+          --ex-border-strong: #44403c;
+          --ex-text: #fafaf9;
+          --ex-muted: #a8a29e;
+          --ex-accent: #fb923c;
+          --ex-code: #292524;
+        }
+      }
+
+      .ex-actions button[aria-pressed='true'] {
+        border-color: var(--dt-primary, #c2410c);
+        background: var(--dt-primary, #c2410c);
+        color: var(--dt-bg, #fffbf5);
+      }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Custom theme (<a href="../">back</a>)</h1>
-      <button id="btn-light" aria-pressed="false">Light</button>
-      <button id="btn-dark" aria-pressed="false">Dark</button>
-      <button id="btn-auto" aria-pressed="true">Auto</button>
+    <header class="ex-header">
+      <a class="ex-back" href="../">← Examples</a>
+      <h1><span class="ex-num">06</span> Custom theme</h1>
+      <div class="ex-actions" role="group" aria-label="Color scheme">
+        <button id="btn-light" aria-pressed="false">Light</button>
+        <button id="btn-dark" aria-pressed="false">Dark</button>
+        <button id="btn-auto" aria-pressed="true">Auto</button>
+      </div>
+      <a
+        class="ex-source"
+        href="https://github.com/jeyabbalas/data-table/tree/main/examples/06-custom-theme"
+        rel="noopener"
+        >Source ↗</a
+      >
+      <p class="ex-lede">
+        Terracotta and cream in light, warm stone in dark: every color comes from
+        <code>--dt-*</code> variables in <code>theme.css</code>, and the buttons call
+        <code>setColorScheme</code>.
+      </p>
     </header>
     <div id="table"></div>
     <script type="module" src="./main.ts"></script>

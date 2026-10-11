@@ -7,6 +7,7 @@ import { createTableState } from '@/core/State';
 import { StateActions } from '@/core/Actions';
 import type { TableState } from '@/core/State';
 import type { Filter } from '@/filters/FilterTypes';
+import { fakeChipStrip, nextFrame, type FakeStrip } from '../helpers/fakeChipStrip';
 
 // Mock WorkerBridge
 const mockBridge = {
@@ -211,54 +212,117 @@ describe('FilterBar', () => {
     bar.destroy();
   });
 
-  it('should smooth-scroll to the rightmost chip when chips overflow', async () => {
-    const bar = new FilterBar(state, actions);
-    const el = bar.getElement();
-    const chipsContainer = el.querySelector('.dt-filter-chips') as HTMLElement;
+  describe('one row that scrolls sideways', () => {
+    let bar: FilterBar;
+    let layout: FakeStrip;
 
-    // Mock scrollTo and layout properties to simulate overflow
-    const scrollToMock = vi.fn();
-    chipsContainer.scrollTo = scrollToMock;
-    Object.defineProperty(chipsContainer, 'scrollWidth', {
-      value: 500,
-      configurable: true,
-    });
-    Object.defineProperty(chipsContainer, 'clientWidth', {
-      value: 200,
-      configurable: true,
-    });
-
-    // Add filters to trigger update
-    actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
-    actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
-
-    // Flush double-rAF (jsdom implements rAF as setTimeout(cb, 0))
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-    expect(scrollToMock).toHaveBeenCalledWith({
-      left: 500,
-      behavior: 'smooth',
+    beforeEach(() => {
+      bar = new FilterBar(state, actions, { onAddSQLFilter: () => {}, onPresetsClick: () => {} });
+      document.body.appendChild(bar.getElement());
+      const el = bar.getElement();
+      // 400px of row, the last 120 under its buttons; chips 100 wide, 10 apart.
+      layout = fakeChipStrip(
+        el.querySelector('.dt-filter-scroll')!,
+        el.querySelector('.dt-filter-actions')!,
+        '.dt-filter-chip',
+        { width: 400, end: 120, chip: 100, gap: 10 },
+      );
     });
 
-    bar.destroy();
-  });
+    afterEach(() => {
+      layout.restore();
+      bar.destroy();
+      document.body.innerHTML = '';
+    });
 
-  it('should not scroll when chips fit within the container', async () => {
-    const bar = new FilterBar(state, actions);
-    const el = bar.getElement();
-    const chipsContainer = el.querySelector('.dt-filter-chips') as HTMLElement;
+    function addFilters(columns: string[]): void {
+      for (const column of columns) actions.addFilter({ type: 'point', column, value: 1 });
+    }
 
-    const scrollToMock = vi.fn();
-    chipsContainer.scrollTo = scrollToMock;
-    // scrollWidth <= clientWidth means no overflow (jsdom defaults both to 0)
+    it('keeps its buttons inside the row that scrolls, so the tab stop always is', () => {
+      // axe's `scrollable-region-focusable` wants something in the tab order
+      // inside a region that overflows, and the roving stop rests on
+      // "Expression" until a chip takes it.
+      const el = bar.getElement();
+      const scroll = el.querySelector('.dt-filter-scroll')!;
+      const actionsGroup = scroll.querySelector('.dt-filter-actions')!;
+      for (const name of ['clear-all', 'expression-btn', 'presets-btn']) {
+        expect(actionsGroup.querySelector(`.dt-filter-${name}`), name).not.toBeNull();
+      }
+      addFilters(['a', 'b']);
+      expect(Array.from(el.querySelectorAll('button')).every((b) => scroll.contains(b))).toBe(true);
+    });
 
-    actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+    it('glides to the chip a new filter adds past the view, at the next frame', async () => {
+      addFilters(['a', 'b']);
+      await nextFrame();
+      expect(layout.scrollTo).not.toHaveBeenCalled(); // both in view
 
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      actions.addFilter({ type: 'null', column: 'c' });
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+      await nextFrame();
 
-    expect(scrollToMock).not.toHaveBeenCalled();
+      // c is the third chip, 220–320, and the room ends at 400 − 120 = 280.
+      expect(layout.scrollTo).toHaveBeenCalledWith({ left: 320 - 280, behavior: 'smooth' });
+    });
 
-    bar.destroy();
+    it('makes one scroll for filters added together, to the last of them', async () => {
+      addFilters(['a', 'b', 'c', 'd', 'e']);
+      await nextFrame();
+
+      // e: 440–540.
+      expect(layout.scrollTo).toHaveBeenCalledTimes(1);
+      expect(layout.scrollTo).toHaveBeenCalledWith({ left: 540 - 280, behavior: 'smooth' });
+    });
+
+    it('glides back to a chip that comes in before the view', async () => {
+      addFilters(['a', 'b', 'c', 'd', 'e']);
+      await nextFrame();
+      layout.scrollTo.mockClear();
+
+      // As an undo or a preset can: a filter put back at the front.
+      state.filters.set([{ type: 'null', column: 'z' }, ...state.filters.get()]);
+      await nextFrame();
+
+      expect(layout.scrollTo).toHaveBeenCalledWith({ left: 0, behavior: 'smooth' });
+    });
+
+    it('does not scroll when a filter changes or goes', async () => {
+      addFilters(['a', 'b', 'c', 'd', 'e']);
+      await nextFrame();
+      layout.scrollTo.mockClear();
+      layout.scrollLeft = 0;
+
+      // A filter on a filtered column replaces it in place: a change.
+      actions.addFilter({ type: 'point', column: 'e', value: 2 });
+      await nextFrame();
+      actions.removeFilter('b');
+      await nextFrame();
+      actions.clearFilters();
+      await nextFrame();
+
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+      expect(layout.scrollLeft).toBe(0);
+    });
+
+    it('does not scroll for the chips its first render finds', async () => {
+      bar.destroy();
+      layout.restore();
+      addFilters(['a', 'b', 'c', 'd', 'e']);
+
+      bar = new FilterBar(state, actions);
+      document.body.appendChild(bar.getElement());
+      const el = bar.getElement();
+      layout = fakeChipStrip(
+        el.querySelector('.dt-filter-scroll')!,
+        el.querySelector('.dt-filter-actions')!,
+        '.dt-filter-chip',
+        { width: 400, end: 120, chip: 100, gap: 10 },
+      );
+      await nextFrame();
+
+      expect(layout.scrollTo).not.toHaveBeenCalled();
+    });
   });
 
   /**
@@ -454,6 +518,42 @@ describe('FilterBar', () => {
       expect(all[0]!.getAttribute('tabindex')).toBe('0');
       // Focus followed the stop instead of falling out of the bar entirely.
       expect(document.activeElement).toBe(all[0]);
+
+      bar.destroy();
+    });
+
+    it('hands the stop, and focus, to the next chip when a middle chip removes itself', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+      actions.addFilter({ type: 'null', column: 'notes' });
+
+      const removeAge = buttons(bar)[1]!;
+      removeAge.focus();
+      removeAge.click();
+
+      // The chip that took its place, not the first: in a row scrolled to
+      // the middle, going to the first would scroll the row back to its start.
+      const stop = buttons(bar).find((b) => b.getAttribute('tabindex') === '0');
+      expect(stop?.getAttribute('aria-label')).toBe('Remove filter for notes');
+      expect(document.activeElement).toBe(stop);
+
+      bar.destroy();
+    });
+
+    it('keeps the stop on its chip through a rebuild that leaves the chip', () => {
+      const bar = mount();
+      actions.addFilter({ type: 'point', column: 'color', value: 'blue' });
+      actions.addFilter({ type: 'range', column: 'age', min: 20, max: 40 });
+      const removeAge = buttons(bar)[1]!;
+      removeAge.focus();
+
+      // Any filter change rebuilds every chip.
+      actions.addFilter({ type: 'null', column: 'notes' });
+
+      const stop = buttons(bar).find((b) => b.getAttribute('tabindex') === '0');
+      expect(stop?.getAttribute('aria-label')).toBe('Remove filter for age');
+      expect(document.activeElement).toBe(stop);
 
       bar.destroy();
     });

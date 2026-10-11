@@ -5,6 +5,8 @@
  * per-type interfaces so consumers get type-safe property access.
  */
 
+import type { AnnotationSeverity } from '../annotations/types';
+
 /**
  * Range (`min` ≤ x ≤ `max` by default) filter on a numeric, date, time or
  * interval column. Bounds may be widened to strict comparisons via `maxInclusive` /
@@ -193,12 +195,65 @@ export interface RawSQLFilter {
 }
 
 /**
+ * Keeps the rows that have annotations: the rows with a row-scope or a
+ * cell-scope annotation in `table.annotations`, of the severities
+ * {@link AnnotatedFilter.severities} names. A column-scope annotation singles
+ * out no row, so it keeps none.
+ *
+ * `actions.showAnnotatedRows()` adds one and `actions.hideAnnotatedRows()`
+ * removes it. There is at most one, as every annotated filter has the same
+ * synthetic column key, `'__annotated__'`. The rows it keeps follow the
+ * annotations: adding or removing one while the filter is on updates the
+ * view in place, keeping its scroll position and the cursor on its row, and
+ * fires `filterChange` with the same filters and the new count. A change
+ * that keeps the same rows, such as an edited message or another severity
+ * on a row already kept, leaves the view as it is. The severity filter
+ * (`annotations.setSeverityFilter`) changes which tints show, not which
+ * rows this keeps.
+ *
+ * It reads a DuckDB table of the annotated rows that the table keeps for
+ * it, named from {@link AnnotatedFilter.table}: `filtersToWhereClause`
+ * writes it as `"__rowid__" IN (SELECT "__rowid__" FROM …)`, which works on
+ * the base table and on its derived-column view alike.
+ *
+ * @example
+ * table.actions.showAnnotatedRows({ severities: ['error', 'warning'] });
+ * table.state.filters.get();
+ * // [{ type: 'annotated', column: '__annotated__', severities: ['error', 'warning'], table: 'orders' }]
+ */
+export interface AnnotatedFilter {
+  type: 'annotated';
+  /** Synthetic key, the same for every annotated filter: it filters no column. */
+  column: '__annotated__';
+  /**
+   * The severities whose annotations keep a row. Left out or empty, an
+   * annotation of any severity does.
+   */
+  severities?: AnnotationSeverity[] | undefined;
+  /**
+   * The base table whose annotated rows the filter keeps: the DuckDB table
+   * the data loaded into, not a derived-column view. `actions.addFilter`
+   * sets it to the table's own, and so do a session restore and a preset
+   * load, so a filter written by hand can leave it out. Without it the
+   * filter keeps no row.
+   */
+  table?: string | undefined;
+}
+
+/**
  * Discriminated union of every filter shape understood by the library.
  * `actions.addFilter`, `state.filters`, the export pipeline, and
  * `filtersToWhereClause` all consume this union directly.
  */
 export type Filter =
-  RangeFilter | PointFilter | SetFilter | NotSetFilter | NullFilter | PatternFilter | RawSQLFilter;
+  | RangeFilter
+  | PointFilter
+  | SetFilter
+  | NotSetFilter
+  | NullFilter
+  | PatternFilter
+  | RawSQLFilter
+  | AnnotatedFilter;
 
 /** String literal union of every {@link Filter} discriminator value. */
 export type FilterType = Filter['type'];

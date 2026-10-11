@@ -6,7 +6,7 @@
 
 # Interface: DuckDBUnionTypeNode
 
-Defined in: [core/duckdbType.ts:209](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L209)
+Defined in: [core/duckdbType.ts:209](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L209)
 
 A UNION: `UNION(num INTEGER, str VARCHAR)`.
 
@@ -25,7 +25,7 @@ if (node.kind === 'union') node.members[1]!.type.sqlType; // 'VARCHAR'
 
 > `readonly` **kind**: `"union"`
 
-Defined in: [core/duckdbType.ts:210](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L210)
+Defined in: [core/duckdbType.ts:210](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L210)
 
 ***
 
@@ -33,7 +33,7 @@ Defined in: [core/duckdbType.ts:210](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **members**: readonly [`DuckDBUnionMember`](DuckDBUnionMember.md)[]
 
-Defined in: [core/duckdbType.ts:212](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L212)
+Defined in: [core/duckdbType.ts:212](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L212)
 
 ***
 
@@ -41,4 +41,4 @@ Defined in: [core/duckdbType.ts:212](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:211](https://github.com/jeyabbalas/data-table/blob/08c82220cdd9d07ff4b79f9d23faa8b1188aac71/src/core/duckdbType.ts#L211)
+Defined in: [core/duckdbType.ts:211](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L211)

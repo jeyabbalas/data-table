@@ -1,28 +1,31 @@
 /**
- * Interactive Data Table — Demo App
+ * Data Table — Demo App
  *
  * This demo shows a third-party consumer embedding the data-table library.
  * Almost all wiring is handled by `createDataTable()`; the demo only owns
- * the surrounding UI (file upload, URL input, info bar) and a tiny
- * persistence convention so that a single dataset's history survives
- * page refresh.
+ * the surrounding UI (file picker, URL box, loading overlay, status bar)
+ * and a tiny persistence convention so that a single dataset's history
+ * survives page refresh.
  *
- * The demo never reads a dataset itself. A file, or a URL's fetched bytes,
- * goes to the library as a File, so a large Parquet file takes the
+ * The demo never reads a dataset itself. A file, or a URL's downloaded
+ * bytes, goes to the library as a File, so a large Parquet file takes the
  * library's large-file path: DuckDB reads it from disk as it loads, and
- * nothing copies it into the page.
+ * nothing copies it into the page. Excel workbooks are the exception: the
+ * library does not read them, so `excel.ts` converts the chosen sheet to
+ * JSON first.
  *
  * Persistence convention (demo-only — the library itself is general):
  * - File uploads use a fresh per-click `tableName`
  *   (`dt_file_${ts36}_${counter}`). Re-uploading the same file is a
  *   deliberate user action and always starts a fresh session, even when
  *   the bytes are identical to the prior upload.
- * - URL loads use a SHA-256 of the fetched bytes (truncated to 16 hex
+ * - URL loads use a SHA-256 of the downloaded bytes (truncated to 16 hex
  *   chars) as the `tableName`; see `fingerprint` for large ones. Same
  *   content → same tableName → snapshot restored (or no-op if the same
  *   hash is already loaded). Different content → different tableName →
  *   fresh state, previous snapshot evicted. This makes URL refresh
- *   fool-proof against URLs whose contents change between visits.
+ *   fool-proof against URLs whose contents change between visits. A
+ *   workbook's identity is its chosen sheet's converted bytes.
  * - The loaded dataset is cached in IndexedDB so a refresh restores it
  *   without a network round-trip or file picker prompt; see
  *   `cacheLoadedSource`.
@@ -40,6 +43,7 @@ import {
   SessionStore,
   type ColorScheme,
   type DataTable,
+  type SourceOptions,
 } from '@jeyabbalas/data-table';
 import {
   isNumericType,
@@ -48,55 +52,61 @@ import {
   isCategoricalType,
   isNestedType,
 } from '@jeyabbalas/data-table/advanced';
+import { Workbook, extensionOf, isWorkbook, pickSheet } from './excel';
+import { initThemeSwitch } from './theme';
 
 // ----- DOM refs -----
 const versionEl = document.getElementById('version')!;
-const initStatusEl = document.getElementById('init-status')!;
 const fileInput = document.getElementById('file-input') as HTMLInputElement;
-const loadFileBtn = document.getElementById('load-file-btn') as HTMLButtonElement;
+const openFileBtn = document.getElementById('open-file-btn') as HTMLButtonElement;
+const urlForm = document.getElementById('url-form') as HTMLFormElement;
 const urlInput = document.getElementById('url-input') as HTMLInputElement;
 const loadUrlBtn = document.getElementById('load-url-btn') as HTMLButtonElement;
+const tableFrameEl = document.getElementById('table-frame')!;
 const tableContainerEl = document.getElementById('table-container')!;
+const emptyErrorEl = document.getElementById('empty-error')!;
+const dropTargetEl = document.getElementById('drop-target')!;
 const tableInfoEl = document.getElementById('table-info')!;
 const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
 const clearSessionBtn = document.getElementById('clear-session-btn') as HTMLButtonElement;
 const undoBtn = document.getElementById('undo-btn') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo-btn') as HTMLButtonElement;
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-const themeRadios = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="theme"]'));
 
 versionEl.textContent = VERSION;
 
-// Theme toggle: forwards to table.setColorScheme when the table exists,
-// otherwise seeds the initial colorScheme option for createDataTable.
-let currentScheme: ColorScheme = 'auto';
-for (const radio of themeRadios) {
-  radio.addEventListener('change', () => {
-    if (!radio.checked) return;
-    currentScheme = radio.value as ColorScheme;
-    table?.setColorScheme(currentScheme);
-  });
-}
+// ----- Theme -----
+// One switch for the page and the table: the page reads `data-theme` on
+// <html>, and the table takes the same scheme through `setColorScheme`, or
+// as its initial `colorScheme` when it mounts.
+let currentScheme: ColorScheme = initThemeSwitch((scheme) => {
+  currentScheme = scheme;
+  table?.setColorScheme(scheme);
+});
 
 // ----- Shareable URL params (demo-only) -----
 // `?url=…` lets a user copy the demo URL and have a friend open the same
-// dataset on the deployed GitHub Pages site. We use replaceState so loading
-// a dataset doesn't pollute the back/forward stack.
+// dataset on the deployed GitHub Pages site, with `&sheet=…` naming a
+// workbook's sheet. We use replaceState so loading a dataset doesn't
+// pollute the back/forward stack.
 const URL_PARAM_KEY = 'url';
+const SHEET_PARAM_KEY = 'sheet';
 
-function getUrlParam(): string | null {
+function getUrlParam(key = URL_PARAM_KEY): string | null {
   try {
-    return new URLSearchParams(window.location.search).get(URL_PARAM_KEY);
+    return new URLSearchParams(window.location.search).get(key);
   } catch {
     return null;
   }
 }
 
-function setUrlParam(url: string | null): void {
+function setUrlParam(url: string | null, sheet?: string): void {
   try {
     const params = new URLSearchParams(window.location.search);
     if (url) params.set(URL_PARAM_KEY, url);
     else params.delete(URL_PARAM_KEY);
+    if (url && sheet) params.set(SHEET_PARAM_KEY, sheet);
+    else params.delete(SHEET_PARAM_KEY);
     const qs = params.toString();
     const next = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`;
     window.history.replaceState(null, '', next);
@@ -147,6 +157,8 @@ interface LastSession {
   source: string;
   /** Identity: `dt_${sha256_16hex}` of the loaded bytes. */
   tableName: string;
+  /** A workbook's sheet, which a URL load of it picks again on restore. */
+  sheet?: string;
 }
 
 function openDataCache(): Promise<IDBDatabase | null> {
@@ -178,6 +190,8 @@ interface CachedSource {
   data: Blob;
   format: FileFormat;
   sourceName: string;
+  /** How the library reads it, when the defaults would not do. */
+  sourceOptions?: SourceOptions;
 }
 
 async function cacheSource(entry: CachedSource): Promise<void> {
@@ -201,11 +215,18 @@ async function cacheSource(entry: CachedSource): Promise<void> {
 /** A cache row as a {@link CachedSource}, including a row an older demo wrote. */
 function toCachedSource(row: unknown): CachedSource | null {
   if (typeof row !== 'object' || row === null) return null;
-  const { tableName, data, format, sourceName, buffer } = row as Record<string, unknown>;
+  const { tableName, data, format, sourceName, sourceOptions, buffer } = row as Record<
+    string,
+    unknown
+  >;
   if (typeof tableName !== 'string') return null;
   const name = typeof sourceName === 'string' ? sourceName : tableName;
   if (data instanceof Blob && (format === 'csv' || format === 'json' || format === 'parquet')) {
-    return { tableName, data, format, sourceName: name };
+    const cached: CachedSource = { tableName, data, format, sourceName: name };
+    if (typeof sourceOptions === 'object' && sourceOptions !== null) {
+      cached.sourceOptions = sourceOptions as SourceOptions;
+    }
+    return cached;
   }
   // Older demos cached every dataset as the bytes of a Parquet export.
   if (buffer instanceof Uint8Array) {
@@ -266,7 +287,7 @@ async function listCachedTableNames(): Promise<string[]> {
 }
 
 // ----- Content-hash dataset identity (URL loads only) -----
-// SHA-256 (first 64 bits, 16 hex chars) over the fetched URL bytes. Same
+// SHA-256 (first 64 bits, 16 hex chars) over the downloaded bytes. Same
 // content → same tableName regardless of URL, modification times, or
 // caching layers. crypto.subtle.digest runs off the main thread. File
 // uploads bypass this and get a per-click unique tableName — see
@@ -297,10 +318,30 @@ async function fingerprint(blob: Blob): Promise<string> {
 
 type FileFormat = 'csv' | 'json' | 'parquet';
 
+const FORMAT_EXTENSIONS: Record<string, FileFormat> = {
+  parquet: 'parquet',
+  pq: 'parquet',
+  json: 'json',
+  ndjson: 'json',
+  jsonl: 'json',
+  csv: 'csv',
+  tsv: 'csv',
+  txt: 'csv',
+};
+
 function detectFormatFromName(name: string): FileFormat {
-  const ext = name.split('.').pop()?.toLowerCase() ?? '';
-  if (ext === 'parquet' || ext === 'pq') return 'parquet';
-  if (ext === 'json' || ext === 'ndjson' || ext === 'jsonl') return 'json';
+  return FORMAT_EXTENSIONS[extensionOf(name)] ?? 'csv';
+}
+
+/**
+ * A dataset's format when its name does not say: Parquet starts with
+ * `PAR1`, JSON with `[` or `{`; anything else is read as CSV, whose
+ * dialect DuckDB detects.
+ */
+async function sniffFormat(blob: Blob, contentType: string): Promise<FileFormat> {
+  const head = await blob.slice(0, 64).text();
+  if (head.startsWith('PAR1')) return 'parquet';
+  if (/json/i.test(contentType) || /^\s*[[{]/.test(head)) return 'json';
   return 'csv';
 }
 
@@ -313,18 +354,86 @@ interface PreparedSource {
   file: File;
   format: FileFormat;
   sourceName: string;
+  /** How the library reads it, when the defaults would not do. */
+  sourceOptions?: SourceOptions;
+  /** A workbook's sheet, which this is converted from. */
+  sheet?: string;
+  /** The size the status bar shows: a workbook's, not its converted sheet's. */
+  size?: number;
 }
 
-async function prepareSource(source: File | string): Promise<PreparedSource> {
+/** Bytes downloaded from a URL, with the server's media type. */
+interface Download {
+  blob: Blob;
+  contentType: string;
+}
+
+/**
+ * Download `url` as a Blob, reporting progress as it goes. An XHR rather
+ * than `fetch`: its blob response is written to the browser's blob store
+ * as it arrives, so a large download is kept on disk rather than in the
+ * page, and it still reports bytes received, which `response.blob()` does
+ * not.
+ */
+function download(
+  url: string,
+  onProgress: (loaded: number, total: number) => void,
+): Promise<Download> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.responseType = 'blob';
+    xhr.onprogress = (event) => onProgress(event.loaded, event.lengthComputable ? event.total : 0);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve({
+          blob: xhr.response as Blob,
+          contentType: xhr.getResponseHeader('content-type') ?? '',
+        });
+      } else {
+        reject(new Error(`Failed to fetch URL: ${xhr.status} ${xhr.statusText}`.trimEnd()));
+      }
+    };
+    // A network failure or a refused cross-origin request: the browser says
+    // which in the console, and nothing more here.
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          'Failed to fetch URL: the server could not be reached, or it does not let ' +
+            'other sites read the file (CORS)',
+        ),
+      );
+    xhr.send();
+  });
+}
+
+/**
+ * Turn a File or URL into what the library loads. Resolves `null` when the
+ * user dismisses a workbook's sheet picker.
+ */
+async function prepareSource(
+  source: File | string,
+  opts: { sheet?: string | null } = {},
+): Promise<PreparedSource | null> {
   if (source instanceof File) {
-    return { file: source, format: detectFormatFromName(source.name), sourceName: source.name };
+    const known = extensionOf(source.name) in FORMAT_EXTENSIONS;
+    if (await isWorkbook(source, source.name, source.type, known)) {
+      return prepareWorkbook(source, source.name, opts.sheet);
+    }
+    const format = known ? detectFormatFromName(source.name) : await sniffFormat(source, '');
+    return { file: source, format, sourceName: source.name };
   }
-  const response = await fetch(source);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
-  }
-  // A Blob, not an ArrayBuffer: the browser keeps a large one on disk.
-  const blob = await response.blob();
+
+  const sourceName = source.split('/').pop() || source;
+  loading.begin(`Downloading ${sourceName}`);
+  loadingMessage = `Downloading <strong>${escapeHtml(sourceName)}</strong>…`;
+  updateInfo(loadingMessage);
+  const { blob, contentType } = await download(source, (loaded, total) => {
+    const known = total > 0 && loaded <= total;
+    loading.step(known ? `${formatSize(loaded)} of ${formatSize(total)}` : formatSize(loaded));
+    loading.progress(known ? loaded / total : null);
+  });
+  loading.progress(null);
   // A web page is no dataset, though it would load as a CSV of its HTML: a
   // server that answers any path with its app's page sends one, as Vite's
   // dev server does for a relative `?url=` it has no file for.
@@ -332,22 +441,80 @@ async function prepareSource(source: File | string): Promise<PreparedSource> {
   if (head.startsWith('<!doctype html') || head.startsWith('<html')) {
     throw new Error('The URL returned a web page, not a data file');
   }
-  // Relative to the page, as fetch reads it: an example chip's /fixtures/
-  // path in development, or a relative `?url=`.
+  // Relative to the page, as the request reads it: an example chip's
+  // /fixtures/ path in development, or a relative `?url=`.
   const path = new URL(source, window.location.href).pathname;
-  const fileSeg = path.split('/').pop() || '';
+  const fileSeg = decodeURIComponent(path.split('/').pop() || '');
+  const known = extensionOf(fileSeg) in FORMAT_EXTENSIONS;
+  if (await isWorkbook(blob, fileSeg, contentType, known)) {
+    return prepareWorkbook(blob, sourceName, opts.sheet);
+  }
   return {
     file: new File([blob], fileSeg || 'data', { type: blob.type }),
-    format: detectFormatFromName(fileSeg),
-    sourceName: source.split('/').pop() || source,
+    format: known ? detectFormatFromName(fileSeg) : await sniffFormat(blob, contentType),
+    sourceName,
   };
+}
+
+/**
+ * A workbook's sheet, converted to JSON: `sheet` if the workbook has it,
+ * the only sheet with data if there is one, or the one picked in the sheet
+ * picker. Resolves `null` when the picker is dismissed.
+ */
+async function prepareWorkbook(
+  blob: Blob,
+  sourceName: string,
+  wanted?: string | null,
+): Promise<PreparedSource | null> {
+  loading.begin(`Opening ${sourceName}`);
+  loading.step('Reading the workbook…');
+  loadingMessage = `Opening <strong>${escapeHtml(sourceName)}</strong>…`;
+  updateInfo(loadingMessage);
+  let workbook: Workbook;
+  try {
+    workbook = await Workbook.open(blob);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not read ${sourceName} as a workbook: ${reason}`, { cause: err });
+  }
+  try {
+    const { sheets } = workbook;
+    if (sheets.length === 0) throw new Error(`${sourceName} has no sheet with data`);
+    let sheet = sheets.find((s) => s.name === wanted)?.name ?? null;
+    if (sheet === null && sheets.length === 1) sheet = sheets[0]!.name;
+    if (sheet === null) {
+      loading.pause();
+      sheet = await pickSheet(sourceName, sheets);
+      if (sheet === null) return null;
+      loading.begin(`Opening ${sourceName}`);
+    }
+    loading.step(`Converting the sheet ${sheet}…`);
+    const converted = await workbook.convert(sheet);
+    const base = sourceName.replace(/\.[^.]+$/, '');
+    return {
+      file: new File([converted.blob], `${base} - ${sheet}.ndjson`, {
+        type: 'application/x-ndjson',
+      }),
+      format: 'json',
+      sourceName: `${sourceName} › ${sheet}`,
+      // Read every row to type the columns: a column empty for the first
+      // 20,480 rows would otherwise be typed from nothing.
+      sourceOptions: { json: { format: 'ndjson', sampleSize: -1 } },
+      sheet,
+      size: blob.size,
+    };
+  } finally {
+    workbook.close();
+  }
 }
 
 /** A cached dataset as a {@link PreparedSource}, to restore it. */
 function preparedFromCache(cached: CachedSource): PreparedSource {
   const file =
     cached.data instanceof File ? cached.data : new File([cached.data], cached.sourceName);
-  return { file, format: cached.format, sourceName: cached.sourceName };
+  const prepared: PreparedSource = { file, format: cached.format, sourceName: cached.sourceName };
+  if (cached.sourceOptions) prepared.sourceOptions = cached.sourceOptions;
+  return prepared;
 }
 
 // ----- Demo-owned SessionStore -----
@@ -373,15 +540,19 @@ if (import.meta.env.DEV) {
 // `tableName` even when two uploads share a millisecond timestamp.
 let fileUploadCounter = 0;
 
-function readPreviousTableName(): string | null {
+function readLastSession(): LastSession | null {
   try {
     const raw = localStorage.getItem(LAST_SESSION_KEY);
     if (!raw) return null;
     const session = JSON.parse(raw) as LastSession;
-    return typeof session.tableName === 'string' ? session.tableName : null;
+    return typeof session.tableName === 'string' ? session : null;
   } catch {
     return null;
   }
+}
+
+function readPreviousTableName(): string | null {
+  return readLastSession()?.tableName ?? null;
 }
 
 async function pruneOrphans(currentTableName: string | null): Promise<void> {
@@ -406,8 +577,24 @@ async function pruneOrphans(currentTableName: string | null): Promise<void> {
   }
 }
 
+// ----- Status bar -----
+
 function updateInfo(message: string): void {
+  tableInfoEl.classList.remove('table-info--error');
   tableInfoEl.innerHTML = message;
+}
+
+/** A failed load, in the status bar and, while no table shows, in the empty frame. */
+function showError(message: string): void {
+  updateInfo(`Error: ${escapeHtml(message)}`);
+  tableInfoEl.classList.add('table-info--error');
+  emptyErrorEl.textContent = message;
+  emptyErrorEl.hidden = false;
+}
+
+function clearError(): void {
+  emptyErrorEl.hidden = true;
+  emptyErrorEl.textContent = '';
 }
 
 /**
@@ -426,6 +613,8 @@ function formatSize(bytes: number): string {
   if (bytes >= 2 ** 20) return `${(bytes / 2 ** 20).toFixed(1)} MB`;
   return `${Math.ceil(bytes / 2 ** 10)} KB`;
 }
+
+const SEP = '<span class="sep" aria-hidden="true"> · </span>';
 
 /** How long the last load took, for the info bar; null while one runs. */
 let lastLoadSeconds: number | null = null;
@@ -452,41 +641,125 @@ function updateTableInfo(): void {
   const schema = state.schema.get().filter((c) => !c.system);
   const filters = state.filters.get();
 
-  const numericCols = schema.filter((c) => isNumericType(c.type)).length;
-  const dateCols = schema.filter((c) => isDateType(c.type)).length;
-  const timeCols = schema.filter((c) => isTimeType(c.type)).length;
-  const categoricalCols = schema.filter((c) => isCategoricalType(c.type)).length;
-  const nestedCols = schema.filter((c) => isNestedType(c.type)).length;
+  const kinds = (
+    [
+      [schema.filter((c) => isNumericType(c.type)).length, 'numeric'],
+      [schema.filter((c) => isDateType(c.type)).length, 'date'],
+      [schema.filter((c) => isTimeType(c.type)).length, 'time'],
+      [schema.filter((c) => isCategoricalType(c.type)).length, 'categorical'],
+      [schema.filter((c) => isNestedType(c.type)).length, 'nested'],
+    ] as const
+  )
+    .filter(([n]) => n > 0)
+    .map(([n, kind]) => `${n} ${kind}`);
 
   let info =
     filters.length > 0
-      ? `<strong>${filteredRows.toLocaleString()}</strong> / ${totalRows.toLocaleString()} rows, <strong>${schema.length}</strong> columns | <strong>${filters.length}</strong> filter${filters.length > 1 ? 's' : ''}`
-      : `<strong>${totalRows.toLocaleString()}</strong> rows, <strong>${schema.length}</strong> columns`;
-  info += ` (${numericCols} numeric, ${dateCols} date, ${timeCols} time, ${categoricalCols} categorical`;
-  if (nestedCols > 0) info += `, ${nestedCols} nested`;
-  info += ')';
+      ? `<strong>${filteredRows.toLocaleString()}</strong> of ${totalRows.toLocaleString()} rows`
+      : `<strong>${totalRows.toLocaleString()}</strong> rows`;
+  info += `${SEP}<strong>${schema.length.toLocaleString()}</strong> columns`;
+  if (kinds.length > 0) info += ` (${kinds.join(', ')})`;
+  if (filters.length > 0) {
+    info += `${SEP}<strong>${filters.length}</strong> filter${filters.length > 1 ? 's' : ''}`;
+  }
 
   const derived = state.derivedColumns.get();
-  if (derived.length > 0) info += ` | <strong>${derived.length}</strong> derived`;
+  if (derived.length > 0) info += `${SEP}<strong>${derived.length}</strong> derived`;
   const pinned = state.pinnedColumns.get();
-  if (pinned.length > 0) info += ` | <strong>${pinned.length}</strong> pinned`;
+  if (pinned.length > 0) info += `${SEP}<strong>${pinned.length}</strong> pinned`;
   const sort = state.sortColumns.get();
   if (sort.length > 0) {
     const desc = sort
-      .map(
-        (s, i) =>
-          `${escapeHtml(s.column)} (${s.direction === 'asc' ? '▲' : '▼'}${sort.length > 1 ? ` #${i + 1}` : ''})`,
-      )
+      .map((s) => `${escapeHtml(s.column)} ${s.direction === 'asc' ? '▲' : '▼'}`)
       .join(', ');
-    info += ` | <strong>Sort:</strong> ${desc}`;
+    info += `${SEP}sorted by ${desc}`;
   }
-  if (lastLoadSeconds !== null) info += ` | loaded in ${lastLoadSeconds.toFixed(1)} s`;
+  if (lastLoadSeconds !== null) info += `${SEP}loaded in ${lastLoadSeconds.toFixed(1)} s`;
   // Nested and JSON cells open in the value inspector.
-  if (nestedCols > 0 || schema.some((c) => c.originalType.toUpperCase() === 'JSON')) {
-    info += ' | F2 or double-click a nested cell to inspect it';
+  if (schema.some((c) => isNestedType(c.type) || c.originalType.toUpperCase() === 'JSON')) {
+    info += `${SEP}<span class="hint">F2 or double-click a nested cell to inspect it</span>`;
   }
   updateInfo(info);
 }
+
+// ----- Loading overlay -----
+
+/**
+ * The overlay over the table while a load runs: what is loading, the step
+ * it is on, and the download's progress. It shows only once a load has
+ * taken {@link LOADING_DELAY_MS}, so a quick one never flashes it, and
+ * counts the seconds once it has taken a few.
+ */
+const LOADING_DELAY_MS = 250;
+
+const loading = (() => {
+  const overlay = document.getElementById('loading')!;
+  const title = document.getElementById('loading-title')!;
+  const detail = document.getElementById('loading-detail')!;
+  const bar = document.getElementById('loading-bar')!;
+  const fill = bar.firstElementChild as HTMLElement;
+  const skip = document.getElementById('loading-skip') as HTMLButtonElement;
+  let showTimer = 0;
+  let clock = 0;
+  let started = 0;
+  let step = '';
+
+  const render = () => {
+    const seconds = Math.floor((performance.now() - started) / 1000);
+    detail.textContent = seconds >= 3 ? `${step}${step ? ' · ' : ''}${seconds} s` : step;
+  };
+  const show = () => {
+    window.clearTimeout(showTimer);
+    showTimer = window.setTimeout(() => {
+      overlay.hidden = false;
+    }, LOADING_DELAY_MS);
+  };
+  const hide = () => {
+    window.clearTimeout(showTimer);
+    overlay.hidden = true;
+  };
+
+  return {
+    /** A load begins, or moves on to `name`. */
+    begin(name: string, { restoring = false } = {}): void {
+      if (!started) {
+        started = performance.now();
+        clock = window.setInterval(render, 1000);
+        tableFrameEl.setAttribute('aria-busy', 'true');
+        show();
+      }
+      title.textContent = name;
+      step = '';
+      if (restoring) skip.hidden = false;
+      bar.hidden = true;
+      render();
+    },
+    step(text: string): void {
+      step = text;
+      render();
+    },
+    /** Determinate progress, 0 to 1; `null` for none. */
+    progress(fraction: number | null): void {
+      bar.hidden = fraction === null;
+      if (fraction !== null) fill.style.width = `${Math.round(fraction * 100)}%`;
+    },
+    /** Out of the way of the sheet picker; the next `begin` brings it back. */
+    pause(): void {
+      hide();
+      window.clearInterval(clock);
+      started = 0;
+    },
+    end(): void {
+      hide();
+      window.clearInterval(clock);
+      started = 0;
+      step = '';
+      skip.hidden = true;
+      bar.hidden = true;
+      tableFrameEl.removeAttribute('aria-busy');
+    },
+  };
+})();
 
 interface LoadOptions {
   /** localStorage label + URL-param sync. */
@@ -520,9 +793,15 @@ async function cacheLoadedSource(
   tableName: string,
   prepared: PreparedSource,
 ): Promise<void> {
-  const { file, format, sourceName } = prepared;
+  const { file, format, sourceName, sourceOptions } = prepared;
   if (format === 'parquet' || file.size > TEXT_EXPORT_LIMIT) {
-    await cacheSource({ tableName, data: file, format, sourceName });
+    await cacheSource({
+      tableName,
+      data: file,
+      format,
+      sourceName,
+      ...(sourceOptions ? { sourceOptions } : {}),
+    });
     return;
   }
   const baseTable = t.state.baseTableName.get() ?? t.state.tableName.get();
@@ -546,9 +825,13 @@ async function cacheLoadedSource(
 
 async function loadPrepared(prepared: PreparedSource, opts: LoadOptions): Promise<void> {
   lastLoadSeconds = null;
+  clearError();
+  loading.begin(`${opts.restoring ? 'Restoring' : 'Loading'} ${prepared.sourceName}`, {
+    restoring: opts.restoring === true,
+  });
   loadingMessage =
     `Loading <strong>${escapeHtml(prepared.sourceName)}</strong> ` +
-    `(${formatSize(prepared.file.size)})...` +
+    `(${formatSize(prepared.size ?? prepared.file.size)})…` +
     (opts.restoring ? SKIP_LINK : '');
   updateInfo(loadingMessage);
   try {
@@ -563,7 +846,7 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
   // - knownTableName wins (boot-time restore paths pass the stored ID).
   // - File upload → unique per-click ID, so re-uploading the same file
   //   always starts a fresh session.
-  // - URL load → SHA-256 of the fetched bytes, so the same URL with
+  // - URL load → SHA-256 of the downloaded bytes, so the same URL with
   //   unchanged content reuses its snapshot, while changed content
   //   produces a new tableName and evicts the previous snapshot.
   let tableName: string;
@@ -575,6 +858,12 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
     tableName = `dt_${await fingerprint(prepared.file)}`;
   }
   const previousTableName = readPreviousTableName();
+  const session: LastSession = {
+    type: opts.meta.type,
+    source: opts.meta.source,
+    tableName,
+    ...(prepared.sheet ? { sheet: prepared.sheet } : {}),
+  };
 
   // Skip-if-current guard: when the user clicks Load URL with content
   // whose hash matches the live table, there's nothing to do at the
@@ -587,16 +876,11 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
     const currentBaseTable = table.state.baseTableName.get() ?? table.state.tableName.get();
     if (currentBaseTable === tableName) {
       try {
-        const session: LastSession = {
-          type: opts.meta.type,
-          source: opts.meta.source,
-          tableName,
-        };
         localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session));
       } catch {
         /* localStorage unavailable */
       }
-      setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null);
+      setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null, prepared.sheet);
       loadingMessage = null;
       updateTableInfo();
       return;
@@ -609,6 +893,7 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
       // when that load fails and leaves its table and worker behind, and the
       // next load would mount a second one; a table mounted empty stays, and
       // takes the next load.
+      loading.step('Starting DuckDB…');
       table = await createDataTable({
         container: tableContainerEl,
         persistence: { sessionStore },
@@ -626,10 +911,12 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
       table.setColorScheme(currentScheme);
     }
     // Timed from here: the first load's figure leaves out DuckDB's start-up.
+    loading.step('Reading the file…');
     const started = performance.now();
     await table.loadData(prepared.file, {
       tableName,
       sourceFormat: prepared.format,
+      ...(prepared.sourceOptions ? { sourceOptions: prepared.sourceOptions } : {}),
     });
 
     lastLoadSeconds = (performance.now() - started) / 1000;
@@ -639,11 +926,6 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
     // Persist the localStorage pointer AFTER the load resolves — a failed
     // load should leave the previous session pointer intact.
     try {
-      const session: LastSession = {
-        type: opts.meta.type,
-        source: opts.meta.source,
-        tableName,
-      };
       localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(session));
     } catch {
       /* localStorage unavailable */
@@ -668,8 +950,9 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
     // Keep the shareable `?url=` param in sync with what was just loaded.
     // File loads aren't shareable, so wipe any stale param the page was
     // opened with — otherwise a refresh would load the (no longer relevant)
-    // shared dataset on top of the user's local data.
-    setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null);
+    // shared dataset on top of the user's local data. The URL box likewise.
+    setUrlParam(opts.meta.type === 'url' ? opts.meta.source : null, prepared.sheet);
+    if (opts.meta.type === 'file') urlInput.value = '';
 
     // Skipped when restoring from the cache: it holds this dataset already.
     if (!opts.skipCache) {
@@ -714,21 +997,40 @@ async function loadPreparedNow(prepared: PreparedSource, opts: LoadOptions): Pro
       );
       return;
     }
-    updateInfo(`Error: ${escapeHtml(message)}`);
+    showError(message);
   }
 }
 
-async function loadSource(source: File | string, { restoring = false } = {}): Promise<void> {
+/** What the status bar says when nothing is loading: the table's counts, or how to start. */
+function showIdleInfo(): void {
+  if (table?.state.tableName.get()) updateTableInfo();
+  else updateInfo('Load a file or URL to get started.');
+}
+
+async function loadSource(
+  source: File | string,
+  { restoring = false, sheet = null as string | null } = {},
+): Promise<void> {
   try {
-    const prepared = await prepareSource(source);
+    const prepared = await prepareSource(source, { sheet });
+    // The sheet picker was dismissed: the table keeps what it had.
+    if (!prepared) {
+      loadingMessage = null;
+      showIdleInfo();
+      return;
+    }
     const meta: LoadOptions['meta'] =
-      source instanceof File ? { type: 'file', source: source.name } : { type: 'url', source };
+      source instanceof File
+        ? { type: 'file', source: prepared.sourceName }
+        : { type: 'url', source };
     await loadPrepared(prepared, { meta, restoring });
+  } catch (error) {
+    loadingMessage = null;
+    showError(error instanceof Error ? error.message : 'Unknown error');
+  } finally {
     // Reset the file picker so the user can immediately re-select the same
     // file (browsers suppress the change event on identical reselection).
     if (source instanceof File) fileInput.value = '';
-  } catch (error) {
-    updateInfo(`Error: ${escapeHtml(error instanceof Error ? error.message : 'Unknown error')}`);
   }
 }
 
@@ -738,6 +1040,15 @@ function wireTableEvents(t: DataTable): void {
   t.on('sortChange', updateTableInfo);
   t.on('columnChange', updateTableInfo);
   t.on('derivedChange', updateTableInfo);
+
+  // The loading overlay's steps.
+  const STEPS = { reading: 'Reading the file…', parsing: 'Parsing…', indexing: 'Indexing…' };
+  t.on('loadProgress', ({ stage }) => {
+    if (loadRunning && stage in STEPS) loading.step(STEPS[stage as keyof typeof STEPS]);
+  });
+  t.on('loadComplete', () => {
+    if (loadRunning) loading.step('Drawing the table…');
+  });
 
   // Undo/redo/reset button state.
   t.on('undoChange', ({ canUndo, canRedo }) => {
@@ -763,7 +1074,8 @@ const exampleChips = Array.from(document.querySelectorAll<HTMLButtonElement>('.c
 let loadRunning = false;
 
 function setLoadControlsDisabled(disabled: boolean): void {
-  loadFileBtn.disabled = disabled;
+  openFileBtn.disabled = disabled;
+  fileInput.disabled = disabled;
   loadUrlBtn.disabled = disabled;
   for (const chip of exampleChips) chip.disabled = disabled;
 }
@@ -777,6 +1089,7 @@ async function exclusively(task: () => Promise<void>): Promise<void> {
     await task();
   } finally {
     loadRunning = false;
+    loading.end();
     setLoadControlsDisabled(false);
   }
 }
@@ -784,6 +1097,18 @@ async function exclusively(task: () => Promise<void>): Promise<void> {
 // ----- Links in the info bar -----
 // Put there by the startup restore and its failure: try it again, forget
 // the last session and its cached dataset, or skip a restore in progress.
+
+/** Abandon the load at startup, and reload without it. */
+function skipRestore(): void {
+  try {
+    localStorage.removeItem(LAST_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+  setUrlParam(null);
+  window.location.reload();
+}
+
 tableInfoEl.addEventListener('click', (event) => {
   const link = (event.target as Element | null)?.closest<HTMLElement>('a[data-action]');
   if (!link) return;
@@ -793,16 +1118,15 @@ tableInfoEl.addEventListener('click', (event) => {
     void exclusively(restoreSession);
     return;
   }
+  if (action === 'skip') {
+    skipRestore();
+    return;
+  }
   const tableName = readPreviousTableName();
   try {
     localStorage.removeItem(LAST_SESSION_KEY);
   } catch {
     /* ignore */
-  }
-  if (action === 'skip') {
-    setUrlParam(null);
-    window.location.reload();
-    return;
   }
   if (action === 'forget') {
     if (tableName) {
@@ -813,6 +1137,8 @@ tableInfoEl.addEventListener('click', (event) => {
     updateInfo('Load a file or URL to get started.');
   }
 });
+
+document.getElementById('loading-skip')!.addEventListener('click', skipRestore);
 
 // ----- UI wiring -----
 exportBtn.addEventListener('click', () => table?.openExportDialog());
@@ -835,20 +1161,18 @@ clearSessionBtn.addEventListener('click', async () => {
   updateInfo('Session cleared. Load a file or URL to start fresh.');
 });
 
-loadFileBtn.addEventListener('click', () => {
+// A file loads as soon as it is picked.
+openFileBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
   if (file) void exclusively(() => loadSource(file));
 });
-loadUrlBtn.addEventListener('click', () => {
+
+// The URL input stays enabled while a load runs; `exclusively` turns Enter away.
+urlForm.addEventListener('submit', (event) => {
+  event.preventDefault();
   const url = urlInput.value.trim();
   if (url) void exclusively(() => loadSource(url));
-});
-// The URL input stays enabled while a load runs; `exclusively` turns Enter away.
-urlInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    const url = urlInput.value.trim();
-    if (url) void exclusively(() => loadSource(url));
-  }
 });
 
 // Example dataset chips — clicking loads the URL through the same path as the
@@ -862,14 +1186,43 @@ for (const chip of exampleChips) {
   });
 }
 
+// ----- Drag and drop -----
+// A file dropped anywhere on the page loads as if picked. Drags that carry
+// no file, such as the table's own column drags, are left alone.
+let dragDepth = 0;
+
+const carriesFiles = (event: DragEvent) =>
+  Array.from(event.dataTransfer?.types ?? []).includes('Files');
+
+window.addEventListener('dragenter', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  if (dragDepth++ === 0 && !loadRunning) dropTargetEl.hidden = false;
+});
+window.addEventListener('dragover', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = loadRunning ? 'none' : 'copy';
+});
+window.addEventListener('dragleave', (event) => {
+  if (!carriesFiles(event)) return;
+  if (--dragDepth <= 0) {
+    dragDepth = 0;
+    dropTargetEl.hidden = true;
+  }
+});
+window.addEventListener('drop', (event) => {
+  if (!carriesFiles(event)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  dropTargetEl.hidden = true;
+  const file = event.dataTransfer?.files[0];
+  if (file) void exclusively(() => loadSource(file));
+});
+
 // ----- Init + auto-restore -----
 (async () => {
-  initStatusEl.textContent = 'DuckDB Ready';
-  initStatusEl.classList.add('init-status--success');
-  loadFileBtn.disabled = false;
-  loadUrlBtn.disabled = false;
   updateInfo('Load a file or URL to get started.');
-
   await sessionStore.open();
   await exclusively(restoreSession);
 })();
@@ -879,19 +1232,26 @@ async function restoreSession(): Promise<void> {
   // Shared `?url=` deep links take precedence over the localStorage
   // session-restore. A friend opening the link expects to see the dataset
   // referenced by the URL, not whatever happened to be in this browser's
-  // last session. Hashing the fetched bytes detects URL content changes
+  // last session. Hashing the downloaded bytes detects URL content changes
   // since the last visit — the new hash differs from `previousTableName`,
   // the previous snapshot is evicted, and the user gets a fresh state on
   // the new content.
   const sharedUrl = getUrlParam();
   if (sharedUrl) {
     urlInput.value = sharedUrl;
-    updateInfo(`Loading shared dataset: <strong>${escapeHtml(sharedUrl)}</strong>...${SKIP_LINK}`);
-    let prepared: PreparedSource;
+    loading.begin(`Loading ${sharedUrl.split('/').pop() || sharedUrl}`, { restoring: true });
+    updateInfo(`Loading shared dataset: <strong>${escapeHtml(sharedUrl)}</strong>…${SKIP_LINK}`);
+    let prepared: PreparedSource | null;
     try {
-      prepared = await prepareSource(sharedUrl);
+      prepared = await prepareSource(sharedUrl, { sheet: getUrlParam(SHEET_PARAM_KEY) });
     } catch (err) {
-      updateInfo(`Error: ${escapeHtml(err instanceof Error ? err.message : 'Unknown error')}`);
+      loadingMessage = null;
+      showError(err instanceof Error ? err.message : 'Unknown error');
+      return;
+    }
+    if (!prepared) {
+      loadingMessage = null;
+      showIdleInfo();
       return;
     }
     const tableName = `dt_${await fingerprint(prepared.file)}`;
@@ -905,22 +1265,24 @@ async function restoreSession(): Promise<void> {
   }
 
   try {
-    const raw = localStorage.getItem(LAST_SESSION_KEY);
-    if (!raw) {
+    const session = readLastSession();
+    if (!session) {
       // Either first-ever load or the session was cleared. Still prune any
       // legacy `table_${Date.now()}_${counter}` orphans from earlier
       // versions so storage doesn't grow without bound.
       await pruneOrphans(null);
       return;
     }
-    const session: LastSession = JSON.parse(raw);
     await pruneOrphans(session.tableName);
     const cached = await loadCachedSource(session.tableName);
     if (cached) {
       updateInfo(
-        `Restoring session: <strong>${escapeHtml(cached.sourceName)}</strong>...${SKIP_LINK}`,
+        `Restoring session: <strong>${escapeHtml(cached.sourceName)}</strong>…${SKIP_LINK}`,
       );
-      await loadPrepared(preparedFromCache(cached), {
+      const prepared = preparedFromCache(cached);
+      // A workbook's sheet, for the `&sheet=` the restored `?url=` keeps.
+      if (session.sheet) prepared.sheet = session.sheet;
+      await loadPrepared(prepared, {
         meta: { type: session.type, source: session.source },
         knownTableName: session.tableName,
         // Cache hit — what we have IS the cache, no need to re-write.
@@ -929,10 +1291,13 @@ async function restoreSession(): Promise<void> {
       });
     } else if (session.type === 'url') {
       urlInput.value = session.source;
-      updateInfo(`Loading <strong>${escapeHtml(session.source)}</strong>...${SKIP_LINK}`);
+      loading.begin(`Loading ${session.source.split('/').pop() || session.source}`, {
+        restoring: true,
+      });
+      updateInfo(`Loading <strong>${escapeHtml(session.source)}</strong>…${SKIP_LINK}`);
       // No cache — re-fetch the URL. Hashing the fresh bytes lets us
       // detect content changes vs. the previous session.
-      await loadSource(session.source, { restoring: true });
+      await loadSource(session.source, { restoring: true, sheet: session.sheet ?? null });
     } else {
       updateInfo(
         `Previous session: <strong>${escapeHtml(session.source)}</strong> — ` +

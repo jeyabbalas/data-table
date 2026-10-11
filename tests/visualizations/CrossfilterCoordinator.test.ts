@@ -364,4 +364,44 @@ describe('CrossfilterCoordinator — filter cycle complete', () => {
     expect(seen).toHaveLength(1);
     coord.destroy();
   });
+
+  it('refresh() runs a cycle for the filters in force: count, charts, then the hook, resolving with the count', async () => {
+    const { state, coord, counts, chart, seen } = setup();
+    state.filters.set([A]);
+    await flush();
+    counts[0]!.resolve([{ cnt: 42 }]);
+    await flush();
+    seen.length = 0;
+
+    // The rows the filters keep changed, the filters did not.
+    const filtersSet = vi.fn();
+    state.filters.subscribe(filtersSet);
+    const refreshed = coord.refresh();
+    await flush();
+    expect(filtersSet).not.toHaveBeenCalled();
+    expect(counts).toHaveLength(2);
+    expect(chart.refetches).toHaveLength(2);
+
+    counts[1]!.resolve([{ cnt: 40 }]);
+    // It resolves with the count, while the chart goes on refetching.
+    await refreshed;
+    expect(seen).toEqual([{ filters: [A], filteredRows: 40 }]);
+    expect(state.filteredRows.get()).toBe(40);
+    chart.refetches[1]!.resolve();
+
+    // A refresh supersedes a cycle in flight, as a filter change does.
+    const stale = coord.refresh();
+    const fresh = coord.refresh();
+    await flush();
+    counts[2]!.resolve([{ cnt: 1 }]);
+    counts[3]!.resolve([{ cnt: 2 }]);
+    for (const refetch of chart.refetches) refetch.resolve();
+    await Promise.all([stale, fresh]);
+    expect(seen.at(-1)).toEqual({ filters: [A], filteredRows: 2 });
+    expect(seen).toHaveLength(2);
+
+    coord.destroy();
+    await expect(coord.refresh()).resolves.toBeUndefined();
+    expect(counts).toHaveLength(4);
+  });
 });

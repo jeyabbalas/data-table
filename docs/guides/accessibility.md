@@ -12,6 +12,7 @@ focus-trap behavior for modals.
 
 - Navigate the table entirely from the keyboard
 - Open a list, struct, map or JSON value and walk it as a tree
+- Go from one annotation to the next, and hear what each says
 - Understand the ARIA roles and live-region announcements
 - Override the ARIA labels for localization or rewording
 - Test the table with a screen reader
@@ -26,7 +27,7 @@ focus-trap behavior for modals.
 Tab into the table from elsewhere on the page until focus reaches `.dt-grid` —
 one tab stop, no matter how many columns it has; see
 [the focus model](#focus-model-single-cursor--aria-activedescendant) for the
-four others the table contributes — and then:
+others the table contributes — and then:
 
 | Key                                                    | Action                                                                       |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
@@ -55,13 +56,19 @@ four others the table contributes — and then:
 | `Shift` + `Home` / `End` (layout mode)                 | Move the column to the first / last position it may occupy                   |
 | `Backspace` (layout mode)                              | Reset the width to the default                                               |
 | `Enter` (layout mode)                                  | Commit and leave the mode                                                    |
+| `Shift` + `F2` (layout mode)                           | Commit and leave the mode                                                    |
+| `F2` (layout mode)                                     | Commit and enter controls mode                                               |
+| `↓` (layout mode)                                      | Commit and move the cursor into the body                                     |
 | `Escape` (layout mode)                                 | Cancel — restore the entry width **and** position                            |
 | `Escape` (value inspector)                             | Close the inspector; focus returns to the grid, cursor kept                  |
 | `Escape`                                               | Clear the cursor                                                             |
+| `Escape` (no cursor)                                   | Clear a chart's brush or selection, the most recent first                    |
+| `F8`, or `Alt` + `↓`                                   | Go to the next [annotation](#annotation-navigation-f8)                       |
+| `Shift` + `F8`, or `Alt` + `↑`                         | Go to the previous annotation                                                |
 | `Ctrl` + `Z` / `Cmd` + `Z`                             | Undo                                                                         |
 | `Ctrl` + `Shift` + `Z` / `Cmd` + `Shift` + `Z`         | Redo                                                                         |
 | `Ctrl` + `Y`                                           | Redo (Windows convention; `Cmd` + `Y` is not bound)                          |
-| `Ctrl` + `C` / `Cmd` + `C`                             | Copy the selected rows' visible columns (native copy when text is selected)  |
+| `Ctrl` + `C` / `Cmd` + `C`                             | Copy the selected rows' visible columns (see below for the browser's copy)   |
 
 The keys that move the cursor scroll its cell into view, and so do the keys
 that act on it where it is — `Enter`, `Space`, `F2` and `Shift+F2` — so a
@@ -70,10 +77,22 @@ In layout mode the view follows the column as its width changes, as it moves,
 and back to its place on `Escape`. A column wider than the view is shown from
 its start.
 
-When any modal or panel holds focus (export dialog, SQL filter editor,
+`Ctrl`/`Cmd` + `C` leaves the copy to the browser when text is selected, and
+when no selected row is in the current view: none is selected, or a filter has
+left every selected position past the view's end.
+
+The `Escape` that clears a chart's brush or selection is the column charts'
+own, and it comes last: a dialog, controls mode, layout mode and the cursor
+each take an `Escape` first. It listens on the whole document, so with focus
+outside the table it clears the latest brush even while a cursor is set. Each
+press clears one, the most recent first. With `visualizations: false` there
+are no charts, and no such key.
+
+While any modal or panel is open (export dialog, SQL filter editor,
 derived-column editor, preset panel, filter panel, value inspector, extract
-panel), the grid keyboard shortcuts are disabled — the dialog owns input
-until dismissed.
+panel), on this table or on another on the page, the grid keyboard shortcuts
+are disabled, undo, redo and copy included — the dialog owns input until
+dismissed.
 
 ### Column layout mode (`Shift+F2`)
 
@@ -246,17 +265,96 @@ has been closed, by Cancel, `Escape`, a press outside, another panel or a
 cursor move, the column is still added and announced, but the cursor, the
 view and focus stay where the user has gone.
 
+### Annotation navigation (`F8`)
+
+When the table has row or cell [annotations](./annotations.md), `F8` moves
+the cursor to the next one and `Shift+F8` to the previous one, in the view
+as filtered and sorted; `Alt+↓` and `Alt+↑` do the same, for keyboards where
+`F8` is hard to reach (on a Mac, `F8` may need `fn`, and `Alt` is the Option
+key). The next annotation is the next annotated cell of the cursor's row,
+then the first annotated cell of the next row that has any, pinned columns
+first; going back, the last annotated cell of the previous row. A row whose
+annotations are its own, or in hidden columns, keeps the cursor's column.
+Column annotations single out no row, and are not visited. Past the last
+annotation the search goes round to the first. It visits the severities the
+severity filter shows, so it skips what the table does not paint.
+
+The keys work wherever focus is in the table: the grid, the filter bar and
+the hidden-columns gutter. They do nothing in a header's controls mode
+(`F2`), where `Alt+↑` and `Alt+↓` no longer leave the mode, and are not
+taken in column layout mode (`Shift+F2`), while a dialog or panel is open,
+or when another handler has prevented the key's default. The table takes the
+key, preventing its default, only while it has data loaded, holds a row- or
+cell-scope annotation and the severity filter shows at least one severity;
+otherwise the key stays the page's, and nothing is announced. With
+`annotationNavigation: false` the keys are always the page's, and
+`actions.nextAnnotation`, `actions.previousAnnotation` and
+`actions.revealRow` still work. No element advertises the keys with
+`aria-keyshortcuts`, as the grid advertises none of its own keys that way;
+this guide and the
+[shortcuts page](https://jeyabbalas.github.io/data-table/shortcuts/) list
+them.
+
+Landing moves the cursor and nothing else takes focus: the row scrolls to the
+middle of the view and the column into view, `aria-activedescendant` names
+the new cell, the annotation popover and the value inspector close, and the
+transient live region (`.dt-announce`) says where the cursor is and what is
+there:
+
+| Situation                                    | Announcement                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| Landed on a cell                             | "Row 1,204 of 9,880,000, age: error, value 200 exceeds maximum 150, and 2 more" |
+| Landed on a row's own annotations            | "Row 1,204 of 9,880,000: warning, duplicate record"                             |
+| The row's annotations are in a hidden column | "Row 1,204 of 9,880,000, age (hidden): error, value 200 exceeds maximum 150"    |
+| Went round the end                           | "Wrapped to the first annotation. Row 3 of 9,880,000, …"                        |
+| No annotation to go to                       | "No annotations shown"                                                          |
+
+The row counts from 1 in the view, of the rows the filters show; the first
+annotation is read with its severity and message, and the rest counted. The
+column is named only when that first annotation is the cell's own: a row
+annotation that comes first reads as "Row 1,204 of 9,880,000: error, …".
+`actions.nextAnnotation({ wrap: false })` says "No more annotations below"
+(or "above") at the end. Every phrase is a `messages.annotations.navigation`
+string; see [i18n → Annotations](./i18n.md#annotations).
+
+Under the annotated filter (`actions.showAnnotatedRows()`), the view follows
+the annotations a moment behind, and the cursor follows its row; an open
+value inspector stays open, its title giving the row's new number. When the
+user resolves the issue under the cursor and its row leaves the view, the
+cursor goes to the gap the row left, on the first kept row after it, and
+`F8` goes to that row next, announced like any landing: the next issue.
+`Shift+F8` goes to the last kept row before the gap. `F8` right after a
+change waits for the view to catch up, some 0.4–0.7 s at a million annotated
+rows, before it moves.
+
+This is how keyboard and screen-reader users reach annotations: the popover
+opens on pointer hover and on DOM focus entering a cell, and the grid's
+cursor moves `aria-activedescendant`, not DOM focus, so moving the cursor
+does not open it.
+A search far from the cursor in a large sorted view is a DuckDB query, some
+hundreds of milliseconds on ten million rows; the keys stay live meanwhile, and
+a newer press, or a cursor move, abandons the search in progress.
+
+Nothing becomes focusable, so the [five-stop census](#focus-model-single-cursor--aria-activedescendant)
+does not change.
+
 ### Focus model (single cursor + `aria-activedescendant`)
 
-A loaded table contributes exactly **five** tab stops, in this DOM order, and
-that number never changes with the data:
+Inside `.dt-root`, a loaded table has exactly **five** tab stops, in this DOM
+order, and that number never changes with the data:
 
-| Stop                                      | Why it exists                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| `.dt-filter-bar`                          | `role="toolbar"` — one roving stop for the whole bar, however many chips it holds. |
-| `.dt-grid`                                | The cursor — arrows, Home/End, PageUp/PageDown, Enter, F2, the keyboard map above. |
-| `.dt-header-scroll` and `.dt-body-scroll` | WCAG 2.1.1: a scrollable region has to be keyboard-reachable.                      |
-| `.dt-hidden-gutter`                       | `role="toolbar"` — one roving stop, however many columns are hidden.               |
+| Stop                                      | Why it exists                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `.dt-filter-bar`                          | `role="toolbar"` — one roving stop for the whole bar, however many chips it holds.     |
+| `.dt-grid`                                | The cursor — arrows, Home/End, PageUp/PageDown, Enter, F2, F8, the keyboard map above. |
+| `.dt-header-scroll` and `.dt-body-scroll` | WCAG 2.1.1: a scrollable region has to be keyboard-reachable.                          |
+| `.dt-hidden-gutter`                       | `role="toolbar"` — one roving stop, however many columns are hidden.                   |
+
+With the `derivedColumns` UI on (the default), the table has one more stop: the
+"+" add-column button (`.dt-add-column-btn`, named "Add derived column"), a
+plain button that follows `.dt-root` inside `.dt-table-wrapper`. `Tab` crosses
+six stops then, a number that does not change with the data either. With
+`derivedColumns: false` there is no button and no wrapper.
 
 Five at four columns, five at 266; five with every column hidden but one, five
 with a dozen filters active. That is the property to hold onto, because it is
@@ -266,9 +364,22 @@ hidden column and the filter bar one per chip, so the count grew with use.
 The two toolbars follow the
 [APG roving-tabindex model](https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/):
 exactly one control inside carries `tabindex="0"`, the rest carry `-1`, and `←`
-/ `→` (plus `↑` / `↓` in the gutter, which wraps onto several rows) move that
-stop between them, with `Home` / `End` jumping to the ends. Tab enters and
-leaves the toolbar; it never walks through it.
+/ `→` move that stop between them, with `Home` / `End` jumping to the ends. Tab
+enters and leaves the toolbar; it never walks through it.
+
+Each toolbar holds its chips in one row that scrolls sideways once it is wider
+than the table (`.dt-filter-scroll`, `.dt-hidden-scroll`), with its other
+buttons ("Clear all", "Expression", "Presets"; "Show all") pinned at the row's
+end while the chips pass beneath them. Those buttons are inside the row, not
+beside it, so the toolbar's one stop is always inside the region that scrolls,
+wherever it rests: axe's `scrollable-region-focusable` asks that of a region
+that overflows. The stop moving onto a chip, by an arrow key or by Tab, scrolls
+the row the least distance that shows the whole chip clear of the pinned
+buttons; focus from a pointer press scrolls nothing, so the click still lands.
+A chip that removes itself with its own button hands the stop, and focus, to the
+chip after it, or before it at the end of the row, so the row stays where the
+user was. A chip a change adds out of view is scrolled to smoothly, or at once
+under `prefers-reduced-motion: reduce`; a chip changed or removed moves nothing.
 
 Landing on a scroll region is not a mode. The first cursor key pressed there
 hands focus to `.dt-grid` and moves the cursor as usual, so there is no state to
@@ -364,7 +475,7 @@ tooltip popovers that open on `focusin`, are left alone.
 | SQL filter modal, export dialog, derived-column modal | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` its title                                      |
 | Null filter toggle group                              | `role="radiogroup"`                                                                                    |
 | Filter bar (`.dt-filter-bar`)                         | `role="toolbar"`, `aria-label`, roving tabindex (horizontal)                                           |
-| Hidden-columns gutter (`.dt-hidden-gutter`)           | `role="toolbar"`, `aria-label`, roving tabindex (both axes)                                            |
+| Hidden-columns gutter (`.dt-hidden-gutter`)           | `role="toolbar"`, `aria-label`, roving tabindex (horizontal)                                           |
 | Column resizer handle                                 | `role="separator"`, `aria-orientation="vertical"`, never focusable                                     |
 | Live-region announcers (two)                          | `role="status"` with `aria-live="polite"`, `aria-atomic="true"`                                        |
 
@@ -424,7 +535,11 @@ announces state changes to screen readers:
 | Row count changed (after load or clear) | "Showing N rows"                                  |
 
 The exact wording comes from `messages.a11y.*` — translate these carefully
-for non-English locales.
+for non-English locales. The second, transient region speaks what a gesture
+did: column widths and moves, the value inspector's and the extract panel's
+outcomes, and where `F8` landed (see
+[Annotation navigation](#annotation-navigation-f8)), in
+`messages.a11y`, `messages.values` and `messages.annotations.navigation`.
 
 ## Modal focus trap
 
@@ -436,10 +551,10 @@ browser does; `Escape` dismisses it and returns focus to the control that
 opened it.
 
 - **Focus trap.** Tab can't escape the dialog while it's open.
-- **Keyboard deferral.** The grid's keyboard handlers check
-  `document.activeElement.closest('[role="dialog"]')` and bail out if a
-  dialog is focused. So Ctrl+Z inside the SQL filter editor undoes _in the
-  editor_, not in the grid.
+- **Keyboard deferral.** The grid's keyboard handler bails out while any of
+  the library's dialogs or panels is open, and whenever focus is inside a
+  `role="dialog"` (`document.activeElement.closest('[role="dialog"]')`). So
+  Ctrl+Z inside the SQL filter editor undoes _in the editor_, not in the grid.
 - **Close on Escape.** Every dialog listens for `Escape` and dismisses.
 
 ## Popovers (annotation + column-header tooltip)
@@ -448,13 +563,23 @@ Two non-modal popovers attach to header / cell elements. Both are
 keyboard-reachable and `Escape`-dismissable:
 
 - **Annotation popover** ([`AnnotationPopover`](../../src/table/AnnotationPopover.ts))
-  — anchored on row / cell / header elements that carry annotations.
+  — anchored on the cells and column headers that show annotations.
   `role="tooltip"` + `aria-live="polite"`. Opens on `pointerenter` /
   `focusin`; dismisses on `pointerleave` (with a 120ms grace so users
-  can move into the popover content), `focusout`, `Escape`, scroll, or
-  click outside. Severity-filtered annotations remain in the
-  underlying store but are not painted or popped while their flag is
-  off.
+  can move into the popover content), `focusout`, `Escape`, a scroll of
+  anything but itself, or click outside. It lists five annotations per
+  section and counts the rest ("+3 more"). Annotations of a severity the
+  severity filter hides are left out and counted ("2 hidden by the severity
+  filter"), and an anchor whose every annotation is hidden opens no popover.
+  It opens below its anchor when it fits there, else on the side with more
+  room, its height capped to that room (96 px at least), so that it does
+  not cover the cell it describes. Past its cap, and past
+  `min(24rem, 100vh − 8px)`, it scrolls, and while it overflows it is a tab
+  stop (`tabindex="0"`), so the region it scrolls can be reached and
+  scrolled from the keyboard, as axe's `scrollable-region-focusable` asks;
+  one that fits is `tabindex="-1"`. A change to its annotations updates it
+  in place, rewriting it only when what it shows changed, so it is not
+  announced again.
 - **Column-header tooltip popover** ([`ColumnHeaderTooltipPopover`](../../src/table/ColumnHeaderTooltipPopover.ts))
   — anchored on the column-name span (`.dt-col-name`). The span
   receives `tabindex="-1"` only when an override is set via
@@ -572,12 +697,13 @@ messages: {
 
 ## Gotchas
 
-- **Grid keyboard shortcuts are disabled when a dialog is focused.** That's intentional — each context "owns" its keystrokes. Confused users often assume the arrow keys should work inside the filter panel; gently remind them.
-- **Tab always moves on.** It is never intercepted, in any state, including controls mode and the two toolbars. Moving _within_ the grid is the arrow keys' job. Five Tab presses cross the whole table: the filter bar, the cursor, the two scroll regions, the hidden-columns gutter.
+- **Grid keyboard shortcuts are disabled while a dialog or panel is open.** That's intentional — each context "owns" its keystrokes. Confused users often assume the arrow keys should work inside the filter panel; gently remind them.
+- **Tab always moves on.** It is never intercepted, in any state, including controls mode and the two toolbars. Moving _within_ the grid is the arrow keys' job. Five Tab presses cross `.dt-root`: the filter bar, the cursor, the two scroll regions, the hidden-columns gutter. With the `derivedColumns` UI on, a sixth crosses the "+" add-column button after it.
 - **The grid does not own keys pressed on the filter bar or the hidden-columns gutter.** They sit inside `.dt-root`, where the keydown listener lives, so the grid explicitly checks that focus is inside `.dt-grid` before acting — otherwise Space on "Clear all filters" would sort a column instead. Undo, redo and copy stay table-wide.
 - **The per-column buttons are not in the tab order.** Sort, pin, hide, filter, a nested or JSON column's extract button and the derived-column `f(x)` icon are reachable through `F2` from the header row, not by tabbing. A 266-column table would otherwise put ~1,600 tab stops in front of the next control on the page.
 - **Only the columns near the view have their buttons.** Every visible column has its `columnheader`, with its label, sort state and `aria-colindex`, but the pin, hide, filter and sort buttons and the drag and resize handles exist only for the columns body rows render cells for. The cursor's column is always one of them, so `F2` always has buttons to cycle, and so is a column whose filter panel, extract panel or derived-column editor is open, so closing it gives focus back to the button that opened it. A screen reader's browse mode, reading the page rather than the grid, finds buttons only in those headers.
 - **The drag handle and the resize handle are not in the `F2` cycle either.** `ColumnHeader.getControls()` — the list `F2` walks — omits them on purpose, along with any control the responsive rules have hidden and any disabled one. A focus stop whose Enter key does nothing is worse than no stop at all, and a focusable `role="separator"` would need `aria-valuenow` / `aria-valuemin` / `aria-valuemax` to stay valid. They have their own gesture instead: [`Shift+F2`](#column-layout-mode-shiftf2), which costs no tab stop and no focus stop.
+- **`F8` and `Alt+↑` / `Alt+↓` are taken only when there are annotations to go to.** In a table with no row or cell annotation, or with every severity hidden by the severity filter, the keys reach the page, the browser or the screen reader as before, and nothing is announced. In a header's controls mode they do nothing.
 - **Live-region announcements are `polite`, not `assertive`.** Long-running operations queue without interrupting the user's current read. For ops that need interruption (errors), raise your own `role="alert"` region.
 - **Hide button preserves the last-visible column.** Pressing hide on the only visible column does nothing — the table must have at least one visible column.
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
@@ -604,16 +730,17 @@ reader from each row. The test rig is the demo (`npm run dev`).
 | Scenario                                                                                                                                | VoiceOver (macOS, Safari)                                                                                                                                                 | NVDA (Windows, Firefox) | JAWS (Windows, Chrome) |
 | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------------- |
 | **Grid focus + arrow nav** — focus the grid, ArrowDown / ArrowRight a few cells                                                         | row N, column NAME, value V                                                                                                                                               | same                    | same                   |
-| **Tab through** — Tab from the control before the table to the one after it                                                             | six presses — five stops inside, one to step off — regardless of column count, hidden columns or active filters; Shift+Tab retraces                                       | same                    | same                   |
+| **Tab through** — Tab from the control before the table to the one after it                                                             | seven presses — five stops in `.dt-root`, the add-column button, one to step off — regardless of column count, hidden columns or active filters; Shift+Tab retraces       | same                    | same                   |
 | **Header cursor** — ArrowUp from body row 0, then ArrowLeft / ArrowRight                                                                | column header name, type, sort and filter state                                                                                                                           | same                    | same                   |
 | **Controls mode** — F2 on a header, ArrowRight a few times, Enter, Escape                                                               | button label announced on each step; Escape returns to the grid cursor                                                                                                    | same                    | same                   |
 | **Layout mode** — Shift+F2 on a header, then ←, Shift+→, Backspace, Escape                                                              | key map read on entry; each step announces a width or a new position; Escape says the layout was cancelled                                                                | same                    | same                   |
 | **Extract panel** — F2 on a list header to its extract button, Enter, ↓ to `element`, Tab to the position field, type a position, Enter | the button announces it opens a dialog; dialog title and tree announced; a wrong position is described on the field; "Column … added" on success; focus lands on the grid | same                    | same                   |
 | **Value inspector** — F2 on a nested cell, then ↓, →, `*`, Ctrl/Cmd+C, Escape                                                           | the cell announces it opens a dialog; dialog title announced; each item read with its level and position; Escape returns to the grid cursor                               | same                    | same                   |
 | **Filter add** — open Filter panel, apply a range filter, close                                                                         | live region: "1 filter active, showing X of Y rows"                                                                                                                       | same                    | same                   |
-| **Sort change** — click a column header twice (toggle desc)                                                                             | live region: "sorted by NAME descending"                                                                                                                                  | same                    | same                   |
+| **Sort change** — click a column's sort button twice (toggle desc)                                                                      | live region: "sorted by NAME descending"                                                                                                                                  | same                    | same                   |
 | **Modal open** — open Export, then SQL filter, then Derived column                                                                      | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener                                                                | same                    | same                   |
 | **Annotation popover** — focus an annotated cell; trigger via pointer / focus                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
+| **Annotation navigation** — with row or cell annotations in the table, F8, F8, Shift+F8, then Alt+↓ from the filter bar                 | each press announces "Row N of M[, column]: severity, message"; the cursor lands on the cell; past the last, "Wrapped to the first annotation."                           | same                    | same                   |
 | **Column header tooltip** — focus a header with a tooltip set                                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
 | **Undo / redo** — Cmd/Ctrl+Z then Cmd/Ctrl+Shift+Z                                                                                      | live region announces resulting state ("0 filters active, …")                                                                                                             | same (Ctrl+Z / Ctrl+Y)  | same                   |
 
@@ -694,4 +821,4 @@ the SQL editors' modals open over it, their placeholders showing.
 - i18n: [i18n guide](./i18n.md) for translating `a11y` strings and ARIA labels
 - Theming: [Theming guide](./theming.md) for focus-outline and contrast customization
 - Migration: [v0.5 → v0.6](../migration-guides/from-0.5-to-0.6.md) if you query the table's DOM by ARIA role
-- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode), `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region, `openValueInspector`), `src/table/ValueInspector.ts`, `src/table/ExtractColumnPanel.ts` and `src/table/TreeView.ts` (the value inspector, the extract panel and their tree), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/12-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)
+- Source: `src/table/KeyboardNavigator.ts` (keyboard map, cursor, controls mode, `F8`), `src/annotations/AnnotationNavigator.ts` (where `F8` lands, its announcements), `src/table/AnnotationPopover.ts`, `src/table/TableContainer.ts` (`.dt-grid` assembly, ARIA grid semantics, live region, `openValueInspector`), `src/table/ValueInspector.ts`, `src/table/ExtractColumnPanel.ts` and `src/table/TreeView.ts` (the value inspector, the extract panel and their tree), `src/table/ColumnHeader.ts` (`getControls`, header ids), `src/table/TableBody.ts` (`role="gridcell"`, cell ids), `src/core/RovingTabindex.ts` (the toolbar keyboard model shared by `src/filters/FilterBar.ts` and `src/table/HiddenColumnsGutter.ts`), `src/styles/12-high-contrast.css` (`prefers-contrast` / `forced-colors`), `src/core/Strings.ts` (`a11y` and `filters.ariaLabels` categories)

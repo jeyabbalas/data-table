@@ -9,6 +9,17 @@ grouped walkthroughs see the [guides](./README.md#guides-task-oriented) and
 
 ---
 
+### AnnotatedFilter
+
+[Filter](#filter) variant (`type: 'annotated'`) that keeps the rows with a
+row-scope or cell-scope [Annotation](#annotation) of the severities it names,
+or of any. Its `column` is always the synthetic `'__annotated__'`, so there is
+at most one, and its `table` names the base table whose annotated rows it
+reads, from a DuckDB temporary table the table keeps current with
+`table.annotations`. Added by `actions.showAnnotatedRows()` and removed by
+`hideAnnotatedRows()`; the view follows the annotations in place.
+See: [Filters](./guides/filters.md#8-annotated--rows-with-annotations) · [Annotations](./guides/annotations.md#showing-only-the-annotated-rows) · Source: `src/filters/FilterTypes.ts`, `src/annotations/AnnotatedRowsTable.ts`
+
 ### Annotation
 
 App-authored overlay metadata attached to a `row`, `column`, or `cell` of a
@@ -17,20 +28,36 @@ loaded table. Each annotation carries a `severity` (`error` / `warning` /
 `createdAt` / `updatedAt`. Annotations live outside [`TableState`](#tablestate)
 and do not participate in undo/redo — they are app-injected validation /
 quality-control output, not user-driven view changes. JSON-serialisable;
-auto-persisted to the [`SessionSnapshot`](#sessionsnapshot).
+saved with the [`SessionSnapshot`](#sessionsnapshot), in an IndexedDB database
+of their own (`dt-annotations`), when they change.
 See: [Annotations](./guides/annotations.md) · Source: `src/annotations/types.ts`
+
+### Annotation navigation
+
+Moving the cursor from one [Annotation](#annotation) to the next in the view
+as filtered and sorted: `F8` / `Shift+F8` or `Alt+↓` / `Alt+↑` from the
+keyboard, `actions.nextAnnotation()` / `previousAnnotation()` from code, and
+`actions.revealRow(rowId, column?)` to show any row by its `__rowid__`. It
+visits row- and cell-scope annotations of the severities the severity filter
+shows, and the live region reads out where it landed. The `annotationNavigation`
+option leaves the keys to the page.
+See: [Annotations](./guides/annotations.md#navigating-annotations) · [Accessibility](./guides/accessibility.md#annotation-navigation-f8) · Source: `src/annotations/AnnotationNavigator.ts`
 
 ### AnnotationStore
 
-Programmatic CRUD store on `table.annotations`. Indexes annotations by id,
-row, column, and cell so `getByRow` / `getByColumn` / `getByCell` are O(1).
-`getByCell(rowId, column)` returns the union of row + column + cell
-annotations sorted by severity, then `createdAt`, then insertion order.
-Emits a single `change` event (`kind: 'added' | 'updated' | 'removed' |
-'cleared' | 'filterChanged'`) on every mutation; `setSeverityFilter` /
-`getSeverityFilter` toggle which severities the rendering layer paints
-without removing data. Round-trips via `toJSON` / `loadJSON('replace' |
-'merge')`; preserves unknown top-level and per-annotation fields.
+Programmatic CRUD store on `table.annotations`. Indexes annotations by id and
+by scope (row, column, and cell by column, then row), so a lookup costs what
+it returns, never a pass over the store: `getByCell(rowId, column)` returns
+the exact intersection, the row's row-scope, the column's column-scope and
+that cell's own annotations, sorted by severity, then `createdAt`, then
+insertion order; `getByRow` / `getByColumn` return a row's or a column's own
+annotations and its cells', in insertion order. Emits a single `change` event
+(`kind: 'added' | 'updated' | 'removed' | 'cleared' | 'filterChanged'`, the
+ids, and the affected annotations) on every mutation that changes something;
+`setSeverityFilter` / `getSeverityFilter` toggle which severities the
+rendering layer paints without removing data. Round-trips via `toJSON` /
+`loadJSON('replace' | 'merge')`; preserves unknown top-level and
+per-annotation fields. Holds a million annotations at about 258 bytes each.
 See: [Annotations](./guides/annotations.md) · Source: `src/annotations/AnnotationStore.ts`
 
 ### AutoSave
@@ -215,10 +242,11 @@ See: [Derived columns → Nested columns](./guides/derived-columns.md#nested-col
 ### Filter
 
 A discriminated-union object describing an active constraint on the dataset.
-Seven variants — [RangeFilter](#rangefilter), [PointFilter](#pointfilter),
+Eight variants — [RangeFilter](#rangefilter), [PointFilter](#pointfilter),
 [SetFilter](#setfilter--notsetfilter), [NotSetFilter](#setfilter--notsetfilter),
 [NullFilter](#nullfilter), [PatternFilter](#patternfilter),
-[RawSQLFilter](#rawsqlfilter) — each carrying a `type` tag. Applied as a
+[RawSQLFilter](#rawsqlfilter), [AnnotatedFilter](#annotatedfilter) — each
+carrying a `type` tag. Applied as a
 `Filter[]` on `TableState.filters`; converted to a `WHERE` clause via
 `filtersToWhereClause` (exported at the root).
 See: [Filters](./guides/filters.md) · [API reference](./api-reference.md) · Source: `src/filters/FilterTypes.ts`
@@ -406,8 +434,10 @@ See: [Architecture](./concepts/architecture.md#virtual-scroller) · Source: `src
 
 The JSON document written to the [SessionStore](#sessionstore) by
 [AutoSave](#autosave). Captures [Filters](#filter), sort columns, column
-visibility / order / widths / pinning, hidden-column metadata, and
-[Derived Column](#derived-column) definitions (with pooled vector payloads).
+visibility / order / widths / pinning, hidden-column metadata,
+[Derived Column](#derived-column) definitions (with pooled vector payloads),
+and the [Annotations](#annotation), which the built-in
+[SessionStore](#sessionstore) keeps in a record of their own.
 Distinct from [StateSnapshot](#statesnapshot) — `SessionSnapshot` is the
 serialised form used for persistence; `StateSnapshot` is the in-memory form
 used for undo/redo.
@@ -415,12 +445,14 @@ See: [Session persistence](./guides/session-persistence.md) · Source: `src/pers
 
 ### SessionStore
 
-The persistence layer. Default implementation wraps IndexedDB keyed by
-[Instance ID](#instance-id); callers can inject any object implementing the
-`SessionStore` contract (save / load / delete) via
-`createDataTable({ sessionStore })` to back up to `localStorage`, a remote API,
-or a cloud sync tier. Degrades gracefully in private-browsing / no-IDB
-environments.
+The persistence layer. Default implementation wraps two IndexedDB databases
+keyed by table name: `dt-sessions` for the session records, and
+`dt-annotations` for each table's annotations, written in chunks and only when
+they change. Callers can inject any object implementing the `SessionStore`
+contract (save / load / delete) via
+`createDataTable({ persistence: { sessionStore } })` to back up to
+`localStorage`, a remote API, or a cloud sync tier. Degrades gracefully in
+private-browsing / no-IDB environments.
 See: [Session persistence](./guides/session-persistence.md) · Source: `src/persistence/SessionStore.ts`
 
 ### SetFilter / NotSetFilter

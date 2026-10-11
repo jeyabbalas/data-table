@@ -33,7 +33,7 @@
  *   lazy ValueInspector chunk       8.46 kB   →   8.9 kB cap (5.2 %)
  *   lazy ExtractColumnPanel chunk   4.97 kB   →   5.3 kB cap (6.6 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
- *   lazy AnnotationNavigator chunk  4.30 kB   →   4.5 kB cap (4.7 %)
+ *   lazy AnnotationNavigator chunk  4.47 kB   →   4.7 kB cap (5.1 %)
  *   lazy AnnotatedRowsTable chunk   2.73 kB   →   2.85 kB cap (4.4 %)
  *
  * The two derived-column chunks were last measured once their panels
@@ -163,6 +163,9 @@
  * compares rows key by key as the grid's `ORDER BY` does), the landing and
  * its announcements, loaded the first time navigation runs. What stays in
  * the shared chunk is the keys, the actions that load it and the strings.
+ * Searching from the cursor's row as an annotated view refreshes in place
+ * (waiting for the refresh, the gap a row left behind, positions counted
+ * rather than reckoned) took it to 4.47 kB, and the cap from 4.5 to 4.7 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown, since 1.0.1,
  * inlines the shared ModalHost helpers into each modal consumer. The
@@ -264,7 +267,7 @@ module.exports = [
   {
     name: 'lazy AnnotationNavigator chunk · ESM',
     path: 'dist/AnnotationNavigator-*.js',
-    limit: '4.5 kB',
+    limit: '4.7 kB',
   },
   {
     name: 'lazy AnnotatedRowsTable chunk · ESM',

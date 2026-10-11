@@ -670,17 +670,20 @@ An unsorted SQL search places the row it finds by counting the rows
 between the cursor's row and it, not every row before it, so a jump deep in
 the table stays cheap. A cursor on a row the grid no longer holds costs one
 query more to find that row: 0.5 s filtered and 1.4 s sorted, at row
-7,000,000. Under the annotated filter, the gap a resolved row leaves takes
+7,000,000. Under the annotated filter, the table runs that query itself, in
+the background, when a sort leaves the cursor off-screen, so that the next
+refresh can follow the row there; and the gap a resolved row leaves takes
 one query to find once the view's count is in, up to about 90 ms deep in
-ten million rows with a million annotated rows, and `F8` right after the
-change waits for it. The first navigation in a store with cell annotations builds
-a by-row index of them, 0.2 s and 24 bytes an annotation at a million,
-which the reads of each held row's annotations use from then on. In a
-sorted view the search compares rows as the grid's `ORDER BY` does: NULL
-last in either direction, NaN after every number, `__rowid__` last. The
-navigation code is a chunk of its own (4.60 kB brotli), loaded the first
-time it runs, or the first time a refresh of the annotated view looks for
-the cursor's row beyond the rows the grid holds.
+ten million rows with a million annotated rows, which `F8` right after the
+change waits for. The first navigation in a store with cell annotations
+builds a by-row index of them, 0.2 s and 24 bytes an annotation at a
+million, which the reads of each held row's annotations use from then on.
+In a sorted view the search compares rows as the grid's `ORDER BY` does:
+NULL last in either direction, NaN after every number, `__rowid__` last.
+The navigation code is a chunk of its own (4.60 kB brotli), loaded the
+first time it runs, or the first time the annotated view looks for the
+cursor's row beyond the rows the grid holds: to follow it through a
+refresh, or to learn which row it is on after a sort.
 
 ### Showing only the annotated rows
 
@@ -714,7 +717,13 @@ when its annotation is removed, the cursor goes to the gap the row left: on
 the first kept row after it, or on the last row when the gap is past the
 end. With one change that is where the cursor was; when several rows join
 or leave in one refresh, it can move. `F8` then goes to the first kept row
-after the row that left, and `Shift+F8` to the last kept row before it. An
+after the row that left, and `Shift+F8` to the last kept row before it. A
+sort, or a change to a derived column that the filters or the sort name,
+puts another row at the cursor's place, and the cursor follows that row
+from then on; when the user has scrolled away from the cursor, the table
+asks DuckDB which row it is, with one query. A derived column added,
+edited or removed that nothing filters or sorts by moves no row, and the
+cursor keeps its row, and the gap it stands at. An
 open value inspector follows the row too, its title giving the new row
 number; at a gap it keeps showing the value it shows, and an `F2` open
 still waiting on the cell is dropped. A change that keeps the same rows,

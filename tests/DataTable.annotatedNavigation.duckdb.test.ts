@@ -492,6 +492,120 @@ describe('the row the cursor is on, through a change of the view (real DuckDB)',
     expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
     await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 3, row: 400 }, SORT);
   });
+
+  /** The row the table has noted the cursor is on, which an in-place refresh follows. */
+  const cursorRowId = (table: DataTable): number | null =>
+    (table.container as unknown as { cursorRow: { rowId: number | null } | null }).cursorRow
+      ?.rowId ?? null;
+
+  /**
+   * 600 annotated rows, set up by `before` when given, the cursor put on
+   * row 400 and the view scrolled back to the top: the grid holds row 400
+   * still, until the view changes.
+   */
+  async function offScreen(before?: (m: Mounted) => Promise<void>): Promise<Mounted> {
+    const m = await mount(
+      Array.from({ length: 600 }, (_, rowId) => rowId),
+      { rows: 600 },
+    );
+    await before?.(m);
+    expect(await m.table.actions.revealRow(400, 'grp')).toEqual({ row: 400, column: 'grp' });
+    const body = m.table.container.getTableBody()!;
+    await vi.waitFor(() => expect(body.cachedRowId(400)).toBe(400), { timeout: 5_000 });
+    body.scrollToRow(0, 'start');
+    await m.table.container.whenBodyReady();
+    expect(cursorRowId(m.table)).toBe(400);
+    return m;
+  }
+
+  it('a sort while the user looks elsewhere: it learns the row there now, which the cursor follows', async () => {
+    const m = await offScreen();
+    // By `__rowid__` descending: position 400 holds row 199 now.
+    m.table.actions.setSort([{ column: '__rowid__', direction: 'desc' }]);
+    await m.settled(600);
+    expect(m.table.container.getTableBody()!.cachedRowId(400)).toBe(null);
+    await vi.waitFor(() => expect(cursorRowId(m.table)).toBe(199), { timeout: 5_000 });
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+
+    // Row 590, ninth in this order, resolved: row 199 is at position 399 now.
+    m.table.annotations.remove(m.ids.get(590)!);
+    await m.settled(599);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
+    await expectLanded(
+      m,
+      await m.table.actions.nextAnnotation(),
+      { rowId: 198, row: 400 },
+      '"__rowid__" DESC',
+    );
+  });
+
+  it('a derived column added while the user looks elsewhere: the rows stay, and so does the row the cursor follows', async () => {
+    const m = await offScreen();
+    const added = await m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'twice',
+      expression: 'id * 2',
+    });
+    expect(added.success).toBe(true);
+    await m.table.container.whenBodyReady();
+    // A new relation, and a new body that holds the rows at the top only.
+    expect(m.table.container.getTableBody()!.cachedRowId(400)).toBe(null);
+    expect(cursorRowId(m.table)).toBe(400);
+
+    m.table.annotations.remove(m.ids.get(10)!);
+    await m.settled(599);
+    // Row 400 is at position 399 now.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
+  });
+
+  it('the derived column the view is sorted by, edited while the user looks elsewhere: it learns the row there now', async () => {
+    const m = await offScreen(async ({ table, settled }) => {
+      const added = await table.actions.addDerivedColumn({
+        kind: 'expression',
+        name: 'key',
+        expression: 'id',
+      });
+      expect(added.success).toBe(true);
+      table.actions.setSort([{ column: 'key', direction: 'asc' }]);
+      await settled(600);
+    });
+    // By `-id` now: the order turned round, and position 400 holds row 199.
+    const edited = await m.table.actions.replaceDerivedColumn('key', {
+      kind: 'expression',
+      name: 'key',
+      expression: '-id',
+    });
+    expect(edited.success).toBe(true);
+    await m.settled(600);
+    await vi.waitFor(() => expect(cursorRowId(m.table)).toBe(199), { timeout: 5_000 });
+
+    m.table.annotations.remove(m.ids.get(590)!);
+    await m.settled(599);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 198, row: 400 }, '-id');
+  });
+
+  it('a derived column added and removed while the cursor stands at a gap: it still does, and F8 goes on from the row that left', async () => {
+    const m = await offScreen();
+    m.table.annotations.remove(m.ids.get(400)!);
+    await m.settled(599);
+    // At the gap row 400 left, where row 401 is.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+    const added = await m.table.actions.addDerivedColumn({
+      kind: 'expression',
+      name: 'twice',
+      expression: 'id * 2',
+    });
+    expect(added.success).toBe(true);
+    await m.table.container.whenBodyReady();
+    expect(m.table.container.getTableBody()!.cachedRowId(400)).toBe(null);
+    await m.table.actions.removeDerivedColumn('twice');
+    await m.table.container.whenBodyReady();
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+    // The first kept row after the row that left: row 401, at the gap.
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
+  });
 });
 
 describe('a gap off-screen, searched in SQL (real DuckDB)', () => {

@@ -629,8 +629,15 @@ export class AnnotationNavigator implements AnnotationNavigation {
     return { pos: cursor.row, rowId, column: cursor.column };
   }
 
-  /** The `__rowid__` of the row at `pos`, by the grid's own query for it. */
-  private async rowIdAt(pos: number, signal: AbortSignal): Promise<number | null> {
+  /**
+   * The `__rowid__` of the row at `pos`, by the grid's own query for it, or
+   * `null` past the view's end. For a search's start, and for the table,
+   * which learns the row the cursor is on after a change of the view
+   * leaves it off-screen: that is no navigation, and waits for none.
+   *
+   * @internal
+   */
+  async rowIdAt(pos: number, signal: AbortSignal): Promise<number | null> {
     if (this.host.getTableBody()?.rowIdsArePositions()) return pos;
     const { state } = this.host;
     const tableName = state.tableName.get();

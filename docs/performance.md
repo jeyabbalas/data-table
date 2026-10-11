@@ -980,8 +980,11 @@ after a change to the annotations first waits for the view to refresh,
 0.4–0.7 s at a million annotated rows. When the change took the cursor's
 row out of the view, finding the gap the row left takes one query once the
 count is in, up to about 90 ms deep in ten million rows with a million
-annotated rows, which the cursor waits for before it moves there. The
-navigator's chunk is 4.60 kB.
+annotated rows, which the cursor waits for before it moves there. After a
+sort, or a change to a derived column the filters or the sort name, the
+table asks in the background for the row at the cursor's place when the
+grid does not hold it (the last row of the table above), so that the next
+refresh can follow that row. The navigator's chunk is 4.60 kB.
 
 **The annotated filter.** In Node's DuckDB-WASM, on 10,000,000 rows: for
 1,000,000 annotated rows, building the statement took 56 ms and building the
@@ -1101,10 +1104,9 @@ The budget still named "lazy ExportDialog chunk" measures the shared
 `VisualizationRegistry-*` chunk, which holds most of the table: header,
 body, keyboard navigation. The root entry imports it, so every table loads
 it up front; the dialogs and panels below it load the first time one opens,
-annotation navigation the first time it runs or a refresh of the annotated
-view looks for the cursor's row beyond the rows the grid holds, and the
-table of annotated rows the first time an annotated filter or a navigation
-needs it.
+annotation navigation the first time it runs or the annotated view looks
+for the cursor's row beyond the rows the grid holds, and the table of
+annotated rows the first time an annotated filter or a navigation needs it.
 Parquet export runs in DuckDB's worker (`COPY TO`), not in a chunk of its
 own. ESM only: the CJS bundles were dropped in 0.4.0.
 

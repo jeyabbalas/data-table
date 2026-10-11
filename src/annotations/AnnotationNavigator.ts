@@ -124,12 +124,12 @@ export interface AnnotationNavigatorHost {
    */
   viewVersion(): number;
   /**
-   * Where the cursor stands when an in-place refresh took its row out of
-   * the view: `'before'` when the gap that row left is just before the
-   * cursor's row, which slid into its place; `'after'` when it is just after
-   * it, the cursor having gone up to the last row; else `null`.
+   * The gap the cursor stands at, when an in-place refresh took its row out
+   * of the view: that row's `__rowid__`, and how many of the view's rows
+   * come before it in the grid's order, where the cursor is (or, past the
+   * last row, on the last). Else `null`.
    */
-  cursorGap(): 'before' | 'after' | null;
+  cursorGap(): { readonly rowId: number; readonly pos: number } | null;
   /**
    * Whether the table is moving the cursor itself, to follow its row
    * through an in-place refresh, which a navigation waits for: that move
@@ -173,14 +173,12 @@ interface Anchor {
   pos: number;
   /**
    * The row the SQL search compares rows with, by `__rowid__`: the row at
-   * `pos`, past which it looks; or, when `inclusive`, the first row it
-   * looks at, the one past `pos`, as from a cursor at the gap a row an
-   * in-place refresh took out of the view left (see
-   * `AnnotationNavigatorHost.cursorGap`). `null` before the first row and
-   * after the last.
+   * `pos`; or, from the gap a row an in-place refresh took out of the view
+   * left (see `AnnotationNavigatorHost.cursorGap`), that row, which is in
+   * the relation still, if not in the view, between `pos` and the next
+   * position past it. `null` before the first row and after the last.
    */
   rowId: number | null;
-  inclusive: boolean;
   /** The cursor's column: the search looks at the rest of its row first. */
   column: string | null;
 }
@@ -597,12 +595,7 @@ export class AnnotationNavigator implements AnnotationNavigation {
     if (hit) return { ...hit, column: null, wrapped: false };
     // A search from the start (or, going back, the end) has seen every row.
     if (!wrap || (dir > 0 ? anchor.pos < 0 : anchor.pos >= total)) return null;
-    const start: Anchor = {
-      pos: dir > 0 ? -1 : total,
-      rowId: null,
-      inclusive: false,
-      column: null,
-    };
+    const start: Anchor = { pos: dir > 0 ? -1 : total, rowId: null, column: null };
     const first = await this.findRow(store, start, dir, selected, total, signal);
     return first ? { ...first, column: null, wrapped: true } : null;
   }
@@ -613,34 +606,27 @@ export class AnnotationNavigator implements AnnotationNavigation {
    * going back, a cursor past the end).
    *
    * After an in-place refresh took the cursor's row out of the view, it
-   * starts at the gap that row left instead: a row on the gap's far side is
-   * the first it looks at, whole (going forward, the row that slid under
-   * the cursor), and the cursor's row, on its near side, is passed by.
+   * starts at the gap that row left instead, past the row itself: the
+   * first row after it going forward, the row now at the gap, where the
+   * cursor is; the last before it going back.
    */
   private async anchor(dir: 1 | -1, total: number, signal: AbortSignal): Promise<Anchor> {
     const cursor = this.host.state.focusedCell.get();
     if (!cursor || cursor.row < 0 || cursor.row >= total) {
       const before = cursor ? cursor.row < 0 : dir > 0;
-      return { pos: before ? -1 : total, rowId: null, inclusive: false, column: null };
+      return { pos: before ? -1 : total, rowId: null, column: null };
+    }
+    const gap = this.host.cursorGap();
+    if (gap !== null) {
+      return { pos: dir > 0 ? gap.pos - 1 : gap.pos, rowId: gap.rowId, column: null };
     }
     const rowId =
       this.host.getTableBody()?.cachedRowId(cursor.row) ??
       this.shownRowId(cursor.row) ??
       (await this.rowIdAt(cursor.row, signal));
     // A row that has gone (the view changed under the cursor) leaves the end to start from.
-    if (rowId === null) {
-      return { pos: dir > 0 ? -1 : total, rowId: null, inclusive: false, column: null };
-    }
-    const gap = this.host.cursorGap();
-    if (gap !== null && (gap === 'before') === dir > 0) {
-      return { pos: cursor.row - dir, rowId, inclusive: true, column: null };
-    }
-    return {
-      pos: cursor.row,
-      rowId,
-      inclusive: false,
-      column: gap === null ? cursor.column : null,
-    };
+    if (rowId === null) return { pos: dir > 0 ? -1 : total, rowId: null, column: null };
+    return { pos: cursor.row, rowId, column: cursor.column };
   }
 
   /** The `__rowid__` of the row at `pos`, by the grid's own query for it. */
@@ -766,10 +752,9 @@ export class AnnotationNavigator implements AnnotationNavigation {
       // Ordered by `__rowid__`: the nearest one past the anchor's.
       const desc = keys[0]!.desc;
       const up = dir > 0 !== desc;
-      const past = `${up ? '>' : '<'}${anchor.inclusive ? '=' : ''}`;
       const [hit] = await this.query<{ r: number | null }>(
         `SELECT ${up ? 'min' : 'max'}(${ROWID}) AS r FROM ${view} WHERE ${filtered}${annotated(ROWID)}` +
-          (at === null ? '' : ` AND ${ROWID} ${past} ${at}`),
+          (at === null ? '' : ` AND ${ROWID} ${up ? '>' : '<'} ${at}`),
         signal,
       );
       const rowId = hit?.r;
@@ -794,12 +779,16 @@ export class AnnotationNavigator implements AnnotationNavigation {
             ` ORDER BY ${orderBySQL(keys, (i) => keys[i]!.column, dir > 0)} LIMIT 1`
         : `${this.anchorRow(keys, view, at)}SELECT ${view}.${ROWID} AS r FROM ${view}, ${ANCHOR}` +
             ` WHERE ${filtered}${annotated(`${view}.${ROWID}`)}` +
-            ` AND ${anchor.inclusive ? `(${after} OR ${view}.${ROWID} = ${at})` : after}` +
+            ` AND ${after}` +
             ` ORDER BY ${orderBySQL(keys, v, dir > 0)} LIMIT 1`,
       signal,
     );
     if (!hit) return null;
-    return { pos: await this.countBefore(keys, view, filtered, hit.r, signal), rowId: hit.r };
+    const [count] = await this.query<{ n: number }>(
+      this.beforeSQL(view, where, String(hit.r)),
+      signal,
+    );
+    return { pos: count!.n, rowId: hit.r };
   }
 
   /** `WITH` one row, the one whose `__rowid__` is `rowId`: its value of each key. */
@@ -818,25 +807,48 @@ export class AnnotationNavigator implements AnnotationNavigation {
     );
   }
 
-  /** How many rows of the sorted view come before the row whose `__rowid__` is `rowId`: its position. */
-  private async countBefore(
-    keys: readonly OrderKey[],
-    view: string,
-    filtered: string,
-    rowId: number | string,
-    signal: AbortSignal,
-  ): Promise<number> {
+  /**
+   * SQL of one row, `n`: how many of the view's rows come before the row
+   * whose `__rowid__` is `literal`, in the grid's order. Its position, when
+   * the view shows it; when the filters hide it, the position of the gap it
+   * would fill, the first row after it being there. The row's own values
+   * are read from the relation, which holds it either way.
+   */
+  private beforeSQL(view: string, where: string, literal: string): string {
+    const { state } = this.host;
+    const keys = gridOrder(state.sortColumns.get(), state.schema.get());
+    const filtered = where ? `(${where}) AND ` : '';
+    if (keys === null) {
+      // The relation numbered as the grid orders it, which orders the
+      // view's rows as the grid does: exact for any type, and a full sort.
+      const order = windowOrderSQL(state.sortColumns.get(), state.schema.get());
+      return (
+        `WITH "__dt_n__" AS (SELECT ${ROWID}, ${where ? `coalesce((${where}), false)` : 'true'} AS "__dt_in__",` +
+        ` row_number() OVER (ORDER BY ${order}) AS "__dt_p__" FROM ${view})` +
+        ` SELECT count(*) AS n FROM "__dt_n__" WHERE "__dt_in__"` +
+        ` AND "__dt_p__" < (SELECT "__dt_p__" FROM "__dt_n__" WHERE ${ROWID} = ${literal})`
+      );
+    }
+    if (keys[0]!.column === ROWID) {
+      return `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} ${keys[0]!.desc ? '>' : '<'} ${literal}`;
+    }
     const before = afterSQL(
       keys,
       (i) => `${ANCHOR}."__dt_k${i}__"`,
       (i) => `${view}.${keys[i]!.column}`,
     );
-    const [count] = await this.query<{ n: number }>(
-      `${this.anchorRow(keys, view, rowId)}SELECT count(*) AS n FROM ${view}, ${ANCHOR}` +
-        ` WHERE ${filtered}${before}`,
-      signal,
+    return (
+      `${this.anchorRow(keys, view, literal)}SELECT count(*) AS n FROM ${view}, ${ANCHOR}` +
+      ` WHERE ${filtered}${before}`
     );
-    return count!.n;
+  }
+
+  /**
+   * SQL of one row, `shown`: whether the filters keep the row whose
+   * `__rowid__` is `literal`. None when no row has it.
+   */
+  private shownSQL(view: string, where: string, literal: string): string {
+    return `SELECT ${where ? `coalesce((${where}), false)` : 'true'} AS shown FROM ${view} WHERE ${ROWID} = ${literal}`;
   }
 
   // =========================================
@@ -1021,29 +1033,42 @@ export class AnnotationNavigator implements AnnotationNavigation {
     const view = quoteIdentifier(tableName);
     const where = filtersToWhereClause(state.filters.get());
     const [found] = await this.query<{ shown: boolean }>(
-      `SELECT ${where ? `coalesce((${where}), false)` : 'true'} AS shown FROM ${view} WHERE ${ROWID} = ${literal}`,
+      this.shownSQL(view, where, literal),
       signal,
     );
     if (!found) throw this.noRow(rowId);
     if (!found.shown) return null;
+    const [count] = await this.query<{ n: number }>(this.beforeSQL(view, where, literal), signal);
+    return count!.n;
+  }
 
-    const keys = gridOrder(state.sortColumns.get(), state.schema.get());
-    if (keys === null) {
-      const [row] = await this.query<{ p: number }>(
-        `${this.numbered(view, where)}SELECT "__dt_p__" AS p FROM "__dt_n__" WHERE ${ROWID} = ${literal}`,
-        signal,
-      );
-      return row ? row.p : null;
-    }
-    const filtered = where ? `(${where}) AND ` : '';
-    if (keys[0]!.column === ROWID) {
-      const [count] = await this.query<{ n: number }>(
-        `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} ${keys[0]!.desc ? '>' : '<'} ${literal}`,
-        signal,
-      );
-      return count!.n;
-    }
-    return this.countBefore(keys, view, filtered, literal, signal);
+  /**
+   * Where the row whose `__rowid__` is `rowId` stands in the view as it is
+   * now, in one query: how many of the view's rows come before it in the
+   * grid's order, and whether the view shows it. A row the filters hide
+   * stands at the gap it would fill. For the table, which puts the cursor
+   * back on its row after an in-place refresh, or at the gap the row left:
+   * it is no navigation, and waits for none, as navigation waits for it.
+   *
+   * @throws `QueryError` coded `INVALID_ROWID` when no row has it,
+   *   `NO_TABLE` without a table, `QUERY_ABORTED` when `signal` aborts.
+   *
+   * @internal
+   */
+  async locate(rowId: number, signal: AbortSignal): Promise<{ before: number; shown: boolean }> {
+    const tableName = this.host.state.tableName.get();
+    if (!tableName) throw noTable();
+    const view = quoteIdentifier(tableName);
+    const where = filtersToWhereClause(this.host.state.filters.get());
+    const literal = rowIdLiteral(rowId);
+    const [found] = await this.query<{ n: number; shown: boolean }>(
+      `SELECT "__dt_c__".n AS n, "__dt_s__".shown AS shown` +
+        ` FROM (${this.beforeSQL(view, where, literal)}) AS "__dt_c__",` +
+        ` (${this.shownSQL(view, where, literal)}) AS "__dt_s__"`,
+      signal,
+    );
+    if (!found) throw this.noRow(rowId);
+    return { before: found.n, shown: found.shown };
   }
 
   /** The error for a `__rowid__` no row of the table has, as `getCellValue` throws it. */

@@ -37,7 +37,7 @@ import type { NestedFieldColumnOptions, StateActions } from '../core/Actions';
 import { ConfigurationError, DataTableError, QueryError } from '../core/errors';
 import { resolveInstanceId } from '../core/instanceId';
 import { isAnyModalOpen } from '../core/ModalHost';
-import type { TableState } from '../core/State';
+import { effectiveRowCount, type TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import type { ColumnSchema, Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -46,7 +46,6 @@ import { AddColumnButton } from '../derived/AddColumnButton';
 import type { DerivedColumnEditPanel } from '../derived/DerivedColumnEditPanel';
 import type { DerivedColumnModal } from '../derived/DerivedColumnModal';
 import type { ExpressionEditorFactory } from '../derived/ExpressionEditorTypes';
-import { annotatedFilterMask } from '../filters/annotatedFilters';
 import { FilterBar } from '../filters/FilterBar';
 import { FilterPanel } from '../filters/FilterPanel';
 import type { FilterPresetPanel } from '../filters/FilterPresetPanel';
@@ -211,18 +210,30 @@ const NO_ANNOTATED_ROWS: AnnotatedRowsSource = {
     Promise.reject(new QueryError('No annotations to search', { code: 'NO_TABLE' })),
 };
 
+/** A cell of the grid: a row's position in the view, and a column. */
+type GridCell = { readonly row: number; readonly column: string };
+
 /**
  * An in-place refresh of the rows an annotated filter keeps (see
- * `TableContainer.refreshAnnotatedView`): the cursor it found and its row's
- * `__rowid__`, `null` when there was none to follow; whether the row count
- * moved the cursor up to the last row meanwhile; and the gap the cursor
- * stood at, which it keeps if it only follows its row.
+ * `TableContainer.refreshAnnotatedView`): the cursor, which the new row
+ * count may move up to the last row meanwhile; the `__rowid__` of the row
+ * the cursor follows, `null` when there is none to follow; and what aborts
+ * its query for that row's place in the view.
  */
 interface AnnotatedRefresh {
-  cursor: { readonly row: number; readonly column: string } | null;
+  cursor: GridCell | null;
   readonly rowId: number | null;
-  clamped: boolean;
-  readonly gap: 'before' | 'after' | null;
+  readonly controller: AbortController;
+}
+
+/**
+ * The cursor after an in-place refresh took its row out of the view: see
+ * `TableContainer.cursorGap`.
+ */
+interface CursorGap {
+  readonly cell: GridCell;
+  readonly rowId: number;
+  readonly pos: number;
 }
 
 /** The panels and modals the table opens, one at a time, named as their fields are. */
@@ -386,15 +397,12 @@ export class TableContainer {
   // Settles once the latest in-place refresh has: its rows, its count, and
   // the cursor back on its row.
   private annotatedViewSettled: Promise<void> = Promise.resolve();
-  // The cursor, after an in-place refresh took its row out of the view, and
-  // where the gap the row left is: just before the cursor's row, which
-  // slid into its place, or just after it, where the cursor went when the
-  // row was the last. Navigation searches from the gap. It holds while the
-  // cursor is that very cell, until a change of the view.
-  private cursorGap: {
-    readonly cell: { readonly row: number; readonly column: string };
-    readonly side: 'before' | 'after';
-  } | null = null;
+  // The cursor, after an in-place refresh took its row out of the view: the
+  // row that left, by `__rowid__`, and the gap it left, `pos` rows into the
+  // view, where the cursor is (on the last row, when the gap is past it).
+  // Navigation searches from the gap. It holds while the cursor is that very
+  // cell, until a change of the view.
+  private cursorGap: CursorGap | null = null;
   // Set while the table moves the cursor itself, to follow its row through
   // an in-place refresh: a navigation waiting for that refresh goes on.
   private followingRow = false;
@@ -700,6 +708,7 @@ export class TableContainer {
       // A change of the view ends what an in-place refresh knew of the
       // cursor: its row's position in the view as it was.
       const viewChanged = (): void => {
+        this.annotatedRefresh?.controller.abort();
         this.annotatedRefresh = null;
         this.cursorGap = null;
       };
@@ -773,105 +782,123 @@ export class TableContainer {
    * filter keeps asks: the body fetches the rows in view again, keeping the
    * scroll position, and the facade counts them again.
    *
-   * The cursor follows its row. Its row's `__rowid__` is noted now, from
-   * the rows the body holds, or from a refresh still running whose rows are
-   * not back. Once the rows in view and the count are in, the cursor goes
-   * to that row's new position, in the same column, if the body holds the
-   * row there; nothing scrolls. A row the filter no longer keeps leaves the
-   * cursor where it is, on the row that slid into its place (or, past the
-   * new end, on the last row), and marks where the gap it left is, which
-   * navigation searches from (see `cursorGap`). A row still kept, but too
-   * far to be among the rows the body holds, leaves the cursor where it
-   * is. Nothing follows if the cursor moved meanwhile, a newer refresh
-   * started, or the view changed.
+   * The cursor follows its row, which is noted now: the row the body holds
+   * at the cursor; at a gap a refresh left (see `cursorGap`), the row that
+   * left it; or the row a refresh still running follows, whose rows are not
+   * back. Once the rows in view are back, a cursor whose row is among them
+   * goes to it at once, before a key can act from the row now in its place.
+   * Else, once the count is in, one query says where the row stands: off
+   * the rows held, or past the view's old end, the cursor goes to it; gone
+   * from the view, the cursor goes to the gap it left, where the first row
+   * after it is now (or, past the last row, to the last), and navigation
+   * searches from that gap. Nothing scrolls. Nothing follows if the cursor
+   * moved meanwhile, a newer refresh started or the view changed, nor when
+   * the cursor's row is not known: the cursor stays where it is.
    */
   private refreshAnnotatedView(): void {
     const body = this.tableBody;
     this.annotatedViewVersion++;
-    const cursor = this.state.focusedCell.get();
     const running = this.annotatedRefresh;
+    running?.controller.abort();
+    const cursor = this.state.focusedCell.get();
+    const carried = running !== null && running.cursor === cursor;
     let rowId: number | null = null;
-    let clamped = false;
     if (cursor && cursor.row >= 0) {
-      if (running && running.cursor === cursor) {
-        ({ rowId, clamped } = running);
-      } else {
-        rowId = body?.cachedRowId(cursor.row) ?? null;
-      }
+      rowId = carried
+        ? running.rowId
+        : (this.cursorGapAt(cursor)?.rowId ?? body?.cachedRowId(cursor.row) ?? null);
     }
-    const refresh: AnnotatedRefresh = { cursor, rowId, clamped, gap: this.cursorGapSide() };
+    const refresh: AnnotatedRefresh = { cursor, rowId, controller: new AbortController() };
     this.annotatedRefresh = refresh;
     body?.refresh();
     const recounted = this.resolvedOptions.onAnnotatedRowsChange?.();
-    const follow = (): void => this.followCursorRow(refresh, body);
-    this.annotatedViewSettled = Promise.all([body?.whenFetched(), recounted]).then(follow, follow);
-  }
-
-  /** The end of an in-place refresh: see {@link refreshAnnotatedView}. */
-  private followCursorRow(refresh: AnnotatedRefresh, body: TableBody | null): void {
-    if (this.destroyed || this.annotatedRefresh !== refresh) return;
-    this.annotatedRefresh = null;
-    const { cursor, rowId } = refresh;
-    if (!cursor || this.state.focusedCell.get() !== cursor) return;
-    if (rowId === null || !body || body !== this.tableBody) {
-      // Which row the cursor is on is not known.
-      this.cursorGap = null;
-      return;
-    }
-    const at = body.cachedPositionOf(rowId);
-    if (at !== null) {
-      if (at !== cursor.row)
-        this.moveCursorWithRow({ row: at, column: cursor.column }, refresh.gap);
-      return;
-    }
-    if (this.annotatedFiltersKeep(rowId)) {
-      // In the view still, past the rows the body holds.
-      this.cursorGap = null;
-      return;
-    }
-    this.cursorGap = { cell: cursor, side: refresh.clamped ? 'after' : 'before' };
+    this.annotatedViewSettled = this.followCursorRow(refresh, body, recounted);
   }
 
   /**
-   * Put the cursor on `cell`, its row's position after an in-place
-   * refresh: the table's own move, which a navigation waiting for that
-   * refresh does not take for the user's. The gap it stood at goes with it.
+   * The cursor following its row through the in-place refresh `refresh`;
+   * see {@link refreshAnnotatedView}. Never rejects: a query that fails
+   * leaves the cursor where it is.
    */
-  private moveCursorWithRow(
-    cell: { row: number; column: string },
-    gap: 'before' | 'after' | null,
-  ): void {
-    this.followingRow = true;
+  private async followCursorRow(
+    refresh: AnnotatedRefresh,
+    body: TableBody | null,
+    recounted: Promise<void> | void,
+  ): Promise<void> {
     try {
-      this.actions?.setFocusedCell(cell);
+      await body?.whenFetched();
+      if (!this.isFollowing(refresh, body)) return;
+      // Among the rows fetched, it is below the old row count and the new:
+      // the count cannot move the cursor from it, so it need not be waited for.
+      const held = body!.cachedPositionOf(refresh.rowId!);
+      if (held !== null) {
+        this.placeCursor(refresh, held, null);
+        return;
+      }
+      await recounted;
+      if (!this.isFollowing(refresh, body)) return;
+      const navigator = await this.loadAnnotationNavigator();
+      if (!this.isFollowing(refresh, body)) return;
+      const { before, shown } = await navigator.locate(refresh.rowId!, refresh.controller.signal);
+      if (!this.isFollowing(refresh, body)) return;
+      const last = effectiveRowCount(this.state) - 1;
+      if (shown) this.placeCursor(refresh, before, null);
+      else if (last >= 0) this.placeCursor(refresh, Math.min(before, last), before);
+    } catch {
+      // Aborted by a newer refresh or a change of the view, or failed: the
+      // cursor stays where it is.
     } finally {
-      this.followingRow = false;
+      if (this.annotatedRefresh === refresh) {
+        // Not placed: which row the cursor is on is not known.
+        this.annotatedRefresh = null;
+        if (this.cursorGapAt(this.state.focusedCell.get())) this.cursorGap = null;
+      }
     }
-    const moved = this.state.focusedCell.get();
-    this.cursorGap = gap && moved ? { cell: moved, side: gap } : null;
-  }
-
-  /** The gap the cursor stands at, while it is the cell an in-place refresh marked; see `cursorGap`. */
-  private cursorGapSide(): 'before' | 'after' | null {
-    const gap = this.cursorGap;
-    return gap && gap.cell === this.state.focusedCell.get() ? gap.side : null;
   }
 
   /**
-   * Whether the annotated filters in force keep the row whose `__rowid__`
-   * is `rowId`, by the annotations in the store now: the severity bits of
-   * its row and cell annotations against each filter's.
+   * Whether `refresh` has a cursor to follow still: no newer refresh started,
+   * the cursor not moved meanwhile, its row known, and the body the same.
    */
-  private annotatedFiltersKeep(rowId: number): boolean {
-    const store = this.resolvedOptions.annotations;
-    if (!store) return false;
-    const mask = store.annotatedRowMask(rowId);
-    const base = this.state.baseTableName.get() ?? this.state.tableName.get();
-    return this.state.filters
-      .get()
-      .every(
-        (f) => f.type !== 'annotated' || f.table !== base || (mask & annotatedFilterMask(f)) !== 0,
-      );
+  private isFollowing(refresh: AnnotatedRefresh, body: TableBody | null): boolean {
+    return (
+      !this.destroyed &&
+      this.annotatedRefresh === refresh &&
+      refresh.cursor !== null &&
+      refresh.rowId !== null &&
+      body !== null &&
+      body === this.tableBody &&
+      this.state.focusedCell.get() === refresh.cursor
+    );
+  }
+
+  /**
+   * End `refresh` with the cursor at `row`, in its column: its row's new
+   * position, or, given `gap`, the row having left the view, where the gap
+   * it left is (`gap` rows into the view; on the last row when the gap is
+   * past it). The table's own move, which a navigation waiting for the
+   * refresh does not take for the user's.
+   */
+  private placeCursor(refresh: AnnotatedRefresh, row: number, gap: number | null): void {
+    this.annotatedRefresh = null;
+    const cursor = refresh.cursor!;
+    if (row !== cursor.row) {
+      this.followingRow = true;
+      try {
+        this.actions?.setFocusedCell({ row, column: cursor.column });
+      } finally {
+        this.followingRow = false;
+      }
+    }
+    const placed = this.state.focusedCell.get();
+    this.cursorGap =
+      gap !== null && placed ? { cell: placed, rowId: refresh.rowId!, pos: gap } : null;
+  }
+
+  /** The gap `cell` stands at, while it is the cursor an in-place refresh left there; see `cursorGap`. */
+  private cursorGapAt(cell: GridCell | null): CursorGap | null {
+    const gap = this.cursorGap;
+    return gap && cell && gap.cell === cell ? gap : null;
   }
 
   /**
@@ -1584,10 +1611,10 @@ export class TableContainer {
           : this.state.totalRows.get();
       if (focusedCell.row >= rowCount) {
         // The cursor an in-place refresh of the annotated rows follows: the
-        // refresh still puts it back on its row, or marks the gap its row
-        // left, after the last row.
+        // refresh still puts it where its row is, or at the gap its row left.
+        const following = this.annotatedRefresh;
         const refresh =
-          this.annotatedRefresh?.cursor === focusedCell ? this.annotatedRefresh : null;
+          following?.cursor === focusedCell && following.rowId !== null ? following : null;
         this.followingRow = refresh !== null;
         try {
           if (rowCount === 0) {
@@ -1601,10 +1628,7 @@ export class TableContainer {
         } finally {
           this.followingRow = false;
         }
-        if (refresh) {
-          refresh.cursor = this.state.focusedCell.get();
-          refresh.clamped = true;
-        }
+        if (refresh) refresh.cursor = this.state.focusedCell.get();
       }
     });
     this.unsubscribes.push(unsubFocusClamp);
@@ -2895,7 +2919,10 @@ export class TableContainer {
           whenFilterCycleSettled: (signal) => this.whenFilterCycleSettled(signal),
           whenAnnotatedViewSettled: () => this.whenAnnotatedViewSettled(),
           viewVersion: () => this.annotatedViewVersion,
-          cursorGap: () => this.cursorGapSide(),
+          cursorGap: () => {
+            const gap = this.cursorGapAt(this.state.focusedCell.get());
+            return gap && { rowId: gap.rowId, pos: gap.pos };
+          },
           isFollowingRow: () => this.followingRow,
           revealColumn: (column) => void this.columnWindow.revealColumn(column),
           closeOverlays: () => {
@@ -3160,9 +3187,12 @@ export class TableContainer {
     this.annotationOverlay?.destroy();
 
     // Stop syncing the annotated rows, and let nothing wait for them: the
-    // gate held for their chunk goes with the subscriptions below
+    // gate held for their chunk goes with the subscriptions below. A query
+    // for where the cursor's row is now is aborted.
     this.annotatedRows?.destroy();
     this.annotatedRows = null;
+    this.annotatedRefresh?.controller.abort();
+    this.annotatedRefresh = null;
     if (this.annotatedRowsSource) {
       this.actions?.setAnnotatedRowsSource(null);
       this.annotatedRowsSource = null;

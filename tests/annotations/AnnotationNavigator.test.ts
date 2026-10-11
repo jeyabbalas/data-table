@@ -678,12 +678,12 @@ describe('AnnotationNavigator: a view refreshed in place', () => {
     await expect(dropped).rejects.toMatchObject({ code: 'QUERY_ABORTED' });
   });
 
-  it('from the gap before the cursor’s row: forward, that row first, whole; back, the row before it', async () => {
+  it('from the gap a row left: forward, the first row after it, whole; back, the last before it', async () => {
     const host = annotatedView();
     const nav = new AnnotationNavigator(host);
-    // Row 4 went from between 3 and 5: row 5 slid under the cursor.
+    // Row 4 left from between 3 and 5: the gap is 1 row in, where row 5 is.
     host.actions.setFocusedCell({ row: 1, column: 'c' });
-    host.view.gap = 'before';
+    host.view.gap = { rowId: 4, pos: 1 };
     expect(await nav.next()).toMatchObject({ rowId: 5, row: 1, column: 'b', wrapped: false });
     expect(host.announce).toHaveBeenLastCalledWith('Row 2 of 4, b: error, b5');
 
@@ -698,19 +698,19 @@ describe('AnnotationNavigator: a view refreshed in place', () => {
     expect(await nav.previous()).toMatchObject({ rowId: 5, row: 1, column: 'b' });
   });
 
-  it('from the gap after the cursor’s row, the last: back, that row first, whole; forward, round to the first', async () => {
+  it('from the gap past the last row: back, the last row, whole; forward, round to the first', async () => {
     const host = annotatedView();
     const nav = new AnnotationNavigator(host);
-    // The last row went, and the cursor went up to row 9.
+    // Row 10, the last, left: the cursor is on row 9, the last now.
     host.actions.setFocusedCell({ row: 3, column: 'b' });
-    host.view.gap = 'after';
+    host.view.gap = { rowId: 10, pos: 4 };
     expect(await nav.previous()).toMatchObject({ rowId: 9, row: 3, column: 'd', wrapped: false });
 
     host.actions.setFocusedCell({ row: 3, column: 'b' });
     expect(await nav.next()).toMatchObject({ rowId: 3, row: 0, wrapped: true });
   });
 
-  it('in SQL, the row on the far side of the gap is one the search may find', async () => {
+  it('in SQL, from the gap: past the row that left it, which the relation holds still', async () => {
     const host = makeHost({
       store: new ModelStore([{ scope: 'row', rowId: 150, severity: 'error' }]),
       answer: (sql) => (sql.includes('count(*)') ? [{ n: 20 }] : [{ r: 150 }]),
@@ -718,23 +718,25 @@ describe('AnnotationNavigator: a view refreshed in place', () => {
     host.state.filters.set([ANNOTATED_FILTER]);
     host.state.filteredRows.set(50);
     const nav = new AnnotationNavigator(host);
-    const fromGap = (): void => {
-      // The grid holds the cursor's row only, row 40: the rows past it are SQL's.
+    const atGap = (): void => {
+      // Row 40 left from position 12, where row 41 is now, the one row the
+      // grid holds: the rows past it are SQL's.
       host.body.cache.clear();
-      host.body.hold(12, 13, () => 40);
+      host.body.hold(12, 13, () => 41);
       host.actions.setFocusedCell({ row: 12, column: 'a' });
-      host.view.gap = 'before';
+      host.view.gap = { rowId: 40, pos: 12 };
     };
 
-    fromGap();
+    atGap();
+    // Past row 40, and the 20 rows before the hit.
     expect(await nav.next()).toMatchObject({ rowId: 150, row: 20 });
-    expect(host.queries[0]).toContain(' AND "__rowid__" >= 40');
+    expect(host.queries[0]).toContain(' AND "__rowid__" > 40');
 
     host.state.sortColumns.set([{ column: 'a', direction: 'desc' }]);
     host.queries.length = 0;
-    fromGap();
+    atGap();
     expect(await nav.next()).toMatchObject({ rowId: 150, row: 20 });
-    expect(host.queries[0]).toContain(' OR "t"."__rowid__" = 40) ORDER BY ');
+    expect(host.queries[0]).toContain('FROM "t" WHERE "__rowid__" = 40) SELECT');
   });
 
   it('searches again when the view is refreshed in place while it searches, and gives up on a view that keeps changing', async () => {

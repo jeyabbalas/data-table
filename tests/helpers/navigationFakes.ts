@@ -191,13 +191,14 @@ export class FakeBody implements NavigatorBody {
 
 /**
  * What a fake host says of in-place refreshes of the view, which a test
- * sets: the version they have moved, where the cursor stands after one took
- * its row out, whether the table is moving the cursor itself, and what
- * `whenAnnotatedViewSettled` resolves with.
+ * sets: the version they have moved, the gap the cursor stands at after one
+ * took its row out (that row's `__rowid__`, and the rows before it), whether
+ * the table is moving the cursor itself, and what `whenAnnotatedViewSettled`
+ * resolves with.
  */
 export interface FakeView {
   version: number;
-  gap: 'before' | 'after' | null;
+  gap: { rowId: number; pos: number } | null;
   following: boolean;
   settled: Promise<void>;
 }

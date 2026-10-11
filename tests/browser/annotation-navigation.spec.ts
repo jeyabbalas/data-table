@@ -466,3 +466,66 @@ test('under the annotated filter, an annotation added above the cursor: the curs
   });
   expect(await renderedRowId(page, 4)).toBe(299_999);
 });
+
+test('under the annotated filter, the cursor on the last row follows it past the old end when a row joins above', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await annotatedFour(page);
+  const host = BIG_TABLE_HOST_ID;
+  const shown = await page.evaluate(() =>
+    (window as unknown as BigWindow).__t.actions.revealRow(299_999, 'grp'),
+  );
+  expect(shown).toEqual({ row: 3, column: 'grp' });
+
+  await page.evaluate(() =>
+    (window as unknown as BigWindow).__t.annotations.add({
+      scope: 'row',
+      rowId: 100_000,
+      severity: 'warning',
+      message: 'added',
+    }),
+  );
+  // Row 299,999 is at position 4 now, past the four rows the grid fetched
+  // again: the cursor went with it.
+  await expect
+    .poll(async () => (await landing(page, host)).cursor, { timeout: 30_000 })
+    .toEqual({ row: 4, column: 'grp' });
+  await expect.poll(() => renderedRowId(page, 4), { timeout: 30_000 }).toBe(299_999);
+
+  // Shift+F8 goes to the row before it.
+  expect(await pressTo(page, host, 'Shift+F8', 3)).toEqual({
+    cursor: { row: 3, column: 'grp' },
+    said: 'Row 4 of 5: info, checked',
+  });
+  expect(await renderedRowId(page, 3)).toBe(250_000);
+});
+
+test('under the annotated filter, two issues resolved at once: the cursor goes to the gap its row left', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const ids = await annotatedFour(page);
+  const host = BIG_TABLE_HOST_ID;
+  expect((await pressTo(page, host, 'F8', 0)).said).toBe('Row 1 of 4, grp: warning, odd group');
+  expect((await pressTo(page, host, 'F8', 1)).said).toBe('Row 2 of 4, val: error, too high');
+
+  // The issues of rows 3 and 999, the cursor's, resolved in one turn.
+  await page.evaluate(
+    ([first, second]) => {
+      const { annotations } = (window as unknown as BigWindow).__t;
+      annotations.remove(first!);
+      annotations.remove(second!);
+    },
+    [ids[3]!, ids[999]!],
+  );
+  // The gap row 999 left is at the start now, where row 250,000 is.
+  await expect
+    .poll(async () => (await landing(page, host)).cursor, { timeout: 30_000 })
+    .toEqual({ row: 0, column: 'val' });
+  expect(await pressTo(page, host, 'F8', 0, /^Row 1 of 2: /)).toEqual({
+    cursor: { row: 0, column: 'val' },
+    said: 'Row 1 of 2: info, checked',
+  });
+  expect(await renderedRowId(page, 0)).toBe(250_000);
+});

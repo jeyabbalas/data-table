@@ -27,7 +27,7 @@ import { PersistenceError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
-import { settleSnapshotAnnotations } from './annotationPersistence';
+import { AnnotationFileCache, settleSnapshotAnnotations } from './annotationPersistence';
 import { classifyPersistenceFailure, isAnnotationsWriteFailure } from './persistenceErrors';
 import { snapshotFromState } from './serialization';
 import { SessionStore } from './SessionStore';
@@ -84,8 +84,8 @@ export class AutoSave {
   // The same, for the annotations record alone: a `QuotaExceededError` on
   // it, or a second failed write of it in a row, holds the annotations
   // back. It is reported once, and saves then go without annotations — the
-  // session record keeps saving, and `SessionStore` deletes the annotations
-  // record it no longer names. A million annotations can outgrow a quota
+  // session record keeps saving, and `SessionStore` keeps it naming the
+  // annotations that landed before. A million annotations can outgrow a quota
   // the rest of the session fits in many times over, and a write that fails
   // for the annotations themselves (a value that cannot be cloned, or one
   // past a browser's limits) fails again: retrying would serialize them all
@@ -94,12 +94,16 @@ export class AutoSave {
   private annotationsHeldBack = false;
   /** Failed writes of the annotations record in a row, other than over the quota. */
   private annotationsFailures = 0;
+  /** Asynchronous saves under way: a flush writes the state they were writing, and newer, at once. */
+  private inFlight = 0;
   /**
-   * The snapshots of the asynchronous saves under way. A `SessionStore` takes
-   * a snapshot's annotations only when it writes them, which
-   * {@link settleAnnotations} makes it do at once.
+   * The lazy snapshots of the asynchronous saves under way, which a
+   * `SessionStore` takes the annotations of only when it writes them;
+   * {@link settleAnnotations} makes them take them at once.
    */
   private readonly saving = new Set<SessionSnapshot>();
+  /** The annotations' file a custom store is handed, the same while they do not change. */
+  private readonly annotationFiles = new AnnotationFileCache();
 
   constructor(
     private state: TableState,
@@ -156,7 +160,12 @@ export class AutoSave {
     // (annotationSeverityFilter), so they need to schedule a save too: one
     // that leaves the annotations record alone, their content unchanged.
     if (this.annotationStore) {
-      this.unsubscribes.push(this.annotationStore.on('change', () => this.scheduleSave()));
+      this.unsubscribes.push(
+        this.annotationStore.on('change', ({ kind }) => {
+          if (kind !== 'filterChanged') this.annotationFiles.drop();
+          this.scheduleSave();
+        }),
+      );
     }
 
     // Subscribe to undo/redo stack changes so stacks are saved even when
@@ -209,42 +218,47 @@ export class AutoSave {
    * through the asynchronous save (`'save'`), whose writes of a million
    * annotations take many short tasks, through the synchronous one
    * (`'saveSync'`), as a page being hidden needs, or dropped (`'drop'`).
-   * `loadData` saves the data it replaces asynchronously, and
-   * `clearSession`, which deletes the session, drops it.
+   * `'saveSync'` also writes the state of an asynchronous save under way,
+   * which the page could take with it. `loadData` saves the data it replaces
+   * asynchronously, and `clearSession`, which deletes the session, drops it.
    *
    * @internal
    */
   disableWith(pending: 'save' | 'saveSync' | 'drop'): void {
-    if (this.timer !== null) {
-      this.clearTimer();
-      if (pending === 'save') this.save();
-      else if (pending === 'saveSync') this.saveSync();
-    }
-
-    for (const unsub of this.unsubscribes) {
-      unsub();
-    }
-    this.unsubscribes = [];
+    const scheduled = this.timer !== null;
     this.clearTimer();
+    try {
+      if (pending === 'save' && scheduled) this.save();
+      if (pending === 'saveSync' && (scheduled || this.inFlight > 0)) this.saveSync();
+    } finally {
+      for (const unsub of this.unsubscribes) {
+        unsub();
+      }
+      this.unsubscribes = [];
+      this.clearTimer();
+      this.annotationFiles.drop();
 
-    if (this.boundOnVisibilityChange && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
+      if (this.boundOnVisibilityChange && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
+      }
+      if (this.boundOnBeforeUnload && typeof window !== 'undefined') {
+        window.removeEventListener('beforeunload', this.boundOnBeforeUnload);
+      }
+      this.boundOnVisibilityChange = null;
+      this.boundOnBeforeUnload = null;
     }
-    if (this.boundOnBeforeUnload && typeof window !== 'undefined') {
-      window.removeEventListener('beforeunload', this.boundOnBeforeUnload);
-    }
-    this.boundOnVisibilityChange = null;
-    this.boundOnBeforeUnload = null;
   }
 
   /**
-   * If a debounced save is pending, execute it immediately and synchronously.
-   * Uses SessionStore.saveSync() to enqueue the IDB write without yielding
-   * to the microtask queue — critical during beforeunload/visibilitychange
-   * where an async await may be skipped by the browser during page teardown.
+   * If a debounced save is pending, or an asynchronous one is under way,
+   * save now, synchronously: the state they would write, and newer. Uses
+   * SessionStore.saveSync() to enqueue the IDB write without yielding to the
+   * microtask queue — critical during beforeunload/visibilitychange where an
+   * async await may be skipped by the browser during page teardown, and a
+   * save under way may not get to write its session record.
    */
   flushPendingSave(): void {
-    if (this.timer !== null) {
+    if (this.timer !== null || this.inFlight > 0) {
       this.clearTimer();
       this.saveSync();
     }
@@ -287,26 +301,38 @@ export class AutoSave {
     if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = this.snapshot();
-    this.saving.add(snapshot);
+    const lazy = this.lazy();
+    let snapshot: SessionSnapshot;
+    try {
+      snapshot = this.snapshot(lazy);
+    } catch (cause) {
+      this.reportError(cause);
+      return;
+    }
+    this.inFlight++;
+    if (lazy) this.saving.add(snapshot);
+    const settle = (): void => {
+      this.inFlight--;
+      this.saving.delete(snapshot);
+    };
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
       if (result && typeof result.then === 'function') {
         result.then(
           () => {
-            this.saving.delete(snapshot);
+            settle();
             this.annotationsFailures = 0;
           },
           (cause: unknown) => {
-            this.saving.delete(snapshot);
+            settle();
             this.reportError(cause);
           },
         );
       } else {
-        this.saving.delete(snapshot);
+        settle();
       }
     } catch (cause) {
-      this.saving.delete(snapshot);
+      settle();
       this.reportError(cause);
     }
   }
@@ -320,15 +346,27 @@ export class AutoSave {
     if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = this.snapshot();
     try {
-      this.store.saveSync(snapshot);
+      this.store.saveSync(this.snapshot(this.lazy()));
     } catch (cause) {
       this.reportError(cause);
     }
   }
 
-  private snapshot(): SessionSnapshot {
+  /**
+   * Whether to hand the store lazy snapshots, whose annotations' file it
+   * takes only to write it: a `SessionStore` as this version wrote it. One
+   * whose `save` or `saveSync` is another's (a subclass's, a wrapper) may
+   * copy the snapshot after its annotations changed, which would lose them.
+   */
+  private lazy(): boolean {
+    return (
+      this.store.save === SessionStore.prototype.save &&
+      this.store.saveSync === SessionStore.prototype.saveSync
+    );
+  }
+
+  private snapshot(lazy: boolean): SessionSnapshot {
     return snapshotFromState(
       this.state,
       this.undoManager,
@@ -336,9 +374,10 @@ export class AutoSave {
       this.annotationStore,
       {
         annotations: !this.annotationsHeldBack,
-        // A `SessionStore` takes the annotations' file only to write it; a
-        // custom store gets it as it is now.
-        lazyAnnotations: this.store instanceof SessionStore,
+        lazyAnnotations: lazy,
+        // Another store gets the file as it is now, the same object from
+        // save to save while the annotations do not change.
+        ...(lazy ? {} : { annotationFiles: this.annotationFiles }),
       },
     );
   }

@@ -326,7 +326,22 @@ describe('AutoSave', () => {
       autoSave.destroy();
     });
 
-    it('is a no-op after save has already fired', () => {
+    it('is a no-op once the save that fired has settled', async () => {
+      const autoSave = new AutoSave(state, store);
+      autoSave.enable();
+
+      state.filters.set([{ type: 'null', column: 'name' }]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(store.save).toHaveBeenCalledTimes(1);
+
+      autoSave.flushPendingSave();
+      // saveSync should not be called — the async save already handled it
+      expect(store.saveSync).not.toHaveBeenCalled();
+
+      autoSave.destroy();
+    });
+
+    it('saves synchronously what a save still under way is writing', () => {
       const autoSave = new AutoSave(state, store);
       autoSave.enable();
 
@@ -334,9 +349,12 @@ describe('AutoSave', () => {
       vi.advanceTimersByTime(1000);
       expect(store.save).toHaveBeenCalledTimes(1);
 
+      // The page may go before the asynchronous save writes its record.
       autoSave.flushPendingSave();
-      // saveSync should not be called — the async save already handled it
-      expect(store.saveSync).not.toHaveBeenCalled();
+      expect(store.saveSync).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(store.saveSync).mock.calls[0]![0].filters).toEqual([
+        { type: 'null', column: 'name' },
+      ]);
 
       autoSave.destroy();
     });

@@ -238,6 +238,40 @@ function settleAnnotations(snapshot: SessionSnapshot, file: AnnotationFile | und
 }
 
 /**
+ * The file of a store's content, kept while that content lasts, for a
+ * custom session store, which can tell unchanged annotations only by the
+ * file being the same object: `AutoSave` hands it the same one from save to
+ * save until they change. {@link AnnotationFileCache.drop} lets it go,
+ * which `AutoSave` does when the content changes.
+ *
+ * @internal
+ */
+export class AnnotationFileCache {
+  private content: ContentToken | null = null;
+  private file: AnnotationFile | undefined;
+
+  /** The file of `store`'s content now: the one taken before, while that content lasts. */
+  fileOf(store: AnnotationStore): AnnotationFile | undefined {
+    const content = contentTokenOf(store);
+    if (content === null) {
+      this.drop();
+      return undefined;
+    }
+    if (content !== this.content) {
+      this.content = content;
+      this.file = fileOf(store, content);
+    }
+    return this.file;
+  }
+
+  /** Let the file go. */
+  drop(): void {
+    this.content = null;
+    this.file = undefined;
+  }
+}
+
+/**
  * Give `snapshot` the annotations of `store`; nothing when it is empty.
  *
  * With `lazy`, their file is not taken now: `annotations` takes it when
@@ -248,7 +282,10 @@ function settleAnnotations(snapshot: SessionSnapshot, file: AnnotationFile | und
  * save of it leaves the stored ones as they are, and the save the change
  * asked for writes the new ones. {@link settleSnapshotAnnotations} takes the
  * files of snapshots still to be saved before a store is emptied for other
- * data.
+ * data. A copy of the snapshot made after that change has no annotations,
+ * and says nothing of them being held back: only a store that reads the
+ * snapshot itself may be handed a lazy one. Without `lazy`, the file is
+ * taken now, or, with `files`, reused while the content is the same.
  *
  * @internal
  */
@@ -256,11 +293,12 @@ export function setSnapshotAnnotations(
   snapshot: SessionSnapshot,
   store: AnnotationStore,
   lazy: boolean,
+  files?: AnnotationFileCache,
 ): void {
   const content = contentTokenOf(store);
   if (content === null) return;
   if (!lazy) {
-    const file = fileOf(store, content);
+    const file = files ? files.fileOf(store) : fileOf(store, content);
     if (file !== undefined) snapshot.annotations = file;
     return;
   }

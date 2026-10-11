@@ -28,7 +28,7 @@ import {
   noteAnnotationsRefused,
   setSnapshotAnnotations,
 } from './annotationPersistence';
-import type { AnnotationsDropReason } from './annotationPersistence';
+import type { AnnotationFileCache, AnnotationsDropReason } from './annotationPersistence';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
 import { SNAPSHOT_VERSION, isPooledVectorRef } from './types';
@@ -180,6 +180,13 @@ export interface SnapshotOptions {
    * to a `SessionStore`.
    */
   lazyAnnotations?: boolean;
+  /**
+   * Without `lazyAnnotations`, the file to hand out: the same object while
+   * the annotations do not change.
+   *
+   * @internal
+   */
+  annotationFiles?: AnnotationFileCache | undefined;
 }
 
 /**
@@ -299,7 +306,12 @@ export function snapshotFromState(
 
   if (annotationStore) {
     if (options.annotations !== false) {
-      setSnapshotAnnotations(snapshot, annotationStore, options.lazyAnnotations === true);
+      setSnapshotAnnotations(
+        snapshot,
+        annotationStore,
+        options.lazyAnnotations === true,
+        options.annotationFiles,
+      );
     } else if (annotationStore.count() > 0) {
       holdBackSnapshotAnnotations(snapshot);
     }

@@ -268,3 +268,38 @@ export function annotationFile(count: number): AnnotationFile {
     })),
   };
 }
+
+/**
+ * Hold a readwrite transaction on both stores of `dt-annotations` open, as
+ * a long write does (another tab's, or one of a million annotations): every
+ * readwrite transaction on them waits until `release()`.
+ */
+export async function holdAnnotationsDb(): Promise<{ release: () => Promise<void> }> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open('dt-annotations', 1);
+    request.onupgradeneeded = () => createAnnotationStores(request.result);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const tx = db.transaction(['annotations', 'chunks'], 'readwrite');
+  const store = tx.objectStore('annotations');
+  let held = true;
+  const spin = (): void => {
+    const request = store.get('__held__');
+    request.onsuccess = () => {
+      if (held) spin();
+    };
+  };
+  spin();
+  const done = new Promise<void>((resolve) => {
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => resolve();
+  });
+  return {
+    release: async () => {
+      held = false;
+      await done;
+      db.close();
+    },
+  };
+}

@@ -41,12 +41,20 @@
  * the session record naming them, with the record it named before as its
  * fallback; and once that too has committed, a small transaction drops what
  * the head kept. A save whose annotations do not land keeps the stored
- * session record's annotations as they are. So the stored session record
- * names a whole record at every point, and a reload, a crash or a failed
- * write restores the last annotations that landed, at worst older than the
- * rest of the session. Two tabs that write one table's annotations at the
- * same moment can still lose them: neither sees the other's records until
- * its own write has begun.
+ * session record's annotations as they are. A synchronous save, for a page
+ * being hidden, enqueues both at once: its annotations keep every record
+ * the head describes, and its session record takes the record the stored
+ * one names as the fallback. So the stored session record names a whole
+ * record at every point, and a reload, a crash or a failed write restores
+ * the last annotations that landed, at worst older than the rest of the
+ * session. Two tabs that write one table's annotations at the same moment
+ * can still lose them: neither sees the other's records until its own write
+ * has begun.
+ *
+ * A session saved without annotations names the record it stopped naming,
+ * as `__annotationsDropped`, until that record is deleted, which the save
+ * does once its session record has landed: a load that finds such a record
+ * still stored deletes it, should the save not have got to.
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
@@ -230,6 +238,40 @@ function settleAnnotations(snapshot: SessionSnapshot, file: AnnotationFile | und
 }
 
 /**
+ * The file of a store's content, kept while that content lasts, for a
+ * custom session store, which can tell unchanged annotations only by the
+ * file being the same object: `AutoSave` hands it the same one from save to
+ * save until they change. {@link AnnotationFileCache.drop} lets it go,
+ * which `AutoSave` does when the content changes.
+ *
+ * @internal
+ */
+export class AnnotationFileCache {
+  private content: ContentToken | null = null;
+  private file: AnnotationFile | undefined;
+
+  /** The file of `store`'s content now: the one taken before, while that content lasts. */
+  fileOf(store: AnnotationStore): AnnotationFile | undefined {
+    const content = contentTokenOf(store);
+    if (content === null) {
+      this.drop();
+      return undefined;
+    }
+    if (content !== this.content) {
+      this.content = content;
+      this.file = fileOf(store, content);
+    }
+    return this.file;
+  }
+
+  /** Let the file go. */
+  drop(): void {
+    this.content = null;
+    this.file = undefined;
+  }
+}
+
+/**
  * Give `snapshot` the annotations of `store`; nothing when it is empty.
  *
  * With `lazy`, their file is not taken now: `annotations` takes it when
@@ -240,7 +282,10 @@ function settleAnnotations(snapshot: SessionSnapshot, file: AnnotationFile | und
  * save of it leaves the stored ones as they are, and the save the change
  * asked for writes the new ones. {@link settleSnapshotAnnotations} takes the
  * files of snapshots still to be saved before a store is emptied for other
- * data.
+ * data. A copy of the snapshot made after that change has no annotations,
+ * and says nothing of them being held back: only a store that reads the
+ * snapshot itself may be handed a lazy one. Without `lazy`, the file is
+ * taken now, or, with `files`, reused while the content is the same.
  *
  * @internal
  */
@@ -248,11 +293,12 @@ export function setSnapshotAnnotations(
   snapshot: SessionSnapshot,
   store: AnnotationStore,
   lazy: boolean,
+  files?: AnnotationFileCache,
 ): void {
   const content = contentTokenOf(store);
   if (content === null) return;
   if (!lazy) {
-    const file = fileOf(store, content);
+    const file = files ? files.fileOf(store) : fileOf(store, content);
     if (file !== undefined) snapshot.annotations = file;
     return;
   }

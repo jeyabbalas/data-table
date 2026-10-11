@@ -261,6 +261,128 @@ describe('a write cut off, or failed, at any point', () => {
   });
 });
 
+describe('a write whose cleanup was cut off', () => {
+  /** A page with a write whose cleanup did not run: its head keeps the record before. */
+  async function cutOffCleanup(): Promise<Page> {
+    const page = newPage();
+    annotate(page.annotations, 3);
+    await page.save();
+    annotate(page.annotations, 1, 3);
+    failTransaction({ db: 'dt-annotations', mode: 'readwrite' }, 2);
+    await page.save();
+    vi.restoreAllMocks();
+    expect((await rawAnnotations())?.['previous']).toHaveLength(1);
+    return page;
+  }
+
+  it('leaves a session-only save resolved when its cleanup cannot start', async () => {
+    const page = await cutOffCleanup();
+    // A sort: the session record alone, then the cleanup of the kept
+    // record, whose connection is closing (another tab's upgrade).
+    page.state.sortColumns.set([{ column: 'id', direction: 'asc' }]);
+    failTransaction({ db: 'dt-annotations', mode: 'readwrite' });
+    await expect(page.save()).resolves.toBeUndefined();
+    vi.restoreAllMocks();
+    expect((await rawSession())?.['sortColumns']).toEqual([{ column: 'id', direction: 'asc' }]);
+    page.store.close();
+  });
+
+  it('keeps of a kept record what the head describes of it, not what it kept itself', async () => {
+    const page = newPage();
+    annotate(page.annotations, 1);
+    await page.save();
+    // Every cleanup fails from now: the second readwrite transaction of
+    // dt-annotations of each save.
+    const transaction = IDBDatabase.prototype.transaction;
+    let writes = 0;
+    vi.spyOn(IDBDatabase.prototype, 'transaction').mockImplementation(function (
+      this: IDBDatabase,
+      ...args: Parameters<IDBDatabase['transaction']>
+    ) {
+      if (this.name === 'dt-annotations' && args[1] === 'readwrite' && ++writes % 2 === 0) {
+        throw new DOMException('Cut off.', 'InvalidStateError');
+      }
+      return transaction.apply(this, args);
+    });
+    for (let i = 1; i <= 4; i++) {
+      annotate(page.annotations, 1, i);
+      await page.save();
+    }
+    vi.restoreAllMocks();
+    const previous = (await rawAnnotations())?.['previous'] as Record<string, unknown>[];
+    expect(previous).toHaveLength(1);
+    expect(Object.keys(previous[0]!).sort()).toEqual(['chunks', 'count', 'file', 'owner']);
+    page.store.close();
+  });
+});
+
+describe('a record a session saved without annotations stopped naming', () => {
+  async function savedThenCleared(): Promise<{ page: Page; owner: unknown }> {
+    const page = newPage();
+    annotate(page.annotations, 25_000);
+    await page.save();
+    const owner = (await rawAnnotations())?.['owner'];
+    page.annotations.clear('all');
+    return { page, owner };
+  }
+
+  it('is deleted before the store closes, after a synchronous save', async () => {
+    const { page } = await savedThenCleared();
+    // `DataTable.destroy()` within the debounce: saveSync, then close.
+    page.saveSync();
+    page.store.close();
+    await vi.waitFor(async () => expect(await rawAnnotations()).toBeUndefined());
+    expect(await rawChunks()).toEqual([]);
+    expect((await rawSession())?.['__annotations']).toBeUndefined();
+  });
+
+  it('is named as dropped, and deleted by a later load, when the page goes before it is', async () => {
+    const { page, owner } = await savedThenCleared();
+    // The page goes before the delete runs.
+    failTransaction({ db: 'dt-annotations', mode: 'readwrite' });
+    page.saveSync();
+    await vi.waitFor(async () =>
+      expect((await rawSession())?.['__annotationsDropped']).toBe(owner),
+    );
+    vi.restoreAllMocks();
+    page.store.close();
+    expect((await rawAnnotations())?.['owner']).toBe(owner);
+
+    const next = await reload();
+    expect(next.annotations.count()).toBe(0);
+    expect(next.issues).toEqual([]);
+    expect(next.snapshot).not.toHaveProperty('__annotationsDropped');
+    expect(await rawAnnotations()).toBeUndefined();
+    expect(await rawChunks()).toEqual([]);
+    next.store.close();
+  });
+
+  it('is not deleted by a later load once another write has replaced it', async () => {
+    const { page, owner } = await savedThenCleared();
+    failTransaction({ db: 'dt-annotations', mode: 'readwrite' });
+    page.saveSync();
+    await vi.waitFor(async () =>
+      expect((await rawSession())?.['__annotationsDropped']).toBe(owner),
+    );
+    vi.restoreAllMocks();
+    page.store.close();
+    // Another tab writes the table's annotations, its session record not yet put.
+    const other = newPage();
+    annotate(other.annotations, 2, 100);
+    failTransaction({ db: 'dt-sessions', mode: 'readwrite' });
+    await other.save().catch(() => undefined);
+    vi.restoreAllMocks();
+    other.store.close();
+    const head = await rawAnnotations();
+    expect(head?.['owner']).not.toBe(owner);
+
+    const next = await reload();
+    expect(next.annotations.count()).toBe(0);
+    expect((await rawAnnotations())?.['owner']).toBe(head?.['owner']);
+    next.store.close();
+  });
+});
+
 describe('saveSync', () => {
   async function saved(): Promise<{ page: Page; landedOwner: unknown }> {
     const page = newPage();
@@ -354,6 +476,39 @@ describe('saveSync', () => {
     });
     const next = await reload(page);
     expect(ids(next.annotations)).toEqual(range(3));
+    expect(next.issues).toEqual([]);
+    next.store.close();
+  });
+
+  it('names a write whose annotations landed and whose session record is on its way', async () => {
+    const { page } = await saved();
+    annotate(page.annotations, 1, 3);
+    const snapshot = () =>
+      snapshotFromState(page.state, undefined, undefined, page.annotations, {
+        lazyAnnotations: true,
+      });
+    // The page is hidden as the asynchronous save puts its session record,
+    // and a rewrite of the annotations would not land.
+    const transaction = IDBDatabase.prototype.transaction;
+    let hidden = false;
+    vi.spyOn(IDBDatabase.prototype, 'transaction').mockImplementation(function (
+      this: IDBDatabase,
+      ...args: Parameters<IDBDatabase['transaction']>
+    ) {
+      const tx = transaction.apply(this, args);
+      if (!hidden && this.name === 'dt-sessions' && args[1] === 'readwrite') {
+        hidden = true;
+        failChunkPut(0, 'abort later');
+        page.store.saveSync(snapshot());
+      }
+      return tx;
+    });
+    await page.store.save(snapshot());
+    vi.restoreAllMocks();
+    expect(hidden).toBe(true);
+    expect((await rawAnnotations())?.['count']).toBe(4);
+    const next = await reload(page);
+    expect(ids(next.annotations)).toEqual(range(4));
     expect(next.issues).toEqual([]);
     next.store.close();
   });
@@ -474,6 +629,86 @@ describe('two tabs on one table', () => {
     expect(ids(next.annotations)).toEqual(range(3));
     expect(next.issues).toEqual([]);
     tabB.store.close();
+    next.store.close();
+  });
+
+  it('takes the other tab’s record as the fallback of a stale tab’s synchronous save', async () => {
+    // Tab A saves X; tab B restores it, adds one, saves Y, and drops X.
+    const tabA = newPage();
+    annotate(tabA.annotations, 2);
+    await tabA.save();
+    const tabB = await reload();
+    annotate(tabB.annotations, 1, 2);
+    await tabB.save();
+    const yOwner = (await rawAnnotations())?.['owner'];
+    expect(new Set((await rawChunks()).map((chunk) => chunk.key[1]))).toEqual(new Set([yOwner]));
+
+    // Tab A, which knows only X, changes its annotations and is hidden;
+    // their write does not land.
+    annotate(tabA.annotations, 2, 10);
+    failChunkPut(0, 'abort later');
+    tabA.saveSync();
+    await vi.waitFor(async () =>
+      expect((await rawSession())?.['__annotations']).toMatchObject({
+        count: 4,
+        fallback: { owner: yOwner, count: 3 },
+      }),
+    );
+    vi.restoreAllMocks();
+    expect((await rawAnnotations())?.['owner']).toBe(yOwner);
+
+    tabB.store.close();
+    const next = await reload(tabA);
+    expect(ids(next.annotations)).toEqual(range(3));
+    expect(next.issues).toEqual([]);
+    next.store.close();
+  });
+
+  it('takes the other tab’s record as the fallback when the stale tab had no annotations', async () => {
+    const tabA = newPage();
+    await tabA.save();
+    const tabB = await reload();
+    annotate(tabB.annotations, 3);
+    await tabB.save();
+    const yOwner = (await rawAnnotations())?.['owner'];
+
+    annotate(tabA.annotations, 1, 50);
+    failChunkPut(0, 'abort later');
+    tabA.saveSync();
+    await vi.waitFor(async () =>
+      expect((await rawSession())?.['__annotations']).toMatchObject({
+        count: 1,
+        fallback: { owner: yOwner },
+      }),
+    );
+    vi.restoreAllMocks();
+    expect((await rawChunks()).map((chunk) => chunk.key[1])).toEqual([yOwner]);
+
+    tabB.store.close();
+    const next = await reload(tabA);
+    expect(ids(next.annotations)).toEqual(range(3));
+    expect(next.issues).toEqual([]);
+    next.store.close();
+  });
+
+  it('keeps the other tab’s record when a stale tab’s synchronous save lands', async () => {
+    const tabA = newPage();
+    annotate(tabA.annotations, 2);
+    await tabA.save();
+    const tabB = await reload();
+    annotate(tabB.annotations, 1, 2);
+    await tabB.save();
+    const yOwner = (await rawAnnotations())?.['owner'];
+
+    annotate(tabA.annotations, 2, 10);
+    tabA.saveSync();
+    await vi.waitFor(async () => expect((await rawAnnotations())?.['count']).toBe(4));
+    // The head keeps Y, which the stored session record named: a page that
+    // went before A's record landed would have restored it.
+    expect((await rawAnnotations())?.['previous']).toMatchObject([{ owner: yOwner }]);
+    tabB.store.close();
+    const next = await reload(tabA);
+    expect(ids(next.annotations)).toEqual([...range(2), 'a10', 'a11']);
     next.store.close();
   });
 });

@@ -161,9 +161,15 @@ What made them slow, and the rule each one gives:
 3. **Persistence must not re-clone unchanged data.** The session record
    carried `annotations.toJSON()`, so a filter, sort or width change cloned
    every annotation again a second later (104 ms per 100,000 in Chrome). The
-   annotations now live in their own database, written when the file object
-   `currentAnnotationFile` caches per content revision is not the one last
-   written: a token per object, compared by identity.
+   annotations now live in their own database, written only when the
+   store's content is not what the session store last wrote or read.
+   Telling is O(1): a token per content revision and table name, which a
+   snapshot carries without the file; the file is built only when a write,
+   or a custom store, reads it, and nothing keeps it after. Two databases
+   cannot be written atomically, so the order makes up for it: the
+   annotations first, then the session record naming them, with the record
+   it named before as its fallback, then a cleanup. A reload restores the
+   last annotations that landed.
 4. **Know the platform's ceilings.** `push(...ids)` spreads its argument onto
    the stack and threw `RangeError` from about 125,000 ids; a V8 `Map` holds
    2²⁴ (about 16.7 million) entries; Chromium refuses an IndexedDB value over
@@ -174,6 +180,15 @@ What made them slow, and the rule each one gives:
    insertion-order array and renumbered what followed it: 43 ms a remove at a
    million, 430 s for `clear('column')`. Insertion order is now the `Map`'s
    own, and a remove is O(1).
+6. **Yield to the next task without a timer.** The grid's fetches, the row
+   count, the stats panels, navigation and the chunked build of the
+   annotated rows waited for the next task with `setTimeout(0)`, after a
+   derived-column change or at the annotated filter's read gate. Chrome
+   throttles a background tab's timers to one a second, and a chain of them
+   to one a minute after five minutes hidden: a million-annotation session
+   restored in a hidden tab with the annotated filter on waited about 18 s
+   on them. They post to a `MessageChannel` instead (`src/core/nextTask.ts`),
+   which is not throttled.
 
 How it was held: a seeded model test runs random operations against a
 brute-force model of the documented behaviour and compares every lookup,

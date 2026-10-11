@@ -2849,9 +2849,19 @@ export class TableContainer {
     if (!shown.error && !shown.warning && !shown.info) return false;
     (direction === 'next' ? actions.nextAnnotation() : actions.previousAnnotation()).catch(
       (error: unknown) => {
-        if (!this.destroyed && error instanceof DataTableError && error.code !== 'QUERY_ABORTED') {
-          this.resolvedOptions.onError?.(error);
+        if (this.destroyed) return;
+        if (error instanceof DataTableError) {
+          if (error.code !== 'QUERY_ABORTED') this.resolvedOptions.onError?.(error);
+          return;
         }
+        // An error the library did not raise, as from a bridge of the app's
+        // own: reported as a query that failed, with it as the cause.
+        this.resolvedOptions.onError?.(
+          new QueryError(error instanceof Error ? error.message : String(error), {
+            code: 'QUERY_RUNTIME',
+            cause: error,
+          }),
+        );
       },
     );
     return true;

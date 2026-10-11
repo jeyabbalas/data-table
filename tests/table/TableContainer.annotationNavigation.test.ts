@@ -248,6 +248,25 @@ describe('TableContainer: annotation navigation', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('a search the keys started that fails with an error not the library’s goes to onError as a query error', async () => {
+    const onError = vi.fn<(error: DataTableError) => void>();
+    const boom = new TypeError('the app’s bridge broke');
+    await mount({ onError }, (sql) => {
+      if (sql.startsWith('SELECT min(')) throw boom;
+      return [];
+    });
+    store.add({ scope: 'row', rowId: 35, severity: 'error', message: 'x' });
+    actions.addFilter({ type: 'null', column: 'name' });
+    state.filteredRows.set(40);
+    actions.setFocusedCell({ row: 1, column: 'id' });
+    press({ key: 'F8' });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    const [error] = onError.mock.calls[0]!;
+    expect(error).toBeInstanceOf(QueryError);
+    expect(error).toMatchObject({ code: 'QUERY_RUNTIME', message: 'the app’s bridge broke' });
+    expect(error.cause).toBe(boom);
+  });
+
   it('closes the annotation popover where it lands', async () => {
     await mount();
     store.add({ scope: 'row', rowId: 12, severity: 'info', message: 'note' });

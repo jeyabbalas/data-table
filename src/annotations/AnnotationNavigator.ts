@@ -511,7 +511,7 @@ export class AnnotationNavigator implements AnnotationNavigation {
       await this.until(nextTask(), signal);
     }
     if (!state.tableName.get()) throw noTable();
-    if (state.filters.get().some((filter) => filter.type === 'annotated')) {
+    if (this.host.store && state.filters.get().some((filter) => filter.type === 'annotated')) {
       await this.until(this.host.source.ensureFresh(signal), signal);
       await this.until(this.host.whenAnnotatedViewSettled(), signal);
     }

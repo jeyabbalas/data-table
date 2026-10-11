@@ -447,6 +447,10 @@ describe('AnnotationNavigator: wrapping and severities', () => {
     const host = makeHost({ store: null });
     expect(await new AnnotationNavigator(host).next()).toBe(null);
     expect(host.announce).toHaveBeenLastCalledWith('No annotations shown');
+    // Without a store, there are no annotated rows to bring up to date.
+    host.state.filters.set([{ type: 'annotated', column: '__annotated__', table: 't' }]);
+    expect(await new AnnotationNavigator(host).next()).toBe(null);
+    expect(host.source.ensureFresh).not.toHaveBeenCalled();
   });
 
   it('column annotations single out no row', async () => {

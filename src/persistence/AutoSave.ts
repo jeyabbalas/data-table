@@ -8,7 +8,8 @@
  * and persisted alongside the table state so they survive browser refreshes.
  *
  * @example
- * import { AutoSave, SessionStore } from '@jeyabbalas/data-table';
+ * import { SessionStore } from '@jeyabbalas/data-table';
+ * import { AutoSave } from '@jeyabbalas/data-table/advanced';
  *
  * const store = new SessionStore();
  * await store.open();
@@ -28,7 +29,7 @@ import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import { classifyPersistenceFailure, isAnnotationsWriteFailure } from './persistenceErrors';
 import { snapshotFromState } from './serialization';
-import type { SessionStore } from './SessionStore';
+import { SessionStore } from './SessionStore';
 import type { SessionSnapshot } from './types';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
@@ -297,6 +298,9 @@ export class AutoSave {
       this.annotationStore,
       {
         annotations: !this.annotationsHeldBack,
+        // A `SessionStore` takes the annotations' file only to write it; a
+        // custom store gets it as it is now.
+        lazyAnnotations: this.store instanceof SessionStore,
       },
     );
   }

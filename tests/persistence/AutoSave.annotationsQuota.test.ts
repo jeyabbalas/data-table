@@ -11,6 +11,7 @@ import { PersistenceError } from '@/core/errors';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
+import { annotationFileToken } from '@/persistence/annotationPersistence';
 import { AutoSave } from '@/persistence/AutoSave';
 import {
   annotationsWriteFailure,
@@ -268,7 +269,7 @@ describe('AutoSave — annotations quota breaker', () => {
     autoSave.destroy();
   });
 
-  it('hands every save the same annotations object while they do not change', async () => {
+  it('hands a custom store the annotations of each save, under one token while they do not change', async () => {
     const { state, annotations } = setup();
     const store = makeStore();
     const autoSave = new AutoSave(state, store, { annotationStore: annotations });
@@ -280,12 +281,17 @@ describe('AutoSave — annotations quota breaker', () => {
     state.columnWidths.set(new Map([['id', 120]]));
     await vi.advanceTimersByTimeAsync(1000);
     expect(store.snapshots).toHaveLength(3);
-    expect(store.snapshots[1]!.annotations).toBe(store.snapshots[0]!.annotations);
-    expect(store.snapshots[2]!.annotations).toBe(store.snapshots[0]!.annotations);
+    // Taken at the save, as they are then, not when the store reads them.
+    for (const snapshot of store.snapshots) {
+      expect(Object.getOwnPropertyDescriptor(snapshot, 'annotations')?.value).toBeDefined();
+    }
+    const token = annotationFileToken(store.snapshots[0]!.annotations!);
+    expect(annotationFileToken(store.snapshots[1]!.annotations!)).toBe(token);
+    expect(annotationFileToken(store.snapshots[2]!.annotations!)).toBe(token);
 
     annotations.add({ scope: 'row', rowId: 2, severity: 'info', message: 'y' });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(store.snapshots[3]!.annotations).not.toBe(store.snapshots[0]!.annotations);
+    expect(annotationFileToken(store.snapshots[3]!.annotations!)).not.toBe(token);
     expect(store.snapshots[3]!.annotations?.annotations).toHaveLength(2);
     autoSave.destroy();
   });

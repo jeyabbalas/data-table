@@ -3,7 +3,9 @@
  * only when they change: a save after a sort, a filter, a width or a
  * severity toggle clones the session record alone, and a reload writes
  * nothing. The session record names the annotations record it was saved
- * with, and a load attaches only that record.
+ * with, and the one before as its fallback, and a load attaches the first
+ * of them that is whole. (Cut-off writes and two tabs:
+ * `SessionStore.annotationsAtomicity.test.ts`.)
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -85,8 +87,10 @@ describe('SessionStore — annotations in a record of their own', () => {
     expect(writes.puts('sessions')).toBe(5);
     expect(writes.puts('annotations')).toBe(1);
     expect(writes.puts('chunks')).toBe(1);
-    // The first save's, which found no annotations, and the write's.
-    expect(writes.deletes('chunks')).toBe(2);
+    // The write's, which clears the table's chunks first: the first save,
+    // which found no annotations, knew of no record to delete.
+    expect(writes.deletes('chunks')).toBe(1);
+    expect(writes.deletes('annotations')).toBe(0);
     expect((await rawSession())?.['__annotations']).toEqual(session?.['__annotations']);
     expect((await rawSession())?.['annotationSeverityFilter']).toEqual({
       error: true,
@@ -94,20 +98,24 @@ describe('SessionStore — annotations in a record of their own', () => {
       info: true,
     });
 
-    // A change of the annotations writes them, under a new owner, and the
-    // old owner's chunks go.
+    // A change of the annotations writes them, under a new owner, keeping
+    // the old record until the session record names the new one, with the
+    // old as its fallback; then the old owner's chunks go.
     annotate(annotations, 1, 3);
     await store.save(snapshotFromState(state, undefined, undefined, annotations));
-    expect(writes.puts('annotations')).toBe(2);
+    // The new head, keeping the old record, then the same without it.
+    expect(writes.puts('annotations')).toBe(3);
     const after = await rawAnnotations();
     expect(after?.['count']).toBe(4);
     expect(after?.['owner']).not.toBe(record?.['owner']);
+    expect(after).not.toHaveProperty('previous');
     expect((await rawChunks()).map((chunk) => chunk.key)).toEqual([['t', after?.['owner'], 0]]);
     expect(await rawIds()).toEqual(['a0', 'a1', 'a2', 'a3']);
     expect((await rawSession())?.['__annotations']).toEqual({
       format: 1,
       count: 4,
       owner: after?.['owner'],
+      fallback: { owner: record?.['owner'], count: 3 },
     });
   });
 
@@ -216,7 +224,9 @@ describe('SessionStore — annotations in a record of their own', () => {
 
     annotations.remove('a0');
     await settle(4);
-    expect(writes.puts('annotations')).toBe(1);
+    expect(writes.puts('chunks')).toBe(1);
+    // The new head, then the same without the record it kept.
+    expect(writes.puts('annotations')).toBe(2);
     expect((await rawAnnotations())?.['count']).toBe(19);
     autoSave.destroy();
   });
@@ -224,18 +234,52 @@ describe('SessionStore — annotations in a record of their own', () => {
   it('enqueues both puts synchronously in saveSync', async () => {
     const state = makeState();
     const annotations = makeAnnotations(state);
+    // A session saved before, which names no annotations.
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
     annotate(annotations, 2);
-    await store.open();
     const writes = countWrites();
 
     store.saveSync(snapshotFromState(state, undefined, undefined, annotations));
     // No await between the call and these counts.
     expect(writes.puts('sessions')).toBe(1);
+    expect(writes.puts('chunks')).toBe(1);
     expect(writes.puts('annotations')).toBe(1);
 
+    await vi.waitFor(async () => expect((await rawAnnotations())?.['count']).toBe(2));
     const record = await rawAnnotations();
-    expect(record?.['count']).toBe(2);
-    expect((await rawSession())?.['__annotations']).toMatchObject({ owner: record?.['owner'] });
+    expect((await rawSession())?.['__annotations']).toEqual({
+      format: 1,
+      count: 2,
+      owner: record?.['owner'],
+    });
+    expect((await store.load('t'))?.annotations?.annotations).toHaveLength(2);
+  });
+
+  it('keeps the annotations in the session record in saveSync while it knows nothing of the table', async () => {
+    // A store that has neither read nor written the table: the stored session
+    // record may name a record it does not know, which it must not delete.
+    await plantRecord('t', 'unknown-to-it', annotationFile(1));
+    await plant('dt-sessions', {
+      ...sessionSnapshot(),
+      __annotations: { format: 1, count: 1, owner: 'unknown-to-it' },
+    });
+    const state = makeState();
+    const annotations = makeAnnotations(state);
+    annotate(annotations, 2);
+    await store.open();
+    const writes = countWrites();
+
+    store.saveSync(snapshotFromState(state, undefined, undefined, annotations));
+    expect(writes.puts('sessions')).toBe(1);
+    expect(writes.puts('chunks')).toBe(0);
+    expect(writes.puts('annotations')).toBe(0);
+    await vi.waitFor(async () => expect(await rawSession()).toHaveProperty('annotations'));
+    const session = await rawSession();
+    expect(session).not.toHaveProperty('__annotations');
+    expect((session?.['annotations'] as AnnotationFile).annotations).toHaveLength(2);
+    expect((await store.load('t'))?.annotations?.annotations).toHaveLength(2);
+    // The record it did not know stays, for a write to replace.
+    expect((await rawAnnotations())?.['owner']).toBe('unknown-to-it');
   });
 
   it('deletes the annotations record when the store empties, once', async () => {
@@ -297,7 +341,8 @@ describe('SessionStore — annotations in a record of their own', () => {
         return ctx.name === 'annotations';
       })
       .map((call) => call[1]);
-    expect(putKeys).toEqual(['b']);
+    // B's new head, then the same without the record it kept.
+    expect(putKeys).toEqual(['b', 'b']);
     expect(writes.puts('sessions')).toBe(2);
 
     expect((await store.load('a'))?.annotations?.annotations).toHaveLength(2);
@@ -362,18 +407,27 @@ describe('SessionStore — annotations in a record of their own', () => {
       expect(snapshot?.annotations).toBeUndefined();
       expect(issues).toEqual([]);
 
-      // The record left behind goes with the next save of an empty store.
+      // The record left behind stays through a save without annotations,
+      // as one this store does not know, and goes once a write replaces it.
       const fresh = makeAnnotations(makeState());
       restoreStateFromSnapshot(state, snapshot!, undefined, undefined, fresh);
       await reloaded.save(snapshotFromState(state, undefined, undefined, fresh));
-      expect(await rawAnnotations()).toBeUndefined();
-      expect(await rawChunks()).toEqual([]);
+      const leftBehind = await rawAnnotations();
+      expect(leftBehind?.['count']).toBe(2);
+      annotate(fresh, 1, 10);
+      await reloaded.save(snapshotFromState(state, undefined, undefined, fresh));
+      const head = await rawAnnotations();
+      expect(head).toMatchObject({ count: 1 });
+      expect(head?.['owner']).not.toBe(leftBehind?.['owner']);
+      expect((await rawChunks()).map((chunk) => chunk.key)).toEqual([['t', head?.['owner'], 0]]);
       reloaded.close();
     });
 
     it('does not attach a record left behind when a later save of this version did not write its own', async () => {
       // A record an older version's clearSession left behind; then this
-      // version saves a session whose annotations put fails.
+      // version saves a session whose annotations put fails. The session
+      // record lands without a marker: it never names a record before that
+      // record has landed.
       await plantRecord('t', 'left-behind', annotationFile(1));
       const state = makeState();
       const annotations = makeAnnotations(state);
@@ -398,13 +452,9 @@ describe('SessionStore — annotations in a record of their own', () => {
       const snapshot = await reloaded.load('t');
       expect(snapshot?.annotations).toBeUndefined();
       expect(snapshot?.sortColumns).toEqual([]);
-      expect(issues).toEqual([
-        {
-          code: 'PERSISTENCE_ANNOTATIONS_DROPPED',
-          tableName: 't',
-          details: { reason: 'mismatch', count: 1 },
-        },
-      ]);
+      expect(await rawSession()).not.toHaveProperty('__annotations');
+      expect(issues).toEqual([]);
+      expect((await rawAnnotations())?.['owner']).toBe('left-behind');
       reloaded.close();
     });
 
@@ -712,13 +762,21 @@ describe('SessionStore — a failed annotations write', () => {
     const state = makeState();
     const annotations = makeAnnotations(state);
     annotate(annotations, 2);
-    await store.open();
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    const landed = await rawSession();
+    annotate(annotations, 1, 2);
+    state.sortColumns.set([{ column: 'id', direction: 'asc' }]);
     failAnnotationsPut('throw');
 
     expect(() =>
       store.saveSync(snapshotFromState(state, undefined, undefined, annotations)),
     ).toThrowError(expect.objectContaining({ code: 'PERSISTENCE_QUOTA_EXCEEDED' }));
-    expect(await rawSession()).not.toHaveProperty('__annotations');
+    // The session record lands, naming the annotations that landed before.
+    await vi.waitFor(async () =>
+      expect((await rawSession())?.['sortColumns']).toEqual([{ column: 'id', direction: 'asc' }]),
+    );
+    expect((await rawSession())?.['__annotations']).toEqual(landed?.['__annotations']);
+    expect((await store.load('t'))?.annotations?.annotations).toHaveLength(2);
   });
 
   it('writes the annotations again on the next save after a write that did not land', async () => {
@@ -823,11 +881,18 @@ describe('SessionStore — a failed annotations write', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     const session = await rawSession();
     expect(session?.['sortColumns']).toEqual([{ column: 'name', direction: 'desc' }]);
-    expect(session).not.toHaveProperty('__annotations');
     expect(session).not.toHaveProperty('annotations');
-    // The record the session no longer names is gone.
-    expect(await rawAnnotations()).toBeUndefined();
+    // The session goes on naming the record that landed before the quota
+    // ran out, and a reload restores it.
+    expect(session?.['__annotations']).toMatchObject({ count: 2 });
+    expect((await rawAnnotations())?.['count']).toBe(2);
     autoSave.destroy();
+    store.close();
+    const reloaded = new SessionStore();
+    const snapshot = await reloaded.load('t');
+    expect(snapshot?.annotations?.annotations.map((a) => a.id)).toEqual(['a0', 'a1']);
+    expect(snapshot?.sortColumns).toEqual([{ column: 'name', direction: 'desc' }]);
+    reloaded.close();
   });
 });
 
@@ -845,10 +910,6 @@ describe('SessionStore — annotations in chunks', () => {
     store.close();
     vi.restoreAllMocks();
   });
-
-  async function flushMicrotasks(): Promise<void> {
-    for (let i = 0; i < 20; i++) await Promise.resolve();
-  }
 
   it.each([
     [1, [1]],
@@ -911,21 +972,36 @@ describe('SessionStore — annotations in chunks', () => {
     const state = makeState();
     const annotations = makeAnnotations(state);
     annotate(annotations, 25_000);
-    const writes = countWrites();
+    // For each chunk put, whether the put before it in the same transaction
+    // had landed.
+    const previousDone: boolean[] = [];
+    let last: IDBRequest | null = null;
+    const put = IDBObjectStore.prototype.put;
+    const spy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+      this: IDBObjectStore,
+      value: unknown,
+      key?: IDBValidKey,
+    ) {
+      const request = put.call(this, value, key);
+      if (this.name === 'chunks') {
+        if ((key as unknown[])[2] !== 0) previousDone.push(last?.readyState === 'done');
+        last = request;
+      }
+      return request;
+    });
+    const chunkPuts = () =>
+      spy.mock.contexts.filter((ctx) => (ctx as IDBObjectStore).name === 'chunks').length;
 
-    const saving = store.save(snapshotFromState(state, undefined, undefined, annotations));
-    await flushMicrotasks();
-    // The first chunk now; each next one once the previous is put.
-    expect(writes.puts('chunks')).toBe(1);
-    expect(writes.puts('annotations')).toBe(0);
-    await saving;
-    expect(writes.puts('chunks')).toBe(3);
-    expect(writes.puts('annotations')).toBe(1);
+    await store.save(snapshotFromState(state, undefined, undefined, annotations));
+    expect(chunkPuts()).toBe(3);
+    expect(previousDone).toEqual([true, true]);
 
     annotate(annotations, 1, 25_000);
+    previousDone.length = 0;
     store.saveSync(snapshotFromState(state, undefined, undefined, annotations));
-    expect(writes.puts('chunks')).toBe(6);
-    expect(writes.puts('annotations')).toBe(2);
+    // No await between the call and these.
+    expect(chunkPuts()).toBe(6);
+    expect(previousDone).toEqual([false, false]);
     await vi.waitFor(async () => expect((await rawAnnotations())?.['count']).toBe(25_001));
     expect((await store.load('t'))?.annotations?.annotations).toHaveLength(25_001);
   });

@@ -1,147 +1,378 @@
 /**
  * How a table's annotations persist: in a record of their own, written only
- * when they change.
+ * when they change, in an order that never loses a record that landed.
  *
  * A session save used to carry `AnnotationStore.toJSON()` inside the session
  * record, so a sort, a filter or a column width serialized and cloned every
- * annotation again, about a second at a million. `SessionStore` keeps them
- * in the `dt-annotations` database instead, under the session's table name,
- * and writes them only when the file a save hands it is not the one it last
- * wrote or read. Telling is cheap: {@link currentAnnotationFile} returns the
- * same file object until the store's content changes, and each file object
- * has a token ({@link annotationFileToken}).
+ * annotation again, about a second at a million. `SessionStore` keeps them in
+ * the `dt-annotations` database instead, under the session's table name, and
+ * writes them only when they are not the annotations it last wrote or read.
+ * Telling is cheap: a store's content has a token ({@link annotationsToken}),
+ * the same until the content or its table name changes, and a snapshot from
+ * `snapshotFromState` can carry it without taking the file
+ * ({@link setSnapshotAnnotations}), which is then taken only when something
+ * reads it, a write or a custom store. Nothing here holds on to a file.
  *
  * A table's annotations record is a head and chunks. The head, in the
  * `annotations` store under the table name, is `{ format, owner, count,
- * chunks, file }`, `file` being the annotation file without its annotations.
- * Those are in the `chunks` store, in slices of at most
+ * chunks, file, previous }`: `file` is the annotation file without its
+ * annotations, which are in the `chunks` store, in slices of at most
  * {@link ANNOTATION_CHUNK_MAX_COUNT} annotations or about
  * {@link ANNOTATION_CHUNK_MAX_BYTES} ({@link annotationChunkEnd}), each under
- * `[tableName, owner, index]`: one key range holds a table's chunks, another
- * those of one write. Chromium refuses any one value over 133,169,152 bytes,
- * which a million annotations pass as a single file; a chunk stays far below
- * it, and a write clones a million annotations in a hundred short tasks
- * rather than one long one. A write deletes the table's chunks and puts the
- * new ones and the head in one transaction, so a reader finds the old record
- * or the new one, never part of either.
+ * `[tableName, owner, index]`; `previous` lists the records a write kept
+ * whole, because a stored session record may still name them. Chromium
+ * refuses any one value over 133,169,152 bytes, which a million annotations
+ * pass as a single file; a chunk stays far below it, and a write clones a
+ * million annotations in a hundred short tasks rather than one long one.
  *
  * The session record holds a marker in place of its annotations,
- * `__annotations: { format, count, owner }`. A load attaches the annotations
- * record only when the session record has a marker and the two agree, the
- * chunks with them. `owner` is a token made for
- * each write of the record ({@link newAnnotationsOwner}) and copied into the
- * marker of the session record written with it, rather than the table name,
- * which the key already is. The two records live in separate databases, so
- * a save writes them in separate transactions, and versions before the
- * annotations record write session records without a marker and never open
- * this database: one that clears the session leaves the annotations record
- * behind, and one that saves over the session drops the marker. The marker
- * alone keeps such a record from the session that replaced it, but not from
- * one written later by this version whose own annotations record never
- * landed (a quota error, a crash between the two commits): the record found
- * then is the one left behind, or another tab's. With a token per write, the
- * load sees it is not the record the session was saved with and reports it,
- * as `PERSISTENCE_ANNOTATIONS_DROPPED`, rather than restore annotations from
- * another session or another time.
+ * `__annotations: { format, count, owner, fallback }`: `owner` names the
+ * record written with it, and `fallback` the record it named before, which
+ * that write kept. `owner` is a token made for each write
+ * ({@link newAnnotationsOwner}), so a record left behind, by a version
+ * before this one (whose `clearSession` leaves it) or by a write whose
+ * session record never landed, is never taken for one a session was saved
+ * with.
+ *
+ * The two records live in separate databases, so no write of both is
+ * atomic; their order makes up for it. A save writes the annotations first,
+ * the new chunks and a head keeping the records the stored session record
+ * may name, in one transaction; only once that has committed does it write
+ * the session record naming them, with the record it named before as its
+ * fallback; and once that too has committed, a small transaction drops what
+ * the head kept. A save whose annotations do not land keeps the stored
+ * session record's annotations as they are. So the stored session record
+ * names a whole record at every point, and a reload, a crash or a failed
+ * write restores the last annotations that landed, at worst older than the
+ * rest of the session. Two tabs that write one table's annotations at the
+ * same moment can still lose them: neither sees the other's records until
+ * its own write has begun.
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
 import { ANNOTATION_FILE_VERSION } from '../annotations/types';
 import type { AnnotationFile } from '../annotations/types';
+import type { SessionSnapshot } from './types';
 
-// ── File tokens ───────────────────────────────────────────────────────
+// ── Tokens ────────────────────────────────────────────────────────────
 
-const fileTokens = new WeakMap<AnnotationFile, number>();
-let lastFileToken = 0;
+let lastToken = 0;
+
+interface FileToken {
+  token: number;
+  /** The file's annotations array, and its length, when the token was taken. */
+  annotations: unknown;
+  length: number;
+}
+
+const fileTokens = new WeakMap<AnnotationFile, FileToken>();
+
+function lengthOf(annotations: unknown): number {
+  return Array.isArray(annotations) ? annotations.length : -1;
+}
 
 /**
- * A number for `file`, the object: the same at every call with it, and
- * different from every other file's, unless {@link shareAnnotationFileToken}
- * gave it another's. A store that last wrote a file with this token holds
- * those annotations already.
+ * A number for `file`'s annotations: the same at every call while the file
+ * holds the same `annotations` array at the same length, a new one once
+ * either changed, and different from every other file's unless
+ * {@link shareAnnotationFileToken} gave it another's. A session store that
+ * last wrote or read annotations with this token holds them already.
  *
- * Assumes a file is not changed once taken: `SessionStore` writes an
- * object it has written before only once.
+ * An edit in place that keeps the array and its length (an annotation's
+ * message changed in place) is not seen.
  *
  * @internal
  */
 export function annotationFileToken(file: AnnotationFile): number {
-  let token = fileTokens.get(file);
-  if (token === undefined) {
-    token = ++lastFileToken;
-    fileTokens.set(file, token);
+  const annotations: unknown = file.annotations;
+  const length = lengthOf(annotations);
+  const known = fileTokens.get(file);
+  if (known !== undefined && known.annotations === annotations && known.length === length) {
+    return known.token;
   }
+  const token = ++lastToken;
+  fileTokens.set(file, { token, annotations, length });
   return token;
 }
 
 /**
- * Give `file` the token another file has, `token`: for a file read back
- * from the record that one was written to, which holds the same annotations.
+ * Give `file` the token `token`: for a file read back from the record
+ * another one with that token was written to, which holds the same
+ * annotations.
  *
  * @internal
  */
 export function shareAnnotationFileToken(file: AnnotationFile, token: number): void {
-  fileTokens.set(file, token);
+  const annotations: unknown = file.annotations;
+  fileTokens.set(file, { token, annotations, length: lengthOf(annotations) });
 }
 
-// ── The current file of a store ───────────────────────────────────────
-
-interface CurrentFile {
-  /** The store's `contentRevision` when `file` was taken. */
+/** A store's content at one `contentRevision`, under the table name it resolved then. */
+interface ContentToken {
   revision: number;
-  /** The table name the store resolved then, which `file` carries. */
   tableName: string | null | undefined;
-  file: AnnotationFile | null;
+  token: number;
 }
 
-const currentFiles = new WeakMap<AnnotationStore, CurrentFile>();
+const contentTokens = new WeakMap<AnnotationStore, ContentToken>();
+
+/** The token of `store`'s content now; `null` when it is empty. */
+function contentTokenOf(store: AnnotationStore): ContentToken | null {
+  if (store.count() === 0) return null;
+  const revision = store.contentRevision;
+  const tableName = store.resolvedTableName();
+  const known = contentTokens.get(store);
+  if (known !== undefined && known.revision === revision && known.tableName === tableName) {
+    return known;
+  }
+  const content: ContentToken = { revision, tableName, token: ++lastToken };
+  contentTokens.set(store, content);
+  return content;
+}
 
 /**
- * `store.toJSON()`, taken once for each revision of its content and table
- * name: repeated saves of an unchanged store get the same object, and with
- * it the same {@link annotationFileToken}. `null` when the store is empty.
- * A severity-filter change leaves it as it is, being no change of content.
- *
- * The file holds the store's live annotations, as `toJSON()` does, and is
- * shared by every caller until the store changes: read it, never change it.
+ * The token of `store`'s content: the same until its content or the table
+ * name it resolves changes, a severity-filter change being neither; `null`
+ * when the store is empty. O(1): it takes no file.
  *
  * @internal
  */
-export function currentAnnotationFile(store: AnnotationStore): AnnotationFile | null {
-  const revision = store.contentRevision;
-  const tableName = store.resolvedTableName();
-  const cached = currentFiles.get(store);
-  if (cached !== undefined && cached.revision === revision && cached.tableName === tableName) {
-    return cached.file;
+export function annotationsToken(store: AnnotationStore): number | null {
+  return contentTokenOf(store)?.token ?? null;
+}
+
+/**
+ * The file of `store`'s content as `content` describes it, under its token
+ * and table name, while the store holds that content still; `undefined`
+ * once it changed. A new file at every call, which nothing here keeps: it
+ * holds the store's live annotations, and a merged copy of each that has
+ * fields of the app's own.
+ */
+function fileOf(store: AnnotationStore, content: ContentToken): AnnotationFile | undefined {
+  if (store.contentRevision !== content.revision || store.count() === 0) return undefined;
+  const file = store.toJSON();
+  // As `toJSON` tagged it then: a load resets the table name before it
+  // empties the store.
+  if (content.tableName === null || content.tableName === undefined) {
+    delete file.tableName;
+  } else {
+    file.tableName = content.tableName;
   }
-  const file = store.count() > 0 ? store.toJSON() : null;
-  currentFiles.set(store, { revision, tableName, file });
+  shareAnnotationFileToken(file, content.token);
   return file;
 }
 
 /**
- * Let `file`, which `store` was just loaded from (`loadJSON` in replace
- * mode, nothing skipped), stand for the store's content: the store's current
- * file takes `file`'s token, so a session store that wrote or read `file`
- * does not write the same annotations again. A restore, and the put-back of
- * a load turned away for its source options, call it.
+ * `store.toJSON()`, under the token of the content it holds
+ * ({@link annotationsToken}); `null` when the store is empty. A new file at
+ * every call, which nothing here keeps.
  *
- * The current file is taken from the store now, and `file` is not kept: the
- * store made annotations of its own from it, and holding both would double
- * the memory of a million annotations. Nothing is adopted when the store's
- * file would differ from `file` in more than its timestamps (another table
- * name, an older file version) or holds fewer annotations (a duplicate
- * skipped): the next save then writes the store's own.
+ * @internal
+ */
+export function takeAnnotationFile(store: AnnotationStore): AnnotationFile | null {
+  const content = contentTokenOf(store);
+  return content === null ? null : (fileOf(store, content) ?? null);
+}
+
+/**
+ * Let `file`, which `store` was just loaded from (`loadJSON` in replace
+ * mode, nothing skipped), stand for the store's content: the content takes
+ * `file`'s token, so a session store that wrote or read `file` does not
+ * write the same annotations again. A restore calls it. `file` is not kept.
+ *
+ * Nothing is adopted when the store's file would differ from `file` in
+ * more than its timestamps (another table name, an older file version) or
+ * the store holds a different number of annotations (a duplicate skipped):
+ * the next save then writes the store's own.
  *
  * @internal
  */
 export function adoptAnnotationFile(store: AnnotationStore, file: AnnotationFile): void {
-  const current = currentAnnotationFile(store);
-  if (current === null || current === file) return;
-  if (file.version !== ANNOTATION_FILE_VERSION || file.tableName !== current.tableName) return;
-  if (!Array.isArray(file.annotations)) return;
-  if (file.annotations.length !== current.annotations.length) return;
-  fileTokens.set(current, annotationFileToken(file));
+  if (store.count() === 0 || file.version !== ANNOTATION_FILE_VERSION) return;
+  if (lengthOf(file.annotations) !== store.count()) return;
+  const tableName = store.resolvedTableName();
+  // `toJSON` leaves the name out when the store resolves none.
+  if (file.tableName !== (tableName ?? undefined)) return;
+  contentTokens.set(store, {
+    revision: store.contentRevision,
+    tableName,
+    token: annotationFileToken(file),
+  });
+}
+
+const refusedTokens = new Set<number>();
+
+/**
+ * Note that a restore's `loadJSON` refused `file`, which a session store
+ * read: the record it came from stays, as one this version cannot read,
+ * until the table has annotations of its own to write.
+ *
+ * @internal
+ */
+export function noteAnnotationsRefused(file: AnnotationFile): void {
+  refusedTokens.add(annotationFileToken(file));
+}
+
+/** Whether the annotations of token `token` were refused by a restore. @internal */
+export function isAnnotationsRefused(token: number): boolean {
+  return refusedTokens.has(token);
+}
+
+// ── Snapshots ─────────────────────────────────────────────────────────
+
+/** What a snapshot from `snapshotFromState` says of its annotations, beyond its `annotations`. */
+type SnapshotAnnotations =
+  /** The annotations of a store, under `token`, whose file is taken when read. */
+  | { kind: 'file'; token: number }
+  /** Annotations held back from saving, or gone: the stored ones stay as they are. */
+  | { kind: 'held' };
+
+const snapshotAnnotations = new WeakMap<object, SnapshotAnnotations>();
+
+/** The store and content of each snapshot whose annotations' file is still to be taken. */
+const pendingContents = new WeakMap<object, { store: AnnotationStore; content: ContentToken }>();
+
+function settleAnnotations(snapshot: SessionSnapshot, file: AnnotationFile | undefined): void {
+  Object.defineProperty(snapshot, 'annotations', {
+    value: file,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+/**
+ * Give `snapshot` the annotations of `store`; nothing when it is empty.
+ *
+ * With `lazy`, their file is not taken now: `annotations` takes it when
+ * first read (by a custom store, `JSON`, a structured clone, a spread), and
+ * a `SessionStore` that finds them unchanged never reads it. Read once the
+ * store's content has changed, it is `undefined`, and the snapshot's
+ * annotations count as held back ({@link holdBackSnapshotAnnotations}): a
+ * save of it leaves the stored ones as they are, and the save the change
+ * asked for writes the new ones. {@link settleSnapshotAnnotations} takes the
+ * files of snapshots still to be saved before a store is emptied for other
+ * data.
+ *
+ * @internal
+ */
+export function setSnapshotAnnotations(
+  snapshot: SessionSnapshot,
+  store: AnnotationStore,
+  lazy: boolean,
+): void {
+  const content = contentTokenOf(store);
+  if (content === null) return;
+  if (!lazy) {
+    const file = fileOf(store, content);
+    if (file !== undefined) snapshot.annotations = file;
+    return;
+  }
+  snapshotAnnotations.set(snapshot, { kind: 'file', token: content.token });
+  pendingContents.set(snapshot, { store, content });
+  Object.defineProperty(snapshot, 'annotations', {
+    enumerable: true,
+    configurable: true,
+    get(this: SessionSnapshot): AnnotationFile | undefined {
+      return settleFrom(this, fileOf(store, content));
+    },
+    set(this: SessionSnapshot, file: AnnotationFile | undefined) {
+      snapshotAnnotations.delete(this);
+      pendingContents.delete(this);
+      settleAnnotations(this, file);
+    },
+  });
+}
+
+/** Settle `snapshot`'s lazy annotations as `file`: held back when it is gone. */
+function settleFrom(
+  snapshot: SessionSnapshot,
+  file: AnnotationFile | undefined,
+): AnnotationFile | undefined {
+  pendingContents.delete(snapshot);
+  if (file === undefined) snapshotAnnotations.set(snapshot, { kind: 'held' });
+  settleAnnotations(snapshot, file);
+  return file;
+}
+
+/**
+ * Take now the files of `snapshots`' lazy annotations that are still to be
+ * taken, one per content: before their store is emptied for other data,
+ * which would leave a save under way without them.
+ *
+ * @internal
+ */
+export function settleSnapshotAnnotations(snapshots: Iterable<SessionSnapshot>): void {
+  const files = new Map<ContentToken, AnnotationFile | undefined>();
+  for (const snapshot of snapshots) {
+    const pending = pendingContents.get(snapshot);
+    if (pending === undefined) continue;
+    let file = files.get(pending.content);
+    if (!files.has(pending.content)) {
+      file = fileOf(pending.store, pending.content);
+      files.set(pending.content, file);
+    }
+    settleFrom(snapshot, file);
+  }
+}
+
+/**
+ * Mark `snapshot`'s annotations as held back from saving (it has no
+ * `annotations`): a `SessionStore` leaves the stored ones as they are, and
+ * the session record goes on naming them.
+ *
+ * @internal
+ */
+export function holdBackSnapshotAnnotations(snapshot: SessionSnapshot): void {
+  snapshotAnnotations.set(snapshot, { kind: 'held' });
+}
+
+/**
+ * What `snapshot` holds of its annotations, for a session store to tell
+ * whether they changed without taking their file: none, held back, or a
+ * file under a token, which `file()` takes (`undefined` when they are gone,
+ * which then count as held back).
+ *
+ * @internal
+ */
+export function snapshotAnnotationsOf(
+  snapshot: SessionSnapshot,
+):
+  | { kind: 'none' }
+  | { kind: 'held' }
+  | { kind: 'file'; token: number; file: () => AnnotationFile | undefined } {
+  const noted = snapshotAnnotations.get(snapshot);
+  if (noted?.kind === 'held') return { kind: 'held' };
+  if (noted?.kind === 'file' && pendingContents.has(snapshot)) {
+    return { kind: 'file', token: noted.token, file: () => snapshot.annotations };
+  }
+  const file = snapshot.annotations;
+  if (file === undefined || file === null) return { kind: 'none' };
+  return { kind: 'file', token: annotationFileToken(file), file: () => file };
+}
+
+/**
+ * Why the annotations a stored session named were not restored, and how
+ * many it was saved with: noted on the snapshot `SessionStore.load` returns,
+ * for the restore to report, whoever owns the store.
+ *
+ * @internal
+ */
+export interface AnnotationsDrop {
+  reason: AnnotationsDropReason;
+  count?: number;
+}
+
+const snapshotDrops = new WeakMap<object, AnnotationsDrop>();
+
+/** @internal */
+export function noteAnnotationsDrop(snapshot: SessionSnapshot, drop: AnnotationsDrop): void {
+  snapshotDrops.set(snapshot, drop);
+}
+
+/** The drop noted on `snapshot` by the load that returned it, if any. @internal */
+export function annotationsDropOf(snapshot: SessionSnapshot): AnnotationsDrop | undefined {
+  return snapshotDrops.get(snapshot);
 }
 
 // ── The records ───────────────────────────────────────────────────────
@@ -155,31 +386,43 @@ export const ANNOTATIONS_RECORD_FORMAT = 1;
 
 /**
  * What a session record holds, under `__annotations`, in place of the
- * annotations it was saved with.
+ * annotations it was saved with: the record written with it (`owner`, of
+ * `count` annotations) and, when that write kept one, the record it named
+ * before (`fallback`).
  *
  * @internal
  */
 export interface AnnotationsMarker {
   format: number;
-  /** How many annotations the record holds. */
   count: number;
-  /** The `owner` of the annotations record written with the session record. */
   owner: string;
+  fallback?: { owner: string; count: number };
 }
 
 /**
- * The head of a table's annotations record in `dt-annotations`, keyed by the
- * table name: its file without the annotations, which are in `chunks`
- * chunks, keyed `[tableName, owner, 0]` to `[tableName, owner, chunks - 1]`.
+ * A record as a head describes it: its owner, its annotations' count, its
+ * chunks' count, and the file without its annotations. Its chunks are keyed
+ * `[tableName, owner, 0]` to `[tableName, owner, chunks - 1]`.
  *
  * @internal
  */
-export interface AnnotationsHead {
-  format: number;
+export interface AnnotationsRecordEntry {
   owner: string;
   count: number;
   chunks: number;
   file: Omit<AnnotationFile, 'annotations'>;
+}
+
+/**
+ * The head of a table's annotations record in `dt-annotations`, keyed by
+ * the table name: the record the last write wrote, and in `previous` those
+ * it kept whole because a stored session record may still name them.
+ *
+ * @internal
+ */
+export interface AnnotationsHead extends AnnotationsRecordEntry {
+  format: number;
+  previous?: AnnotationsRecordEntry[];
 }
 
 /**
@@ -214,81 +457,113 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/**
- * Whether `value`, a session record's `__annotations`, is a marker this
- * version reads.
- *
- * @internal
- */
-export function isAnnotationsMarker(value: unknown): value is AnnotationsMarker {
+function isOwnedCount(value: unknown): value is { owner: string; count: number } {
   return (
     isPlainObject(value) &&
-    value['format'] === ANNOTATIONS_RECORD_FORMAT &&
-    isCount(value['count']) &&
     typeof value['owner'] === 'string' &&
-    value['owner'].length > 0
+    value['owner'].length > 0 &&
+    isCount(value['count'])
   );
 }
 
 /**
- * The head of `value`, the stored head of the annotations record of a
- * session whose marker is `marker`, when it is the head written with that
- * session record; otherwise why not.
+ * The marker `value`, a session record's `__annotations`, when it is one
+ * this version reads; a `fallback` it cannot read is left out. `null`
+ * otherwise.
  *
  * @internal
  */
-export function checkAnnotationsHead(
-  marker: AnnotationsMarker,
-  value: unknown,
-):
-  | { ok: true; head: AnnotationsHead }
-  | { ok: false; reason: Exclude<AnnotationsDropReason, 'unavailable'> } {
-  if (value === undefined || value === null) return { ok: false, reason: 'missing' };
-  if (!isPlainObject(value) || value['format'] !== ANNOTATIONS_RECORD_FORMAT) {
-    return { ok: false, reason: 'invalid' };
-  }
-  const { owner, count, chunks, file } = value;
-  if (typeof owner !== 'string' || !isCount(count) || !isCount(chunks)) {
-    return { ok: false, reason: 'invalid' };
-  }
-  if (owner !== marker.owner) return { ok: false, reason: 'mismatch' };
+export function readAnnotationsMarker(value: unknown): AnnotationsMarker | null {
   if (
-    count !== marker.count ||
+    !isOwnedCount(value) ||
+    (value as Record<string, unknown>)['format'] !== ANNOTATIONS_RECORD_FORMAT
+  ) {
+    return null;
+  }
+  const fallback = (value as Record<string, unknown>)['fallback'];
+  const marker: AnnotationsMarker = {
+    format: ANNOTATIONS_RECORD_FORMAT,
+    count: value.count,
+    owner: value.owner,
+  };
+  if (isOwnedCount(fallback) && fallback.owner !== value.owner) {
+    marker.fallback = { owner: fallback.owner, count: fallback.count };
+  }
+  return marker;
+}
+
+function readEntry(value: unknown): AnnotationsRecordEntry | null {
+  if (!isOwnedCount(value)) return null;
+  const { chunks, file } = value as Record<string, unknown>;
+  if (
+    !isCount(chunks) ||
     // Every chunk holds an annotation at least.
-    chunks > count ||
-    (count > 0 && chunks === 0) ||
+    chunks > value.count ||
+    (value.count > 0 && chunks === 0) ||
     !isPlainObject(file) ||
     typeof file['version'] !== 'number'
   ) {
-    return { ok: false, reason: 'invalid' };
+    return null;
   }
-  return { ok: true, head: value as unknown as AnnotationsHead };
+  return value as unknown as AnnotationsRecordEntry;
 }
 
 /**
- * The file `head` and the values stored for its chunks, in key order, make;
- * `null` when they do not agree with it. The annotations themselves are left
- * to `loadJSON` to check.
+ * The head `value`, as stored under a table's name, when it is one this
+ * version reads: the record it names and those it kept, a kept one it cannot
+ * read left out. `null` otherwise, a head of a newer format included.
+ *
+ * @internal
+ */
+export function readAnnotationsHead(value: unknown): AnnotationsHead | null {
+  if (!isPlainObject(value) || value['format'] !== ANNOTATIONS_RECORD_FORMAT) return null;
+  const entry = readEntry(value);
+  if (entry === null) return null;
+  const previous = Array.isArray(value['previous'])
+    ? value['previous'].flatMap((kept: unknown) => {
+        const read = readEntry(kept);
+        return read === null || read.owner === entry.owner ? [] : [read];
+      })
+    : [];
+  return {
+    format: ANNOTATIONS_RECORD_FORMAT,
+    owner: entry.owner,
+    count: entry.count,
+    chunks: entry.chunks,
+    file: entry.file,
+    ...(previous.length > 0 ? { previous } : {}),
+  };
+}
+
+/** The records `head` describes: the one it names first, then those it kept. @internal */
+export function headEntries(head: AnnotationsHead): AnnotationsRecordEntry[] {
+  return [head, ...(head.previous ?? [])];
+}
+
+/**
+ * The file `entry` and the values stored for its chunks, in key order,
+ * make; `null` when they do not agree with it. The annotations themselves
+ * are left to `loadJSON` to check.
  *
  * @internal
  */
 export function assembleAnnotationFile(
-  head: AnnotationsHead,
+  entry: AnnotationsRecordEntry,
   chunks: readonly unknown[],
 ): AnnotationFile | null {
-  if (chunks.length !== head.chunks) return null;
+  if (chunks.length !== entry.chunks) return null;
   let count = 0;
   for (const chunk of chunks) {
     if (!Array.isArray(chunk) || chunk.length === 0) return null;
     count += chunk.length;
   }
-  if (count !== head.count) return null;
+  if (count !== entry.count) return null;
   const annotations = new Array<unknown>(count);
   let i = 0;
   for (const chunk of chunks as unknown[][]) {
     for (const annotation of chunk) annotations[i++] = annotation;
   }
-  return { ...head.file, annotations } as AnnotationFile;
+  return { ...entry.file, annotations } as AnnotationFile;
 }
 
 // ── Chunks ────────────────────────────────────────────────────────────

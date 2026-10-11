@@ -2,9 +2,10 @@
  * @vitest-environment jsdom
  *
  * The facade's side of annotations kept in a record of their own: a restore
- * that leaves them out says so with a `warning` (never silently), a load
- * turned away for its source options puts them back without a write, and
- * `clearSession` / `destroy` cover both databases.
+ * that leaves them out says so with a `warning` (never silently), whoever
+ * owns the session store, a load turned away for its source options puts
+ * them back without a write, and `clearSession` / `destroy` cover both
+ * databases.
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -160,6 +161,34 @@ describe('annotations persistence — facade', () => {
     });
     expect(table.state.sortColumns.get()).toEqual([{ column: 'name', direction: 'desc' }]);
     expect(table.annotations.count()).toBe(0);
+  });
+
+  it('warns, once, when the annotations record of a shared store cannot be attached', async () => {
+    await plantSession({ ...session(), __annotations: { format: 1, count: 2, owner: 'gone' } });
+    const onLoadIssue = vi.fn();
+    const sessionStore = new SessionStore({ onLoadIssue });
+    await sessionStore.open();
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      ...BARE,
+    });
+    const warning = vi.fn();
+    table.on('warning', warning);
+
+    await table.loadData(new File([''], 'a.csv'), { tableName: 'A' });
+
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith({
+      code: 'PERSISTENCE_ANNOTATIONS_DROPPED',
+      message: expect.stringContaining('"A"'),
+      details: { tableName: 'A', reason: 'missing', count: 2 },
+    });
+    // The app's own handler is told as well.
+    expect(onLoadIssue).toHaveBeenCalledTimes(1);
+    expect(table.state.sortColumns.get()).toEqual([{ column: 'name', direction: 'desc' }]);
+    sessionStore.close();
   });
 
   it('warns when loadJSON refuses the saved annotations, and restores the rest', async () => {

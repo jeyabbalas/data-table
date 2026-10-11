@@ -68,7 +68,7 @@ import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
 import { FilterPresetManager } from './filters/FilterPresets';
-import { adoptAnnotationFile, currentAnnotationFile } from './persistence/annotationPersistence';
+import { adoptAnnotationFile, takeAnnotationFile } from './persistence/annotationPersistence';
 import { AutoSave } from './persistence/AutoSave';
 import { SessionStore } from './persistence/SessionStore';
 import type { ColumnStatsData } from './statistics/ColumnStatsTypes';
@@ -585,10 +585,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // IDB row). Phase 7 deferred this; Phase 9 surfaces it.
       sessionStore = new SessionStore({
         onLoadIssue: (issue) => {
-          if (issue.code === 'PERSISTENCE_ANNOTATIONS_DROPPED') {
-            warnAnnotationsDropped(issue.tableName, issue.details);
-            return;
-          }
+          // Noted on the snapshot, and reported by its restore, as for a
+          // store of the app's own.
+          if (issue.code === 'PERSISTENCE_ANNOTATIONS_DROPPED') return;
           if (destroyed) return;
           emitter.emit('warning', {
             code: issue.code,
@@ -1651,16 +1650,16 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     let failed = false;
     // The presets and annotations cleared below, to put back if the worker
     // rejects the load for its source options, as `actions` puts back the
-    // rest: such a load keeps the data it had. The annotations are the file
-    // saves use, taken once per change, and the store adopts it again when
-    // they are put back, so that no save writes them again.
+    // rest: such a load keeps the data it had. The annotations' file carries
+    // the token of their content, which the store adopts again when they are
+    // put back, so that no save writes them again.
     let restoreCleared: (() => void) | null = null;
     try {
       // A bad source option fails the load here, as loadError, and leaves
       // the table as it was: everything below clears it for the new data.
       validateSourceOptions(loadOpts?.sourceOptions);
       const ownPresets = ownsPresetManager ? presetManager?.presets.get() : undefined;
-      const annotationFile = currentAnnotationFile(annotationStore);
+      const annotationFile = takeAnnotationFile(annotationStore);
       restoreCleared = () => {
         if (ownPresets) presetManager?.presets.set(ownPresets);
         if (annotationFile) {

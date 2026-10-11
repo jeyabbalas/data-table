@@ -21,7 +21,13 @@ import type { VectorColumnDef } from '../derived/types';
 import type { FilterPresetManager } from '../filters/FilterPresets';
 import type { Filter } from '../filters/FilterTypes';
 import { normalizeRestoredFilters } from '../filters/restoredFilters';
-import { adoptAnnotationFile, currentAnnotationFile } from './annotationPersistence';
+import {
+  adoptAnnotationFile,
+  annotationsDropOf,
+  holdBackSnapshotAnnotations,
+  noteAnnotationsRefused,
+  setSnapshotAnnotations,
+} from './annotationPersistence';
 import type { AnnotationsDropReason } from './annotationPersistence';
 import { serializeFilter, deserializeFilter } from './SessionStore';
 import type { SessionSnapshot, SerializedStateSnapshot, VectorValuePoolEntry } from './types';
@@ -161,15 +167,27 @@ export interface SnapshotOptions {
   /**
    * Whether the snapshot carries the annotations themselves (default `true`);
    * the severity filter is captured either way. `AutoSave` turns it off once
-   * the annotations no longer fit in the IndexedDB quota.
+   * the annotations no longer fit in the IndexedDB quota, and a
+   * `SessionStore` then leaves the stored ones as they are.
    */
   annotations?: boolean;
+  /**
+   * Whether the annotations' file is taken only when the snapshot's
+   * `annotations` is first read (default `false`), which a `SessionStore`
+   * that finds them unchanged never does. Read once the annotation store's
+   * content has changed, it is `undefined`, and a `SessionStore` saves the
+   * snapshot as if they were held back. `AutoSave` asks for it when it saves
+   * to a `SessionStore`.
+   */
+  lazyAnnotations?: boolean;
 }
 
 /**
  * Part of a saved session that its restore left out, having restored the
- * rest: today, annotations `AnnotationStore.loadJSON` refused. The facade
- * reports it as a `warning` event.
+ * rest: today, annotations the session store could not attach to the
+ * snapshot (noted on it by `SessionStore.load`), or that
+ * `AnnotationStore.loadJSON` refused. The facade reports it as a `warning`
+ * event.
  */
 export interface RestoreIssue {
   code: 'PERSISTENCE_ANNOTATIONS_DROPPED';
@@ -193,9 +211,9 @@ export interface RestoreIssue {
  * If an UndoManager is provided, its undo/redo stacks are serialized
  * and included in the snapshot for persistence across refreshes.
  *
- * The annotations are {@link currentAnnotationFile}: the same object from
- * one snapshot to the next until they change, which a `SessionStore` reads
- * as nothing to write, and which a custom store must not change.
+ * The annotations' file carries the token of the annotation store's
+ * content, the same until it changes, which a `SessionStore` compares to
+ * tell whether to write them; a custom store must not change the file.
  */
 export function snapshotFromState(
   state: TableState,
@@ -279,9 +297,12 @@ export function snapshotFromState(
     }
   }
 
-  if (annotationStore && options.annotations !== false) {
-    const file = currentAnnotationFile(annotationStore);
-    if (file) snapshot.annotations = file;
+  if (annotationStore) {
+    if (options.annotations !== false) {
+      setSnapshotAnnotations(snapshot, annotationStore, options.lazyAnnotations === true);
+    } else if (annotationStore.count() > 0) {
+      holdBackSnapshotAnnotations(snapshot);
+    }
   }
 
   // Capture the severity filter only when the user has toggled at least one
@@ -491,13 +512,29 @@ export function restoreStateFromSnapshot(
     presetManager.loadPresets(snapshot.filterPresets);
   }
 
+  // Annotations the session store could not attach to the snapshot, which
+  // it noted on it: reported, whoever owns the store.
+  const drop = annotationsDropOf(snapshot);
+  if (drop !== undefined) {
+    onIssue?.({
+      code: 'PERSISTENCE_ANNOTATIONS_DROPPED',
+      tableName: snapshot.tableName,
+      details: {
+        reason: drop.reason,
+        ...(drop.count !== undefined ? { count: drop.count } : {}),
+      },
+    });
+  }
+
   // Restore annotations if present. A file `loadJSON` refuses (a manual edit
   // of IndexedDB, a newer file version) must not block session restore for
-  // the rest of the state: it is reported, and the store stays empty. An id
-  // the file repeats keeps its first annotation, as sessions saved before
-  // `loadJSON` refused repeats can hold some. The store then adopts the file
-  // it came from, so the next save writes no annotations until they change;
-  // with a repeat skipped, it writes them once, without it.
+  // the rest of the state: it is reported, and the store stays empty, while
+  // the stored record stays as it is until the table has annotations to
+  // write. An id the file repeats keeps its first annotation, as sessions
+  // saved before `loadJSON` refused repeats can hold some. The store then
+  // adopts the file it came from, so the next save writes no annotations
+  // until they change; with a repeat skipped, it writes them once, without
+  // it.
   if (annotationStore && snapshot.annotations) {
     try {
       const { skipped } = annotationStore.loadJSON(snapshot.annotations, {
@@ -506,6 +543,7 @@ export function restoreStateFromSnapshot(
       });
       if (skipped === 0) adoptAnnotationFile(annotationStore, snapshot.annotations);
     } catch (error) {
+      noteAnnotationsRefused(snapshot.annotations);
       onIssue?.(annotationsRefused(snapshot, error));
     }
   }

@@ -176,10 +176,12 @@ table.actions.hideAnnotatedRows();
   the count and the charts wait for it.
 - Like a raw-SQL filter, it applies to every chart's own query: a column's
   chart counts only the annotated rows.
-- The rows it keeps follow the annotations: adding or removing one while the
-  filter is on updates the view in place, keeping the scroll position and the
-  cursor. The severity filter (`annotations.setSeverityFilter`) does not change
-  which rows it keeps. See
+- The rows it keeps follow the annotations: a change that adds or removes a
+  kept row refreshes the view in place, keeping the scroll position, with the
+  cursor following its row, and fires `filterChange` again with the same
+  filters and the new count; one that keeps the same rows refreshes nothing.
+  The severity filter (`annotations.setSeverityFilter`) does not change which
+  rows it keeps. See
   [Annotations → Showing only the annotated rows](./annotations.md#showing-only-the-annotated-rows).
 - For undo, two annotated filters are the same when they keep the same rows
   of the same table: `['warning', 'error']` is `['error', 'warning']`, and

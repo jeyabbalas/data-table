@@ -331,27 +331,30 @@ severity filter's flags. They are kept apart from the rest of the session:
   the filters, sort, columns and the rest; the annotations go to the
   IndexedDB database `dt-annotations`, under the same table name, as a head
   and chunks of at most 10,000 annotations or about 8 MiB each. The session
-  record carries a small marker in their place: how many, and a token of the
-  write it goes with, which a restore checks against the head.
+  record carries a small marker in their place: how many, a token of the
+  write it names, and of the write before it, its fallback.
 - **Written when they change.** A save after a sort, filter, width or
   severity-filter change writes nothing to `dt-annotations`: 0.2–0.3 ms in
   Chromium at a million annotations, where every save used to serialize and
   clone them all again (about 1.2 s in Node). A reload writes nothing back
   until they change.
-- **Atomic, in short tasks.** A write deletes the table's chunks and puts
-  the new ones and the head in one transaction, so a reader finds the old
-  record or the new one, never part of either. Each chunk is put once the one
-  before it is stored: at a million annotations in Chromium a write took
-  0.48–0.5 s in 100 chunks, with no task over 16 ms. The chunks also keep each
-  value far below 127 MiB, the most Chromium stores in one IndexedDB value,
-  which a million annotations in one value pass.
+- **Annotations first.** A save that has annotations to write puts the new
+  chunks and head in one transaction, so a reader finds a record whole or
+  not at all, and only once that has committed writes the session record
+  naming them, with the record it named before as its fallback, which the
+  write kept until then. A reload at any point, or a write that fails,
+  restores the last annotations that landed, at worst older than the rest of
+  the session. Each chunk is put once the one before it is stored: at a
+  million annotations in Chromium a write took 0.43–0.51 s in 100 chunks,
+  with no task over 16 ms. The chunks also keep each value far below
+  127 MiB, the most Chromium stores in one IndexedDB value, which a million
+  annotations in one value pass.
 - **Restored apart.** A reload reads the head and the chunks in one
-  transaction. In Chromium at a million, the read took 0.57–0.61 s and the
-  restore 0.70–0.73 s, the reload's longest step. When the annotations cannot
-  be restored (their record is missing, belongs to another save of the
-  session than the one restored, cannot be read, or the database cannot be
-  opened), the rest of the session restores, and the table emits a `warning`
-  coded `PERSISTENCE_ANNOTATIONS_DROPPED` with `details.reason` (`'missing'`,
+  transaction: in Chromium at a million, 0.37–0.8 s to read and 0.70–0.73 s
+  to restore, the reload's longest step. When neither the annotations the
+  session names nor their fallback can be restored, the rest of the session
+  restores, and the table emits a `warning` coded
+  `PERSISTENCE_ANNOTATIONS_DROPPED` with `details.reason` (`'missing'`,
   `'mismatch'`, `'invalid'` or `'unavailable'`). See
   [Troubleshooting → Warning events](../troubleshooting.md#warning-events).
 - **Upgraded on the way.** A session saved by 0.9, its annotations inside the
@@ -359,19 +362,20 @@ severity filter's flags. They are kept apart from the rest of the session:
   `dt-annotations`. When `dt-annotations` cannot be opened, annotations stay
   in the session record, as 0.9 kept them.
 - **Failing alone.** A save of the annotations that fails does not stop the
-  session from saving. A quota error on them stops their saves at once; any
+  session from saving: the session record goes on naming the annotations
+  that landed before. A quota error on them stops their saves at once; any
   other failure is reported and tried again on the next save, and a second
   in a row stops them. Each is an `error` event with `source: 'persistence'`
-  and `details.record: 'annotations'`. Once stopped, the session saves
-  without them and their record is deleted, so a reload restores the session
-  without annotations; `clearSession()` or a reload starts their saves again.
+  and `details.record: 'annotations'`. Once stopped, a reload restores the
+  last annotations that landed; `clearSession()` or a reload starts their
+  saves again.
 
-The session record and the annotations are written in separate
-transactions. A page closed in the moment between them (about half a
-second at a million annotations) leaves a session record that names a
-write which did not land: the reload restores the rest of the session and
-warns `'mismatch'`, and the annotations saved before stay on disk,
-unrestored. See
+Two tabs that save the same table: the last to write wins, annotations
+included. A tab whose annotations the other has replaced since writes its
+own again at its next save, even one that only changes the sort. Only two
+tabs writing the same table's annotations at the same moment can lose them:
+the reload then restores the session without them and warns `'mismatch'`.
+See
 [Session persistence](./session-persistence.md#annotations-in-a-database-of-their-own).
 
 To reset the persisted state: `await table.clearSession()` clears all
@@ -428,9 +432,12 @@ sorted by severity, then `createdAt`, then insertion:
   filter hides are not listed, and each section counts them: "3 hidden by the
   severity filter". An anchor whose every annotation is hidden opens no
   popover, and a cell of that kind keeps its native title.
-- **It scrolls.** Past `min(24rem, 100vh − 8px)` it scrolls, and its own
-  scroll does not close it. While it overflows it is a tab stop
-  (`tabindex="0"`), so the keyboard can scroll it; otherwise `tabindex="-1"`.
+- **It stays beside its cell.** It opens below its anchor when it fits
+  there, else on the side with more room, its height capped to that room
+  (96 px at least), so that it does not cover the cell it describes. Past its
+  cap, and past `min(24rem, 100vh − 8px)`, it scrolls, and its own scroll
+  does not close it. While it overflows it is a tab stop (`tabindex="0"`),
+  so the keyboard can scroll it; otherwise `tabindex="-1"`.
 - **It follows the store.** A change to the annotations it lists updates it
   in place, a microtask later, and rewrites it only when what it shows
   changed, so `aria-live` does not announce it again. It hides when nothing
@@ -463,10 +470,12 @@ previous one; `Alt+↓` and `Alt+↑` do the same.
 The keys work from anywhere in the table: the grid, the filter bar and the
 hidden-columns gutter. Not in a header's controls mode (`F2`), where they do
 nothing, nor in column layout mode (`Shift+F2`), nor while a dialog or panel
-is open. The table takes the key only while it has annotations and data
-loaded; otherwise it stays the page's. On a Mac, `Alt` is the Option key,
-and `F8` may need `fn`. `createDataTable({ annotationNavigation: false })`
-leaves the keys to the page; the actions below work either way.
+is open. The table takes the key only while data is loaded, the store holds
+a row-scope or cell-scope annotation, and the severity filter shows at least
+one severity; otherwise the key stays the page's, and nothing is announced.
+On a Mac, `Alt` is the Option key, and `F8` may need `fn`.
+`createDataTable({ annotationNavigation: false })` leaves the keys to the
+page; the actions below work either way.
 
 **Where "next" is.** The order is the view's, as filtered and sorted. From
 the cursor, the next annotation is the next annotated visible cell in the
@@ -478,6 +487,16 @@ single out no row, and are not visited. Without a cursor, `F8` goes to the
 first annotation and `Shift+F8` to the last. Past the last annotation the
 search goes round to the first, and past the first to the last. It visits
 the severities the [severity filter](#severity-filter-view-layer) shows.
+
+**Under the annotated filter.** With only the annotated rows shown (see
+[below](#showing-only-the-annotated-rows)), the view follows the annotations
+a moment behind. `F8` first brings it up to date and waits for it to refresh,
+so right after a change it waits for that (0.4–0.7 s at a million annotated
+rows) before it searches. Resolve the issue under the cursor, by removing
+its annotation, and its row leaves the view: the cursor stays on the row
+that slid into its place, and `F8` goes to that row, the next annotated one.
+A view that refreshes again while the search runs is searched again; after
+three, the search gives up with `QUERY_ABORTED`.
 
 **Landing.** The row scrolls to the middle of the view and the column into
 it, the cursor moves there, the popover and the value inspector close, and
@@ -493,9 +512,14 @@ the live region says where the cursor is and what is there:
 | None further, with `wrap: false`             | "No more annotations below" / "No more annotations above"                       |
 
 The row counts from 1 in the view; the first annotation there is read with
-its severity, and the others counted. The words come from
-`messages.annotations.navigation` (see
-[i18n](./i18n.md#annotations)).
+its severity, and the others counted. The column is named when that first
+annotation is the cell's own; when it is the row's (a row annotation comes
+first when it is more severe, or as severe and older), the announcement
+reads as for the row. With no annotation of the severities sought in the
+view, a navigation says "No annotations shown". The keys say nothing when
+the store holds no row or cell annotation, or the severity filter hides
+every severity: they are the page's then. The words come from
+`messages.annotations.navigation` (see [i18n](./i18n.md#annotations)).
 
 ### From code
 
@@ -537,27 +561,31 @@ which comes into view too. It resolves `{ row, column }`, the row's
 position and the column shown, or `null` when the filters hide the row.
 `rowId` is a number or a `bigint`. Its options are `align` (`'start'`,
 `'center'` or `'end'`; default `'center'`), `focus` (default `true`; with
-`false` the cursor stays where it is) and `signal`. A `column` the table has
-but hides leaves the cursor's column, with no error.
+`false` the cursor, the popover and the value inspector stay as they are)
+and `signal`. A `column` the table has but hides leaves the cursor's column,
+with no error.
 
 All three run one at a time: a newer one, a move of the cursor, or a change
-of the filters, the sort or the table aborts the one running. They wait for
-a filter change that is still counting its rows, and for a derived-column
-change, so they scroll in the view the filters make. A search started by a
-key that fails for another reason is reported as the table's `error` event,
-with `source: 'unknown'`.
+of the filters, the sort or the table aborts the one running; the table's
+own move of the cursor, following its row through a refresh of the annotated
+view, aborts nothing. They wait for a filter change that is still counting
+its rows, for a derived-column change, and, under the annotated filter, for
+the view to refresh, so they scroll in the view the filters make. A search
+started by a key that fails for another reason is reported as the table's
+`error` event, with `source: 'unknown'`: an error the library did not raise
+comes wrapped, as a `QueryError` coded `QUERY_RUNTIME` whose `cause` it is.
 
 Errors, as rejections:
 
-| Error                | Code                | When                                                                                                                               |
-| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `QueryError`         | `QUERY_ABORTED`     | A newer navigation, a cursor move, a filter, sort or table change, or `options.signal` aborted it.                                 |
-| `QueryError`         | `INVALID_ROWID`     | `revealRow`: `rowId` is not a non-negative integer, or no row has it.                                                              |
-| `QueryError`         | `COLUMN_NOT_FOUND`  | `revealRow`: `column` is not in the schema.                                                                                        |
-| `QueryError`         | `NO_TABLE`          | No table is loaded, or the table has no UI.                                                                                        |
-| `ConfigurationError` | `OPTIONS_INVALID`   | A severity that is not `'error'`, `'warning'` or `'info'`, a `wrap` or `focus` that is not a boolean, an `align` it does not take. |
-| `ConfigurationError` | `CHUNK_LOAD_FAILED` | The navigator's chunk did not download (`details.chunk: 'AnnotationNavigator'`). The next call asks for it again.                  |
-| `DestroyedError`     | `DESTROYED`         | The table was destroyed before the call.                                                                                           |
+| Error                | Code                | When                                                                                                                                                             |
+| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QueryError`         | `QUERY_ABORTED`     | A newer navigation, a cursor move, a filter, sort or table change, or `options.signal` aborted it; or the annotated view refreshed three times under the search. |
+| `QueryError`         | `INVALID_ROWID`     | `revealRow`: `rowId` is not a non-negative integer, or no row has it.                                                                                            |
+| `QueryError`         | `COLUMN_NOT_FOUND`  | `revealRow`: `column` is not in the schema.                                                                                                                      |
+| `QueryError`         | `NO_TABLE`          | No table is loaded, or the table has no UI.                                                                                                                      |
+| `ConfigurationError` | `OPTIONS_INVALID`   | A severity that is not `'error'`, `'warning'` or `'info'`, a `wrap` or `focus` that is not a boolean, an `align` it does not take.                               |
+| `ConfigurationError` | `CHUNK_LOAD_FAILED` | The navigator's chunk did not download (`details.panel: 'annotationNavigator'`). The next call asks for it again.                                                |
+| `DestroyedError`     | `DESTROYED`         | The table was destroyed before the call.                                                                                                                         |
 
 ### An issue list
 
@@ -634,11 +662,17 @@ search alone took:
 | `revealRow` in a sorted view                         | 90–360 ms  |
 | Building the table of annotated rows, the first time | 0.64–0.7 s |
 
-A cursor on a row the grid no longer holds costs one query more to find
-that row: 0.5 s filtered and 1.4 s sorted, at row 7,000,000. In a sorted
+An unsorted SQL search now counts the rows before the row it finds, in the
+view as it is, which adds about 91 ms near row 9,000,000 with a million
+annotated rows, 40 ms with a thousand, and 20 ms under a range filter
+(Node's DuckDB-WASM). A cursor on a row the grid no longer holds costs one
+query more to find that row: 0.5 s filtered and 1.4 s sorted, at row
+7,000,000. The first navigation in a store with cell annotations builds a
+by-row index of them, 0.2 s and 24 bytes an annotation at a million, which
+the reads of each held row's annotations use from then on. In a sorted
 view the search compares rows as the grid's `ORDER BY` does: NULL last in
 either direction, NaN after every number, `__rowid__` last. The navigation
-code is a chunk of its own (4.30 kB brotli), loaded the first time it runs.
+code is a chunk of its own (4.47 kB brotli), loaded the first time it runs.
 
 ### Showing only the annotated rows
 
@@ -659,11 +693,18 @@ undo entry, and asking again for the same severities changes nothing.
 unknown severity throws `ConfigurationError` `OPTIONS_INVALID`. The filter
 shape is in the [filters guide](./filters.md#8-annotated--rows-with-annotations).
 
-The view follows the annotations. Adding or removing one while the filter
-is on updates the view in place: the scroll position and the cursor stay,
-the rows show placeholders a moment while they are fetched again, and the
-row count, the charts and a `filterChange` event follow. The severity
-filter changes which tints show, not which rows the filter keeps.
+The view follows the annotations. When a change to them changes which rows
+the filter keeps, the view refreshes in place: the scroll position stays,
+the rows show placeholders a moment while they are fetched again, the row
+count and the charts follow, and `filterChange` fires with the same filters
+and the new count. The cursor follows its row to the row's new position,
+without scrolling. When its row leaves the view, as it does when its
+annotation is removed, the cursor stays where it was, on the row that slid
+into its place (on the new last row, when it was the last), and `F8` goes
+to that row next, `Shift+F8` to the row before the gap. A change that keeps
+the same rows, such as an edited message or another severity on a row
+already kept, refreshes nothing. The severity filter changes which tints
+show, not which rows the filter keeps.
 
 Behind it is a DuckDB temporary table of the annotated rows,
 `__dt_annot_<table>__`, one row per annotated `__rowid__` with the bits of
@@ -673,7 +714,11 @@ and rebuilt whole, in one statement, when the annotations have changed:
 under the filter at most once every 150 ms, or every rebuild's own time when
 that is longer. Until the first build lands, the grid, the count and the
 charts wait, so a filter restored with a session or loaded from a preset
-never queries a table that does not exist yet. In headless Chromium on
+never queries a table that does not exist yet. A rebuild drops only the
+cached query results that read the table, not those of other tables on a
+shared bridge. A rebuild that fails is reported once, as an `error` event
+with `source: 'query'`, and the view tries no other until the annotations,
+the filters or the base table change. In headless Chromium on
 10,000,000 rows:
 
 | Annotated rows | `showAnnotatedRows` → `filterChange` | A change under it → `filterChange` | Switching severities |
@@ -682,9 +727,11 @@ never queries a table that does not exist yet. In headless Chromium on
 |      1,000,000 | 0.67 s                               | 0.67 s                             | 75 ms                |
 
 At a million annotated rows the longest main-thread task was about 120 ms,
-the store listing its annotated rows once after a change; the statement is
+the store listing its annotated rows once after a change, which every
+rebuild after a change to row or cell annotations repeats; the statement is
 built 100,000 rows at a time, with a yield between, and none of those took
-over 11 ms.
+over 11 ms. These figures predate two later changes: the cursor following
+its row, and no refresh when the kept rows are the same.
 
 ## Annotations at scale
 
@@ -702,7 +749,7 @@ on a 10,000 × 1,000 table and a 10,000,000 × 9 one. What a million cost:
 | A scroll step                           | 6.4 ms on 10,000 × 1,000 (4.7 ms with none); 3.1 ms on 10,000,000 × 9 (2.2 ms) | headless Chromium |
 | One `update()` of an annotation in view | 3.5–6.5 µs                                                                     | headless Chromium |
 | A save after a sort change              | 0.2–0.3 ms                                                                     | Chromium          |
-| A save after the annotations change     | 0.48–0.5 s, no task over 16 ms                                                 | Chromium          |
+| A save after the annotations change     | 0.43–0.51 s, no task over 16 ms                                                | Chromium          |
 | Restoring them on a reload              | 0.70–0.73 s                                                                    | Chromium          |
 
 The store's figures are from Node 22 on an Apple M1 Pro, with 90% cell, 9%
@@ -723,16 +770,16 @@ Limits:
   `add`, `addMany` and `loadJSON` throw a `RangeError` and leave the store as
   it was.
 - **Memory.** A million annotations take about 258 MB of JavaScript heap,
-  more with long messages or `metadata`. The first `getByRow` adds 24 bytes
-  an annotation for its by-row index, and persistence keeps the store's file
-  between saves, about 8 MB at a million.
+  more with long messages or `metadata`. The first `getByRow`, or the first
+  navigation, adds 24 bytes an annotation for a by-row index. Persistence
+  keeps no copy of them: a save takes their file only to write it.
 - **Batches.** Add many annotations with one `addMany`, which fires one event,
   rather than one `add` each; a loop of `add` calls stays cheap for the grid,
   but each call fires its own event. Clear a scope with `clear(scope)`.
 - **Saving.** The save after a change to the annotations writes them all
-  again: about 0.5 s at a million in Chromium, in tasks of at most 16 ms. A
-  page hidden with such a save pending writes them in one task, 0.43–0.46 s
-  at a million.
+  again: 0.43–0.51 s at a million in Chromium, in tasks of at most 16 ms. A
+  page hidden with such a save pending writes them in one task, 0.32 s at a
+  million.
 
 ## Multi-table
 

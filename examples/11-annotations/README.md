@@ -60,8 +60,9 @@ saved session).
    region reads the annotation out. Past the last one it goes round to the
    first.
 4. **Show only the annotated rows** adds an annotated filter, with its chip in
-   the filter bar. Clear the store or add annotations while it is on: the view
-   follows in place, keeping the scroll position and the cursor.
+   the filter bar. Add annotations or clear the store while it is on: when the
+   rows it keeps change, the view refreshes in place, keeping the scroll
+   position, and the cursor follows its row.
 5. **Errors** lists the first 20 errors on rows and cells. Click one:
    `revealRow` scrolls its row into view and puts the cursor on its cell, or
    says the filters hide it.

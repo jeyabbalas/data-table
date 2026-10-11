@@ -107,8 +107,9 @@ bridge keep their tables and continue working.
   bridge has. It is built only when one of them reads it, rebuilt when that
   table's annotations change, and dropped with its base table: when a load
   replaces the table, and on `destroy()`. A rebuild runs in the bridge's one
-  queue, as any query does: for a million annotated rows, 0.64–0.7 s in
-  Chrome.
+  queue, as any query does (for a million annotated rows, 0.64–0.7 s in
+  Chrome), and drops only the bridge's cached results that read that table:
+  the other tables' stay.
 
 **Caveats (honest):**
 

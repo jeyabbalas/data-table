@@ -267,30 +267,33 @@ view and focus stay where the user has gone.
 
 ### Annotation navigation (`F8`)
 
-When the table has [annotations](./annotations.md), `F8` moves the cursor to
-the next one and `Shift+F8` to the previous one, in the view as filtered and
-sorted; `Alt+↓` and `Alt+↑` do the same, for keyboards where `F8` is hard to
-reach (on a Mac, `F8` may need `fn`, and `Alt` is the Option key). The next
-annotation is the next annotated cell of the cursor's row, then the first
-annotated cell of the next row that has any, pinned columns first; going
-back, the last annotated cell of the previous row. A row whose annotations
-are its own, or in hidden columns, keeps the cursor's column. Column
-annotations single out no row, and are not visited. Past the last annotation
-the search goes round to the first. It visits the severities the severity
-filter shows, so it skips what the table does not paint.
+When the table has row or cell [annotations](./annotations.md), `F8` moves
+the cursor to the next one and `Shift+F8` to the previous one, in the view
+as filtered and sorted; `Alt+↓` and `Alt+↑` do the same, for keyboards where
+`F8` is hard to reach (on a Mac, `F8` may need `fn`, and `Alt` is the Option
+key). The next annotation is the next annotated cell of the cursor's row,
+then the first annotated cell of the next row that has any, pinned columns
+first; going back, the last annotated cell of the previous row. A row whose
+annotations are its own, or in hidden columns, keeps the cursor's column.
+Column annotations single out no row, and are not visited. Past the last
+annotation the search goes round to the first. It visits the severities the
+severity filter shows, so it skips what the table does not paint.
 
 The keys work wherever focus is in the table: the grid, the filter bar and
 the hidden-columns gutter. They do nothing in a header's controls mode
 (`F2`), where `Alt+↑` and `Alt+↓` no longer leave the mode, and are not
 taken in column layout mode (`Shift+F2`), while a dialog or panel is open,
 or when another handler has prevented the key's default. The table takes the
-key, preventing its default, only while it holds annotations and has data
-loaded; otherwise the key stays the page's. With `annotationNavigation: false`
-the keys are always the page's, and `actions.nextAnnotation`,
-`actions.previousAnnotation` and `actions.revealRow` still work. No element
-advertises the keys with `aria-keyshortcuts`, as the grid advertises none of
-its own keys that way; this guide and the [shortcuts page](https://jeyabbalas.github.io/data-table/shortcuts/)
-list them.
+key, preventing its default, only while it has data loaded, holds a row- or
+cell-scope annotation and the severity filter shows at least one severity;
+otherwise the key stays the page's, and nothing is announced. With
+`annotationNavigation: false` the keys are always the page's, and
+`actions.nextAnnotation`, `actions.previousAnnotation` and
+`actions.revealRow` still work. No element advertises the keys with
+`aria-keyshortcuts`, as the grid advertises none of its own keys that way;
+this guide and the
+[shortcuts page](https://jeyabbalas.github.io/data-table/shortcuts/) list
+them.
 
 Landing moves the cursor and nothing else takes focus: the row scrolls to the
 middle of the view and the column into view, `aria-activedescendant` names
@@ -307,10 +310,20 @@ there:
 | No annotation to go to                       | "No annotations shown"                                                          |
 
 The row counts from 1 in the view, of the rows the filters show; the first
-annotation is read with its severity and message, and the rest counted.
+annotation is read with its severity and message, and the rest counted. The
+column is named only when that first annotation is the cell's own: a row
+annotation that comes first reads as "Row 1,204 of 9,880,000: error, …".
 `actions.nextAnnotation({ wrap: false })` says "No more annotations below"
 (or "above") at the end. Every phrase is a `messages.annotations.navigation`
 string; see [i18n → Annotations](./i18n.md#annotations).
+
+Under the annotated filter (`actions.showAnnotatedRows()`), the view
+follows the annotations a moment behind, and the cursor follows its row.
+When the user resolves the issue under the cursor and its row leaves the
+view, the cursor stays where it was, on the row that slid into its place,
+and `F8` goes to that row next, announced like any landing: the next issue.
+`F8` right after a change waits for the view to catch up, some 0.4–0.7 s at
+a million annotated rows, before it moves.
 
 This is how keyboard and screen-reader users reach annotations: the popover
 opens on pointer hover and on DOM focus entering a cell, and the grid's
@@ -556,8 +569,11 @@ keyboard-reachable and `Escape`-dismissable:
   section and counts the rest ("+3 more"). Annotations of a severity the
   severity filter hides are left out and counted ("2 hidden by the severity
   filter"), and an anchor whose every annotation is hidden opens no popover.
-  Past `min(24rem, 100vh − 8px)` it scrolls, and while it overflows it is a
-  tab stop (`tabindex="0"`), so the region it scrolls can be reached and
+  It opens below its anchor when it fits there, else on the side with more
+  room, its height capped to that room (96 px at least), so that it does
+  not cover the cell it describes. Past its cap, and past
+  `min(24rem, 100vh − 8px)`, it scrolls, and while it overflows it is a tab
+  stop (`tabindex="0"`), so the region it scrolls can be reached and
   scrolled from the keyboard, as axe's `scrollable-region-focusable` asks;
   one that fits is `tabindex="-1"`. A change to its annotations updates it
   in place, rewriting it only when what it shows changed, so it is not
@@ -685,7 +701,7 @@ messages: {
 - **The per-column buttons are not in the tab order.** Sort, pin, hide, filter, a nested or JSON column's extract button and the derived-column `f(x)` icon are reachable through `F2` from the header row, not by tabbing. A 266-column table would otherwise put ~1,600 tab stops in front of the next control on the page.
 - **Only the columns near the view have their buttons.** Every visible column has its `columnheader`, with its label, sort state and `aria-colindex`, but the pin, hide, filter and sort buttons and the drag and resize handles exist only for the columns body rows render cells for. The cursor's column is always one of them, so `F2` always has buttons to cycle, and so is a column whose filter panel, extract panel or derived-column editor is open, so closing it gives focus back to the button that opened it. A screen reader's browse mode, reading the page rather than the grid, finds buttons only in those headers.
 - **The drag handle and the resize handle are not in the `F2` cycle either.** `ColumnHeader.getControls()` — the list `F2` walks — omits them on purpose, along with any control the responsive rules have hidden and any disabled one. A focus stop whose Enter key does nothing is worse than no stop at all, and a focusable `role="separator"` would need `aria-valuenow` / `aria-valuemin` / `aria-valuemax` to stay valid. They have their own gesture instead: [`Shift+F2`](#column-layout-mode-shiftf2), which costs no tab stop and no focus stop.
-- **`F8` and `Alt+↑` / `Alt+↓` are taken only when there are annotations.** In a table without any, the keys reach the page, the browser or the screen reader as before. In a header's controls mode they do nothing.
+- **`F8` and `Alt+↑` / `Alt+↓` are taken only when there are annotations to go to.** In a table with no row or cell annotation, or with every severity hidden by the severity filter, the keys reach the page, the browser or the screen reader as before, and nothing is announced. In a header's controls mode they do nothing.
 - **Live-region announcements are `polite`, not `assertive`.** Long-running operations queue without interrupting the user's current read. For ops that need interruption (errors), raise your own `role="alert"` region.
 - **Hide button preserves the last-visible column.** Pressing hide on the only visible column does nothing — the table must have at least one visible column.
 - **Row selection via Enter is explicit.** Keyboard users can't accidentally select the whole row with a stray arrow; they must Enter.
@@ -722,7 +738,7 @@ reader from each row. The test rig is the demo (`npm run dev`).
 | **Sort change** — click a column's sort button twice (toggle desc)                                                                      | live region: "sorted by NAME descending"                                                                                                                                  | same                    | same                   |
 | **Modal open** — open Export, then SQL filter, then Derived column                                                                      | dialog title announced; focus moves into dialog; Tab cycles inside; Esc closes and returns focus to opener                                                                | same                    | same                   |
 | **Annotation popover** — focus an annotated cell; trigger via pointer / focus                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
-| **Annotation navigation** — with annotations in the table, F8, F8, Shift+F8, then Alt+↓ from the filter bar                             | each press announces "Row N of M, column: severity, message"; the cursor lands on the cell; past the last, "Wrapped to the first annotation."                             | same                    | same                   |
+| **Annotation navigation** — with row or cell annotations in the table, F8, F8, Shift+F8, then Alt+↓ from the filter bar                 | each press announces "Row N of M[, column]: severity, message"; the cursor lands on the cell; past the last, "Wrapped to the first annotation."                           | same                    | same                   |
 | **Column header tooltip** — focus a header with a tooltip set                                                                           | tooltip role; description announced                                                                                                                                       | same                    | same                   |
 | **Undo / redo** — Cmd/Ctrl+Z then Cmd/Ctrl+Shift+Z                                                                                      | live region announces resulting state ("0 filters active, …")                                                                                                             | same (Ctrl+Z / Ctrl+Y)  | same                   |
 

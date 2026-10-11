@@ -101,7 +101,11 @@ A user-supplied (shared) `FilterPresetManager` passed via
 `presets: { manager }` is **not** cleared — sharing across tables is
 opt-in (see [Multi-table dashboards](./multi-table.md)). The annotation
 store and query cache are always per-DataTable, so they're unconditionally
-cleared.
+cleared. The presets and the annotations go once the worker has loaded the
+new data, in the load's turn: a load the worker rejects for its source
+options keeps them, with the rest of the table, and a load a newer load or
+a clear supersedes restores nothing into the table that replaces it. A save
+the table had pending, of the data being replaced, is written first.
 
 The DuckDB-side cleanup is symmetric:
 
@@ -128,40 +132,62 @@ second IndexedDB database, `dt-annotations`, under the same table name, and
 are written only when they change, so that saving a sort or a column width
 does not copy a million annotations again.
 
-| Database         | Store         | Key                         | Holds                                                                                                                     |
-| ---------------- | ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `dt-sessions`    | `sessions`    | `tableName`                 | The session snapshot, without its annotations, and a marker in their place: `__annotations: { format: 1, count, owner }`. |
-| `dt-annotations` | `annotations` | `tableName`                 | The head: `{ format: 1, owner, count, chunks, file }`, `file` being the `AnnotationFile` without its `annotations` array. |
-| `dt-annotations` | `chunks`      | `[tableName, owner, index]` | The annotations, in slices of at most 10,000 annotations or about 8 MiB.                                                  |
+| Database         | Store         | Key                         | Holds                                                                                                                                                                                 |
+| ---------------- | ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dt-sessions`    | `sessions`    | `tableName`                 | The session snapshot, without its annotations, and a marker in their place: `__annotations: { format: 1, count, owner, fallback? }`.                                                  |
+| `dt-annotations` | `annotations` | `tableName`                 | The head: `{ format: 1, owner, count, chunks, file, previous? }`, `file` being the `AnnotationFile` without its `annotations` array, and `previous` the earlier records a write kept. |
+| `dt-annotations` | `chunks`      | `[tableName, owner, index]` | The annotations, in slices of at most 10,000 annotations or about 8 MiB.                                                                                                              |
 
-`owner` is a token made for each write of the annotations and copied into the
-marker of the session record saved with it. `SessionStore.load()` strips the
-marker, and attaches the annotations only when the head's `owner` and
-`count` match it.
+`owner` is a token made for each write of the annotations. The session
+record's marker names the record it was saved with (`owner`, `count`) and
+the one it named before (`fallback`). `SessionStore.load()` strips the
+marker and attaches the first of the two that it finds whole, among the
+head and the records the head keeps.
 
-**When they are written.** `AutoSave` hands the store the same annotation
-file object from one save to the next until the annotations change, and the
-store writes the annotations only when the file is not the one it last
-wrote or read:
+**When they are written.** The store writes a table's annotations only when
+they are not the annotations it last wrote or read, by a token of their
+content that stays the same until they change, so a snapshot carries them
+without their file being taken. A save:
+
+1. puts the new chunks and the head in one readwrite transaction, keeping
+   whole, in the head's `previous`, the records the stored session record
+   may name; each chunk is put once the one before it is stored, so cloning
+   a million annotations takes many short tasks;
+2. only once that has committed, writes the session record naming the new
+   record, with the one it named before as its `fallback`;
+3. once that has committed too, drops the records the head kept, in a small
+   transaction.
+
+So the stored session record names a whole record at every point: a reload
+at any point, or a write that fails, restores the last annotations that
+landed, at worst older than the rest of the session. A failed annotations
+write saves the session record naming the annotations it named before.
 
 - A save after a sort, filter, width or severity-filter change writes the
-  session record alone, and nothing to `dt-annotations`: 0.2–0.3 ms in
+  session record alone, after one small read of the head (has another tab
+  written them since?), and nothing to `dt-annotations`: 0.2–0.3 ms in
   Chromium with a million annotations, where serializing and cloning them all
   took about 1.2 s (Node) before.
-- A save after the annotations change writes them in one readwrite
-  transaction: it deletes the table's chunks, puts the new ones, each once
-  the one before it is stored, then the head. A failure aborts the whole
-  transaction, and the previous head and chunks stay as they were. A million
-  annotations take 100 chunks: 0.48–0.5 s in Chromium, no task over 16 ms.
-- `saveSync()`, which runs when the page is hidden or unloaded, puts every
-  chunk at once, when the annotations changed since the last write: one task
-  of 0.43–0.46 s at a million.
+- A save after the annotations change takes 0.43–0.51 s at a million in
+  Chromium, 100 chunks, with no task over 16 ms.
+- `saveSync()`, which runs only from `destroy()` and when the page is hidden
+  or unloaded, enqueues all of it at once, the session record naming the new
+  annotations with their fallback kept: one task of 0.32 s for a changed
+  million. An asynchronous save it overtakes writes nothing more.
 - A reload restores the annotations and writes nothing back until they
-  change. Reading a million took 0.57–0.61 s in Chromium, most of it one
+  change. Reading a million took 0.37–0.8 s in Chromium, most of it one
   `getAll` of the chunks, and restoring them 0.70–0.73 s.
-- Emptying the store (`table.annotations.clear()`) deletes the record at the
-  next save, and so does a save of a table whose record an older version's
-  `clearSession()` left behind.
+- A table's saves, loads and deletes run one at a time, in call order; a
+  `saveSync()` and a `delete()` stop the older asynchronous saves.
+- `loadData()` writes the save it had pending, of the data it replaces,
+  asynchronously; `clearSession()` drops its pending save, the session going
+  anyway. Auto-save stays off while any load or clear runs, and a load that
+  a newer load or a clear supersedes restores nothing.
+- Emptying the store (`table.annotations.clear()`) deletes its record at the
+  next save. A record this version cannot attach (a newer format, an
+  unreadable one, a file `loadJSON` refused), or one an older version's
+  `clearSession()` left behind, stays until the table has annotations to
+  write.
 
 The chunks are there because Chromium refuses any single IndexedDB value
 over 133,169,152 bytes (127 MiB), and a million annotations of about 167
@@ -169,26 +195,35 @@ bytes each pass that in one value. A chunk can reach it only with some 13 KB
 an annotation in parts its size estimate cannot see, such as a `Blob` in
 `metadata`.
 
-**When they are not restored.** The rest of the session restores, and the
-table emits a `warning` coded `PERSISTENCE_ANNOTATIONS_DROPPED`, with
-`details: { tableName, reason, count? }`, `count` being how many the session
-was saved with, when known:
+**Two tabs.** The last tab to write a table's session wins, annotations
+included: a tab whose annotations the other has replaced since writes its
+own again at its next save, even one that only changes the sort. Only two
+tabs writing the same table's annotations at the same moment can leave
+neither restorable.
 
-| `reason`        | Cause                                                                                                                                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `'missing'`     | The session names annotations, but no record of them is there: another tab cleared the session while this one saved, or their first write did not land.                                                              |
-| `'mismatch'`    | The record is from another save: the page closed after the session record was written and before the annotations landed, or another tab saved the same table. The annotations saved before stay on disk, unrestored. |
-| `'invalid'`     | A malformed head, chunk or marker, or a file `loadJSON` refused, whose code and message are in `details.errorCode` and `details.errorMessage`.                                                                       |
-| `'unavailable'` | `dt-annotations` could not be read.                                                                                                                                                                                  |
+**When they are not restored.** When neither the record the session names
+nor its fallback is whole, the rest of the session restores, and the table
+emits a `warning` coded `PERSISTENCE_ANNOTATIONS_DROPPED`, whoever owns the
+store, with `details: { tableName, reason, count? }`, `count` being how many
+the session was saved with, when known:
+
+| `reason`        | Cause                                                                                                                                                                      |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'missing'`     | The session names annotations, but no record of them is there, as when another tab cleared the session meanwhile.                                                          |
+| `'mismatch'`    | The table's record is another save's, which replaced both the one the session names and its fallback: two tabs wrote the same table's annotations at the same moment.      |
+| `'invalid'`     | A malformed head, chunk or marker, a record of a newer format, or a file `loadJSON` refused, whose code and message are in `details.errorCode` and `details.errorMessage`. |
+| `'unavailable'` | `dt-annotations` could not be read.                                                                                                                                        |
+
+A record this version could not read (`'invalid'`, `'unavailable'`) stays,
+and the session goes on naming it, until the table has annotations to write.
 
 **Writes that fail.** The annotations have a circuit breaker of their own.
 A quota error on them stops their saves at once; any other failure is
 retried by the next save, and a second one in a row stops them. Each failure
 until then is reported as an `error` event with `source: 'persistence'` and
-`details.record: 'annotations'`. The session
-keeps saving without the annotations, and their record is deleted, so a
-reload restores the session without them, and without a warning;
-`clearSession()` or a reload starts their saves again.
+`details.record: 'annotations'`. The session keeps saving, naming the last
+annotations that landed, which a reload restores; `clearSession()` or a
+reload starts their saves again.
 
 **Older sessions and older versions.**
 
@@ -206,10 +241,9 @@ reload restores the session without them, and without a warning;
   session record, as before.
 
 **Custom stores.** An object of your own passed as
-`persistence.sessionStore` receives whole snapshots, annotations included,
-and gets the same `annotations` object from one save to the next until they
-change: compare it by identity to skip writing them again, and treat it as
-read-only.
+`persistence.sessionStore` receives whole snapshots, annotations included:
+a new `annotations` file at each save, as in 0.9. Treat it as read-only.
+Annotations inside the session records it returns are restored as they are.
 
 ## Opting out
 
@@ -327,7 +361,7 @@ await table.clearSession();
 Effect:
 
 - IDB records for `tableName` deleted, the session's and its annotations'
-  head and chunks (if persistence enabled)
+  head and chunks (if persistence enabled); a save still pending is dropped
 - Filters, sort, column layout, derived columns reset
 - Undo/redo stacks cleared
 - Query cache flushed
@@ -336,8 +370,9 @@ Effect:
   (i.e. you didn't pass a shared `presets: { manager }`)
 - The DuckDB table is **not** dropped — its rows remain queryable via
   `bridge.query()` until the next `loadData()` (or `destroy()` on a
-  shared bridge) evicts it, with the temporary table of its annotated rows. Use `bridge.dropTable(tableName)` to
-  release that worker memory immediately if you need to. The derived
+  shared bridge) evicts it, with the temporary table of its annotated
+  rows. Use `bridge.dropTable(tableName)` to release that worker memory
+  immediately if you need to. The derived
   columns' VIEW and helper tables are dropped, and `derivedChange` fires
   when there were any.
 - A `loadData()` still in flight when `clearSession()` is called lands
@@ -421,7 +456,7 @@ useEffect(() => {
 ## Gotchas
 
 - **Two tables with the same `tableName` overwrite each other's sessions.** Pick unique names, or share the store and accept the overwrite.
-- **Two tabs of the same app race on the IDB row.** Two browser tabs that mount a table with the same `tableName` against the same `dt-sessions` database both open their own `SessionStore` and write debounced snapshots. There is no cross-tab coordination (no `BroadcastChannel`, no IDB observer): whichever tab's debounced save lands second wins, and the other tab's most-recent edits are lost on reload. Practical mitigations: scope `tableName` per-tab (e.g. include a tab id or session id), avoid sharing the same `tableName` across tabs that are likely to be edited concurrently, or accept last-writer-wins as the documented contract. A future Phase-9-or-later release may add `BroadcastChannel` coordination; until then, treat IDB session state as single-writer. With annotations, a session record one tab saves can name annotations the other tab has since replaced: the next reload then restores the session without annotations, with a `PERSISTENCE_ANNOTATIONS_DROPPED` warning (`'mismatch'`).
+- **Two tabs of the same app race on the IDB row.** Two browser tabs that mount a table with the same `tableName` against the same `dt-sessions` database both open their own `SessionStore` and write debounced snapshots. There is no cross-tab coordination (no `BroadcastChannel`, no IDB observer): whichever tab's debounced save lands second wins, and the other tab's most-recent edits are lost on reload. Practical mitigations: scope `tableName` per-tab (e.g. include a tab id or session id), avoid sharing the same `tableName` across tabs that are likely to be edited concurrently, or accept last-writer-wins as the documented contract. A future Phase-9-or-later release may add `BroadcastChannel` coordination; until then, treat IDB session state as single-writer. Annotations follow the same rule: a tab whose annotations the other has replaced since writes its own again at its next save. Two tabs writing the same table's annotations at the same moment can leave neither restorable, which the next reload reports as `PERSISTENCE_ANNOTATIONS_DROPPED` (`'mismatch'`).
 - **`SessionStore` is a thin IDB wrapper — it never throws.** On failure (closed DB, blocked storage) it resolves with `null` / `false`. Check return values and listen for `warning`.
 - **`saveSync()` requires the DB to already be open.** It's a no-op until after `await store.open()` resolves. The library opens the DB during `createDataTable()` init.
 - **Snapshot size grows with derived vectors.** A 1M-row vector column adds ~MBs per snapshot. Use expression columns when possible; otherwise, accept the cost.

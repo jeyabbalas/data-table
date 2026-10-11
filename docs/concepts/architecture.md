@@ -600,7 +600,8 @@ annotations as at none, and a change far from the view touches no DOM.
 
 Annotations persist with the session but apart from it: `SessionStore` keeps
 them in a second IndexedDB database, `dt-annotations`, as a head and chunks,
-written only when they change (see
+written only when they change, and before the session record that names
+them, so a reload restores the last annotations that landed (see
 [Session persistence](../guides/session-persistence.md#annotations-in-a-database-of-their-own)).
 A single shared
 [`AnnotationPopover`](../../src/table/AnnotationPopover.ts) instance is

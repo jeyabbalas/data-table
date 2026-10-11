@@ -184,12 +184,14 @@ write saves the session record naming the annotations it named before.
 - A reload restores the annotations and writes nothing back until they
   change. Reading a million took 0.37–0.8 s in Chromium, most of it one
   `getAll` of the chunks, and restoring them 0.70–0.73 s.
-- A table's saves, loads and deletes run one at a time, in call order; a
-  `saveSync()` and a `delete()` stop the older asynchronous saves. `close()`
-  lets the operations asked for before it end, then closes the connections;
-  one asked for after it opens the databases again, once those have ended.
-  So `destroy()`, which closes a store the table owns, never drops a save
-  under way.
+- A table's saves, loads and deletes run one at a time, in call order,
+  whichever `SessionStore` asks for them; a `saveSync()` and a `delete()`
+  stop the older asynchronous saves. `close()` lets the operations asked for
+  before it end, those asked for in the same task included, then closes the
+  connections; one asked for after it opens the databases again, once those
+  have ended. So `destroy()`, which closes a store the table owns, never
+  drops a save under way, and a table mounted again on the same name, with a
+  store of its own, reads what those saves wrote.
 - `loadData()` writes the save it had pending, of the data it replaces,
   asynchronously; `clearSession()` drops its pending save, the session going
   anyway. Auto-save stays off while any load or clear runs, and a load that

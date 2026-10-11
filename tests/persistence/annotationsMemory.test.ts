@@ -202,7 +202,51 @@ describe('the annotations’ file', () => {
   );
 });
 
-describe('the annotations a clear replaces', () => {
+describe('the annotations a load or a clear replaces', () => {
+  itWithGc('go with a load, without persistence', async () => {
+    const table = await createDataTable({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: false,
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    tables.push(table);
+    fill(table.annotations);
+    const probe = new WeakRef(table.annotations.get('a0')!);
+    await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+    expect(table.annotations.count()).toBe(0);
+    await collect();
+    expect(probe.deref()).toBeUndefined();
+  });
+
+  itWithGc('go with a load, once the save of them it found pending has written them', async () => {
+    const sessionStore = new SessionStore();
+    await sessionStore.open();
+    const table = await createDataTable({
+      container: container(),
+      bridge: makeBridge(),
+      persistence: { sessionStore },
+      source: new File([''], 'a.csv'),
+      tableName: 'A',
+      ...BARE,
+    });
+    tables.push(table);
+    const refs = watchFiles(table.annotations);
+    fill(table.annotations);
+    const probe = new WeakRef(table.annotations.get('a0')!);
+    const saves = watchSaves(sessionStore);
+    await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+    expect(saves).toHaveLength(1);
+    await Promise.all(saves);
+    expect((await rawAnnotations('A'))?.['count']).toBe(1000);
+    await dropDatabases(sessionStore);
+    await collect();
+    expect(probe.deref()).toBeUndefined();
+    expect(alive(refs)).toBe(0);
+  });
+
   itWithGc('go with clearSession, and nothing keeps them past the debounce', async () => {
     const sessionStore = new SessionStore();
     await sessionStore.open();

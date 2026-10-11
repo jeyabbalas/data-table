@@ -163,18 +163,6 @@ function fileOf(store: AnnotationStore, content: ContentToken): AnnotationFile |
 }
 
 /**
- * `store.toJSON()`, under the token of the content it holds
- * ({@link annotationsToken}); `null` when the store is empty. A new file at
- * every call, which nothing here keeps.
- *
- * @internal
- */
-export function takeAnnotationFile(store: AnnotationStore): AnnotationFile | null {
-  const content = contentTokenOf(store);
-  return content === null ? null : (fileOf(store, content) ?? null);
-}
-
-/**
  * Let `file`, which `store` was just loaded from (`loadJSON` in replace
  * mode, nothing skipped), stand for the store's content: the content takes
  * `file`'s token, so a session store that wrote or read `file` does not

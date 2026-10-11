@@ -947,8 +947,9 @@ export class AnnotationNavigator implements AnnotationNavigation {
 
   /**
    * Bring row `row` (whose `__rowid__` is `rowId`) into view, aligned as
-   * asked, and `column` beside it; put the cursor on `cursor` when given. The
-   * popover and the value inspector belong to the cell the user has left.
+   * asked, and `column` beside it; put the cursor on `cursor` when given,
+   * and close the popover and the value inspector, which belong to the cell
+   * the cursor left. Without a cursor to move, they stay open.
    */
   private show(
     row: number,
@@ -964,7 +965,7 @@ export class AnnotationNavigator implements AnnotationNavigation {
     body.scrollToRow(row, align);
     if (cursor) this.host.actions.setFocusedCell({ row, column: cursor });
     if (column) this.host.revealColumn(column);
-    this.host.closeOverlays();
+    if (cursor) this.host.closeOverlays();
   }
 
   /**

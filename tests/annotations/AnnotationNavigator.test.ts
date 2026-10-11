@@ -818,16 +818,19 @@ describe('AnnotationNavigator: revealRow', () => {
     await expect(nav.reveal(9)).rejects.toMatchObject({ code: 'INVALID_ROWID' });
   });
 
-  it('with focus: false, scrolls and leaves the cursor', async () => {
+  it('with focus: false, scrolls and leaves the cursor, and the popover and inspector open', async () => {
     const host = makeHost();
     host.body.positions = true;
     host.actions.setFocusedCell({ row: 1, column: 'a' });
-    expect(await new AnnotationNavigator(host).reveal(60, 'c', { focus: false })).toEqual({
-      row: 60,
-      column: 'c',
-    });
+    const nav = new AnnotationNavigator(host);
+    expect(await nav.reveal(60, 'c', { focus: false })).toEqual({ row: 60, column: 'c' });
     expect(host.state.focusedCell.get()).toEqual({ row: 1, column: 'a' });
     expect(host.revealColumn).toHaveBeenLastCalledWith('c');
+    expect(host.closeOverlays).not.toHaveBeenCalled();
+
+    // Moving the cursor, it closes them: they belong to the cell it left.
+    await nav.reveal(61, 'c');
+    expect(host.closeOverlays).toHaveBeenCalledTimes(1);
   });
 
   it("a hidden column leaves the cursor's", async () => {

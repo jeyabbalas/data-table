@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AnnotationStore } from '@/annotations/AnnotationStore';
 import { StateActions } from '@/core/Actions';
-import { QueryError, type DataTableError } from '@/core/errors';
+import { ConfigurationError, QueryError, type DataTableError } from '@/core/errors';
 import { __resetModalHostForTests } from '@/core/ModalHost';
 import { createTableState, initializeColumnsFromSchema, type TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
@@ -265,6 +265,30 @@ describe('TableContainer: annotation navigation', () => {
     expect(error).toBeInstanceOf(QueryError);
     expect(error).toMatchObject({ code: 'QUERY_RUNTIME', message: 'the app’s bridge broke' });
     expect(error.cause).toBe(boom);
+  });
+
+  it('a navigator chunk that does not load is CHUNK_LOAD_FAILED, as a panel’s is', async () => {
+    vi.doMock('@/annotations/AnnotationNavigator', () => {
+      throw new Error('chunk offline');
+    });
+    try {
+      const onError = vi.fn<(error: DataTableError) => void>();
+      await mount({ onError });
+      store.add({ scope: 'row', rowId: 12, severity: 'info', message: 'note' });
+      const failed = { code: 'CHUNK_LOAD_FAILED', details: { panel: 'annotationNavigator' } };
+      // To the caller of the actions…
+      await expect(actions.nextAnnotation()).rejects.toMatchObject(failed);
+      expect(onError).not.toHaveBeenCalled();
+      // …and to onError for the keys, which have no caller.
+      expect(press({ key: 'F8' })).toBe(true);
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+      const [error] = onError.mock.calls[0]!;
+      expect(error).toBeInstanceOf(ConfigurationError);
+      expect(error).toMatchObject(failed);
+      expect(error.message).toMatch(/^The annotationNavigator chunk did not load: /);
+    } finally {
+      vi.doUnmock('@/annotations/AnnotationNavigator');
+    }
   });
 
   it('closes the annotation popover where it lands', async () => {

@@ -164,12 +164,15 @@ export interface TableContainerOptions {
   /**
    * Called with a failure nothing else hears of: a panel that loads on
    * first use, the value inspector or the extract panel, whose chunk did
-   * not download, or the chunk that keeps an annotated filter's table of
-   * annotated rows. The error is a `ConfigurationError` with code
-   * `CHUNK_LOAD_FAILED`, `details.panel` (`'valueInspector'`,
-   * `'extractPanel'` or `'annotatedRows'`) and the import's error as
-   * `cause`; for a panel, the live region says it too. `createDataTable`
-   * emits it as the table's `error` event.
+   * not download; the chunk that keeps an annotated filter's table of
+   * annotated rows; or the annotation navigator's, for a navigation the
+   * keys started (one the actions start rejects with it). The error is a
+   * `ConfigurationError` with code `CHUNK_LOAD_FAILED`, `details.panel`
+   * (`'valueInspector'`, `'extractPanel'`, `'annotatedRows'` or
+   * `'annotationNavigator'`) and the import's error as `cause`; for a
+   * panel, the live region says it too. `createDataTable` emits it as the
+   * table's `error` event. A search the keys started that fails otherwise
+   * comes here too.
    */
   onError?: ((error: DataTableError) => void) | undefined;
   /**
@@ -2906,8 +2909,8 @@ export class TableContainer {
       },
       (cause: unknown) => {
         throw new ConfigurationError(
-          `The annotation navigator chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
-          { code: 'CHUNK_LOAD_FAILED', cause, details: { chunk: 'AnnotationNavigator' } },
+          `The annotationNavigator chunk did not load: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { code: 'CHUNK_LOAD_FAILED', cause, details: { panel: 'annotationNavigator' } },
         );
       },
     );

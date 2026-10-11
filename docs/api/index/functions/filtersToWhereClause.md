@@ -8,7 +8,7 @@
 
 > **filtersToWhereClause**(`filters`, `excludeColumn?`): `string`
 
-Defined in: [filters/FilterSQL.ts:285](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterSQL.ts#L285)
+Defined in: [filters/FilterSQL.ts:310](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterSQL.ts#L310)
 
 Convert an array of filters to a SQL WHERE clause fragment.
 
@@ -29,8 +29,9 @@ Array of filters to convert.
 `string`
 
 Optional column name to exclude from the WHERE
-  clause (used for crossfilter behavior). Raw-SQL filters are never
-  excluded — their synthetic column keys never match real columns.
+  clause (used for crossfilter behavior). Raw-SQL and annotated filters
+  are never excluded — their synthetic column keys never match real
+  columns.
 
 ## Returns
 

@@ -6,7 +6,7 @@
 
 # Class: FilterBar
 
-Defined in: [filters/FilterBar.ts:70](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterBar.ts#L70)
+Defined in: [filters/FilterBar.ts:70](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterBar.ts#L70)
 
 FilterBar renders a horizontal bar of filter chips showing all active filters.
 It auto-shows when filters are present and collapses when empty.
@@ -52,7 +52,7 @@ bar.destroy();
 
 > **new FilterBar**(`state`, `actions`, `options?`): `FilterBar`
 
-Defined in: [filters/FilterBar.ts:88](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterBar.ts#L88)
+Defined in: [filters/FilterBar.ts:88](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterBar.ts#L88)
 
 #### Parameters
 
@@ -78,7 +78,7 @@ Defined in: [filters/FilterBar.ts:88](https://github.com/jeyabbalas/data-table/b
 
 > **destroy**(): `void`
 
-Defined in: [filters/FilterBar.ts:333](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterBar.ts#L333)
+Defined in: [filters/FilterBar.ts:333](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterBar.ts#L333)
 
 Destroy and clean up
 
@@ -92,7 +92,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [filters/FilterBar.ts:326](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterBar.ts#L326)
+Defined in: [filters/FilterBar.ts:326](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterBar.ts#L326)
 
 Get the bar's DOM element
 

@@ -6,7 +6,7 @@
 
 # Class: HiddenColumnsGutter
 
-Defined in: [table/HiddenColumnsGutter.ts:40](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L40)
+Defined in: [table/HiddenColumnsGutter.ts:40](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/HiddenColumnsGutter.ts#L40)
 
 HiddenColumnsGutter renders a horizontal bar of chips for hidden columns.
 It auto-shows when columns are hidden and collapses when all are visible.
@@ -29,7 +29,7 @@ stop, and focus, on the chip next to it.
 
 > **new HiddenColumnsGutter**(`state`, `actions`, `options?`): `HiddenColumnsGutter`
 
-Defined in: [table/HiddenColumnsGutter.ts:54](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L54)
+Defined in: [table/HiddenColumnsGutter.ts:54](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/HiddenColumnsGutter.ts#L54)
 
 #### Parameters
 
@@ -55,7 +55,7 @@ Defined in: [table/HiddenColumnsGutter.ts:54](https://github.com/jeyabbalas/data
 
 > **destroy**(): `void`
 
-Defined in: [table/HiddenColumnsGutter.ts:258](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L258)
+Defined in: [table/HiddenColumnsGutter.ts:258](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/HiddenColumnsGutter.ts#L258)
 
 Destroy and clean up
 
@@ -69,7 +69,7 @@ Destroy and clean up
 
 > **getElement**(): `HTMLElement`
 
-Defined in: [table/HiddenColumnsGutter.ts:251](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/table/HiddenColumnsGutter.ts#L251)
+Defined in: [table/HiddenColumnsGutter.ts:251](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/table/HiddenColumnsGutter.ts#L251)
 
 Get the gutter's DOM element
 

@@ -6,7 +6,7 @@
 
 # Interface: DuckDBStructTypeNode
 
-Defined in: [core/duckdbType.ts:155](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L155)
+Defined in: [core/duckdbType.ts:155](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L155)
 
 A STRUCT: `STRUCT(x DOUBLE, y DOUBLE)`.
 
@@ -27,7 +27,7 @@ if (node.kind === 'struct') {
 
 > `readonly` **fields**: readonly [`DuckDBStructField`](DuckDBStructField.md)[]
 
-Defined in: [core/duckdbType.ts:158](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L158)
+Defined in: [core/duckdbType.ts:158](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L158)
 
 ***
 
@@ -35,7 +35,7 @@ Defined in: [core/duckdbType.ts:158](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **kind**: `"struct"`
 
-Defined in: [core/duckdbType.ts:156](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L156)
+Defined in: [core/duckdbType.ts:156](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L156)
 
 ***
 
@@ -43,4 +43,4 @@ Defined in: [core/duckdbType.ts:156](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:157](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L157)
+Defined in: [core/duckdbType.ts:157](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L157)

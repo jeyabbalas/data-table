@@ -6,7 +6,7 @@
 
 # Interface: PatternFilter
 
-Defined in: [filters/FilterTypes.ts:161](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L161)
+Defined in: [filters/FilterTypes.ts:163](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L163)
 
 String-pattern filter on a categorical column. The [mode](#mode) value picks
 the comparison: `contains` / `starts` / `ends` use case-insensitive
@@ -20,7 +20,7 @@ string; SQL escaping is handled internally.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:163](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L163)
+Defined in: [filters/FilterTypes.ts:165](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L165)
 
 ***
 
@@ -28,7 +28,7 @@ Defined in: [filters/FilterTypes.ts:163](https://github.com/jeyabbalas/data-tabl
 
 > **mode**: `"contains"` \| `"regex"` \| `"starts"` \| `"ends"`
 
-Defined in: [filters/FilterTypes.ts:165](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L165)
+Defined in: [filters/FilterTypes.ts:167](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L167)
 
 ***
 
@@ -36,7 +36,7 @@ Defined in: [filters/FilterTypes.ts:165](https://github.com/jeyabbalas/data-tabl
 
 > **pattern**: `string`
 
-Defined in: [filters/FilterTypes.ts:164](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L164)
+Defined in: [filters/FilterTypes.ts:166](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L166)
 
 ***
 
@@ -44,4 +44,4 @@ Defined in: [filters/FilterTypes.ts:164](https://github.com/jeyabbalas/data-tabl
 
 > **type**: `"pattern"`
 
-Defined in: [filters/FilterTypes.ts:162](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L162)
+Defined in: [filters/FilterTypes.ts:164](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L164)

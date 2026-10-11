@@ -6,7 +6,7 @@
 
 # Interface: NullFilter
 
-Defined in: [filters/FilterTypes.ts:149](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L149)
+Defined in: [filters/FilterTypes.ts:151](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L151)
 
 NULL / NOT-NULL predicate filter — `column IS NULL` or `column IS NOT NULL`
 depending on the discriminator value of `type`.
@@ -17,7 +17,7 @@ depending on the discriminator value of `type`.
 
 > **column**: `string`
 
-Defined in: [filters/FilterTypes.ts:151](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L151)
+Defined in: [filters/FilterTypes.ts:153](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L153)
 
 ***
 
@@ -25,4 +25,4 @@ Defined in: [filters/FilterTypes.ts:151](https://github.com/jeyabbalas/data-tabl
 
 > **type**: `"null"` \| `"not-null"`
 
-Defined in: [filters/FilterTypes.ts:150](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/filters/FilterTypes.ts#L150)
+Defined in: [filters/FilterTypes.ts:152](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/filters/FilterTypes.ts#L152)

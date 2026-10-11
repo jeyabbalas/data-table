@@ -8,7 +8,7 @@
 
 > **parseDuckDBType**(`text`): [`DuckDBTypeNode`](../type-aliases/DuckDBTypeNode.md)
 
-Defined in: [core/duckdbType.ts:477](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L477)
+Defined in: [core/duckdbType.ts:477](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L477)
 
 Parse a DuckDB type name into a tree.
 

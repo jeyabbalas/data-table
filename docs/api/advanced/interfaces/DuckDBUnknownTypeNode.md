@@ -6,7 +6,7 @@
 
 # Interface: DuckDBUnknownTypeNode
 
-Defined in: [core/duckdbType.ts:228](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L228)
+Defined in: [core/duckdbType.ts:228](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L228)
 
 A type the parser could not read: text it does not understand, or nesting
 deeper than `MAX_TYPE_DEPTH` (256) levels.
@@ -27,7 +27,7 @@ node.sqlType; // 'STRUCT(a INTEGER'
 
 > `readonly` **kind**: `"unknown"`
 
-Defined in: [core/duckdbType.ts:229](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L229)
+Defined in: [core/duckdbType.ts:229](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L229)
 
 ***
 
@@ -35,4 +35,4 @@ Defined in: [core/duckdbType.ts:229](https://github.com/jeyabbalas/data-table/bl
 
 > `readonly` **sqlType**: `string`
 
-Defined in: [core/duckdbType.ts:230](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/duckdbType.ts#L230)
+Defined in: [core/duckdbType.ts:230](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/duckdbType.ts#L230)

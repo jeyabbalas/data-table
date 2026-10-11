@@ -357,6 +357,25 @@ describe('several changes in one refresh (real DuckDB)', () => {
     await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 7, row: 0 });
   });
 
+  it('…and in a view sorted by `__rowid__` descending, the same', async () => {
+    const m = await mount([2, 5, 7, 9]);
+    m.table.actions.setSort([{ column: '__rowid__', direction: 'desc' }]);
+    await m.settled(4); // [9, 7, 5, 2]
+    m.table.actions.setFocusedCell({ row: 1, column: 'grp' }); // row 7
+    m.table.annotations.remove(m.ids.get(9)!);
+    m.table.annotations.remove(m.ids.get(7)!);
+    await m.settled(2);
+    expect(await m.order('"__rowid__" DESC')).toEqual([5, 2]);
+    // Row 7's gap is at the start now, where row 5 is.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 0, column: 'grp' });
+    await expectLanded(
+      m,
+      await m.table.actions.nextAnnotation(),
+      { rowId: 5, row: 0 },
+      '"__rowid__" DESC',
+    );
+  });
+
   it("a row joins above as the cursor's row leaves: F8 goes on past the gap, not back", async () => {
     const m = await mount([2, 5, 7]);
     m.table.actions.setFocusedCell({ row: 1, column: 'grp' });

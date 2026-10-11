@@ -862,6 +862,96 @@ describe('AnnotationNavigator: revealRow', () => {
   });
 });
 
+describe('AnnotationNavigator: where a row stands, for a refresh of the view', () => {
+  const FILTER = '"b" IS NOT NULL';
+  const shownOf = (rowId: number): string =>
+    `(SELECT coalesce((${FILTER}), false) AS shown FROM "t" WHERE "__rowid__" = ${rowId}) AS "__dt_s__"`;
+  const located = (before: string, rowId: number): string =>
+    `SELECT "__dt_c__".n AS n, "__dt_s__".shown AS shown FROM (${before}) AS "__dt_c__", ${shownOf(rowId)}`;
+
+  /** A view filtered on `b`, of 1,000 rows, and the bridge's answer to `locate`. */
+  function filtered(): ReturnType<typeof makeHost> {
+    const host = makeHost({ rows: 1000, answer: () => [{ n: 7, shown: true }] });
+    host.state.filters.set([{ type: 'not-null', column: 'b' }]);
+    return host;
+  }
+
+  it('counts on from the nearest row the grid holds before it: the rows between them only', async () => {
+    const host = filtered();
+    // Positions 0 to 49 hold the even rowids, 0 to 98.
+    host.body.hold(0, 50, (p) => p * 2);
+    expect(await new AnnotationNavigator(host).locate(120, new AbortController().signal)).toEqual({
+      before: 7,
+      shown: true,
+    });
+    expect(host.queries).toEqual([
+      located(
+        `SELECT 50 + count(*) AS n FROM "t" WHERE (${FILTER}) AND "__rowid__" > 98 AND "__rowid__" < 120`,
+        120,
+      ),
+    ]);
+  });
+
+  it('back from the nearest row held after it, when that one is nearer', async () => {
+    const host = filtered();
+    host.body.hold(0, 10, (p) => p).hold(100, 150, (p) => p * 2);
+    await new AnnotationNavigator(host).locate(190, new AbortController().signal);
+    // Row 9 is 181 rowids before 190; row 200, at position 100, is 10 after.
+    expect(host.queries).toEqual([
+      located(
+        `SELECT 100 - count(*) AS n FROM "t" WHERE (${FILTER}) AND "__rowid__" >= 190 AND "__rowid__" < 200`,
+        190,
+      ),
+    ]);
+  });
+
+  it('from the start, when that is nearer than any row held', async () => {
+    const host = filtered();
+    host.body.hold(100, 150, (p) => p * 2);
+    await new AnnotationNavigator(host).locate(5, new AbortController().signal);
+    expect(host.queries).toEqual([
+      located(`SELECT count(*) AS n FROM "t" WHERE (${FILTER}) AND "__rowid__" < 5`, 5),
+    ]);
+  });
+
+  it('by `__rowid__` descending, the same from the other end', async () => {
+    const host = filtered();
+    host.state.sortColumns.set([{ column: '__rowid__', direction: 'desc' }]);
+    // Positions 0 to 10 hold rowids 999 down to 989.
+    host.body.hold(0, 11, (p) => 999 - p);
+    const nav = new AnnotationNavigator(host);
+    await nav.locate(900, new AbortController().signal);
+    // From the end, 99 rowids; from row 989, at position 10, 89.
+    expect(host.queries.at(-1)).toBe(
+      located(
+        `SELECT 11 + count(*) AS n FROM "t" WHERE (${FILTER}) AND "__rowid__" > 900 AND "__rowid__" < 989`,
+        900,
+      ),
+    );
+    host.body.cache.clear();
+    host.body.hold(100, 111, (p) => 999 - p);
+    await nav.locate(905, new AbortController().signal);
+    // Row 899, at position 100, comes after 905 in this order.
+    expect(host.queries.at(-1)).toBe(
+      located(
+        `SELECT 100 - count(*) AS n FROM "t" WHERE (${FILTER}) AND "__rowid__" > 899 AND "__rowid__" <= 905`,
+        905,
+      ),
+    );
+  });
+
+  it('sorted on a column, it compares every row with it, whatever the grid holds', async () => {
+    const host = filtered();
+    host.state.sortColumns.set([{ column: 'a', direction: 'asc' }]);
+    host.body.hold(0, 50, (p) => p * 2);
+    await new AnnotationNavigator(host).locate(120, new AbortController().signal);
+    expect(host.queries).toHaveLength(1);
+    expect(host.queries[0]).toContain('WITH "__dt_a__" AS (SELECT "a" AS "__dt_k0__"');
+    // Not counted on or back from a row held.
+    expect(host.queries[0]).not.toMatch(/\d+ [+-] count\(\*\)/);
+  });
+});
+
 describe('the model these tests navigate agrees with the annotation store', () => {
   it('on every mask, the annotated rows, getByCell and getByRow', () => {
     // A seeded mix: every scope and severity, rowIds negative, fractional

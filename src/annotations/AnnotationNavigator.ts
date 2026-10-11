@@ -82,6 +82,7 @@ export type NavigatorBody = Pick<
   TableBody,
   | 'cachedRowId'
   | 'cachedPositionOf'
+  | 'cachedRowsAround'
   | 'rowIdsArePositions'
   | 'cancelScrollAnimation'
   | 'scrollToRow'
@@ -1069,6 +1070,11 @@ export class AnnotationNavigator implements AnnotationNavigation {
    * back on its row after an in-place refresh, or at the gap the row left:
    * it is no navigation, and waits for none, as navigation waits for it.
    *
+   * It runs on each refresh while the cursor stands at a gap, or its row is
+   * off the rows the grid holds. In a view ordered by `__rowid__` it counts
+   * from the nearest row held (see {@link nearBeforeSQL}); in a sorted view
+   * it compares every row with the cursor's, as a sorted search does.
+   *
    * @throws `QueryError` coded `INVALID_ROWID` when no row has it,
    *   `NO_TABLE` without a table, `QUERY_ABORTED` when `signal` aborts.
    *
@@ -1082,12 +1088,48 @@ export class AnnotationNavigator implements AnnotationNavigation {
     const literal = rowIdLiteral(rowId);
     const [found] = await this.query<{ n: number; shown: boolean }>(
       `SELECT "__dt_c__".n AS n, "__dt_s__".shown AS shown` +
-        ` FROM (${this.beforeSQL(view, where, literal)}) AS "__dt_c__",` +
+        ` FROM (${this.nearBeforeSQL(view, where, rowId) ?? this.beforeSQL(view, where, literal)}) AS "__dt_c__",` +
         ` (${this.shownSQL(view, where, literal)}) AS "__dt_s__"`,
       signal,
     );
     if (!found) throw this.noRow(rowId);
     return { before: found.n, shown: found.shown };
+  }
+
+  /**
+   * {@link beforeSQL} in a view ordered by `__rowid__`, counted from the
+   * row the grid holds nearest `rowId` instead of the view's start, when
+   * that row is nearer by `__rowid__`: the rows between the two, a range
+   * the scan skips to, on from the held row's position, or back from it.
+   * `null` in a view otherwise ordered, or when the grid holds no row
+   * nearer. The positions held are the view's: the refresh that asks has
+   * the grid's rows back, and a newer one drops its answer.
+   */
+  private nearBeforeSQL(view: string, where: string, rowId: number): string | null {
+    const { state } = this.host;
+    const first = gridOrder(state.sortColumns.get(), state.schema.get())?.[0];
+    if (first?.column !== ROWID) return null;
+    const near = this.host.getTableBody()?.cachedRowsAround(rowId);
+    if (!near) return null;
+    const desc = first.desc;
+    // The row held before `rowId` in the view's order, and the one after it.
+    const ahead = desc ? near.above : near.below;
+    const behind = desc ? near.below : near.above;
+    const filtered = where ? `(${where}) AND ` : '';
+    let span = desc ? state.totalRows.get() - 1 - rowId : rowId;
+    let sql: string | null = null;
+    if (ahead && Math.abs(ahead.rowId - rowId) < span) {
+      span = Math.abs(ahead.rowId - rowId);
+      const [lo, hi] = desc ? [rowId, ahead.rowId] : [ahead.rowId, rowId];
+      sql = `SELECT ${ahead.position + 1} + count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} > ${lo} AND ${ROWID} < ${hi}`;
+    }
+    if (behind && Math.abs(behind.rowId - rowId) < span) {
+      const range = desc
+        ? `${ROWID} > ${behind.rowId} AND ${ROWID} <= ${rowId}`
+        : `${ROWID} >= ${rowId} AND ${ROWID} < ${behind.rowId}`;
+      sql = `SELECT ${behind.position} - count(*) AS n FROM ${view} WHERE ${filtered}${range}`;
+    }
+    return sql;
   }
 
   /** The error for a `__rowid__` no row of the table has, as `getCellValue` throws it. */

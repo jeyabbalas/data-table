@@ -666,24 +666,28 @@ search alone took:
 | `revealRow` in a sorted view                         | 90–360 ms  |
 | Building the table of annotated rows, the first time | 0.64–0.7 s |
 
-An unsorted SQL search places the row it finds by counting the rows
-between the cursor's row and it, not every row before it, so a jump deep in
-the table stays cheap. A cursor on a row the grid no longer holds costs one
+An unsorted SQL search places the row it finds by counting the rows between
+the cursor's row and it, not every row before it, so a jump deep in the
+table stays cheap. A cursor on a row the grid no longer holds costs one
 query more to find that row: 0.5 s filtered and 1.4 s sorted, at row
 7,000,000. Under the annotated filter, the table runs that query itself, in
 the background, when a sort leaves the cursor off-screen, so that the next
 refresh can follow the row there; and the gap a resolved row leaves takes
-one query to find once the view's count is in, up to about 90 ms deep in
-ten million rows with a million annotated rows, which `F8` right after the
-change waits for. The first navigation in a store with cell annotations
-builds a by-row index of them, 0.2 s and 24 bytes an annotation at a
-million, which the reads of each held row's annotations use from then on.
-In a sorted view the search compares rows as the grid's `ORDER BY` does:
-NULL last in either direction, NaN after every number, `__rowid__` last.
-The navigation code is a chunk of its own (4.60 kB brotli), loaded the
-first time it runs, or the first time the annotated view looks for the
-cursor's row beyond the rows the grid holds: to follow it through a
-refresh, or to learn which row it is on after a sort.
+one query to find once the view's count is in, which `F8` right after the
+change waits for, and which runs again on each refresh while the cursor
+stands at the gap. Unsorted, it counts from the nearest row the grid holds:
+about 23 ms at any depth in Node's DuckDB-WASM with the gap among them, and
+up to about 90 ms in Chrome deep in ten million rows with a million
+annotated rows when it is far from them. Sorted on a column, it compares
+every row with the one that left: a few hundred ms. The first navigation in
+a store with cell annotations builds a by-row index of them, 0.2 s and 24
+bytes an annotation at a million, which the reads of each held row's
+annotations use from then on. In a sorted view the search compares rows as
+the grid's `ORDER BY` does: NULL last in either direction, NaN after every
+number, `__rowid__` last. The navigation code is a chunk of its own (4.60 kB
+brotli), loaded the first time it runs, or the first time the annotated view
+looks for the cursor's row beyond the rows the grid holds: to follow it
+through a refresh, or to learn which row it is on after a sort.
 
 ### Showing only the annotated rows
 

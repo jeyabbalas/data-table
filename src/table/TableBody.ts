@@ -2871,6 +2871,36 @@ export class TableBody {
   }
 
   /**
+   * The rows the body holds nearest the row whose `__rowid__` is `rowId`, by
+   * `__rowid__`: the one with the greatest `__rowid__` below it and the one
+   * with the smallest above it, each with its position, or `null` on a side
+   * it holds none of. One pass over the rows held. Where a refresh of the
+   * annotated view puts a row it no longer holds, in a view ordered by
+   * `__rowid__`, is counted from the nearer of them; see
+   * {@link cachedRowId} for the scroll a filter change animates.
+   *
+   * @internal
+   */
+  cachedRowsAround(rowId: number): {
+    below: { rowId: number; position: number } | null;
+    above: { rowId: number; position: number } | null;
+  } {
+    let below: { rowId: number; position: number } | null = null;
+    let above: { rowId: number; position: number } | null = null;
+    if (this.isAnimatingScroll) return { below, above };
+    for (const [position, row] of this.rowDataCache) {
+      const id = rowIdOf(row);
+      if (id === null || id === rowId) continue;
+      if (id < rowId) {
+        if (!below || id > below.rowId) below = { rowId: id, position };
+      } else if (!above || id < above.rowId) {
+        above = { rowId: id, position };
+      }
+    }
+    return { below, above };
+  }
+
+  /**
    * Whether every row's position is its `__rowid__`: no filter, no sort, and
    * the dense `__rowid__` the range fast path reads by still holds.
    *

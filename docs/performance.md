@@ -752,7 +752,10 @@ As of 0.10.0, with the source of each:
   right after a change to the annotations first waits for the view to
   refresh, 0.4–0.7 s at a million annotated rows, and, when the change took
   the cursor's row out of the view, for the query that finds the gap the
-  row left: up to about 90 ms deep in ten million rows.
+  row left: up to about 90 ms deep in ten million rows, and 215–390 ms in
+  Node's DuckDB-WASM in a view sorted on a column, where it compares every
+  row with the one that left. Each refresh while the cursor stands at the
+  gap runs it again.
 - **The annotated filter at a million annotated rows.** Each of its queries
   reads the table of annotated rows (`src/filters/FilterSQL.ts`). On ten
   million rows, the filtered count took 0.34 s in Node's DuckDB-WASM (72 ms
@@ -979,12 +982,19 @@ between the cursor's row and it. Under the annotated filter, a jump right
 after a change to the annotations first waits for the view to refresh,
 0.4–0.7 s at a million annotated rows. When the change took the cursor's
 row out of the view, finding the gap the row left takes one query once the
-count is in, up to about 90 ms deep in ten million rows with a million
-annotated rows, which the cursor waits for before it moves there. After a
-sort, or a change to a derived column the filters or the sort name, the
-table asks in the background for the row at the cursor's place when the
-grid does not hold it (the last row of the table above), so that the next
-refresh can follow that row. The navigator's chunk is 4.60 kB.
+count is in, which the cursor waits for before it moves there; it runs
+again on each refresh while the cursor stands at the gap. In a view ordered
+by `__rowid__`, an unsorted one among them, it counts only the rows between
+the gap and the nearest row the grid holds. In Node's DuckDB-WASM, on ten
+million rows with a million annotated rows, it took about 23 ms at any
+depth with the gap among the rows held, against up to 105 ms at row
+9,000,000 counted from the start, as for a gap far from them (up to about
+90 ms in Chrome); sorted on a column, where it compares every row with the
+one that left, 215–390 ms. After a sort, or a change to a derived column
+the filters or the sort name, the table asks in the background for the row
+at the cursor's place when the grid does not hold it (the last row of the
+table above), so that the next refresh can follow that row. The
+navigator's chunk is 4.60 kB.
 
 **The annotated filter.** In Node's DuckDB-WASM, on 10,000,000 rows: for
 1,000,000 annotated rows, building the statement took 56 ms and building the

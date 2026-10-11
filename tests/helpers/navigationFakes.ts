@@ -184,6 +184,19 @@ export class FakeBody implements NavigatorBody {
     return null;
   }
 
+  cachedRowsAround(rowId: number): {
+    below: { rowId: number; position: number } | null;
+    above: { rowId: number; position: number } | null;
+  } {
+    let below: { rowId: number; position: number } | null = null;
+    let above: { rowId: number; position: number } | null = null;
+    for (const [position, id] of this.cache) {
+      if (id < rowId && (!below || id > below.rowId)) below = { rowId: id, position };
+      if (id > rowId && (!above || id < above.rowId)) above = { rowId: id, position };
+    }
+    return { below, above };
+  }
+
   rowIdsArePositions(): boolean {
     return this.positions;
   }

@@ -136,11 +136,17 @@ interface Mounted {
 /**
  * The table, of `rows` rows (12 by default), as CSV or, with `json`, as
  * JSON with a list column, with a row annotation of each of `annotated`
- * rows, under the annotated filter, its rows in view fetched.
+ * rows, under the annotated filter, its rows in view fetched. The grid's
+ * fetch blocks and row cache are its defaults unless given.
  */
 async function mount(
   annotated: number[],
-  { rows = 12, json: asJson = false }: { rows?: number; json?: boolean } = {},
+  {
+    rows = 12,
+    json: asJson = false,
+    fetchBlockSize,
+    rowCacheRows,
+  }: { rows?: number; json?: boolean; fetchBlockSize?: number; rowCacheRows?: number } = {},
 ): Promise<Mounted> {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -156,6 +162,8 @@ async function mount(
     presets: false,
     expressionFilter: false,
     visualizations: false,
+    ...(fetchBlockSize === undefined ? {} : { fetchBlockSize }),
+    ...(rowCacheRows === undefined ? {} : { rowCacheRows }),
   });
   tables.push(table);
   const added = table.annotations.addMany(
@@ -404,6 +412,85 @@ describe('a row that moves out of the rows the grid fetches again (real DuckDB)'
     expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
     expect(body.getVisibleRange().start).toBe(0);
     await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
+  });
+});
+
+describe("the cursor's row out of the grid's row cache (real DuckDB)", () => {
+  /**
+   * 600 annotated rows, a grid that keeps 64 rows, 16 at a time, and the
+   * cursor put on row 400 before its rows have landed; then the view
+   * scrolled to the top, and back down, until the grid holds row 400 no
+   * more.
+   */
+  async function evicted(): Promise<Mounted> {
+    const m = await mount(
+      Array.from({ length: 600 }, (_, rowId) => rowId),
+      { rows: 600, fetchBlockSize: 16, rowCacheRows: 64 },
+    );
+    expect(await m.table.actions.revealRow(400, 'grp')).toEqual({ row: 400, column: 'grp' });
+    const body = m.table.container.getTableBody()!;
+    await vi.waitFor(() => expect(body.cachedRowId(400)).toBe(400), { timeout: 5_000 });
+    for (const row of [200, 0]) {
+      body.scrollToRow(row, 'start');
+      await vi.waitFor(() => expect(body.cachedRowId(row)).toBe(row), { timeout: 5_000 });
+    }
+    expect(body.cachedRowId(400)).toBe(null);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+    return m;
+  }
+
+  it('a row above it resolved: the cursor follows its row all the same', async () => {
+    const m = await evicted();
+    m.table.annotations.remove(m.ids.get(10)!);
+    await m.settled(599);
+    // Row 400 is at position 399 now.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
+  });
+
+  it('its own issue resolved: the cursor stands at the gap it left, and F8 and Shift+F8 go on from there', async () => {
+    const m = await evicted();
+    m.table.annotations.remove(m.ids.get(400)!);
+    await m.settled(599);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
+
+    const second = await evicted();
+    second.table.annotations.remove(second.ids.get(400)!);
+    await second.settled(599);
+    await expectLanded(second, await second.table.actions.previousAnnotation(), {
+      rowId: 399,
+      row: 399,
+    });
+  });
+});
+
+describe('the row the cursor is on, through a change of the view (real DuckDB)', () => {
+  it('a sort forgets the row the cursor was on, and learns the one there now', async () => {
+    const m = await mount(
+      Array.from({ length: 600 }, (_, rowId) => rowId),
+      { rows: 600, fetchBlockSize: 16, rowCacheRows: 64 },
+    );
+    expect(await m.table.actions.revealRow(400, 'grp')).toEqual({ row: 400, column: 'grp' });
+    const body = m.table.container.getTableBody()!;
+    await vi.waitFor(() => expect(body.cachedRowId(400)).toBe(400), { timeout: 5_000 });
+
+    // By `grp` descending: rows of `grp` 2, then 1, then 0, each by rowid.
+    // Position 400, where the cursor stays, is row 0's.
+    const SORT = '"grp" DESC, "__rowid__"';
+    m.table.actions.setSort([{ column: 'grp', direction: 'desc' }]);
+    await vi.waitFor(() => expect(body.cachedRowId(400)).toBe(0), { timeout: 5_000 });
+    for (const row of [200, 0]) {
+      body.scrollToRow(row, 'start');
+      await vi.waitFor(() => expect(body.cachedRowId(row)).not.toBe(null), { timeout: 5_000 });
+    }
+    expect(body.cachedRowId(400)).toBe(null);
+
+    // Row 2, first in the sort, resolved: row 0 is at position 399 now.
+    m.table.annotations.remove(m.ids.get(2)!);
+    await m.settled(599);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 399, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 3, row: 400 }, SORT);
   });
 });
 

@@ -408,6 +408,13 @@ export class TableContainer {
   // Navigation searches from the gap. It holds while the cursor is that very
   // cell, until a change of the view.
   private cursorGap: CursorGap | null = null;
+  // The row the cursor is on, by `__rowid__`: noted when the cursor is put
+  // there, or, the row still loading then, once it renders. An in-place
+  // refresh follows that row when the body no longer holds it, as after the
+  // user scrolled far from the cursor. For `cell`, the cursor it was noted
+  // for, only; a change of the view forgets the row, and learns the new one
+  // when it renders.
+  private cursorRow: { readonly cell: GridCell; rowId: number | null } | null = null;
   // Set while the table moves the cursor itself, to follow its row through
   // an in-place refresh: a navigation waiting for that refresh goes on.
   private followingRow = false;
@@ -716,11 +723,16 @@ export class TableContainer {
         this.annotatedRefresh?.controller.abort();
         this.annotatedRefresh = null;
         this.cursorGap = null;
+        this.noteCursorRow(this.state.focusedCell.get(), null);
       };
       this.unsubscribes.push(
         this.state.filters.subscribe(viewChanged),
         this.state.sortColumns.subscribe(viewChanged),
         this.state.tableName.subscribe(viewChanged),
+        // The table's own moves note the row they follow themselves.
+        this.state.focusedCell.subscribe((cell) => {
+          if (!this.followingRow) this.noteCursorRow(cell);
+        }),
       );
       this.annotatedRowsSource = {
         ensureFresh: (signal) => this.loadAnnotatedRows().then((rows) => rows.ensureFresh(signal)),
@@ -787,18 +799,20 @@ export class TableContainer {
    * filter keeps asks: the body fetches the rows in view again, keeping the
    * scroll position, and the facade counts them again.
    *
-   * The cursor follows its row, which is noted now: the row the body holds
-   * at the cursor; at a gap a refresh left (see `cursorGap`), the row that
-   * left it; or the row a refresh still running follows, whose rows are not
-   * back. Once the rows in view are back, a cursor whose row is among them
-   * goes to it at once, before a key can act from the row now in its place.
-   * Else, once the count is in, one query says where the row stands: off
-   * the rows held, or past the view's old end, the cursor goes to it; gone
-   * from the view, the cursor goes to the gap it left, where the first row
-   * after it is now (or, past the last row, to the last), and navigation
-   * searches from that gap. Nothing scrolls. Nothing follows if the cursor
-   * moved meanwhile, a newer refresh started or the view changed, nor when
-   * the cursor's row is not known: the cursor stays where it is.
+   * The cursor follows its row, which is noted now: at a gap a refresh left
+   * (see `cursorGap`), the row that left it; the row the body holds at the
+   * cursor, or, the user having scrolled far from it, the one noted when
+   * the cursor was put there (see `cursorRow`); or the row a refresh still
+   * running follows, whose rows are not back. Once the rows in view are
+   * back, a cursor whose row is among them goes to it at once, before a key
+   * can act from the row now in its place. Else, once the count is in, one
+   * query says where the row stands: off the rows held, or past the view's
+   * old end, the cursor goes to it; gone from the view, the cursor goes to
+   * the gap it left, where the first row after it is now (or, past the
+   * last row, to the last), and navigation searches from that gap. Nothing
+   * scrolls. Nothing follows if the cursor moved meanwhile, a newer refresh
+   * started or the view changed, nor when the cursor's row is not known:
+   * the cursor stays where it is.
    */
   private refreshAnnotatedView(): void {
     const body = this.tableBody;
@@ -811,7 +825,9 @@ export class TableContainer {
     if (cursor && cursor.row >= 0) {
       rowId = carried
         ? running.rowId
-        : (this.cursorGapAt(cursor)?.rowId ?? body?.cachedRowId(cursor.row) ?? null);
+        : (this.cursorGapAt(cursor)?.rowId ??
+          body?.cachedRowId(cursor.row) ??
+          (this.cursorRow?.cell === cursor ? this.cursorRow.rowId : null));
     }
     const refresh: AnnotatedRefresh = {
       origin: carried ? running.origin : cursor,
@@ -859,9 +875,12 @@ export class TableContainer {
       // cursor stays where it is.
     } finally {
       if (this.annotatedRefresh === refresh) {
-        // Not placed: which row the cursor is on is not known.
+        // Not placed: which row the cursor is on is not known, until the
+        // row at its place renders.
         this.annotatedRefresh = null;
-        if (this.cursorGapAt(this.state.focusedCell.get())) this.cursorGap = null;
+        const cursor = this.state.focusedCell.get();
+        if (this.cursorGapAt(cursor)) this.cursorGap = null;
+        if (cursor === refresh.cursor) this.noteCursorRow(cursor, null);
       }
     }
   }
@@ -906,6 +925,8 @@ export class TableContainer {
     const placed = this.state.focusedCell.get();
     this.cursorGap =
       gap !== null && placed ? { cell: placed, rowId: refresh.rowId!, pos: gap } : null;
+    // On its row; at a gap, on the row after it, once that renders.
+    this.noteCursorRow(placed, gap === null ? refresh.rowId : null);
 
     const from = refresh.origin ?? cursor;
     const at = (cell: GridCell | null | undefined): boolean =>
@@ -921,6 +942,25 @@ export class TableContainer {
     }
     const shown = this.valueInspector?.getShown();
     if (to !== null && shown && shown.row === from.row) this.valueInspector!.moveTo(to);
+  }
+
+  /**
+   * Note the row `cell`, the cursor, is on (see `cursorRow`): `rowId` when
+   * given, else the row the body holds there, if it does yet; one still
+   * loading is noted once it renders.
+   */
+  private noteCursorRow(
+    cell: GridCell | null,
+    rowId: number | null = cell ? (this.tableBody?.cachedRowId(cell.row) ?? null) : null,
+  ): void {
+    this.cursorRow = cell && cell.row >= 0 ? { cell, rowId } : null;
+  }
+
+  /** After a render: a cursor row still loading when it was noted, once it is there. */
+  private fillCursorRow(): void {
+    const noted = this.cursorRow;
+    if (!noted || noted.rowId !== null || noted.cell !== this.state.focusedCell.get()) return;
+    noted.rowId = this.tableBody?.cachedRowId(noted.cell.row) ?? null;
   }
 
   /** The gap `cell` stands at, while it is the cursor an in-place refresh left there; see `cursorGap`. */
@@ -2052,6 +2092,7 @@ export class TableContainer {
               onRowsRendered: () => {
                 this.syncActiveDescendant();
                 this.openPendingInspect();
+                this.fillCursorRow();
               },
               // Where the body parks real DOM focus when it is about to detach the
               // row holding it. Passed explicitly rather than rediscovered with

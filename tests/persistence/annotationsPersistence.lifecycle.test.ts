@@ -22,6 +22,8 @@ import {
   deleteDatabase,
   holdAnnotationsDb,
   plant,
+  rawAnnotations,
+  rawChunks,
   rawSession,
   sessionSnapshot,
 } from '../helpers/sessionDatabases';
@@ -415,6 +417,51 @@ describe('a load turned away for its source options, under the annotated filter'
 });
 
 describe('destroy() with a save under way', () => {
+  /** A table on `name` with the store it owns, the default. */
+  const ownTable = (name: string): Promise<DataTable> =>
+    mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], `${name}.csv`),
+      tableName: name,
+      ...BARE,
+    });
+
+  it('a new table on the same name, mounted at once, restores what it was writing', async () => {
+    const table = await ownTable('A');
+    const save = vi.spyOn(SessionStore.prototype, 'save');
+    const blocker = await holdAnnotationsDb();
+    table.annotations.add({ id: 'new', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    table.actions.toggleSort('id');
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    save.mockRestore();
+    await table.destroy();
+    // A route change back: the table again, at once.
+    const again = ownTable('A');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await blocker.release();
+    const second = await again;
+    expect(second.state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(second.annotations.getAll().map((a) => a.id)).toEqual(['new']);
+  }, 10_000);
+
+  it('a new table on the old name, after a load and a destroy, restores what the load saved', async () => {
+    const table = await ownTable('A');
+    const blocker = await holdAnnotationsDb();
+    // Within the debounce: the load writes the save it finds pending.
+    table.annotations.add({ id: 'new', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    table.actions.toggleSort('id');
+    await table.loadData(new File([''], 'b.csv'), { tableName: 'B' });
+    await table.destroy();
+    const again = ownTable('A');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await blocker.release();
+    const second = await again;
+    expect(second.state.sortColumns.get()).toEqual([{ column: 'id', direction: 'asc' }]);
+    expect(second.annotations.getAll().map((a) => a.id)).toEqual(['new']);
+  }, 10_000);
+
   it('lets it land, with the state asked for after it, in the store it owns', async () => {
     const table = await mount({
       container: container(),
@@ -479,4 +526,28 @@ describe('AutoSave around a load or a clear', () => {
     await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 3000 });
     sessionStore.close();
   });
+});
+
+describe('clearSession() and destroy() in one task', () => {
+  it('deletes the session and its annotations, and resolves', async () => {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], 'b.csv'),
+      tableName: 'B',
+      ...BARE,
+    });
+    table.actions.toggleSort('id');
+    table.annotations.add({ id: 'x', scope: 'row', rowId: 0, severity: 'error', message: 'm' });
+    await vi.waitFor(async () => expect(await rawAnnotations('B')).toBeDefined(), {
+      timeout: 3000,
+    });
+    // A "reset and close" button.
+    const cleared = table.clearSession();
+    await table.destroy();
+    await expect(cleared).resolves.toBeUndefined();
+    expect(await rawSession('B')).toBeUndefined();
+    expect(await rawAnnotations('B')).toBeUndefined();
+    expect(await rawChunks('B')).toEqual([]);
+  }, 10_000);
 });

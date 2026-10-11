@@ -325,8 +325,35 @@ interface TableRecords {
    * before one writes nothing more, and a load records nothing.
    */
   overtakes: number;
-  /** The last operation on the table: the next waits for it. */
+  /** The last operation this store asked for on the table, which a {@link SessionStore.close} lets end. */
   tail: Promise<void>;
+}
+
+/**
+ * The last operation of every session store on each table, by database and
+ * table name: an operation on a table, whichever store asks for it, starts
+ * once those asked for before it have ended, so that a load does not read a
+ * session record another store's save, closing, is still writing. An entry
+ * goes once its operation has ended, unless another has followed.
+ */
+const tableTails = new Map<string, Promise<void>>();
+
+function tableKey(tableName: string): string {
+  return `${DB_NAME}\u0000${tableName}`;
+}
+
+/** The last operation on `tableName`, of any store: resolved when there is none. */
+function tableTail(tableName: string): Promise<void> {
+  return tableTails.get(tableKey(tableName)) ?? Promise.resolve();
+}
+
+/** Make `tail` the last operation on `tableName`, until it ends. */
+function followTable(tableName: string, tail: Promise<void>): void {
+  const key = tableKey(tableName);
+  tableTails.set(key, tail);
+  void tail.then(() => {
+    if (tableTails.get(key) === tail) tableTails.delete(key);
+  });
 }
 
 /** Open `name` at `version`, or `null` when it cannot be. */
@@ -966,17 +993,13 @@ export class SessionStore {
   private readonly onLoadIssue: SessionStoreOptions['onLoadIssue'];
   /**
    * What this store knows of each table's stored records, by table name, and
-   * the table's queue: `save`, `load` and `delete` of one table run one at a
-   * time, in call order, so that none reads or writes what another is half
+   * its last operation on the table. `save`, `load` and `delete` of one
+   * table run one at a time, in call order, whichever store asks for them
+   * (see `tableTails`), so that none reads or writes what another is half
    * way through. `saveSync`, which cannot wait, goes first: an asynchronous
    * save it overtook stops where it is, the newer state being written.
    */
   private readonly tables = new Map<string, TableRecords>();
-  /**
-   * The last operation on each table that a {@link close} let end before it
-   * closed the connections: the table's next operation waits for it.
-   */
-  private readonly closing = new Map<string, Promise<void>>();
 
   constructor(options?: SessionStoreOptions) {
     this.onLoadIssue = options?.onLoadIssue;
@@ -1103,22 +1126,48 @@ export class SessionStore {
         dropped: null,
         pending: null,
         overtakes: 0,
-        tail: this.closing.get(tableName) ?? Promise.resolve(),
+        tail: Promise.resolve(),
       };
-      this.closing.delete(tableName);
       this.tables.set(tableName, table);
     }
     return table;
   }
 
-  /** Run `operation` in `table`'s turn: once every operation on it asked for before has ended. */
-  private inTurn<R>(table: TableRecords, operation: () => Promise<R>): Promise<R> {
-    const run = table.tail.then(operation);
-    table.tail = run.then(
+  /**
+   * Run `operation` in the turn of `tableName`, whose records `table` are:
+   * once every operation on it asked for before has ended, of this store or
+   * another. Asked for now, synchronously, so that a {@link close} right
+   * after lets it end.
+   */
+  private inTurn<R>(
+    tableName: string,
+    table: TableRecords,
+    operation: () => Promise<R>,
+  ): Promise<R> {
+    const run = tableTail(tableName).then(operation);
+    const tail = run.then(
       () => undefined,
       () => undefined,
     );
+    table.tail = tail;
+    followTable(tableName, tail);
     return run;
+  }
+
+  /**
+   * The connections an operation asked for now runs on, read now when the
+   * databases are open, so that a {@link close} right after lets it end on
+   * them. Otherwise opened in its turn, unless a close has come since: a
+   * close refuses the operations it finds still waiting for the databases.
+   */
+  private connectionsAsked(): () => Promise<Connections | null> {
+    const open = this.isOpen() ? this.connections() : null;
+    if (open !== null) return () => Promise.resolve(open);
+    const generation = this.generation;
+    return async () => {
+      if (generation !== this.generation || !(await this.ensureOpen())) return null;
+      return generation === this.generation ? this.connections() : null;
+    };
   }
 
   /**
@@ -1136,10 +1185,10 @@ export class SessionStore {
    * changed without their file being taken. Any other file is compared by
    * identity: by its `annotations` array and that array's length, so an
    * edit made in place, to a file this store wrote or loaded, is not seen
-   * (an annotation pushed onto the array is). Saves of one table run one at
-   * a time, in call order, and a {@link close} lets those asked for before
-   * it end. When `dt-annotations` could not be opened, the annotations stay
-   * in the session record.
+   * (an annotation pushed onto the array is). Operations on one table run
+   * one at a time, in call order, whichever store asks for them, and a
+   * {@link close} lets those asked for before it end. When `dt-annotations`
+   * could not be opened, the annotations stay in the session record.
    *
    * Rejects with the underlying `DOMException` (typically
    * `QuotaExceededError`) when IDB IS available but the session record's
@@ -1155,14 +1204,13 @@ export class SessionStore {
     const tableName = snapshot.tableName;
     const table = this.table(tableName);
     const overtakes = table.overtakes;
-    if (!(await this.ensureOpen())) return;
-    const connections = this.connections();
-    if (connections === null) return;
     // A synchronous save since has the newer state written; a delete, none.
     const stale = (): boolean => table.overtakes !== overtakes;
-    return this.inTurn(table, () =>
-      this.saveInTurn(snapshot, tableName, table, connections, stale),
-    );
+    const connections = this.connectionsAsked();
+    return this.inTurn(tableName, table, async () => {
+      const open = await connections();
+      if (open !== null) await this.saveInTurn(snapshot, tableName, table, open, stale);
+    });
   }
 
   private async saveInTurn(
@@ -1469,10 +1517,13 @@ export class SessionStore {
         );
       }
     });
-    table.tail = Promise.all([table.tail, settled]).then(
+    // The table's next operation, of any store, waits for these writes.
+    const tail = Promise.all([tableTail(tableName), settled]).then(
       () => undefined,
       () => undefined,
     );
+    table.tail = tail;
+    followTable(tableName, tail);
     if (annotationsError !== null) throw annotationsWriteFailure(annotationsError.error, tableName);
   }
 
@@ -1490,15 +1541,17 @@ export class SessionStore {
    * the snapshot, which warns. Annotations saved in the session record
    * itself — by versions before the record, or by a custom store — win over
    * any record. A record a session saved without annotations stopped naming
-   * is deleted, if it is still stored. A load waits for the table's saves
-   * asked for before it.
+   * is deleted, if it is still stored. A load waits for the table's
+   * operations asked for before it, of this store or another: a save that a
+   * closed store lets end lands first.
    */
   async load(tableName: string): Promise<SessionSnapshot | null> {
-    if (!(await this.ensureOpen())) return null;
-    const connections = this.connections();
-    if (connections === null) return null;
     const table = this.table(tableName);
-    return this.inTurn(table, () => this.loadInTurn(tableName, table, connections));
+    const connections = this.connectionsAsked();
+    return this.inTurn(tableName, table, async () => {
+      const open = await connections();
+      return open === null ? null : this.loadInTurn(tableName, table, open);
+    });
   }
 
   private async loadInTurn(
@@ -1596,12 +1649,11 @@ export class SessionStore {
   async delete(tableName: string): Promise<void> {
     const table = this.table(tableName);
     table.overtakes++;
-    if (!(await this.ensureOpen())) return;
-    const connections = this.connections();
-    if (connections === null) return;
-    return this.inTurn(table, async () => {
-      const db = usable(connections.db);
-      if (db === null) return;
+    const asked = this.connectionsAsked();
+    return this.inTurn(tableName, table, async () => {
+      const connections = await asked();
+      const db = connections === null ? null : usable(connections.db);
+      if (connections === null || db === null) return;
       // Nothing a synchronous save makes meanwhile names the records going.
       table.landed = undefined;
       table.embedded = false;
@@ -1636,9 +1688,12 @@ export class SessionStore {
 
   /**
    * Close both database connections and reset state, once the operations
-   * asked for before have ended: a save under way, or waiting its turn,
-   * still lands, as `DataTable.destroy()` needs of the saves it leaves. An
-   * operation asked for after opens the databases again.
+   * asked for before have ended, those asked for in the same task included:
+   * a save under way, or waiting its turn, still lands, as
+   * `DataTable.destroy()` needs of the saves it leaves, and a delete still
+   * deletes. An operation asked for after opens the databases again, and
+   * starts once those have ended; one asked for before the databases were
+   * open, and still waiting for them, does nothing.
    */
   close(): void {
     this.generation++;
@@ -1647,20 +1702,13 @@ export class SessionStore {
     this.annotationsDb = null;
     this.annotationsUnavailable = false;
     this.opening = null;
-    const ending: Promise<void>[] = [];
-    for (const [tableName, table] of this.tables) {
-      ending.push(table.tail);
-      this.closing.set(tableName, table.tail);
-    }
+    const ending = [...this.tables.values()].map((table) => table.tail);
     this.tables.clear();
     const closeConnections = (): void => {
       for (const connection of connections) {
         if (connection === null) continue;
         closedConnections.add(connection);
         connection.close();
-      }
-      for (const [tableName, tail] of this.closing) {
-        if (ending.includes(tail)) this.closing.delete(tableName);
       }
     };
     if (ending.length === 0) closeConnections();

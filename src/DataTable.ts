@@ -1936,8 +1936,13 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       if (sessionStore && key) await sessionStore.delete(key);
       // If destroy() raced ahead while we were awaiting the IDB delete, drop
       // the in-memory reset — the state slices are about to be torn down and
-      // mutating them now would emit on a dying emitter.
+      // mutating them now would emit on a dying emitter. The session is
+      // deleted (a store destroy() closes lets the delete end), and the
+      // in-memory state goes with the table: done, unless a load in flight
+      // has landed a table of its own, whose session is not.
       if (destroyed) {
+        const current = state.baseTableName.get() ?? state.tableName.get();
+        if (current === null || current === key) return;
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
       // In its turn, after a derived-column change running now, which then

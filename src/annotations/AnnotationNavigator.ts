@@ -17,13 +17,19 @@
  *    a binary search over the store's sorted annotated rows;
  * 3. SQL, against the helper table of annotated rows (see
  *    `annotatedRowsSource`). Unsorted, the smallest `__rowid__` past the
- *    cursor's, and a count of the rows between the two for its position.
- *    Sorted, the first row in the grid's order past the cursor's row, found
- *    by comparing each row with it key by key as the grid's `ORDER BY` does
+ *    cursor's, and a count of the rows before it for its position. Sorted,
+ *    the first row in the grid's order past the cursor's row, found by
+ *    comparing each row with it key by key as the grid's `ORDER BY` does
  *    (NULLS LAST, `__rowid__` last), and a count of the rows before it.
  *    A sort column whose type the parser could not read falls back to
  *    numbering the view with `row_number()`, which is exact for any type
  *    and slow.
+ *
+ * Under an annotated filter, the view follows the annotations, refreshed in
+ * place a moment after they change. A navigation first brings it up to
+ * date and waits for that refresh, which puts the cursor back on its row;
+ * when the cursor's row has left the view, the search starts at the gap it
+ * left. A view refreshed again while the search runs is searched again.
  */
 
 import type { StateActions } from '../core/Actions';
@@ -103,8 +109,33 @@ export interface AnnotationNavigatorHost {
   /**
    * Resolves once the filters in state have had their row count: the
    * grid's scroll range, and the "of N" a landing announces, are then theirs.
+   * The wait is dropped when `signal` aborts.
    */
-  whenFilterCycleSettled(): Promise<void>;
+  whenFilterCycleSettled(signal: AbortSignal): Promise<void>;
+  /**
+   * Resolves once the in-place refreshes of the rows an annotated filter
+   * keeps have settled: the rows in view fetched again, their count in, and
+   * the cursor back on its row. At once when none is running.
+   */
+  whenAnnotatedViewSettled(): Promise<void>;
+  /**
+   * A number each in-place refresh of the view moves: a position read
+   * before one may hold another row after it.
+   */
+  viewVersion(): number;
+  /**
+   * Where the cursor stands when an in-place refresh took its row out of
+   * the view: `'before'` when the gap that row left is just before the
+   * cursor's row, which slid into its place; `'after'` when it is just after
+   * it, the cursor having gone up to the last row; else `null`.
+   */
+  cursorGap(): 'before' | 'after' | null;
+  /**
+   * Whether the table is moving the cursor itself, to follow its row
+   * through an in-place refresh, which a navigation waits for: that move
+   * aborts nothing.
+   */
+  isFollowingRow(): boolean;
   /** Scroll sideways so that `column` is in view. */
   revealColumn(column: string): void;
   /** Close the annotation popover and the value inspector. */
@@ -116,6 +147,13 @@ export interface AnnotationNavigatorHost {
 /** Navigation queries: someone is waiting on them, and nothing reads them twice. */
 const QUERY_OPTIONS = { cache: false, priority: 'elevated' } as const;
 
+/**
+ * How many times a navigation searches a view that an in-place refresh
+ * keeps changing under it, before it gives up: the annotations an annotated
+ * filter keeps rows by are changing faster than it can search.
+ */
+const MAX_SEARCHES = 3;
+
 const ROWID = quoteIdentifier(ROWID_COLUMN);
 
 /**
@@ -126,12 +164,24 @@ const ROWID = quoteIdentifier(ROWID_COLUMN);
  */
 const ANCHOR = '"__dt_a__"';
 
-/** Where the search starts: a row of the view, or before the first (-1) or after the last. */
+/**
+ * Where the search starts: it looks at the rows past position `pos` in its
+ * direction, `pos` being a row of the view, or before the first (-1) or
+ * after the last.
+ */
 interface Anchor {
   pos: number;
-  /** The row's `__rowid__`; `null` before the first row and after the last. */
+  /**
+   * The row the SQL search compares rows with, by `__rowid__`: the row at
+   * `pos`, past which it looks; or, when `inclusive`, the first row it
+   * looks at, the one past `pos`, as from a cursor at the gap a row an
+   * in-place refresh took out of the view left (see
+   * `AnnotationNavigatorHost.cursorGap`). `null` before the first row and
+   * after the last.
+   */
   rowId: number | null;
-  /** The cursor's column, on a body row. */
+  inclusive: boolean;
+  /** The cursor's column: the search looks at the rest of its row first. */
   column: string | null;
 }
 
@@ -279,7 +329,8 @@ function windowOrderSQL(
  * Finds annotations and rows in the view, and takes the cursor there. One
  * navigation at a time: a newer one, a cursor move or a change of the
  * filters, the sort or the relation aborts the one running, which rejects
- * with a `QueryError` coded `QUERY_ABORTED`.
+ * with a `QueryError` coded `QUERY_ABORTED`. The table's own move of the
+ * cursor, following its row through an in-place refresh, aborts nothing.
  *
  * @internal
  */
@@ -300,7 +351,11 @@ export class AnnotationNavigator implements AnnotationNavigation {
     const { state } = host;
     const abort = (): void => this.abort();
     this.unsubscribes = [
-      state.focusedCell.subscribe(abort),
+      // The table's own move of the cursor, following its row through an
+      // in-place refresh, is part of what a navigation waits for.
+      state.focusedCell.subscribe(() => {
+        if (!host.isFollowingRow()) this.abort();
+      }),
       state.filters.subscribe(abort),
       state.sortColumns.subscribe(abort),
       state.tableName.subscribe(abort),
@@ -340,8 +395,15 @@ export class AnnotationNavigator implements AnnotationNavigation {
 
     const run = this.begin(options.signal);
     try {
-      await this.settle(run.signal);
-      const row = await this.positionOf(rowId, literal, run.signal);
+      let row: number | null = null;
+      for (let search = 1; ; search++) {
+        await this.settle(run.signal);
+        const version = this.host.viewVersion();
+        row = await this.positionOf(rowId, literal, run.signal);
+        // Refreshed in place meanwhile: the row may be elsewhere now.
+        if (this.host.viewVersion() === version) break;
+        if (search === MAX_SEARCHES) throw aborted();
+      }
       this.end(run);
       if (row === null) return null;
       const visible = state.visibleColumns.get();
@@ -432,16 +494,27 @@ export class AnnotationNavigator implements AnnotationNavigation {
    * relation readable (a derived-column change rebuilds it), and the scroll
    * back to the top that a filter change animates ended, since the grid's
    * rows are the old filters' until it has.
+   *
+   * Under an annotated filter, the rows the view keeps follow the
+   * annotations a moment behind, and the view is refreshed in place to
+   * them: the annotated rows are brought up to date first (a sync the view
+   * would wait for runs at once), then that refresh is waited for, the
+   * cursor back on its row. The positions the search reads are then the
+   * view's.
    */
   private async settle(signal: AbortSignal): Promise<void> {
     const { actions, state } = this.host;
-    await this.until(this.host.whenFilterCycleSettled(), signal);
+    await this.until(this.host.whenFilterCycleSettled(signal), signal);
     while (!actions.isRelationReadable()) {
       await this.until(actions.whenRelationReadable(), signal);
       // The state update that follows the change lands a task later.
       await this.until(nextTask(), signal);
     }
     if (!state.tableName.get()) throw noTable();
+    if (state.filters.get().some((filter) => filter.type === 'annotated')) {
+      await this.until(this.host.source.ensureFresh(signal), signal);
+      await this.until(this.host.whenAnnotatedViewSettled(), signal);
+    }
     this.host.getTableBody()?.cancelScrollAnimation();
   }
 
@@ -465,14 +538,22 @@ export class AnnotationNavigator implements AnnotationNavigation {
 
     const run = this.begin(options.signal);
     try {
-      await this.settle(run.signal);
       let selected = 0;
       if (store) {
         if (severities === undefined) selected = severityMaskOf(store.getSeverityFilter());
         else for (const severity of severities) selected |= SEVERITY_BIT[severity];
       }
-      const stop =
-        store && selected !== 0 ? await this.find(store, dir, selected, wrap, run.signal) : null;
+      let stop: Stop | null = null;
+      for (let search = 1; ; search++) {
+        await this.settle(run.signal);
+        const version = this.host.viewVersion();
+        stop =
+          store && selected !== 0 ? await this.find(store, dir, selected, wrap, run.signal) : null;
+        // Refreshed in place meanwhile: what it found is where the rows
+        // were. Search the view as it is now, once it has settled.
+        if (this.host.viewVersion() === version) break;
+        if (search === MAX_SEARCHES) throw aborted();
+      }
       this.end(run);
       if (stop === null) {
         const n = this.host.messages.annotations.navigation;
@@ -516,7 +597,12 @@ export class AnnotationNavigator implements AnnotationNavigation {
     if (hit) return { ...hit, column: null, wrapped: false };
     // A search from the start (or, going back, the end) has seen every row.
     if (!wrap || (dir > 0 ? anchor.pos < 0 : anchor.pos >= total)) return null;
-    const start: Anchor = { pos: dir > 0 ? -1 : total, rowId: null, column: null };
+    const start: Anchor = {
+      pos: dir > 0 ? -1 : total,
+      rowId: null,
+      inclusive: false,
+      column: null,
+    };
     const first = await this.findRow(store, start, dir, selected, total, signal);
     return first ? { ...first, column: null, wrapped: true } : null;
   }
@@ -525,20 +611,36 @@ export class AnnotationNavigator implements AnnotationNavigation {
    * Where a search starts: the cursor's row, or before the first row (no
    * cursor going forward, the header row) or after the last (no cursor
    * going back, a cursor past the end).
+   *
+   * After an in-place refresh took the cursor's row out of the view, it
+   * starts at the gap that row left instead: a row on the gap's far side is
+   * the first it looks at, whole (going forward, the row that slid under
+   * the cursor), and the cursor's row, on its near side, is passed by.
    */
   private async anchor(dir: 1 | -1, total: number, signal: AbortSignal): Promise<Anchor> {
     const cursor = this.host.state.focusedCell.get();
     if (!cursor || cursor.row < 0 || cursor.row >= total) {
       const before = cursor ? cursor.row < 0 : dir > 0;
-      return { pos: before ? -1 : total, rowId: null, column: null };
+      return { pos: before ? -1 : total, rowId: null, inclusive: false, column: null };
     }
     const rowId =
       this.host.getTableBody()?.cachedRowId(cursor.row) ??
       this.shownRowId(cursor.row) ??
       (await this.rowIdAt(cursor.row, signal));
     // A row that has gone (the view changed under the cursor) leaves the end to start from.
-    if (rowId === null) return { pos: dir > 0 ? -1 : total, rowId: null, column: null };
-    return { pos: cursor.row, rowId, column: cursor.column };
+    if (rowId === null) {
+      return { pos: dir > 0 ? -1 : total, rowId: null, inclusive: false, column: null };
+    }
+    const gap = this.host.cursorGap();
+    if (gap !== null && (gap === 'before') === dir > 0) {
+      return { pos: cursor.row - dir, rowId, inclusive: true, column: null };
+    }
+    return {
+      pos: cursor.row,
+      rowId,
+      inclusive: false,
+      column: gap === null ? cursor.column : null,
+    };
   }
 
   /** The `__rowid__` of the row at `pos`, by the grid's own query for it. */
@@ -664,40 +766,35 @@ export class AnnotationNavigator implements AnnotationNavigation {
       // Ordered by `__rowid__`: the nearest one past the anchor's.
       const desc = keys[0]!.desc;
       const up = dir > 0 !== desc;
+      const past = `${up ? '>' : '<'}${anchor.inclusive ? '=' : ''}`;
       const [hit] = await this.query<{ r: number | null }>(
         `SELECT ${up ? 'min' : 'max'}(${ROWID}) AS r FROM ${view} WHERE ${filtered}${annotated(ROWID)}` +
-          (at === null ? '' : ` AND ${ROWID} ${up ? '>' : '<'} ${at}`),
+          (at === null ? '' : ` AND ${ROWID} ${past} ${at}`),
         signal,
       );
       const rowId = hit?.r;
       if (rowId === null || rowId === undefined) return null;
-      if (at === null) {
-        // The rows before it.
-        const [count] = await this.query<{ n: number }>(
-          `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} ${desc ? '>' : '<'} ${rowId}`,
-          signal,
-        );
-        return { pos: count!.n, rowId };
-      }
-      // The rows between the anchor and it, a range the scan skips to.
-      const [lo, hi] = up ? [at, rowId] : [rowId, at];
+      // Its position: the rows before it, counted in the view as it is, not
+      // reckoned from the anchor's position, which may be the view's before
+      // an in-place refresh.
       const [count] = await this.query<{ n: number }>(
-        `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} > ${lo} AND ${ROWID} < ${hi}`,
+        `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} ${desc ? '>' : '<'} ${rowId}`,
         signal,
       );
-      return { pos: anchor.pos + dir * (count!.n + 1), rowId };
+      return { pos: count!.n, rowId };
     }
 
     // Sorted: the first row past the anchor's in the grid's order.
     const v = (i: number): string => `${view}.${keys[i]!.column}`;
     const a = (i: number): string => `${ANCHOR}."__dt_k${i}__"`;
+    const after = dir > 0 ? afterSQL(keys, v, a) : afterSQL(keys, a, v);
     const [hit] = await this.query<{ r: number }>(
       at === null
         ? `SELECT ${ROWID} AS r FROM ${view} WHERE ${filtered}${annotated(ROWID)}` +
             ` ORDER BY ${orderBySQL(keys, (i) => keys[i]!.column, dir > 0)} LIMIT 1`
         : `${this.anchorRow(keys, view, at)}SELECT ${view}.${ROWID} AS r FROM ${view}, ${ANCHOR}` +
             ` WHERE ${filtered}${annotated(`${view}.${ROWID}`)}` +
-            ` AND ${dir > 0 ? afterSQL(keys, v, a) : afterSQL(keys, a, v)}` +
+            ` AND ${anchor.inclusive ? `(${after} OR ${view}.${ROWID} = ${at})` : after}` +
             ` ORDER BY ${orderBySQL(keys, v, dir > 0)} LIMIT 1`,
       signal,
     );
@@ -868,10 +965,18 @@ export class AnnotationNavigator implements AnnotationNavigation {
     this.host.closeOverlays();
   }
 
-  /** What makes a position name a row: the relation, the filters, the sort. */
+  /**
+   * What makes a position name a row: the relation, the filters, the sort,
+   * and the in-place refreshes the rows an annotated filter keeps have had.
+   */
   private view(): readonly unknown[] {
     const { state } = this.host;
-    return [state.tableName.get(), state.filters.get(), state.sortColumns.get()];
+    return [
+      state.tableName.get(),
+      state.filters.get(),
+      state.sortColumns.get(),
+      this.host.viewVersion(),
+    ];
   }
 
   /** The `__rowid__` at `row` when the last navigation showed it there, in this view. */

@@ -189,13 +189,28 @@ export class FakeBody implements NavigatorBody {
   }
 }
 
+/**
+ * What a fake host says of in-place refreshes of the view, which a test
+ * sets: the version they have moved, where the cursor stands after one took
+ * its row out, whether the table is moving the cursor itself, and what
+ * `whenAnnotatedViewSettled` resolves with.
+ */
+export interface FakeView {
+  version: number;
+  gap: 'before' | 'after' | null;
+  following: boolean;
+  settled: Promise<void>;
+}
+
 export interface FakeHost extends AnnotationNavigatorHost {
   readonly state: TableState;
   readonly actions: StateActions;
   readonly body: FakeBody;
+  readonly view: FakeView;
   readonly announce: ReturnType<typeof vi.fn<(message: string) => void>>;
   readonly revealColumn: ReturnType<typeof vi.fn<(column: string) => void>>;
   readonly closeOverlays: ReturnType<typeof vi.fn<() => void>>;
+  readonly whenAnnotatedViewSettled: ReturnType<typeof vi.fn<() => Promise<void>>>;
   /** Resolve the filter cycle a test holds open with `holdFilterCycle`. */
   settleFilterCycle(): void;
   holdFilterCycle(): void;
@@ -251,6 +266,7 @@ export function makeHost(
   } as unknown as WorkerBridge);
   const body = new FakeBody();
   let held: { promise: Promise<void>; resolve: () => void } | null = null;
+  const view: FakeView = { version: 0, gap: null, following: false, settled: Promise.resolve() };
   const host = {
     state,
     actions,
@@ -261,8 +277,13 @@ export function makeHost(
       ({ ensureFresh: vi.fn(async () => 'helper') } satisfies AnnotatedRowsSource),
     messages: options.messages ?? defaultStrings,
     body,
+    view,
     getTableBody: () => body,
     whenFilterCycleSettled: () => held?.promise ?? Promise.resolve(),
+    whenAnnotatedViewSettled: vi.fn(() => view.settled),
+    viewVersion: () => view.version,
+    cursorGap: () => view.gap,
+    isFollowingRow: () => view.following,
     holdFilterCycle: () => {
       let resolve!: () => void;
       const promise = new Promise<void>((r) => (resolve = r));

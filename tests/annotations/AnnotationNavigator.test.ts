@@ -111,12 +111,12 @@ describe('AnnotationNavigator: which tier answers', () => {
     expect(host.queries).toEqual([]);
   });
 
-  it('(3) filtered and unsorted: the nearest rowid past the cursor, and a count between', async () => {
+  it('(3) filtered and unsorted: the nearest rowid past the cursor, and a count of the rows before it', async () => {
     const store = new ModelStore([{ scope: 'row', rowId: 150, severity: 'error' }]);
     const host = makeHost({
       store,
       answer: (sql) =>
-        sql.startsWith('SELECT min(') ? [{ r: 150 }] : sql.includes('count(*)') ? [{ n: 24 }] : [],
+        sql.startsWith('SELECT min(') ? [{ r: 150 }] : sql.includes('count(*)') ? [{ n: 65 }] : [],
     });
     host.state.filters.set([{ type: 'range', column: 'a', min: 0, max: 10 }]);
     host.state.filteredRows.set(90);
@@ -126,15 +126,17 @@ describe('AnnotationNavigator: which tier answers', () => {
 
     const landed = await new AnnotationNavigator(host).next();
 
-    expect(landed).toMatchObject({ rowId: 150, row: 40 + 1 + 24 });
+    expect(landed).toMatchObject({ rowId: 150, row: 65 });
     expect(host.source.ensureFresh).toHaveBeenCalledTimes(1);
     expect(host.queries).toHaveLength(2);
     expect(host.queries[0]).toBe(
       'SELECT min("__rowid__") AS r FROM "t" WHERE (("a" >= 0 AND "a" < 10)) AND' +
         ' "__rowid__" IN (SELECT "__rowid__" FROM "helper") AND "__rowid__" > 80',
     );
+    // Counted from the start of the view, never reckoned from the cursor's
+    // position, which an in-place refresh may have made another row's.
     expect(host.queries[1]).toBe(
-      'SELECT count(*) AS n FROM "t" WHERE (("a" >= 0 AND "a" < 10)) AND "__rowid__" > 80 AND "__rowid__" < 150',
+      'SELECT count(*) AS n FROM "t" WHERE (("a" >= 0 AND "a" < 10)) AND "__rowid__" < 150',
     );
   });
 
@@ -242,7 +244,7 @@ describe('AnnotationNavigator: which tier answers', () => {
           ? [{ __rowid__: 70 }]
           : sql.startsWith('SELECT min(')
             ? [{ r: sql.includes('> 70') ? 90 : next }]
-            : [{ n: 5 }],
+            : [{ n: sql.includes('< 90') ? 11 : 5 }],
     });
     host.state.filters.set([{ type: 'not-null', column: 'b' }]);
     host.state.filteredRows.set(50);
@@ -250,8 +252,14 @@ describe('AnnotationNavigator: which tier answers', () => {
 
     expect(await nav.next()).toMatchObject({ rowId: 70, row: 5 });
     // The grid has not fetched the row yet: the navigation knows it.
-    expect(await nav.next()).toMatchObject({ rowId: 90, row: 5 + 6 });
+    expect(await nav.next()).toMatchObject({ rowId: 90, row: 11 });
     expect(host.queries.some((sql) => sql.includes('OFFSET'))).toBe(false);
+
+    // Refreshed in place, the view may hold another row there: it is asked for.
+    host.view.version++;
+    await nav.next();
+    expect(host.queries.some((sql) => sql.includes('LIMIT 1 OFFSET 11'))).toBe(true);
+    host.queries.length = 0;
 
     // In another view, the same position is another row: it is asked for.
     host.actions.setFocusedCell({ row: 11, column: 'a' });
@@ -574,6 +582,177 @@ describe('AnnotationNavigator: where the cursor lands', () => {
     const host = annotated({ scope: 'row', rowId: 1, severity: 'error' });
     host.state.tableName.set(null);
     await expect(new AnnotationNavigator(host).next()).rejects.toMatchObject({ code: 'NO_TABLE' });
+  });
+});
+
+describe('AnnotationNavigator: a view refreshed in place', () => {
+  const ANNOTATED_FILTER = { type: 'annotated', column: '__annotated__', table: 't' } as const;
+
+  /**
+   * The annotated view [3, 5, 7, 9]: rows 3, 7 and 9 annotated, row 5 in
+   * cells `b` and `d`, and row 9 in cells `a` and `d` too. The grid holds
+   * all four.
+   */
+  function annotatedView(): ReturnType<typeof makeHost> {
+    const store = new ModelStore([
+      { scope: 'row', rowId: 3, severity: 'error', message: 'r3' },
+      { scope: 'cell', rowId: 5, column: 'b', severity: 'error', message: 'b5' },
+      { scope: 'cell', rowId: 5, column: 'd', severity: 'error', message: 'd5' },
+      { scope: 'row', rowId: 7, severity: 'error', message: 'r7' },
+      { scope: 'row', rowId: 9, severity: 'error', message: 'r9' },
+      { scope: 'cell', rowId: 9, column: 'a', severity: 'error', message: 'a9' },
+      { scope: 'cell', rowId: 9, column: 'd', severity: 'error', message: 'd9' },
+    ]);
+    const host = makeHost({ store, rows: 10 });
+    host.state.filters.set([ANNOTATED_FILTER]);
+    host.state.filteredRows.set(4);
+    host.body.hold(0, 4, (p) => [3, 5, 7, 9][p]!);
+    return host;
+  }
+
+  /** A promise for the test to resolve, and its resolver. */
+  function gate(): { promise: Promise<void>; open: () => void } {
+    let open!: () => void;
+    const promise = new Promise<void>((resolve) => (open = resolve));
+    return { promise, open };
+  }
+
+  it('brings the annotated rows up to date, and waits for the refresh in place, before it reads the rows', async () => {
+    const host = annotatedView();
+    const refresh = gate();
+    host.view.settled = refresh.promise;
+    host.actions.setFocusedCell({ row: 0, column: 'a' });
+    const run = new AnnotationNavigator(host).next();
+    await tick();
+    expect(host.source.ensureFresh).toHaveBeenCalledTimes(1);
+    expect(host.whenAnnotatedViewSettled).toHaveBeenCalledTimes(1);
+    expect(host.body.reads).toBe(0);
+
+    // The refresh lands: row 3's annotations went, and the rows moved up.
+    host.body.cache.clear();
+    host.body.hold(0, 3, (p) => [5, 7, 9][p]!);
+    host.state.filteredRows.set(3);
+    refresh.open();
+    // From row 5, now at the cursor's position: its next cell, then row 7.
+    await expect(run).resolves.toMatchObject({ rowId: 5, row: 0, column: 'b' });
+  });
+
+  it("the table's own move of the cursor, following its row, aborts nothing; the user's does", async () => {
+    const host = annotatedView();
+    const nav = new AnnotationNavigator(host);
+    let refresh = gate();
+    host.view.settled = refresh.promise;
+    host.actions.setFocusedCell({ row: 2, column: 'c' });
+    const run = nav.next();
+    await tick();
+    // A row above went: the table moves the cursor up with row 7.
+    host.body.cache.clear();
+    host.body.hold(0, 3, (p) => [5, 7, 9][p]!);
+    host.view.following = true;
+    host.actions.setFocusedCell({ row: 1, column: 'c' });
+    host.view.following = false;
+    refresh.open();
+    await expect(run).resolves.toMatchObject({ rowId: 9, row: 2 });
+
+    refresh = gate();
+    host.view.settled = refresh.promise;
+    const dropped = nav.next();
+    await tick();
+    host.actions.setFocusedCell({ row: 0, column: 'c' });
+    refresh.open();
+    await expect(dropped).rejects.toMatchObject({ code: 'QUERY_ABORTED' });
+  });
+
+  it('from the gap before the cursor’s row: forward, that row first, whole; back, the row before it', async () => {
+    const host = annotatedView();
+    const nav = new AnnotationNavigator(host);
+    // Row 4 went from between 3 and 5: row 5 slid under the cursor.
+    host.actions.setFocusedCell({ row: 1, column: 'c' });
+    host.view.gap = 'before';
+    expect(await nav.next()).toMatchObject({ rowId: 5, row: 1, column: 'b', wrapped: false });
+    expect(host.announce).toHaveBeenLastCalledWith('Row 2 of 4, b: error, b5');
+
+    host.actions.setFocusedCell({ row: 1, column: 'c' });
+    expect(await nav.previous()).toMatchObject({ rowId: 3, row: 0, wrapped: false });
+
+    // Without the gap, the cursor's own row: its next and previous cells.
+    host.view.gap = null;
+    host.actions.setFocusedCell({ row: 1, column: 'c' });
+    expect(await nav.next()).toMatchObject({ rowId: 5, row: 1, column: 'd' });
+    host.actions.setFocusedCell({ row: 1, column: 'c' });
+    expect(await nav.previous()).toMatchObject({ rowId: 5, row: 1, column: 'b' });
+  });
+
+  it('from the gap after the cursor’s row, the last: back, that row first, whole; forward, round to the first', async () => {
+    const host = annotatedView();
+    const nav = new AnnotationNavigator(host);
+    // The last row went, and the cursor went up to row 9.
+    host.actions.setFocusedCell({ row: 3, column: 'b' });
+    host.view.gap = 'after';
+    expect(await nav.previous()).toMatchObject({ rowId: 9, row: 3, column: 'd', wrapped: false });
+
+    host.actions.setFocusedCell({ row: 3, column: 'b' });
+    expect(await nav.next()).toMatchObject({ rowId: 3, row: 0, wrapped: true });
+  });
+
+  it('in SQL, the row on the far side of the gap is one the search may find', async () => {
+    const host = makeHost({
+      store: new ModelStore([{ scope: 'row', rowId: 150, severity: 'error' }]),
+      answer: (sql) => (sql.includes('count(*)') ? [{ n: 20 }] : [{ r: 150 }]),
+    });
+    host.state.filters.set([ANNOTATED_FILTER]);
+    host.state.filteredRows.set(50);
+    const nav = new AnnotationNavigator(host);
+    const fromGap = (): void => {
+      // The grid holds the cursor's row only, row 40: the rows past it are SQL's.
+      host.body.cache.clear();
+      host.body.hold(12, 13, () => 40);
+      host.actions.setFocusedCell({ row: 12, column: 'a' });
+      host.view.gap = 'before';
+    };
+
+    fromGap();
+    expect(await nav.next()).toMatchObject({ rowId: 150, row: 20 });
+    expect(host.queries[0]).toContain(' AND "__rowid__" >= 40');
+
+    host.state.sortColumns.set([{ column: 'a', direction: 'desc' }]);
+    host.queries.length = 0;
+    fromGap();
+    expect(await nav.next()).toMatchObject({ rowId: 150, row: 20 });
+    expect(host.queries[0]).toContain(' OR "t"."__rowid__" = 40) ORDER BY ');
+  });
+
+  it('searches again when the view is refreshed in place while it searches, and gives up on a view that keeps changing', async () => {
+    let refreshes = 1;
+    const host = makeHost({
+      store: new ModelStore([{ scope: 'row', rowId: 150, severity: 'error' }]),
+      answer: (sql) => {
+        if (sql.startsWith('SELECT min(')) {
+          // A sync lands, and the view is refreshed, as the search runs.
+          if (refreshes > 0) {
+            refreshes--;
+            host.view.version++;
+          }
+          return [{ r: 150 }];
+        }
+        return [{ n: host.view.version === 0 ? 70 : 65 }];
+      },
+    });
+    host.state.filters.set([{ type: 'null', column: 'b' }]);
+    host.state.filteredRows.set(90);
+    host.actions.setFocusedCell({ row: 0, column: 'a' });
+    host.body.hold(0, 1, () => 0);
+    const nav = new AnnotationNavigator(host);
+
+    expect(await nav.next()).toMatchObject({ rowId: 150, row: 65 });
+    expect(host.queries.filter((sql) => sql.startsWith('SELECT min('))).toHaveLength(2);
+
+    refreshes = Infinity;
+    host.queries.length = 0;
+    host.actions.setFocusedCell({ row: 0, column: 'a' });
+    await expect(nav.next()).rejects.toMatchObject({ code: 'QUERY_ABORTED' });
+    expect(host.queries.filter((sql) => sql.startsWith('SELECT min('))).toHaveLength(3);
+    expect(host.state.focusedCell.get()).toEqual({ row: 0, column: 'a' });
   });
 });
 

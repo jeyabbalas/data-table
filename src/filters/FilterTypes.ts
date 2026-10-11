@@ -204,10 +204,10 @@ export interface RawSQLFilter {
  * removes it. There is at most one, as every annotated filter has the same
  * synthetic column key, `'__annotated__'`. The rows it keeps follow the
  * annotations: adding or removing one while the filter is on updates the
- * view in place, keeping its scroll position and the cursor, and fires
- * `filterChange` with the same filters and the new count. A change that
- * keeps the same rows, such as an edited message or another severity on a
- * row already kept, leaves the view as it is. The severity filter
+ * view in place, keeping its scroll position and the cursor on its row, and
+ * fires `filterChange` with the same filters and the new count. A change
+ * that keeps the same rows, such as an edited message or another severity
+ * on a row already kept, leaves the view as it is. The severity filter
  * (`annotations.setSeverityFilter`) changes which tints show, not which
  * rows this keeps.
  *

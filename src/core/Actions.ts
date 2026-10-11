@@ -1399,10 +1399,13 @@ export class StateActions {
    *
    * The view follows the annotations: adding or removing one while the
    * filter is on updates the view in place, keeping its scroll position and
-   * the cursor, and fires `filterChange` with the same filters and the new
-   * count. A column-scope annotation singles out no row. The severity
-   * filter (`annotations.setSeverityFilter`) changes which tints show, not
-   * which rows this shows.
+   * the cursor on its row, and fires `filterChange` with the same filters
+   * and the new count. When the cursor's row leaves the view, the cursor
+   * stays where it was, on the row that slid into its place, which
+   * {@link StateActions.nextAnnotation} (`F8`) goes to next. A column-scope
+   * annotation singles out no row. The severity filter
+   * (`annotations.setSeverityFilter`) changes which tints show, not which
+   * rows this shows.
    *
    * Synchronous, like `addFilter`. The rows, the count and the charts follow
    * as they do for any filter change, once DuckDB holds the table's annotated
@@ -3413,7 +3416,10 @@ export class StateActions {
    *
    * One navigation runs at a time: a newer call, a move of the cursor, or a
    * change of the filters, the sort or the table aborts it. It waits for a
-   * filter change still counting its rows. Far from the cursor in a large
+   * filter change still counting its rows, and, under an annotated filter
+   * ({@link StateActions.showAnnotatedRows}), for the view to catch up with
+   * the annotations: right after the issue under the cursor is resolved, it
+   * goes to the row that slid into its place. Far from the cursor in a large
    * sorted view, finding the row is a DuckDB query, some hundreds of
    * milliseconds on ten million rows.
    *

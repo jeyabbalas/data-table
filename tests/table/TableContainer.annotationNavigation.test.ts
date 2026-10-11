@@ -194,6 +194,24 @@ describe('TableContainer: annotation navigation', () => {
     ).toBe(true);
   });
 
+  it('a navigation that stops waiting for the filter cycle leaves no wait behind', async () => {
+    await mount();
+    store.add({ scope: 'row', rowId: 31, severity: 'error', message: 'far' });
+    table.filterCycleSettled(state.filters.get());
+    actions.addFilter({ type: 'range', column: 'score', min: 3, max: 18 });
+    const waits = (): number =>
+      (table as unknown as { filterCycleWaiters: unknown[] }).filterCycleWaiters.length;
+
+    // Each newer one aborts the one before: only the latest waits.
+    const runs = [actions.nextAnnotation(), actions.nextAnnotation(), actions.nextAnnotation()];
+    const ended = Promise.allSettled(runs);
+    await vi.waitFor(() => expect(waits()).toBe(1));
+    actions.setFocusedCell({ row: 0, column: 'id' });
+    const outcomes = await ended;
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'rejected', 'rejected']);
+    expect(waits()).toBe(0);
+  });
+
   it('a search the keys started that fails goes to onError; one dropped does not', async () => {
     const onError = vi.fn<(error: DataTableError) => void>();
     await mount({ onError }, (sql) => {

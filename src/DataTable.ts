@@ -670,10 +670,12 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     annotationNavigation: opts.annotationNavigation !== false,
     // The rows an annotated filter keeps changed with the annotations, and
     // the grid fetches them again in place: the count, the charts and the
-    // stats panels follow, as for a filter change.
+    // stats panels follow, as for a filter change. The container puts the
+    // cursor back on its row once the count is in.
     onAnnotatedRowsChange: () => {
-      void coordinator.refresh();
+      const recounted = coordinator.refresh();
       void statsPanelCoordinator?.syncExistingFilters(state.filters.get());
+      return recounted;
     },
     onAnnotatedRowsError: (error) => emitError({ error, source: 'query' }),
   });

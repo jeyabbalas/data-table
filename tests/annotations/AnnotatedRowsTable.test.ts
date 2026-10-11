@@ -8,18 +8,28 @@
  * - The gate is closed as the filters' subscribers run, and opens when the
  *   sync lands, fails, the filter goes, or the table is destroyed.
  * - A later change under the filter keeps the gate open and refreshes the
- *   view in place once its sync lands, at most once per interval.
+ *   view in place once its sync lands, at most once per interval, when the
+ *   rows the filter keeps changed.
+ * - A sync drops the bridge's cached results that read the table it
+ *   rebuilt, and only those.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AnnotatedRowsTable, annotatedRowsStatement } from '@/annotations/AnnotatedRowsTable';
+import {
+  AnnotatedRowsTable,
+  annotatedRowsChange,
+  annotatedRowsStatement,
+} from '@/annotations/AnnotatedRowsTable';
 import type { AnnotationChangeHandler } from '@/annotations/types';
 import { StateActions } from '@/core/Actions';
 import { DataTableError, QueryError } from '@/core/errors';
 import { createTableState, initializeColumnsFromSchema } from '@/core/State';
 import type { TableState } from '@/core/State';
 import type { Filter } from '@/core/types';
+import { WorkerBridge } from '@/data/WorkerBridge';
+import { filtersToWhereClause } from '@/filters/FilterSQL';
 
+import { createMockWorker } from '../helpers/mockWorker';
 import { makeRowFetchBridge, type CapturedQuery } from '../helpers/rowFetchBridge';
 
 /** The store's side of the contract: a content revision and its annotated rows. */
@@ -70,12 +80,17 @@ class FakeStore {
 
 const ANNOTATED: Filter = { type: 'annotated', column: '__annotated__', table: 't' };
 
+/** How the annotated filter of any severity reads the table. */
+const HELPER_READ = '("__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_t__"))';
+
 interface Harness {
   state: TableState;
   actions: StateActions;
   store: FakeStore;
   queries: CapturedQuery[];
   clearQueryCache: ReturnType<typeof vi.fn>;
+  /** The bridge's `invalidateQueries`, called with which cached results to drop. */
+  invalidated: ReturnType<typeof vi.fn<(stale: (sql: string) => boolean) => void>>;
   table: AnnotatedRowsTable;
   onRefresh: ReturnType<typeof vi.fn>;
   onError: ReturnType<typeof vi.fn>;
@@ -86,7 +101,7 @@ interface Harness {
 
 let harness: Harness | null = null;
 
-function setup(options: { minInterval?: number } = {}): Harness {
+function setup(options: { minInterval?: number; invalidates?: boolean } = {}): Harness {
   const state = createTableState();
   state.tableName.set('t');
   state.baseTableName.set('t');
@@ -103,10 +118,13 @@ function setup(options: { minInterval?: number } = {}): Harness {
   const store = new FakeStore();
   const onRefresh = vi.fn();
   const onError = vi.fn();
+  const invalidated = vi.fn<(stale: (sql: string) => boolean) => void>();
   const table = new AnnotatedRowsTable({
     state,
     actions,
-    bridge: bridge as never,
+    bridge: (options.invalidates === false
+      ? bridge
+      : { ...bridge, invalidateQueries: invalidated }) as never,
     store: store as never,
     onRefresh,
     onError,
@@ -118,6 +136,7 @@ function setup(options: { minInterval?: number } = {}): Harness {
     store,
     queries,
     clearQueryCache: bridge.clearQueryCache,
+    invalidated,
     table,
     onRefresh,
     onError,
@@ -163,7 +182,7 @@ describe('AnnotatedRowsTable — what syncs', () => {
   });
 
   it('syncs once when the filter comes into force, in one statement of the latest rows', async () => {
-    const { store, actions, syncs, clearQueryCache } = setup();
+    const { store, actions, syncs, invalidated } = setup();
     store.set([
       [3, 1],
       [7, 6],
@@ -180,11 +199,13 @@ describe('AnnotatedRowsTable — what syncs', () => {
     expect(syncs()[0]!.sql).toMatch(/^CREATE OR REPLACE TEMP TABLE "__dt_annot_t__" AS /);
     expect(syncs()[0]!.options).toMatchObject({ cache: false, priority: 'elevated' });
 
-    // Results cached before read the table as it was.
-    clearQueryCache.mockClear();
+    // Results cached before read the table as it was: those go, and only those.
     syncs()[0]!.deferred.resolve([]);
     await settle();
-    expect(clearQueryCache).toHaveBeenCalledTimes(1);
+    expect(invalidated).toHaveBeenCalledTimes(1);
+    const [stale] = invalidated.mock.calls[0]!;
+    expect(stale(`SELECT count(*) FROM "t" WHERE ${HELPER_READ}`)).toBe(true);
+    expect(stale('SELECT count(*) FROM "t"')).toBe(false);
     expect(syncs()).toHaveLength(1);
   });
 
@@ -277,13 +298,13 @@ describe('AnnotatedRowsTable — what syncs', () => {
   });
 
   it('sends nothing for a change that leaves the annotated rows as they are', async () => {
-    const { store, actions, table, syncs, onRefresh, clearQueryCache } = setup();
+    const { store, actions, table, syncs, onRefresh, invalidated } = setup();
     store.set([[1, 1]]);
     actions.showAnnotatedRows();
     await settle();
     syncs()[0]!.deferred.resolve([]);
     await settle();
-    clearQueryCache.mockClear();
+    invalidated.mockClear();
 
     // A message edited, an annotation added to a column: under the filter…
     store.touch();
@@ -291,7 +312,7 @@ describe('AnnotatedRowsTable — what syncs', () => {
     await settle();
     expect(syncs()).toHaveLength(1);
     expect(onRefresh).not.toHaveBeenCalled();
-    expect(clearQueryCache).not.toHaveBeenCalled();
+    expect(invalidated).not.toHaveBeenCalled();
     // …for a caller of ensureFresh…
     store.touch();
     await expect(table.ensureFresh()).resolves.toBe('__dt_annot_t__');
@@ -337,6 +358,209 @@ describe('AnnotatedRowsTable — what syncs', () => {
   });
 });
 
+describe('AnnotatedRowsTable — what a change under the filter refreshes', () => {
+  /** The filter in force over rows 1 (error), 2 (warning) and 3 (info), its first sync landed. */
+  async function live(options: Parameters<typeof setup>[0] & { errorsOnly?: boolean } = {}) {
+    const harness = setup(options);
+    harness.store.set([
+      [1, 1],
+      [2, 2],
+      [3, 4],
+    ]);
+    harness.actions.showAnnotatedRows(options.errorsOnly ? { severities: ['error'] } : {});
+    await settle();
+    harness.syncs()[0]!.deferred.resolve([]);
+    await settle();
+    harness.invalidated.mockClear();
+    harness.clearQueryCache.mockClear();
+    /**
+     * New content, and its sync landed. The view's sync waits as long as
+     * the last one took, which the test's own pace sets: wait for it to go.
+     */
+    const change = async (pairs: [number, number][]): Promise<void> => {
+      const sent = harness.syncs().length;
+      harness.store.set(pairs);
+      await vi.waitFor(() => expect(harness.syncs()).toHaveLength(sent + 1));
+      harness.syncs().at(-1)!.deferred.resolve([]);
+      await settle();
+    };
+    return { ...harness, change };
+  }
+
+  it('content with every row and mask as the table holds them sends nothing', async () => {
+    const { store, table, syncs, onRefresh, invalidated } = await live();
+    // Another list, the same rows and masks, and rowIds no row has.
+    store.set([
+      [-1, 1],
+      [1, 1],
+      [2, 2],
+      [2.5, 4],
+      [3, 4],
+    ]);
+    // Current, once that content has been looked at, with nothing sent.
+    await expect(table.ensureFresh()).resolves.toBe('__dt_annot_t__');
+    await settle();
+    expect(syncs()).toHaveLength(1);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(invalidated).not.toHaveBeenCalled();
+  });
+
+  it('new severities on rows the filter keeps rebuild the table, and leave the view and its cached results', async () => {
+    const { state, syncs, onRefresh, invalidated, change } = await live();
+    // A warning on the row with an error: any severity keeps it either way.
+    await change([
+      [1, 3],
+      [2, 2],
+      [3, 4],
+    ]);
+    expect(syncs()).toHaveLength(2);
+    expect(syncs()[1]!.sql).toContain(`string_split('11,18,28', ',')`);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(invalidated).toHaveBeenCalledTimes(1);
+    const [stale] = invalidated.mock.calls[0]!;
+    const view = filtersToWhereClause(state.filters.get());
+    // What the view's own queries read keeps the same rows; anything else
+    // that reads the table, as navigation's searches do, may have changed.
+    expect(stale(`SELECT COUNT(*) as cnt FROM "t" WHERE ${view}`)).toBe(false);
+    expect(stale('SELECT "__rowid__" FROM "__dt_annot_t__" WHERE ("__mask__" & 2) <> 0')).toBe(
+      true,
+    );
+    expect(
+      stale(
+        `SELECT count(*) FROM "t" WHERE ${view} AND "__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_t__" WHERE ("__mask__" & 1) <> 0)`,
+      ),
+    ).toBe(true);
+    expect(stale('SELECT count(*) FROM "u"')).toBe(false);
+  });
+
+  it('under errors only, rows without an error come and go unseen; a row that gains or loses one refreshes', async () => {
+    const { syncs, onRefresh, invalidated, change } = await live({ errorsOnly: true });
+    // A warning on the error row, a new info row, the warning row gone.
+    await change([
+      [1, 3],
+      [3, 4],
+      [5, 4],
+    ]);
+    expect(syncs()).toHaveLength(2);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(invalidated).toHaveBeenCalledTimes(1);
+    // Row 3 gains an error.
+    await change([
+      [1, 3],
+      [3, 5],
+      [5, 4],
+    ]);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    // Row 1 loses its.
+    await change([
+      [1, 2],
+      [3, 5],
+      [5, 4],
+    ]);
+    expect(onRefresh).toHaveBeenCalledTimes(2);
+    expect(syncs()).toHaveLength(4);
+    // Each dropped every result that read the table.
+    const [stale] = invalidated.mock.calls.at(-1)!;
+    expect(
+      stale(`SELECT 1 WHERE ${HELPER_READ.replace(')', ' WHERE ("__mask__" & 1) <> 0)')}`),
+    ).toBe(true);
+  });
+
+  it('a bridge without invalidateQueries has its whole cache cleared', async () => {
+    const { clearQueryCache, onRefresh, change } = await live({ invalidates: false });
+    await change([[7, 1]]);
+    expect(clearQueryCache).toHaveBeenCalledTimes(1);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('annotatedRowsChange', () => {
+  const rows = (pairs: [number, number][]) => ({
+    rowIds: Float64Array.from(pairs.map(([rowId]) => rowId)),
+    masks: Uint8Array.from(pairs.map(([, mask]) => mask)),
+  });
+  /** `kept[mask]`: any severity keeps a row, errors only a row with an error, no filter all. */
+  const ANY = Uint8Array.from([0, 1, 1, 1, 1, 1, 1, 1]);
+  const ERRORS = Uint8Array.from([0, 1, 0, 1, 0, 1, 0, 1]);
+  const NO_FILTER = new Uint8Array(8).fill(1);
+  const before = rows([
+    [1, 1],
+    [4, 2],
+    [9, 4],
+  ]);
+
+  it('says whether the rows a view keeps changed, or only their masks, or nothing', () => {
+    expect(annotatedRowsChange(null, before, ANY)).toBe('rows');
+    expect(annotatedRowsChange(before, before, ANY)).toBe('none');
+    const same = rows([
+      [1, 1],
+      [4, 2],
+      [9, 4],
+    ]);
+    expect(annotatedRowsChange(before, same, ANY)).toBe('none');
+    const warned = rows([
+      [1, 3],
+      [4, 2],
+      [9, 4],
+    ]);
+    expect(annotatedRowsChange(before, warned, ANY)).toBe('masks');
+    expect(
+      annotatedRowsChange(
+        before,
+        rows([
+          [1, 1],
+          [4, 2],
+        ]),
+        ANY,
+      ),
+    ).toBe('rows');
+    const added = rows([
+      [0, 4],
+      [1, 1],
+      [4, 2],
+      [9, 4],
+    ]);
+    expect(annotatedRowsChange(before, added, ANY)).toBe('rows');
+    // Errors only: rows without one come and go unseen.
+    const others = rows([
+      [1, 1],
+      [9, 4],
+      [12, 2],
+    ]);
+    expect(annotatedRowsChange(before, others, ERRORS)).toBe('masks');
+    const erred = rows([
+      [1, 1],
+      [4, 3],
+      [9, 4],
+    ]);
+    expect(annotatedRowsChange(before, erred, ERRORS)).toBe('rows');
+    expect(
+      annotatedRowsChange(
+        before,
+        rows([
+          [4, 2],
+          [9, 4],
+        ]),
+        ERRORS,
+      ),
+    ).toBe('rows');
+    // With no annotated filter, the view keeps every row: masks only.
+    expect(annotatedRowsChange(before, rows([[2, 1]]), NO_FILTER)).toBe('masks');
+  });
+
+  it('counts nothing of a rowId the table leaves out', () => {
+    const odd = rows([
+      [-2, 1],
+      [1, 1],
+      [1.5, 2],
+      [4, 2],
+      [9, 4],
+      [2 ** 50, 4],
+    ]);
+    expect(annotatedRowsChange(before, odd, ANY)).toBe('none');
+  });
+});
+
 describe('AnnotatedRowsTable — the read gate', () => {
   it('is closed before the filters’ subscribers run, and opens when the sync lands', async () => {
     const { state, actions, syncs, settled, onRefresh } = setup();
@@ -360,7 +584,7 @@ describe('AnnotatedRowsTable — the read gate', () => {
   });
 
   it('stays open while later changes sync, and refreshes the view once each lands', async () => {
-    const { store, actions, syncs, onRefresh, settled, clearQueryCache } = setup();
+    const { store, actions, syncs, onRefresh, settled, invalidated } = setup();
     actions.showAnnotatedRows();
     await settle();
     syncs()[0]!.deferred.resolve([]);
@@ -373,10 +597,10 @@ describe('AnnotatedRowsTable — the read gate', () => {
     expect(syncs()).toHaveLength(2);
     expect(actions.isRelationReadable()).toBe(true);
     expect(actions.isRelationChanging()).toBe(false);
-    clearQueryCache.mockClear();
+    invalidated.mockClear();
     syncs()[1]!.deferred.resolve([]);
     await settle();
-    expect(clearQueryCache).toHaveBeenCalledTimes(1);
+    expect(invalidated).toHaveBeenCalledTimes(1);
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(settled).not.toHaveBeenCalled();
   });
@@ -455,6 +679,59 @@ describe('AnnotatedRowsTable — the read gate', () => {
     expect(error).toMatchObject({ code: 'QUERY_RUNTIME', message: 'Out of Memory Error' });
     await fresh;
     expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  it('a sync that keeps failing is tried again only when something changes, each content reported once', async () => {
+    vi.useFakeTimers();
+    const { store, actions, table, syncs, onError, onRefresh } = setup({ minInterval: 150 });
+    const fail = (i: number): void => syncs()[i]!.deferred.reject(new Error('Out of Memory Error'));
+    store.set([[1, 1]]);
+    actions.showAnnotatedRows();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncs()).toHaveLength(1);
+    fail(0);
+    // Ten seconds of a page on which nothing changes: no sync, no report.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(actions.isRelationReadable()).toBe(true);
+
+    // A caller of ensureFresh tries again; the same content is not reported again.
+    const fresh = expect(table.ensureFresh()).rejects.toThrow('Out of Memory Error');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncs()).toHaveLength(2);
+    fail(1);
+    await fresh;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(2);
+
+    // So do new filters.
+    actions.showAnnotatedRows({ severities: ['error'] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(syncs()).toHaveLength(3);
+    fail(2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(3);
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // New content is tried after the interval, and its failure reported.
+    store.set([[2, 1]]);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(syncs()).toHaveLength(4);
+    fail(3);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(4);
+    expect(onError).toHaveBeenCalledTimes(2);
+
+    // And content that syncs updates the view, which read a table that failed.
+    store.set([[3, 1]]);
+    await vi.advanceTimersByTimeAsync(150);
+    expect(syncs()).toHaveLength(5);
+    syncs()[4]!.deferred.resolve([]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(syncs()).toHaveLength(5);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(2);
   });
 
   it('passes on the error a sync fails with when it is the library’s', async () => {
@@ -601,6 +878,76 @@ describe('AnnotatedRowsTable — ensureFresh', () => {
     state.tableName.set('__dt_view_t__');
     syncs()[0]!.deferred.resolve([]);
     await expect(fresh).resolves.toBe('__dt_annot_t__');
+  });
+});
+
+describe('AnnotatedRowsTable — the bridge’s cached results', () => {
+  it('a sync drops the results that read its table, not another table’s on the same bridge', async () => {
+    const HELD = 'SELECT max("__rowid__") AS n FROM "__dt_annot_t__"';
+    let held: { id: string } | null = null;
+    const mock = createMockWorker({
+      onMessage: (message) => {
+        if (message.type !== 'query') return undefined;
+        if ((message.payload as { sql: string }).sql === HELD) {
+          held = message;
+          return null;
+        }
+        return { id: message.id, type: 'result', payload: { rows: [{ n: 1 }] } };
+      },
+    });
+    const bridge = new WorkerBridge({ workerFactory: () => mock.worker });
+    await bridge.initialize();
+    const actions = { addReadGate: () => () => undefined, readGateOpened: () => undefined };
+    const [t, u] = ['t', 'u'].map((base) => {
+      const state = createTableState();
+      state.tableName.set(base);
+      state.baseTableName.set(base);
+      const store = new FakeStore();
+      store.set([[1, 1]]);
+      const table = new AnnotatedRowsTable({ state, actions, bridge, store: store as never });
+      return { store, table };
+    }) as [
+      { store: FakeStore; table: AnnotatedRowsTable },
+      { store: FakeStore; table: AnnotatedRowsTable },
+    ];
+    try {
+      await t.table.ensureFresh();
+      await u.table.ensureFresh();
+      const reads = [
+        'SELECT count(*) AS n FROM "t" WHERE "__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_t__")',
+        'SELECT count(*) AS n FROM "u" WHERE "__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_u__")',
+        'SELECT count(*) AS n FROM "t"',
+      ];
+      for (const sql of reads) await bridge.query(sql);
+      const posts = (): string[] =>
+        mock.posted
+          .filter((m) => m.type === 'query')
+          .map((m) => (m.payload as { sql: string }).sql);
+      const cached = posts().length;
+      // A read of the table in flight while it is rebuilt.
+      const inFlight = bridge.query(HELD);
+      await vi.waitFor(() => expect(held).not.toBeNull());
+
+      t.store.set([[2, 1]]);
+      await t.table.ensureFresh();
+      expect(posts()).toHaveLength(cached + 2);
+      mock.sendFromWorker({ id: held!.id, type: 'result', payload: { rows: [{ n: 1 }] } });
+      await inFlight;
+
+      held = null;
+      for (const sql of reads) await bridge.query(sql);
+      const again = bridge.query(HELD);
+      await vi.waitFor(() => expect(held).not.toBeNull());
+      mock.sendFromWorker({ id: held!.id, type: 'result', payload: { rows: [{ n: 2 }] } });
+      await again;
+      // The read of the rebuilt table, and the one in flight, go to DuckDB
+      // again; the other table's and the plain read come from the cache.
+      expect(posts().slice(cached + 2)).toEqual([reads[0], HELD]);
+    } finally {
+      t.table.destroy();
+      u.table.destroy();
+      bridge.terminate();
+    }
   });
 });
 

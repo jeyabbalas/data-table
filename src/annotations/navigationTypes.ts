@@ -77,7 +77,11 @@ export interface AnnotationNavigationResult {
 export interface RevealRowOptions {
   /** Where in the view the row goes. Default: `'center'`. */
   align?: 'start' | 'center' | 'end' | undefined;
-  /** Put the cursor on the row too. Default: `true`. */
+  /**
+   * Put the cursor on the row too, closing the annotation popover and the
+   * value inspector, which belong to the cell it leaves. Default: `true`.
+   * With `false`, the cursor and those stay as they are.
+   */
   focus?: boolean | undefined;
   /**
    * Aborts the reveal: the promise rejects with a `QueryError` coded

@@ -21,20 +21,20 @@
  * Vite 8.3.0 / rolldown 1.2.10, which, like rolldown 1.0.1 before it,
  * inlines the shared ModalHost code into each modal consumer):
  *   root entry · ESM               11.80 kB   →  12.1 kB cap (2.5 %)
- *   advanced entry · ESM            2.13 kB   →   2.25 kB cap (5.6 %)
+ *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     23.52 kB   →  23.7 kB cap (0.8 %)
- *   lazy ExportDialog chunk       110.39 kB   → 114 kB   cap (3.3 %)
+ *   lazy ExportDialog chunk       113.43 kB   → 117 kB   cap (3.1 %)
  *   lazy SQLFilterModal chunk       2.55 kB   →   2.6 kB cap (2.0 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
  *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
  *   lazy FilterPresetPanel          2.69 kB   →   2.7 kB cap (0.4 %)
  *   lazy CodeMirror editor          5.21 kB   →   5.5 kB cap (5.6 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
- *   lazy ValueInspector chunk       8.46 kB   →   8.9 kB cap (5.2 %)
- *   lazy ExtractColumnPanel chunk   4.97 kB   →   5.3 kB cap (6.6 %)
+ *   lazy ValueInspector chunk       8.43 kB   →   8.9 kB cap (5.6 %)
+ *   lazy ExtractColumnPanel chunk   4.99 kB   →   5.3 kB cap (6.2 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
- *   lazy AnnotationNavigator chunk  4.30 kB   →   4.5 kB cap (4.7 %)
- *   lazy AnnotatedRowsTable chunk   2.25 kB   →   2.35 kB cap (4.4 %)
+ *   lazy AnnotationNavigator chunk  4.47 kB   →   4.7 kB cap (5.1 %)
+ *   lazy AnnotatedRowsTable chunk   2.74 kB   →   2.85 kB cap (4.0 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -115,13 +115,22 @@
  * gate on the relation, and the gate that holds the filter's reads until
  * the `AnnotatedRowsTable-*` chunk below is in. Keeping a session's
  * annotations in a database of their own, written only when they change and
- * in chunks, took it to 110.39 kB. The cap moved to 114 kB.
+ * in chunks, took it to 110.39 kB, and the cap to 114 kB. The review fixes
+ * that followed (the cursor following its row as an annotated view
+ * refreshes in place, a refresh only when the rows the filter keeps
+ * change, a write order and a per-table queue under which no failure loses
+ * annotations that had landed, a load's annotations cleared in its turn)
+ * took it to 113.43 kB, and the cap to 117 kB.
  *
  * AnnotatedRowsTable chunk history. New with the annotated-rows filter, at
  * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with
  * the annotation store, loaded the first time an annotated filter comes into
  * force or something reads that table (navigation, a filtered export,
- * `getColumnValues`).
+ * `getColumnValues`). A sync that compares the new rows with the ones the
+ * table holds, refreshing the view only when the rows the filter keeps
+ * change, that drops only the cached results that read the table, and that
+ * is not retried while it keeps failing took it to 2.73 kB, and the cap
+ * from 2.35 to 2.85 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -159,6 +168,9 @@
  * compares rows key by key as the grid's `ORDER BY` does), the landing and
  * its announcements, loaded the first time navigation runs. What stays in
  * the shared chunk is the keys, the actions that load it and the strings.
+ * Searching from the cursor's row as an annotated view refreshes in place
+ * (waiting for the refresh, the gap a row left behind, positions counted
+ * rather than reckoned) took it to 4.47 kB, and the cap from 4.5 to 4.7 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown, since 1.0.1,
  * inlines the shared ModalHost helpers into each modal consumer. The
@@ -210,7 +222,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '114 kB',
+    limit: '117 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -260,11 +272,11 @@ module.exports = [
   {
     name: 'lazy AnnotationNavigator chunk · ESM',
     path: 'dist/AnnotationNavigator-*.js',
-    limit: '4.5 kB',
+    limit: '4.7 kB',
   },
   {
     name: 'lazy AnnotatedRowsTable chunk · ESM',
     path: 'dist/AnnotatedRowsTable-*.js',
-    limit: '2.35 kB',
+    limit: '2.85 kB',
   },
 ];

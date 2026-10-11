@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AnnotationStore } from '@/annotations/AnnotationStore';
 import { StateActions } from '@/core/Actions';
-import { QueryError, type DataTableError } from '@/core/errors';
+import { ConfigurationError, QueryError, type DataTableError } from '@/core/errors';
 import { __resetModalHostForTests } from '@/core/ModalHost';
 import { createTableState, initializeColumnsFromSchema, type TableState } from '@/core/State';
 import type { ColumnSchema } from '@/core/types';
@@ -149,16 +149,30 @@ describe('TableContainer: annotation navigation', () => {
     );
   });
 
-  it('leaves the keys to the page while there are no annotations', async () => {
+  it('leaves the keys to the page while there is no row to go to', async () => {
     await mount();
     actions.setFocusedCell({ row: 2, column: 'id' });
     expect(press({ key: 'F8' })).toBe(false);
     expect(press({ key: 'ArrowDown', altKey: true })).toBe(false);
-    // Column annotations are annotations, though they single out no row.
+    // A column annotation singles out no row.
     store.add({ scope: 'column', column: 'name', severity: 'info', message: 'about names' });
+    expect(press({ key: 'F8' })).toBe(false);
+    // Rows whose every severity the severity filter hides are not gone to either.
+    store.add({ scope: 'row', rowId: 5, severity: 'warning', message: 'look' });
+    store.setSeverityFilter({ error: false, warning: false, info: false });
+    expect(press({ key: 'F8' })).toBe(false);
+    expect(press({ key: 'ArrowUp', altKey: true })).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(announced()).toBe('');
+    expect(state.focusedCell.get()).toEqual({ row: 2, column: 'id' });
+
+    // A severity shown, of any annotation: the keys go to the rows.
+    store.setSeverityFilter({ info: true });
     expect(press({ key: 'F8' })).toBe(true);
     await vi.waitFor(() => expect(announced()).toBe('No annotations shown'));
-    expect(state.focusedCell.get()).toEqual({ row: 2, column: 'id' });
+    store.setSeverityFilter({ warning: true });
+    expect(press({ key: 'F8' })).toBe(true);
+    await vi.waitFor(() => expect(state.focusedCell.get()).toEqual({ row: 5, column: 'id' }));
   });
 
   it('with annotationNavigation: false, the keys are the page’s and the actions still work', async () => {
@@ -194,6 +208,24 @@ describe('TableContainer: annotation navigation', () => {
     ).toBe(true);
   });
 
+  it('a navigation that stops waiting for the filter cycle leaves no wait behind', async () => {
+    await mount();
+    store.add({ scope: 'row', rowId: 31, severity: 'error', message: 'far' });
+    table.filterCycleSettled(state.filters.get());
+    actions.addFilter({ type: 'range', column: 'score', min: 3, max: 18 });
+    const waits = (): number =>
+      (table as unknown as { filterCycleWaiters: unknown[] }).filterCycleWaiters.length;
+
+    // Each newer one aborts the one before: only the latest waits.
+    const runs = [actions.nextAnnotation(), actions.nextAnnotation(), actions.nextAnnotation()];
+    const ended = Promise.allSettled(runs);
+    await vi.waitFor(() => expect(waits()).toBe(1));
+    actions.setFocusedCell({ row: 0, column: 'id' });
+    const outcomes = await ended;
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'rejected', 'rejected']);
+    expect(waits()).toBe(0);
+  });
+
   it('a search the keys started that fails goes to onError; one dropped does not', async () => {
     const onError = vi.fn<(error: DataTableError) => void>();
     await mount({ onError }, (sql) => {
@@ -214,6 +246,49 @@ describe('TableContainer: annotation navigation', () => {
     actions.setFocusedCell({ row: 2, column: 'id' });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('a search the keys started that fails with an error not the library’s goes to onError as a query error', async () => {
+    const onError = vi.fn<(error: DataTableError) => void>();
+    const boom = new TypeError('the app’s bridge broke');
+    await mount({ onError }, (sql) => {
+      if (sql.startsWith('SELECT min(')) throw boom;
+      return [];
+    });
+    store.add({ scope: 'row', rowId: 35, severity: 'error', message: 'x' });
+    actions.addFilter({ type: 'null', column: 'name' });
+    state.filteredRows.set(40);
+    actions.setFocusedCell({ row: 1, column: 'id' });
+    press({ key: 'F8' });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    const [error] = onError.mock.calls[0]!;
+    expect(error).toBeInstanceOf(QueryError);
+    expect(error).toMatchObject({ code: 'QUERY_RUNTIME', message: 'the app’s bridge broke' });
+    expect(error.cause).toBe(boom);
+  });
+
+  it('a navigator chunk that does not load is CHUNK_LOAD_FAILED, as a panel’s is', async () => {
+    vi.doMock('@/annotations/AnnotationNavigator', () => {
+      throw new Error('chunk offline');
+    });
+    try {
+      const onError = vi.fn<(error: DataTableError) => void>();
+      await mount({ onError });
+      store.add({ scope: 'row', rowId: 12, severity: 'info', message: 'note' });
+      const failed = { code: 'CHUNK_LOAD_FAILED', details: { panel: 'annotationNavigator' } };
+      // To the caller of the actions…
+      await expect(actions.nextAnnotation()).rejects.toMatchObject(failed);
+      expect(onError).not.toHaveBeenCalled();
+      // …and to onError for the keys, which have no caller.
+      expect(press({ key: 'F8' })).toBe(true);
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+      const [error] = onError.mock.calls[0]!;
+      expect(error).toBeInstanceOf(ConfigurationError);
+      expect(error).toMatchObject(failed);
+      expect(error.message).toMatch(/^The annotationNavigator chunk did not load: /);
+    } finally {
+      vi.doUnmock('@/annotations/AnnotationNavigator');
+    }
   });
 
   it('closes the annotation popover where it lands', async () => {

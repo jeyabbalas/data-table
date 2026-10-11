@@ -126,6 +126,11 @@ let popoverInstanceCounter = 0;
 
 const GRACE_MS = 120;
 const EDGE_PAD = 4;
+/**
+ * The least height the popover is capped to beside its anchor, in px: with
+ * less room than that on either side, it goes where it fits instead.
+ */
+const MIN_HEIGHT = 96;
 
 /**
  * Where a severity sits in the allow-list, `-1` for anything else. The only
@@ -590,23 +595,27 @@ export class AnnotationPopover {
     const rect = anchor.getBoundingClientRect();
     const viewportW = window.innerWidth || document.documentElement.clientWidth;
     const viewportH = window.innerHeight || document.documentElement.clientHeight;
-    const popH = el.offsetHeight;
+    // The stylesheet's height cap first: a cap set for an earlier anchor
+    // would hide how tall the popover is now.
+    el.style.maxHeight = '';
+    let popH = el.offsetHeight;
     const popW = el.offsetWidth;
 
-    // Vertical: prefer below; flip above if overflowing.
-    const spaceBelow = viewportH - rect.bottom;
-    const spaceAbove = rect.top;
-    let top: number;
-    if (spaceBelow >= popH + EDGE_PAD || spaceBelow >= spaceAbove) {
-      top = rect.bottom + EDGE_PAD;
-      // Clamp to keep the popover fully on-screen when possible.
-      if (top + popH > viewportH - EDGE_PAD) {
-        top = Math.max(EDGE_PAD, viewportH - popH - EDGE_PAD);
-      }
-    } else {
-      top = rect.top - popH - EDGE_PAD;
-      if (top < EDGE_PAD) top = EDGE_PAD;
+    // Vertical: below when it fits there, else on the side with more room,
+    // its height capped to that room so that it never covers its anchor: it
+    // scrolls past its cap. Moved up to fit instead, a tall popover covered
+    // the cell it describes.
+    const spaceBelow = viewportH - rect.bottom - 2 * EDGE_PAD;
+    const spaceAbove = rect.top - 2 * EDGE_PAD;
+    const below = popH <= spaceBelow || spaceBelow >= spaceAbove;
+    const room = Math.max(MIN_HEIGHT, below ? spaceBelow : spaceAbove);
+    if (popH > room) {
+      el.style.maxHeight = `${Math.floor(room)}px`;
+      popH = el.offsetHeight;
     }
+    let top = below ? rect.bottom + EDGE_PAD : rect.top - popH - EDGE_PAD;
+    // A viewport with less room than that on either side: keep it on-screen.
+    top = Math.min(Math.max(EDGE_PAD, top), Math.max(EDGE_PAD, viewportH - popH - EDGE_PAD));
 
     // Horizontal: align to anchor.left; clamp to viewport.
     let left = rect.left;

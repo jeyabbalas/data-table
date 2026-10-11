@@ -124,6 +124,28 @@ describe('QueryCache', () => {
     });
   });
 
+  describe('invalidate', () => {
+    it('drops the results it picks, keeps the others, and stores none in flight', () => {
+      const cache = new QueryCache();
+      cache.set('SELECT * FROM "a"', [{ v: 1 }]);
+      cache.set('SELECT * FROM "b"', [{ v: 2 }]);
+      cache.set('SELECT * FROM "a" JOIN "c" USING (id)', [{ v: 3 }]);
+      const inFlight = cache.generation;
+
+      cache.invalidate((sql) => sql.includes('"a"'));
+
+      expect(cache.get('SELECT * FROM "a"')).toBeUndefined();
+      expect(cache.get('SELECT * FROM "a" JOIN "c" USING (id)')).toBeUndefined();
+      expect(cache.get('SELECT * FROM "b"')).toEqual([{ v: 2 }]);
+      expect(cache.generation).toBe(inFlight + 1);
+      // A query that started before may have read what changed: whatever it read.
+      cache.set('SELECT * FROM "d"', [{ v: 4 }], inFlight);
+      expect(cache.get('SELECT * FROM "d"')).toBeUndefined();
+      cache.set('SELECT * FROM "d"', [{ v: 4 }], cache.generation);
+      expect(cache.get('SELECT * FROM "d"')).toEqual([{ v: 4 }]);
+    });
+  });
+
   describe('has', () => {
     beforeEach(() => {
       vi.useFakeTimers();

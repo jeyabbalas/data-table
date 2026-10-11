@@ -1009,9 +1009,8 @@ describe('ExportDialog', () => {
       await vi.waitFor(() => expect(exportFromState).toHaveBeenCalledTimes(1));
     });
 
-    it('and before a copy of the selected rows', async () => {
-      state.selectedRows.set(new Set([0]));
-      scope('selected');
+    it('and before a copy of the filtered rows', async () => {
+      scope('filtered');
       (prepared.getElement().querySelector('.dt-export-copy-btn') as HTMLButtonElement).click();
       await vi.waitFor(() => expect(beforeExport).toHaveBeenCalledTimes(1));
       expect(mockWriteText).not.toHaveBeenCalled();
@@ -1021,6 +1020,16 @@ describe('ExportDialog', () => {
 
     it('is not asked for an export of every row, which reads no filter', async () => {
       scope('all');
+      download();
+      await vi.waitFor(() => expect(exportFromState).toHaveBeenCalledTimes(1));
+      expect(beforeExport).not.toHaveBeenCalled();
+    });
+
+    it('nor for the selected rows: the positions selected in the view as it shows them', async () => {
+      state.selectedRows.set(new Set([0]));
+      scope('selected');
+      (prepared.getElement().querySelector('.dt-export-copy-btn') as HTMLButtonElement).click();
+      await vi.waitFor(() => expect(mockWriteText).toHaveBeenCalledTimes(1));
       download();
       await vi.waitFor(() => expect(exportFromState).toHaveBeenCalledTimes(1));
       expect(beforeExport).not.toHaveBeenCalled();

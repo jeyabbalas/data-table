@@ -1,7 +1,8 @@
 /**
- * The annotation file a save hands the session store: taken once per change
- * of the store's content, so the store can tell an unchanged one by its
- * token alone, and adopted after a restore, so a reload writes nothing.
+ * The annotations a save hands the session store: a token per content of
+ * the store, so the store can tell unchanged ones without taking their file,
+ * a file taken only when read and held by nothing here, and the marker and
+ * head that name a record.
  */
 import { serialize } from 'node:v8';
 import { describe, expect, it, vi } from 'vitest';
@@ -15,15 +16,21 @@ import {
   adoptAnnotationFile,
   annotationChunkEnd,
   annotationFileToken,
+  annotationsToken,
   assembleAnnotationFile,
-  checkAnnotationsHead,
-  currentAnnotationFile,
   estimateAnnotationBytes,
-  isAnnotationsMarker,
+  headEntries,
+  holdBackSnapshotAnnotations,
   newAnnotationsOwner,
+  readAnnotationsHead,
+  readAnnotationsMarker,
+  setSnapshotAnnotations,
+  settleSnapshotAnnotations,
   shareAnnotationFileToken,
+  snapshotAnnotationsOf,
 } from '@/persistence/annotationPersistence';
 import type { AnnotationsHead } from '@/persistence/annotationPersistence';
+import type { SessionSnapshot } from '@/persistence/types';
 
 function makeStore(tableName: string | null = 't') {
   const name = createSignal<string | null>(tableName);
@@ -50,36 +57,48 @@ function fileOf(count: number, tableName = 't'): AnnotationFile {
   };
 }
 
-describe('currentAnnotationFile', () => {
+function snapshotOf(store: AnnotationStore, lazy = true): SessionSnapshot {
+  const snapshot = {
+    version: 6,
+    timestamp: 0,
+    tableName: 't',
+    filters: [],
+    sortColumns: [],
+    visibleColumns: [],
+    columnOrder: [],
+    columnWidths: {},
+    pinnedColumns: [],
+    hiddenColumnInfo: {},
+  } as unknown as SessionSnapshot;
+  setSnapshotAnnotations(snapshot, store, lazy);
+  return snapshot;
+}
+
+/** The token a session store compares for `snapshot`'s annotations, or its kind. */
+function tokenOf(snapshot: SessionSnapshot): number | string {
+  const annotations = snapshotAnnotationsOf(snapshot);
+  return annotations.kind === 'file' ? annotations.token : annotations.kind;
+}
+
+describe('annotationsToken', () => {
   it('is null for an empty store', () => {
     const { store } = makeStore();
-    expect(currentAnnotationFile(store)).toBeNull();
+    expect(annotationsToken(store)).toBeNull();
   });
 
-  it('returns the same object until the content changes', () => {
-    const { store } = makeStore();
-    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
-    const first = currentAnnotationFile(store);
-    expect(first?.annotations).toHaveLength(1);
-    expect(currentAnnotationFile(store)).toBe(first);
-    expect(currentAnnotationFile(store)).toBe(first);
-  });
-
-  it('takes the file once per content change, not per call', () => {
+  it('is the same until the content changes, and takes no file', () => {
     const { store } = makeStore();
     store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
     const toJSON = vi.spyOn(store, 'toJSON');
-    for (let i = 0; i < 10; i++) currentAnnotationFile(store);
-    expect(toJSON).toHaveBeenCalledTimes(1);
-    store.add({ scope: 'row', rowId: 2, severity: 'info', message: 'b' });
-    for (let i = 0; i < 10; i++) currentAnnotationFile(store);
-    expect(toJSON).toHaveBeenCalledTimes(2);
+    const token = annotationsToken(store);
+    for (let i = 0; i < 10; i++) expect(annotationsToken(store)).toBe(token);
+    expect(toJSON).not.toHaveBeenCalled();
   });
 
-  it('takes a new file after every kind of content change', () => {
+  it('changes with every kind of content change', () => {
     const { store } = makeStore();
     const a = store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
-    let previous = currentAnnotationFile(store);
+    const seen = new Set([annotationsToken(store)]);
     const changes: (() => unknown)[] = [
       () => store.add({ scope: 'column', column: 'x', severity: 'info', message: 'c' }),
       () => store.update(a.id, { message: 'a2' }),
@@ -93,44 +112,37 @@ describe('currentAnnotationFile', () => {
     ];
     for (const change of changes) {
       change();
-      const next = currentAnnotationFile(store);
-      expect(next).not.toBe(previous);
-      previous = next;
+      const token = annotationsToken(store);
+      expect(seen.has(token)).toBe(false);
+      seen.add(token);
     }
     store.clear('all');
-    expect(currentAnnotationFile(store)).toBeNull();
+    expect(annotationsToken(store)).toBeNull();
   });
 
-  it('keeps the file across severity-filter changes', () => {
+  it('stays across severity-filter changes', () => {
     const { store } = makeStore();
     store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
-    const file = currentAnnotationFile(store);
+    const token = annotationsToken(store);
     store.setSeverityFilter({ error: false });
     store.setSeverityFilter({ warning: false, error: true });
-    expect(currentAnnotationFile(store)).toBe(file);
+    expect(annotationsToken(store)).toBe(token);
   });
 
-  it('takes a new file when the table name the store resolves changes', () => {
+  it('changes when the table name the store resolves changes', () => {
     const { store, name } = makeStore('t1');
     store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
-    const first = currentAnnotationFile(store);
-    expect(first?.tableName).toBe('t1');
+    const first = annotationsToken(store);
     name.set('t2');
-    const second = currentAnnotationFile(store);
-    expect(second).not.toBe(first);
-    expect(second?.tableName).toBe('t2');
+    expect(annotationsToken(store)).not.toBe(first);
   });
 
-  it('keeps a file per store', () => {
+  it('is per store', () => {
     const one = makeStore('a').store;
     const two = makeStore('b').store;
     one.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
     two.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
-    const fileOne = currentAnnotationFile(one);
-    const fileTwo = currentAnnotationFile(two);
-    expect(fileOne).not.toBe(fileTwo);
-    expect(currentAnnotationFile(one)).toBe(fileOne);
-    expect(currentAnnotationFile(two)).toBe(fileTwo);
+    expect(annotationsToken(one)).not.toBe(annotationsToken(two));
   });
 });
 
@@ -148,17 +160,118 @@ describe('annotation file tokens', () => {
     shareAnnotationFileToken(copy, annotationFileToken(a));
     expect(annotationFileToken(copy)).toBe(annotationFileToken(a));
   });
+
+  it('change when the file’s annotations array is replaced or changes length', () => {
+    const a = fileOf(2);
+    const token = annotationFileToken(a);
+    a.annotations.push({ id: 'x', scope: 'row', rowId: 9, severity: 'info', message: 'x' });
+    const pushed = annotationFileToken(a);
+    expect(pushed).not.toBe(token);
+    a.annotations = [...a.annotations];
+    expect(annotationFileToken(a)).not.toBe(pushed);
+  });
+
+  it('stay through an edit in place that keeps the array and its length', () => {
+    const a = fileOf(2);
+    const token = annotationFileToken(a);
+    a.annotations[0] = { ...a.annotations[0]!, message: 'edited' };
+    expect(annotationFileToken(a)).toBe(token);
+  });
+});
+
+describe('snapshot annotations', () => {
+  it('take the file now, under the content’s token, unless lazy', () => {
+    const { store } = makeStore();
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const eager = snapshotOf(store, false);
+    expect(Object.getOwnPropertyDescriptor(eager, 'annotations')?.value).toBeDefined();
+    expect(annotationFileToken(eager.annotations!)).toBe(annotationsToken(store));
+    expect(tokenOf(eager)).toBe(annotationsToken(store));
+  });
+
+  it('take no file when lazy until read, and then under the content’s token', () => {
+    const { store } = makeStore();
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const toJSON = vi.spyOn(store, 'toJSON');
+    const snapshot = snapshotOf(store);
+    expect(tokenOf(snapshot)).toBe(annotationsToken(store));
+    expect(toJSON).not.toHaveBeenCalled();
+    const file = snapshot.annotations!;
+    expect(toJSON).toHaveBeenCalledTimes(1);
+    expect(file.annotations).toHaveLength(1);
+    expect(annotationFileToken(file)).toBe(annotationsToken(store));
+    // Read once: a data property from then on.
+    expect(snapshot.annotations).toBe(file);
+    expect(JSON.parse(JSON.stringify(snapshot)).annotations.annotations).toHaveLength(1);
+    expect(toJSON).toHaveBeenCalledTimes(1);
+  });
+
+  it('are none for an empty store, and held back when asked', () => {
+    const { store } = makeStore();
+    expect(tokenOf(snapshotOf(store))).toBe('none');
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const held = snapshotOf(store);
+    delete held.annotations;
+    holdBackSnapshotAnnotations(held);
+    expect(tokenOf(held)).toBe('held');
+  });
+
+  it('are gone, and held back, when read after the content changed', () => {
+    const { store } = makeStore();
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const snapshot = snapshotOf(store);
+    store.add({ scope: 'row', rowId: 2, severity: 'error', message: 'b' });
+    expect(snapshot.annotations).toBeUndefined();
+    expect(tokenOf(snapshot)).toBe('held');
+  });
+
+  it('carry the table name of their content, though the store resolves another since', () => {
+    const { store, name } = makeStore('t1');
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const snapshot = snapshotOf(store);
+    // As a load resets the table name before it empties the store.
+    name.set(null);
+    expect(snapshot.annotations?.tableName).toBe('t1');
+    const unnamed = makeStore(null).store;
+    unnamed.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const other = snapshotOf(unnamed);
+    expect(other.annotations).not.toHaveProperty('tableName');
+  });
+
+  it('are settled before a store is emptied, one file per content', () => {
+    const { store } = makeStore();
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const first = snapshotOf(store);
+    const second = snapshotOf(store);
+    const toJSON = vi.spyOn(store, 'toJSON');
+    settleSnapshotAnnotations([first, second]);
+    expect(toJSON).toHaveBeenCalledTimes(1);
+    store.clear('all');
+    expect(first.annotations?.annotations).toHaveLength(1);
+    expect(second.annotations).toBe(first.annotations);
+  });
+
+  it('take the value assigned to them, as a file of their own', () => {
+    const { store } = makeStore();
+    store.add({ scope: 'row', rowId: 1, severity: 'error', message: 'a' });
+    const snapshot = snapshotOf(store);
+    const file = fileOf(2);
+    snapshot.annotations = file;
+    expect(snapshot.annotations).toBe(file);
+    expect(tokenOf(snapshot)).toBe(annotationFileToken(file));
+  });
 });
 
 describe('adoptAnnotationFile', () => {
-  it('gives the store’s current file the token of the file it was loaded from', () => {
+  it('gives the store’s content the token of the file it was loaded from', () => {
     const { store } = makeStore();
     const file = fileOf(3);
     store.loadJSON(file, 'replace');
     adoptAnnotationFile(store, file);
-    const current = currentAnnotationFile(store);
-    expect(current).not.toBe(file);
-    expect(annotationFileToken(current!)).toBe(annotationFileToken(file));
+    expect(annotationsToken(store)).toBe(annotationFileToken(file));
+    const taken = snapshotOf(store).annotations!;
+    expect(taken).not.toBe(file);
+    expect(annotationFileToken(taken)).toBe(annotationFileToken(file));
   });
 
   it('does not keep the file it adopts', () => {
@@ -166,10 +279,10 @@ describe('adoptAnnotationFile', () => {
     const file = fileOf(2);
     store.loadJSON(file, 'replace');
     adoptAnnotationFile(store, file);
-    // The current file holds the store's own annotations, not the file's.
-    const current = currentAnnotationFile(store)!;
-    expect(current.annotations[0]).not.toBe(file.annotations[0]);
-    expect(current.annotations[0]).toBe(store.get('f0'));
+    // A file taken since holds the store's own annotations, not the file's.
+    const taken = snapshotOf(store).annotations!;
+    expect(taken.annotations[0]).not.toBe(file.annotations[0]);
+    expect(taken.annotations[0]).toBe(store.get('f0'));
   });
 
   it('adopts nothing when the store holds fewer annotations than the file', () => {
@@ -178,7 +291,7 @@ describe('adoptAnnotationFile', () => {
     file.annotations.push({ ...file.annotations[0]! });
     store.loadJSON(file, { mode: 'replace', duplicates: 'skip' });
     adoptAnnotationFile(store, file);
-    expect(annotationFileToken(currentAnnotationFile(store)!)).not.toBe(annotationFileToken(file));
+    expect(annotationsToken(store)).not.toBe(annotationFileToken(file));
   });
 
   it('adopts nothing for a file of another table or an older file version', () => {
@@ -187,17 +300,13 @@ describe('adoptAnnotationFile', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     other.loadJSON(otherFile, 'replace');
     adoptAnnotationFile(other, otherFile);
-    expect(annotationFileToken(currentAnnotationFile(other)!)).not.toBe(
-      annotationFileToken(otherFile),
-    );
+    expect(annotationsToken(other)).not.toBe(annotationFileToken(otherFile));
 
     const older = makeStore('t').store;
     const olderFile = { ...fileOf(1), version: 0 };
     older.loadJSON(olderFile, 'replace');
     adoptAnnotationFile(older, olderFile);
-    expect(annotationFileToken(currentAnnotationFile(older)!)).not.toBe(
-      annotationFileToken(olderFile),
-    );
+    expect(annotationsToken(older)).not.toBe(annotationFileToken(olderFile));
     vi.restoreAllMocks();
   });
 
@@ -206,7 +315,7 @@ describe('adoptAnnotationFile', () => {
     const file = fileOf(0);
     store.loadJSON(file, 'replace');
     expect(() => adoptAnnotationFile(store, file)).not.toThrow();
-    expect(currentAnnotationFile(store)).toBeNull();
+    expect(annotationsToken(store)).toBeNull();
   });
 });
 
@@ -228,35 +337,58 @@ describe('the annotations record and its marker', () => {
   });
 
   it('reads a marker of this format only', () => {
-    expect(isAnnotationsMarker(marker)).toBe(true);
-    expect(isAnnotationsMarker({ ...marker, format: 2 })).toBe(false);
-    expect(isAnnotationsMarker({ ...marker, count: -1 })).toBe(false);
-    expect(isAnnotationsMarker({ ...marker, count: 1.5 })).toBe(false);
-    expect(isAnnotationsMarker({ ...marker, owner: '' })).toBe(false);
-    expect(isAnnotationsMarker({ format: 1, count: 2 })).toBe(false);
-    expect(isAnnotationsMarker(null)).toBe(false);
-    expect(isAnnotationsMarker([marker])).toBe(false);
-  });
-
-  it('attaches the head written with the session record', () => {
-    const value = head();
-    expect(checkAnnotationsHead(marker, value)).toEqual({ ok: true, head: value });
-    const empty = head({ count: 0, chunks: 0 });
-    expect(checkAnnotationsHead({ ...marker, count: 0 }, empty)).toEqual({ ok: true, head: empty });
-  });
-
-  it('tells a missing head, another save’s, and a malformed one apart', () => {
-    expect(checkAnnotationsHead(marker, undefined)).toEqual({ ok: false, reason: 'missing' });
-    expect(checkAnnotationsHead(marker, head({ owner: 'o2' }))).toEqual({
-      ok: false,
-      reason: 'mismatch',
-    });
+    expect(readAnnotationsMarker(marker)).toEqual(marker);
     for (const bad of [
+      { ...marker, format: 2 },
+      { ...marker, count: -1 },
+      { ...marker, count: 1.5 },
+      { ...marker, owner: '' },
+      { format: 1, count: 2 },
+      null,
+      [marker],
+    ]) {
+      expect(readAnnotationsMarker(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('reads a marker’s fallback, and leaves out one it cannot read', () => {
+    const fallback = { owner: 'o0', count: 1 };
+    expect(readAnnotationsMarker({ ...marker, fallback })).toEqual({ ...marker, fallback });
+    for (const bad of [{ owner: 'o0' }, { owner: '', count: 1 }, 'o0', { owner: 'o1', count: 2 }]) {
+      expect(readAnnotationsMarker({ ...marker, fallback: bad }), JSON.stringify(bad)).toEqual(
+        marker,
+      );
+    }
+  });
+
+  it('reads a head of this format, with the records it kept', () => {
+    const kept = { owner: 'o0', count: 1, chunks: 1, file: fields };
+    const value = head({ previous: [kept] });
+    const read = readAnnotationsHead(value)!;
+    expect(read).toEqual(value);
+    expect(headEntries(read).map((entry) => entry.owner)).toEqual(['o1', 'o0']);
+    const empty = head({ count: 0, chunks: 0 });
+    expect(readAnnotationsHead(empty)).toEqual(empty);
+  });
+
+  it('leaves out a kept record it cannot read, or one that is the head’s own', () => {
+    const kept = { owner: 'o0', count: 1, chunks: 1, file: fields };
+    const read = readAnnotationsHead(
+      head({ previous: [kept, { owner: 'o2', count: 1 }, head(), 'x'] }),
+    );
+    expect(read?.previous).toEqual([kept]);
+    expect(readAnnotationsHead(head({ previous: [{ owner: 'o2' }] }))).not.toHaveProperty(
+      'previous',
+    );
+  });
+
+  it('reads no malformed head, nor one of another format', () => {
+    for (const bad of [
+      undefined,
       'a string',
       [head()],
       head({ format: 2 }),
       head({ owner: 7 }),
-      head({ count: 3 }),
       head({ count: -1 }),
       head({ chunks: 1.5 }),
       head({ chunks: 0 }),
@@ -265,10 +397,7 @@ describe('the annotations record and its marker', () => {
       head({ file: [] }),
       head({ file: { tableName: 't' } }),
     ]) {
-      expect(checkAnnotationsHead(marker, bad), JSON.stringify(bad)).toEqual({
-        ok: false,
-        reason: 'invalid',
-      });
+      expect(readAnnotationsHead(bad), JSON.stringify(bad)).toBeNull();
     }
   });
 

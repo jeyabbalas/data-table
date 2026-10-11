@@ -195,6 +195,28 @@ const CASES: Case[] = [
     filters: [{ type: 'raw-sql', column: '__raw_sql_1__', id: '1', sql: '"__rowid__" % 4 <> 1' }],
   },
   {
+    label: 'a raw-sql filter that names its table, sorted',
+    table: 'base',
+    sort: [{ column: 'val', direction: 'desc' }],
+    filters: [{ type: 'raw-sql', column: '__raw_sql_3__', id: '3', sql: 'base.grp <> 2' }],
+  },
+  {
+    label: 'a raw-sql filter that names its table, sorted by a list, then a value',
+    table: 'base',
+    sort: [
+      { column: 'waits', direction: 'asc' },
+      { column: 'val', direction: 'desc' },
+    ],
+    filters: [
+      {
+        type: 'raw-sql',
+        column: '__raw_sql_4__',
+        id: '4',
+        sql: 'base.val IS NOT NULL OR base.grp = 1',
+      },
+    ],
+  },
+  {
     label: 'the annotated rows themselves, as the annotated filter selects them',
     table: 'base',
     sort: [{ column: 'v', direction: 'desc' }],

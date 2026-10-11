@@ -365,7 +365,7 @@ describe('CrossfilterCoordinator — filter cycle complete', () => {
     coord.destroy();
   });
 
-  it('refresh() runs a cycle for the filters in force: count, charts, then the hook', async () => {
+  it('refresh() runs a cycle for the filters in force: count, charts, then the hook, resolving with the count', async () => {
     const { state, coord, counts, chart, seen } = setup();
     state.filters.set([A]);
     await flush();
@@ -383,10 +383,11 @@ describe('CrossfilterCoordinator — filter cycle complete', () => {
     expect(chart.refetches).toHaveLength(2);
 
     counts[1]!.resolve([{ cnt: 40 }]);
-    chart.refetches[1]!.resolve();
+    // It resolves with the count, while the chart goes on refetching.
     await refreshed;
     expect(seen).toEqual([{ filters: [A], filteredRows: 40 }]);
     expect(state.filteredRows.get()).toBe(40);
+    chart.refetches[1]!.resolve();
 
     // A refresh supersedes a cycle in flight, as a filter change does.
     const stale = coord.refresh();

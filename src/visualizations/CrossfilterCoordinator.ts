@@ -19,6 +19,7 @@
  */
 
 import type { StateActions } from '../core/Actions';
+import { nextTask } from '../core/nextTask';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
@@ -99,6 +100,9 @@ export class CrossfilterCoordinator {
    * `onFilterCycleComplete` once the count has settled. For when the rows
    * the filters keep changed while the filters did not, as an annotated
    * filter's do when annotations change. A cycle in flight is superseded.
+   * Resolves once the count has settled (or a newer cycle superseded it),
+   * without waiting for the charts, which go on refetching: what waits on
+   * it, annotation navigation among others, needs the count only.
    *
    * @internal
    */
@@ -116,7 +120,7 @@ export class CrossfilterCoordinator {
     }
   }
 
-  private async onFiltersChanged(filters: Filter[]): Promise<void> {
+  private onFiltersChanged(filters: Filter[]): Promise<void> {
     const seq = ++this.filterSequence;
     // The charts to refetch are the ones live now: a chart made from here on
     // is made with these filters.
@@ -125,12 +129,9 @@ export class CrossfilterCoordinator {
     // Run visualization updates and filtered row count in parallel (independent
     // queries), but cap viz fan-out so we don't queue N queries behind DuckDB's
     // single-threaded worker on wide tables. The cycle-complete hook goes with
-    // the count, not with the charts; the returned promise settles once both
-    // have.
-    await Promise.all([
-      this.updateVisualizations(charts, filters, seq),
-      this.countFilteredRows(filters, seq),
-    ]);
+    // the count, not with the charts, and so does the returned promise.
+    void this.updateVisualizations(charts, filters, seq);
+    return this.countFilteredRows(filters, seq);
   }
 
   /**
@@ -203,7 +204,7 @@ export class CrossfilterCoordinator {
   private async waitForReadableRelation(seq: number): Promise<boolean> {
     while (!this.actions.isRelationReadable()) {
       await this.actions.whenRelationReadable();
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await nextTask();
       if (this.destroyed || seq !== this.filterSequence) return false;
     }
     return true;

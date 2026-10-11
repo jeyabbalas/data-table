@@ -679,6 +679,19 @@ export class WorkerBridge {
   }
 
   /**
+   * Drop the cached query results whose SQL `stale` picks, keeping the
+   * others: for a change to a table only some queries read, as when a
+   * table's DuckDB table of annotated rows is rebuilt on a bridge other
+   * tables share. A query still in flight then returns its result without
+   * storing it, as after {@link clearQueryCache}.
+   *
+   * @internal
+   */
+  invalidateQueries(stale: (sql: string) => boolean): void {
+    this.queryCache.invalidate(stale);
+  }
+
+  /**
    * Drop a table from DuckDB if it exists. The identifier is double-quoted
    * (matching the worker-side loaders), so any tableName the bridge issued
    * to a `loadData` call is safe to pass back here.

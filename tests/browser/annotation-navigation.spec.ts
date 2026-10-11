@@ -301,7 +301,7 @@ test('under the annotated filter, F8 goes through the rows it shows', async ({ p
   expect(await renderedRowId(page, 1)).toBe(299_999);
 });
 
-test('under the annotated filter, removing an annotation refreshes the view in place, scroll and cursor kept', async ({
+test('under the annotated filter, removing an annotation refreshes the view in place: scroll kept, cursor on its row', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -357,14 +357,112 @@ test('under the annotated filter, removing an annotation refreshes the view in p
     ids.first,
   );
   await expect.poll(count).toBe(99_999);
-  // Each row from position 10 on moved up one: position 50,000 is rowId 150,003 now.
+  // Each row from position 10 on moved up one: position 50,000 is rowId
+  // 150,003 now, and the cursor went up with its row, to 49,999.
   await expect.poll(() => renderedRowId(page, 50_000), { timeout: 30_000 }).toBe(150_003);
+  await expect
+    .poll(async () => (await landing(page, BIG_TABLE_HOST_ID)).cursor, { timeout: 30_000 })
+    .toEqual({ row: 49_999, column: 'grp' });
+  expect(await renderedRowId(page, 49_999)).toBe(150_000);
   expect(Math.abs((await scrollTop()) - before)).toBeLessThan(2);
   expect(
     await page.evaluate(() => (window as unknown as { __minScroll: number }).__minScroll),
   ).toBeGreaterThan(before - 2);
-  expect((await landing(page, BIG_TABLE_HOST_ID)).cursor).toEqual({ row: 50_000, column: 'grp' });
   expect(await page.evaluate(() => (window as unknown as { __errors: string[] }).__errors)).toEqual(
     [],
   );
+});
+
+/**
+ * 300,000 rows, four annotated (rows 3, 999, 250,000 and 299,999, as in the
+ * case above that walks them), under the annotated filter.
+ */
+async function annotatedFour(page: Page): Promise<Record<number, string>> {
+  await mountBigTable(page, { rows: 300_000 });
+  const ids = await page.evaluate(() => {
+    const t = (window as unknown as BigWindow).__t;
+    const added = t.annotations.addMany([
+      { scope: 'cell', rowId: 3, column: 'grp', severity: 'warning', message: 'odd group' },
+      { scope: 'cell', rowId: 999, column: 'val', severity: 'error', message: 'too high' },
+      { scope: 'row', rowId: 250_000, severity: 'info', message: 'checked' },
+      { scope: 'row', rowId: 299_999, severity: 'error', message: 'last row' },
+    ]);
+    t.actions.showAnnotatedRows();
+    return Object.fromEntries(added.map((a) => [(a as { rowId: number }).rowId, a.id]));
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as BigWindow).__t.state.filteredRows.get()))
+    .toBe(4);
+  return ids;
+}
+
+test('under the annotated filter, resolving the issue under the cursor and pressing F8 goes to the next', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const ids = await annotatedFour(page);
+  const host = BIG_TABLE_HOST_ID;
+  expect((await pressTo(page, host, 'F8', 0)).said).toBe('Row 1 of 4, grp: warning, odd group');
+
+  // The app resolves the issue, and the user presses F8 at once: the next
+  // issue, where the view, refreshed in place, has it.
+  await page.evaluate((id) => (window as unknown as BigWindow).__t.annotations.remove(id), ids[3]!);
+  expect(await pressTo(page, host, 'F8', 0, /^Row 1 of 3, /)).toEqual({
+    cursor: { row: 0, column: 'val' },
+    said: 'Row 1 of 3, val: error, too high',
+  });
+  expect(await renderedRowId(page, 0)).toBe(999);
+
+  // Resolved again, F8 once the view has caught up: the row that slid
+  // under the cursor, then the one after.
+  await page.evaluate(
+    (id) => (window as unknown as BigWindow).__t.annotations.remove(id),
+    ids[999]!,
+  );
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as BigWindow).__t.state.filteredRows.get()))
+    .toBe(2);
+  await expect.poll(() => renderedRowId(page, 0), { timeout: 30_000 }).toBe(250_000);
+  expect(await pressTo(page, host, 'F8', 0, /^Row 1 of 2: /)).toEqual({
+    cursor: { row: 0, column: 'val' },
+    said: 'Row 1 of 2: info, checked',
+  });
+  expect((await pressTo(page, host, 'F8', 1)).said).toBe('Row 2 of 2: error, last row');
+  expect(await renderedRowId(page, 1)).toBe(299_999);
+});
+
+test('under the annotated filter, an annotation added above the cursor: the cursor stays on its row', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await annotatedFour(page);
+  const host = BIG_TABLE_HOST_ID;
+  const shown = await page.evaluate(() =>
+    (window as unknown as BigWindow).__t.actions.revealRow(250_000, 'grp'),
+  );
+  expect(shown).toEqual({ row: 2, column: 'grp' });
+
+  await page.evaluate(() =>
+    (window as unknown as BigWindow).__t.annotations.add({
+      scope: 'row',
+      rowId: 100_000,
+      severity: 'warning',
+      message: 'added',
+    }),
+  );
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as BigWindow).__t.state.filteredRows.get()))
+    .toBe(5);
+  await expect
+    .poll(async () => (await landing(page, host)).cursor, { timeout: 30_000 })
+    .toEqual({ row: 3, column: 'grp' });
+  expect(await renderedRowId(page, 3)).toBe(250_000);
+  expect(await renderedRowId(page, 2)).toBe(100_000);
+
+  // F8 goes on past the cursor's row.
+  expect(await pressTo(page, host, 'F8', 4)).toEqual({
+    cursor: { row: 4, column: 'grp' },
+    said: 'Row 5 of 5: error, last row',
+  });
+  expect(await renderedRowId(page, 4)).toBe(299_999);
 });

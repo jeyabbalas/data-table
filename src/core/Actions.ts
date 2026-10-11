@@ -285,6 +285,7 @@ export class StateActions {
   private onRelationSettledCallback?: (() => void) | undefined;
   private onBaseTableReplacedCallback?: ((tableName: string) => void) | undefined;
   private onRestoreIssueCallback?: ((issue: RestoreIssue) => void) | undefined;
+  private onDataClearedCallback?: ((kind: 'load' | 'clear') => void) | undefined;
   /** Callers of {@link whenRelationReadable} waiting on the changes in flight. */
   private readableWaiters: (() => void)[] = [];
   /** Callers of {@link dropDerived} waiting for the DuckDB change in flight to end. */
@@ -409,14 +410,31 @@ export class StateActions {
 
   /**
    * Set a callback told what a load's restore of a saved session left out,
-   * having restored the rest: today, annotations `loadJSON` refused. The
-   * facade reports each as a `warning` event.
+   * having restored the rest: today, annotations the session store could not
+   * attach to the session, or that `loadJSON` refused. The facade reports
+   * each as a `warning` event.
    *
    * @internal
    */
   setOnRestoreIssue(callback: (issue: RestoreIssue) => void): void {
     this.throwIfDestroyed('setOnRestoreIssue');
     this.onRestoreIssueCallback = callback;
+  }
+
+  /**
+   * Set a callback run in the turn of a load (`'load'`), once the worker has
+   * loaded the new data and before the restore of its saved session, or
+   * after a failed load that keeps no data, and in the turn of
+   * {@link clearData} (`'clear'`): the facade empties there what belongs to
+   * the data the state no longer holds, its annotations and its own presets.
+   * In the turn, a load that a newer one superseded leaves nothing it
+   * restored to the table that replaces it.
+   *
+   * @internal
+   */
+  setOnDataCleared(callback: (kind: 'load' | 'clear') => void): void {
+    this.throwIfDestroyed('setOnDataCleared');
+    this.onDataClearedCallback = callback;
   }
 
   /**
@@ -1031,6 +1049,7 @@ export class StateActions {
       this.lastSelectedIndex = null;
       this.undoManager?.clear();
       this.initialSnapshot = null;
+      this.onDataClearedCallback?.('clear');
       const manager = this.derivedManager;
       if (manager) {
         this.derivedManager = null;
@@ -1138,8 +1157,9 @@ export class StateActions {
         restoreState();
         this.lastSelectedIndex = anchor;
         if (undoStacks) this.undoManager?.loadStacks(undoStacks.undoStack, undoStacks.redoStack);
-      } else if (replacedInPlace) {
-        this.onBaseTableReplacedCallback?.(replaced);
+      } else {
+        if (replacedInPlace) this.onBaseTableReplacedCallback?.(replaced);
+        if (!this.destroyed) this.onDataClearedCallback?.('load');
       }
       throw err;
     }
@@ -1160,6 +1180,9 @@ export class StateActions {
       await this.abandonIfDestroyed(result.tableName);
     }
 
+    // What belongs to the data replaced goes, before the new table is named.
+    this.onDataClearedCallback?.('load');
+
     // Update state with schema from loader result
     this.state.tableName.set(result.tableName);
     this.state.totalRows.set(result.rowCount);
@@ -1170,11 +1193,13 @@ export class StateActions {
     this.state.baseTableName.set(result.tableName);
     this.state.derivedColumns.set([]);
 
-    // Restore session if a store is provided and a snapshot exists
-    if (options.sessionStore) {
+    // Restore session if a store is provided and a snapshot exists. A load
+    // superseded by a newer load or a clear restores none: the data it
+    // loaded is already going.
+    if (options.sessionStore && epoch === this.loadEpoch) {
       const snapshot = await options.sessionStore.load(result.tableName);
       this.throwIfDestroyed('loadData');
-      if (snapshot) {
+      if (snapshot && epoch === this.loadEpoch) {
         // What the load set up, to go back to if the snapshot cannot be read.
         const loaded = captureSnapshot(this.state);
         const loadedTooltips = this.state.columnHeaderTooltips.get();
@@ -1399,9 +1424,13 @@ export class StateActions {
    *
    * The view follows the annotations: adding or removing one while the
    * filter is on updates the view in place, keeping its scroll position and
-   * the cursor. A column-scope annotation singles out no row. The severity
-   * filter (`annotations.setSeverityFilter`) changes which tints show, not
-   * which rows this shows.
+   * the cursor on its row, and fires `filterChange` with the same filters
+   * and the new count. When the cursor's row leaves the view, the cursor
+   * stays where it was, on the row that slid into its place, which
+   * {@link StateActions.nextAnnotation} (`F8`) goes to next. A column-scope
+   * annotation singles out no row. The severity filter
+   * (`annotations.setSeverityFilter`) changes which tints show, not which
+   * rows this shows.
    *
    * Synchronous, like `addFilter`. The rows, the count and the charts follow
    * as they do for any filter change, once DuckDB holds the table's annotated
@@ -1637,6 +1666,13 @@ export class StateActions {
   /**
    * Get the complete WHERE clause SQL for all active filters.
    * Convenience method for downstream apps that need the raw SQL string.
+   *
+   * An annotated filter's SQL ({@link StateActions.showAnnotatedRows})
+   * reads an internal temporary table of the annotated rows, which the
+   * table keeps current lazily: it can trail the annotations in the store
+   * by a moment, does not exist until the table first needs it, and lives
+   * only on the table's own DuckDB connection. Run elsewhere, or before
+   * then, the clause fails or keeps the rows of annotations since changed.
    */
   getFiltersSQL(): string {
     return filtersToWhereClause(this.state.filters.get());
@@ -2888,9 +2924,10 @@ export class StateActions {
    * positional order within the current filter/sort view (same semantics as
    * the export "selected rows" scope) — not strict selection insertion order.
    * With an annotated filter in force ({@link StateActions.showAnnotatedRows}),
-   * a `'filtered'` or `'selected'` read keeps the rows the annotations in
-   * the store single out, even in the moment before the view catches up
-   * with a change to them.
+   * a `'filtered'` read keeps the rows the annotations in the store single
+   * out, even in the moment before the view catches up with a change to
+   * them. A `'selected'` read takes the rows at the selected positions in
+   * the view as it shows them, which that catching up could change.
    *
    * Numeric columns materialize into the narrowest sensible typed array:
    * - DuckDB `BIGINT` / `UBIGINT` / `HUGEINT` / `UHUGEINT` → `BigInt64Array`
@@ -2991,8 +3028,10 @@ export class StateActions {
     }
 
     // The rows an annotated filter keeps are read from the table of
-    // annotated rows, which can trail the store by a moment.
-    if (scope !== 'all') {
+    // annotated rows, which can trail the store by a moment. Not for the
+    // selected rows: they are positions in the view as it shows them, and
+    // bringing that table up to date would put other rows there.
+    if (scope === 'filtered') {
       try {
         await this.ensureFiltersFresh(signal);
       } finally {
@@ -3412,7 +3451,10 @@ export class StateActions {
    *
    * One navigation runs at a time: a newer call, a move of the cursor, or a
    * change of the filters, the sort or the table aborts it. It waits for a
-   * filter change still counting its rows. Far from the cursor in a large
+   * filter change still counting its rows, and, under an annotated filter
+   * ({@link StateActions.showAnnotatedRows}), for the view to catch up with
+   * the annotations: right after the issue under the cursor is resolved, it
+   * goes to the row that slid into its place. Far from the cursor in a large
    * sorted view, finding the row is a DuckDB query, some hundreds of
    * milliseconds on ten million rows.
    *

@@ -718,6 +718,8 @@ test.describe('the annotation popover in a real browser', () => {
   test('caps its sections, scrolls without closing, refreshes in place, and passes axe', async ({
     page,
   }) => {
+    // Short enough that the popover fits neither below its cell nor above.
+    await page.setViewportSize({ width: 1280, height: 600 });
     await mountTable(page, { columns: 40, rows: 100 });
     await installProbe(page, '__dt', HOST_ID);
     await call(page, 'hotCell', 2, 'c01', 8);
@@ -735,6 +737,13 @@ test.describe('the annotation popover in a real browser', () => {
       await expect(section.locator('.dt-annotation-entry')).toHaveCount(5);
       await expect(section.locator('.dt-annotation-popover__more')).toHaveText('+3 more');
     }
+
+    // Beside the cell, never over it: capped to the room on its side.
+    const popoverAt = (await popover.boundingBox())!;
+    expect(
+      popoverAt.y >= cellBox.y + cellBox.height || popoverAt.y + popoverAt.height <= cellBox.y,
+      `popover ${JSON.stringify(popoverAt)} covers the cell ${JSON.stringify(cellBox)}`,
+    ).toBe(true);
 
     // It overflows: a tab stop, and its own scroll does not close it.
     const metrics = await popover.evaluate((el) => ({

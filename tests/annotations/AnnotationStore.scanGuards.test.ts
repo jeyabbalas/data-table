@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { AnnotationStore } from '@/annotations/AnnotationStore';
-import { createScopeSummary } from '@/annotations/severity';
+import { createScopeSummary, SEVERITY_BIT } from '@/annotations/severity';
 import type { Annotation, NewAnnotation } from '@/annotations/types';
 
 let visited = 0;
@@ -285,6 +285,32 @@ describe('AnnotationStore — scan guards', () => {
       const third = scan(() => store.getByRow(HOT_ROW));
       expect(third.result.length).toBe(second.result.length + 1);
       expect(third.visited).toBeLessThanOrEqual(third.result.length);
+    });
+  });
+
+  it('annotatedRowMask reads the indexes, never rebuilding annotatedRows after a change', () => {
+    withCountingCollections(() => {
+      const { store } = buildStore();
+      const cells = store.getAll().filter((a) => a.scope === 'cell').length;
+      // The first read that meets cell annotations builds the by-row index, once.
+      expect(scan(() => store.annotatedRowMask(HOT_ROW)).visited).toBeGreaterThanOrEqual(cells);
+
+      // Changes to row and cell scope, as navigation meets after an issue is
+      // resolved: a rebuild of annotatedRows would walk every index again.
+      const hot = store.listCellScope(HOT_ROW, HOT_COLUMN)[0]!;
+      store.add({ scope: 'cell', rowId: 1_500, column: 'c1', severity: 'error', message: 'x' });
+      store.add({ scope: 'row', rowId: 1_501, severity: 'info', message: 'y' });
+      store.update(hot.id, { severity: 'info' });
+      const all = store.getAll();
+      for (const rowId of [HOT_ROW, 1_500, 1_501, 1_999, ROWS + 1]) {
+        let expected = 0;
+        for (const a of all) {
+          if (a.scope !== 'column' && a.rowId === rowId) expected |= SEVERITY_BIT[a.severity];
+        }
+        const read = scan(() => store.annotatedRowMask(rowId));
+        expect(read.result, `row ${rowId}`).toBe(expected);
+        expect(read.visited, `row ${rowId}`).toBe(0);
+      }
     });
   });
 

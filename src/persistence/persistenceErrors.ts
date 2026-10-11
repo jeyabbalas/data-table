@@ -33,16 +33,17 @@ export function classifyPersistenceFailure(
 }
 
 /**
- * The error a save reports when the session record was written but the
- * table's annotations record was not. Its `details.record` is
- * `'annotations'`, which {@link isAnnotationsWriteFailure} reads.
+ * The error a save reports when the table's annotations record was not
+ * written; the session record was, naming the annotations it named before.
+ * Its `details.record` is `'annotations'`, which
+ * {@link isAnnotationsWriteFailure} reads.
  *
  * @internal
  */
 export function annotationsWriteFailure(cause: unknown, tableName: string): PersistenceError {
   const reason = cause instanceof Error ? cause.message : String(cause);
   return new PersistenceError(
-    `The annotations of "${tableName}" were not saved (${reason}); the rest of the session was.`,
+    `The annotations of "${tableName}" were not saved (${reason}); the rest of the session was, with the annotations saved before.`,
     {
       code: classifyPersistenceFailure(cause),
       cause,

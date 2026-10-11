@@ -19,7 +19,7 @@ comes the Content Security Policy the page needs.
     <title>Data table from a CDN</title>
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.css"
+      href="https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/data-table.css"
     />
     <style>
       html,
@@ -35,8 +35,8 @@ comes the Content Security Policy the page needs.
     <script type="importmap">
       {
         "imports": {
-          "@jeyabbalas/data-table": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.js",
-          "@jeyabbalas/data-table/advanced": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/advanced.js",
+          "@jeyabbalas/data-table": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/data-table.js",
+          "@jeyabbalas/data-table/advanced": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/advanced.js",
           "@codemirror/autocomplete": "https://esm.sh/*@codemirror/autocomplete@6.20.3",
           "@codemirror/commands": "https://esm.sh/*@codemirror/commands@6.11.1",
           "@codemirror/lang-sql": "https://esm.sh/*@codemirror/lang-sql@6.10.0",
@@ -62,7 +62,7 @@ comes the Content Security Policy the page needs.
       // The library's worker script, from the same version. Its name changes when its
       // code does: for another version, copy it from that version's listing (see "The worker").
       const WORKER_URL =
-        'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-BpxbYHX2.js';
+        'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/assets/worker-BpxbYHX2.js';
 
       // A browser starts no worker from another origin's script. A blob: URL
       // belongs to this page, and a module worker started from one can import it.
@@ -84,7 +84,7 @@ comes the Content Security Policy the page needs.
 
 Before it runs, point `source` at your CSV, JSON or Parquet file. A file on
 another origin must send CORS headers (`Access-Control-Allow-Origin`). The
-rest is set for 0.9.0, the worker's file name included; for another version,
+rest is set for 0.10.0, the worker's file name included; for another version,
 see [The worker](#the-worker).
 
 The stylesheet goes in a `<link>`. A bundler applies
@@ -109,14 +109,14 @@ other by relative URL. They find the worker by a URL relative to their own,
 dialogs, the value inspector and other parts from sibling files when first
 used. On a raw-file CDN, all of those URLs resolve.
 
-| Entry point                       | File                  | jsDelivr URL                                                                    |
-| --------------------------------- | --------------------- | ------------------------------------------------------------------------------- |
-| `@jeyabbalas/data-table`          | `dist/data-table.js`  | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.js`  |
-| `@jeyabbalas/data-table/advanced` | `dist/advanced.js`    | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/advanced.js`    |
-| `@jeyabbalas/data-table/styles`   | `dist/data-table.css` | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/data-table.css` |
+| Entry point                       | File                  | jsDelivr URL                                                                     |
+| --------------------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| `@jeyabbalas/data-table`          | `dist/data-table.js`  | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/data-table.js`  |
+| `@jeyabbalas/data-table/advanced` | `dist/advanced.js`    | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/advanced.js`    |
+| `@jeyabbalas/data-table/styles`   | `dist/data-table.css` | `https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/data-table.css` |
 
 unpkg serves the same files at
-`https://unpkg.com/@jeyabbalas/data-table@0.9.0/dist/…`. To use it, change
+`https://unpkg.com/@jeyabbalas/data-table@0.10.0/dist/…`. To use it, change
 the host in every library URL: the stylesheet, the import map and the
 worker. In the policy, put `https://unpkg.com` wherever the library comes
 from jsDelivr, and swap in the edited import map's hash. DuckDB's own files
@@ -144,7 +144,7 @@ its message:
 
 ```text
 Failed to construct the library's worker (Failed to construct 'Worker': Script at
-'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/worker-BpxbYHX2.js'
+'https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/assets/worker-BpxbYHX2.js'
 cannot be accessed from origin 'https://your-site.example'.). A Content Security Policy
 (worker-src) or another origin can block it: see bridgeOptions.workerFactory in
 docs/guides/csp-and-offline.md.
@@ -161,15 +161,16 @@ give each table that `bridge` and a `tableName` of its own. A table ignores
 
 The part after `worker-` is a hash of the file's content, set when the
 package is built, so the name changes when the worker's code changes. For
-0.9.0 the file is `worker-BpxbYHX2.js`. For another version, copy the name
-from that version's file listing; for 0.9.0 these are:
+0.10.0 the file is `worker-BpxbYHX2.js`, the same as 0.9.0's, since its code
+did not change. For another version, copy the name from that version's file
+listing; for 0.10.0 these are:
 
 - jsDelivr:
-  [cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/](https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.9.0/dist/assets/)
+  [cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/assets/](https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/assets/)
 - unpkg:
-  [app.unpkg.com/@jeyabbalas/data-table@0.9.0/files/dist/assets](https://app.unpkg.com/@jeyabbalas/data-table@0.9.0/files/dist/assets)
+  [app.unpkg.com/@jeyabbalas/data-table@0.10.0/files/dist/assets](https://app.unpkg.com/@jeyabbalas/data-table@0.10.0/files/dist/assets)
 
-The folder holds two files, the worker and its source map: for 0.9.0,
+The folder holds two files, the worker and its source map: for 0.10.0,
 `worker-BpxbYHX2.js` and `worker-BpxbYHX2.js.map`. For a given version the
 name never changes. npm does not let a published version's files change, and
 both CDNs serve those files as they are, cached for a year. The URL you copy
@@ -217,7 +218,7 @@ that extract a field of a nested or JSON column into a column of its own.
 ## DuckDB's files
 
 The library's worker has DuckDB-WASM's JavaScript built in (1.33.1-dev57.0
-in 0.9.0), so the page imports nothing from `@duckdb/duckdb-wasm`. DuckDB
+in 0.10.0), so the page imports nothing from `@duckdb/duckdb-wasm`. DuckDB
 runs in a worker of its own, which the library's worker starts from a
 `blob:` URL. That worker loads DuckDB's worker script with `importScripts`
 and fetches the matching `.wasm`, both from jsDelivr. DuckDB then downloads
@@ -239,7 +240,7 @@ element at the top of `<head>`; it reaches the page's `blob:` workers too.
 ```http
 Content-Security-Policy: default-src 'self';
   script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh
-    'sha256-ML6UIHXAYwqiuGgMethV9xznPRACNUDXwEmKzNaGR7w=' 'sha256-<hash of the module script>';
+    'sha256-3YnF++/0zaEQCQp0EbWpbl+zKmkUgJXhijcUFiV9aO8=' 'sha256-<hash of the module script>';
   worker-src 'self' blob: https://cdn.jsdelivr.net;
   connect-src 'self' https://cdn.jsdelivr.net https://extensions.duckdb.org;
   style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
@@ -312,7 +313,7 @@ Chrome reports them:
 To load nothing of the library from a CDN, serve the package's `dist/`
 folder from your own origin, at `/vendor/data-table/` for example. Get it
 from the package's tarball,
-`https://registry.npmjs.org/@jeyabbalas/data-table/-/data-table-0.9.0.tgz`
+`https://registry.npmjs.org/@jeyabbalas/data-table/-/data-table-0.10.0.tgz`
 (its `package/dist/` folder), or copy
 `node_modules/@jeyabbalas/data-table/dist/` from any project that installs
 the package. Point the stylesheet and the import map at those files. The

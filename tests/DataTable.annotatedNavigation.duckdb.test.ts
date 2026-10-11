@@ -407,6 +407,36 @@ describe('a row that moves out of the rows the grid fetches again (real DuckDB)'
   });
 });
 
+describe('a gap off-screen, searched in SQL (real DuckDB)', () => {
+  it("the cursor's row resolved while the user looks elsewhere: F8 and Shift+F8 go on from the gap", async () => {
+    const m = await mount(
+      Array.from({ length: 600 }, (_, rowId) => rowId),
+      { rows: 600 },
+    );
+    expect(await m.table.actions.revealRow(400, 'grp')).toEqual({ row: 400, column: 'grp' });
+    const body = m.table.container.getTableBody()!;
+    await vi.waitFor(() => expect(body.cachedRowId(400)).toBe(400), { timeout: 5_000 });
+    body.scrollToRow(0, 'start');
+    await m.table.container.whenBodyReady();
+
+    m.table.annotations.remove(m.ids.get(400)!);
+    await m.settled(599);
+    // The gap row 400 left is 400 rows in, where row 401 is.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+    // Neither row is among the rows the grid holds: each search is SQL's.
+    expect(body.cachedRowId(400)).toBe(null);
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 401, row: 400 });
+
+    body.scrollToRow(0, 'start');
+    await m.table.container.whenBodyReady();
+    m.table.annotations.remove(m.ids.get(401)!);
+    await m.settled(598);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 400, column: 'grp' });
+    expect(body.cachedRowId(399)).toBe(null);
+    await expectLanded(m, await m.table.actions.previousAnnotation(), { rowId: 399, row: 399 });
+  });
+});
+
 describe('the rows back, the count on its way (real DuckDB)', () => {
   it('the cursor is on its row already, and the keys act from there', async () => {
     const m = await mount([2, 5, 7, 9]);

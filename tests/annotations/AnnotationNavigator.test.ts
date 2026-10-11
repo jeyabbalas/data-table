@@ -111,12 +111,12 @@ describe('AnnotationNavigator: which tier answers', () => {
     expect(host.queries).toEqual([]);
   });
 
-  it('(3) filtered and unsorted: the nearest rowid past the cursor, and a count of the rows before it', async () => {
+  it('(3) filtered and unsorted: the nearest rowid past the cursor, and a count between', async () => {
     const store = new ModelStore([{ scope: 'row', rowId: 150, severity: 'error' }]);
     const host = makeHost({
       store,
       answer: (sql) =>
-        sql.startsWith('SELECT min(') ? [{ r: 150 }] : sql.includes('count(*)') ? [{ n: 65 }] : [],
+        sql.startsWith('SELECT min(') ? [{ r: 150 }] : sql.includes('count(*)') ? [{ n: 24 }] : [],
     });
     host.state.filters.set([{ type: 'range', column: 'a', min: 0, max: 10 }]);
     host.state.filteredRows.set(90);
@@ -126,17 +126,16 @@ describe('AnnotationNavigator: which tier answers', () => {
 
     const landed = await new AnnotationNavigator(host).next();
 
-    expect(landed).toMatchObject({ rowId: 150, row: 65 });
+    expect(landed).toMatchObject({ rowId: 150, row: 40 + 1 + 24 });
     expect(host.source.ensureFresh).toHaveBeenCalledTimes(1);
     expect(host.queries).toHaveLength(2);
     expect(host.queries[0]).toBe(
       'SELECT min("__rowid__") AS r FROM "t" WHERE (("a" >= 0 AND "a" < 10)) AND' +
         ' "__rowid__" IN (SELECT "__rowid__" FROM "helper") AND "__rowid__" > 80',
     );
-    // Counted from the start of the view, never reckoned from the cursor's
-    // position, which an in-place refresh may have made another row's.
+    // A range the scan skips to, not every row before it.
     expect(host.queries[1]).toBe(
-      'SELECT count(*) AS n FROM "t" WHERE (("a" >= 0 AND "a" < 10)) AND "__rowid__" < 150',
+      'SELECT count(*) AS n FROM "t" WHERE (("a" >= 0 AND "a" < 10)) AND "__rowid__" > 80 AND "__rowid__" < 150',
     );
   });
 
@@ -244,7 +243,7 @@ describe('AnnotationNavigator: which tier answers', () => {
           ? [{ __rowid__: 70 }]
           : sql.startsWith('SELECT min(')
             ? [{ r: sql.includes('> 70') ? 90 : next }]
-            : [{ n: sql.includes('< 90') ? 11 : 5 }],
+            : [{ n: 5 }],
     });
     host.state.filters.set([{ type: 'not-null', column: 'b' }]);
     host.state.filteredRows.set(50);
@@ -252,7 +251,7 @@ describe('AnnotationNavigator: which tier answers', () => {
 
     expect(await nav.next()).toMatchObject({ rowId: 70, row: 5 });
     // The grid has not fetched the row yet: the navigation knows it.
-    expect(await nav.next()).toMatchObject({ rowId: 90, row: 11 });
+    expect(await nav.next()).toMatchObject({ rowId: 90, row: 5 + 6 });
     expect(host.queries.some((sql) => sql.includes('OFFSET'))).toBe(false);
 
     // Refreshed in place, the view may hold another row there: it is asked for.
@@ -728,9 +727,10 @@ describe('AnnotationNavigator: a view refreshed in place', () => {
     };
 
     atGap();
-    // Past row 40, and the 20 rows before the hit.
-    expect(await nav.next()).toMatchObject({ rowId: 150, row: 20 });
+    // Past row 40, and the 20 rows between it and the hit: 12 + 20.
+    expect(await nav.next()).toMatchObject({ rowId: 150, row: 32 });
     expect(host.queries[0]).toContain(' AND "__rowid__" > 40');
+    expect(host.queries[1]).toContain(' AND "__rowid__" > 40 AND "__rowid__" < 150');
 
     host.state.sortColumns.set([{ column: 'a', direction: 'desc' }]);
     host.queries.length = 0;
@@ -761,7 +761,7 @@ describe('AnnotationNavigator: a view refreshed in place', () => {
     host.body.hold(0, 1, () => 0);
     const nav = new AnnotationNavigator(host);
 
-    expect(await nav.next()).toMatchObject({ rowId: 150, row: 65 });
+    expect(await nav.next()).toMatchObject({ rowId: 150, row: 1 + 65 });
     expect(host.queries.filter((sql) => sql.startsWith('SELECT min('))).toHaveLength(2);
 
     refreshes = Infinity;

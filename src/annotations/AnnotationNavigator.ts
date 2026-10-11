@@ -17,9 +17,9 @@
  *    a binary search over the store's sorted annotated rows;
  * 3. SQL, against the helper table of annotated rows (see
  *    `annotatedRowsSource`). Unsorted, the smallest `__rowid__` past the
- *    cursor's, and a count of the rows before it for its position. Sorted,
- *    the first row in the grid's order past the cursor's row, found by
- *    comparing each row with it key by key as the grid's `ORDER BY` does
+ *    cursor's, and a count of the rows between the two for its position.
+ *    Sorted, the first row in the grid's order past the cursor's row, found
+ *    by comparing each row with it key by key as the grid's `ORDER BY` does
  *    (NULLS LAST, `__rowid__` last), and a count of the rows before it.
  *    A sort column whose type the parser could not read falls back to
  *    numbering the view with `row_number()`, which is exact for any type
@@ -759,14 +759,26 @@ export class AnnotationNavigator implements AnnotationNavigation {
       );
       const rowId = hit?.r;
       if (rowId === null || rowId === undefined) return null;
-      // Its position: the rows before it, counted in the view as it is, not
-      // reckoned from the anchor's position, which may be the view's before
-      // an in-place refresh.
+      if (at === null) {
+        // The rows before it.
+        const [count] = await this.query<{ n: number }>(
+          `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} ${desc ? '>' : '<'} ${rowId}`,
+          signal,
+        );
+        return { pos: count!.n, rowId };
+      }
+      // The rows between the anchor's row and it, a range the scan skips
+      // to; a count from the start would read every row before it. The
+      // anchor's position is the view's: `settle` waited for the view to be
+      // current, and a refresh since makes the navigation search again.
+      // From a gap, the anchor's row is the one that left it, at no
+      // position, and the hit's position runs on from the gap's.
+      const [lo, hi] = up ? [at, rowId] : [rowId, at];
       const [count] = await this.query<{ n: number }>(
-        `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} ${desc ? '>' : '<'} ${rowId}`,
+        `SELECT count(*) AS n FROM ${view} WHERE ${filtered}${ROWID} > ${lo} AND ${ROWID} < ${hi}`,
         signal,
       );
-      return { pos: count!.n, rowId };
+      return { pos: anchor.pos + dir * (count!.n + 1), rowId };
     }
 
     // Sorted: the first row past the anchor's in the grid's order.

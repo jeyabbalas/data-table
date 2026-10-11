@@ -215,12 +215,14 @@ type GridCell = { readonly row: number; readonly column: string };
 
 /**
  * An in-place refresh of the rows an annotated filter keeps (see
- * `TableContainer.refreshAnnotatedView`): the cursor, which the new row
- * count may move up to the last row meanwhile; the `__rowid__` of the row
- * the cursor follows, `null` when there is none to follow; and what aborts
- * its query for that row's place in the view.
+ * `TableContainer.refreshAnnotatedView`): the cursor it found (`origin`),
+ * and the cursor now, which the new row count may have moved up to the
+ * last row meanwhile; the `__rowid__` of the row the cursor follows, `null`
+ * when there is none to follow; and what aborts its query for that row's
+ * place in the view.
  */
 interface AnnotatedRefresh {
+  readonly origin: GridCell | null;
   cursor: GridCell | null;
   readonly rowId: number | null;
   readonly controller: AbortController;
@@ -264,8 +266,11 @@ interface RunningExtract {
  */
 interface PanelRequest {
   readonly panel: PanelName;
-  /** The value inspector's: the cell asked for. */
-  readonly cell?: { readonly row: number; readonly column: string } | undefined;
+  /**
+   * The value inspector's: the cell asked for, which follows its row through
+   * an in-place refresh of the annotated rows.
+   */
+  cell?: GridCell | undefined;
   /** The value inspector's: whether focus was in the table when it was asked for. */
   readonly focusInTable?: boolean | undefined;
 }
@@ -808,7 +813,12 @@ export class TableContainer {
         ? running.rowId
         : (this.cursorGapAt(cursor)?.rowId ?? body?.cachedRowId(cursor.row) ?? null);
     }
-    const refresh: AnnotatedRefresh = { cursor, rowId, controller: new AbortController() };
+    const refresh: AnnotatedRefresh = {
+      origin: carried ? running.origin : cursor,
+      cursor,
+      rowId,
+      controller: new AbortController(),
+    };
     this.annotatedRefresh = refresh;
     body?.refresh();
     const recounted = this.resolvedOptions.onAnnotatedRowsChange?.();
@@ -877,7 +887,10 @@ export class TableContainer {
    * position, or, given `gap`, the row having left the view, where the gap
    * it left is (`gap` rows into the view; on the last row when the gap is
    * past it). The table's own move, which a navigation waiting for the
-   * refresh does not take for the user's.
+   * refresh does not take for the user's. What waits on the cursor's cell,
+   * or shows it, follows the row: an open of the value inspector asked for
+   * there, and the inspector itself. At a gap, the open is dropped, and the
+   * inspector stays on the value it shows.
    */
   private placeCursor(refresh: AnnotatedRefresh, row: number, gap: number | null): void {
     this.annotatedRefresh = null;
@@ -893,6 +906,21 @@ export class TableContainer {
     const placed = this.state.focusedCell.get();
     this.cursorGap =
       gap !== null && placed ? { cell: placed, rowId: refresh.rowId!, pos: gap } : null;
+
+    const from = refresh.origin ?? cursor;
+    const at = (cell: GridCell | null | undefined): boolean =>
+      cell != null && cell.row === from.row && cell.column === from.column;
+    const to = gap === null ? row : null;
+    if (at(this.pendingInspect)) {
+      this.pendingInspect = to === null ? null : { row: to, column: from.column };
+    }
+    const request = this.panelRequest;
+    if (request?.panel === 'valueInspector' && at(request.cell)) {
+      if (to === null) this.panelRequest = null;
+      else request.cell = { row: to, column: from.column };
+    }
+    const shown = this.valueInspector?.getShown();
+    if (to !== null && shown && shown.row === from.row) this.valueInspector!.moveTo(to);
   }
 
   /** The gap `cell` stands at, while it is the cursor an in-place refresh left there; see `cursorGap`. */
@@ -1586,6 +1614,10 @@ export class TableContainer {
       this.state.tableName.subscribe(() => this.closeForTable(closeInspector)),
       this.state.selectedRows.subscribe(closeInspector),
       this.state.focusedCell.subscribe((cell) => {
+        // The table's own move, following the cursor's row through an
+        // in-place refresh: what waits on the cell, or shows it, follows the
+        // row too (see placeCursor).
+        if (this.followingRow) return;
         const elsewhere = (at: { row: number; column: string }): boolean =>
           cell?.row !== at.row || cell.column !== at.column;
         const pending = this.pendingInspect;

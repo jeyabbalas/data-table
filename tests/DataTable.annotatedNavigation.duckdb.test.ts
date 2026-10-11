@@ -22,6 +22,7 @@ import { vi } from 'vitest';
 import type { AnnotationNavigationResult } from '@/annotations/navigationTypes';
 import type { QueryOptions, WorkerBridge } from '@/data/WorkerBridge';
 import { createDataTable, quoteIdentifier, type DataTable } from '@/index';
+import type { ValueInspector } from '@/table/ValueInspector';
 
 import { createNodeDuckDB, type NodeDuckDBHarness } from './helpers/duckdbNode';
 import { makeNodeBridge } from './helpers/nodeBridge';
@@ -427,6 +428,37 @@ describe('the rows back, the count on its way (real DuckDB)', () => {
     expect(m.table.state.focusedCell.get()).toEqual({ row: 3, column: 'grp' });
     expect(renderedRowId(m.table, 3)).toBe(7);
   });
+});
+
+describe('the value inspector through a refresh in place (real DuckDB)', () => {
+  const inspector = (table: DataTable): ValueInspector | null =>
+    (table.container as unknown as { valueInspector: ValueInspector | null }).valueInspector;
+
+  for (const [where, rowId, row] of [
+    ['below', 9, 1],
+    ['above', 3, 2],
+  ] as const) {
+    it(`an annotation added ${where} the cursor's row: the inspector stays open on its row`, async () => {
+      const m = await mount([2, 5, 7], { json: true });
+      m.table.actions.setFocusedCell({ row: 1, column: 'tags' });
+      expect(m.table.container.openValueInspector({ row: 1, column: 'tags' })).toBe(true);
+      await vi.waitFor(() => expect(inspector(m.table)?.getIsOpen()).toBe(true), {
+        timeout: 5_000,
+      });
+
+      m.table.annotations.add({ scope: 'row', rowId, severity: 'warning', message: 'new' });
+      await m.settled(4);
+      expect(m.table.state.focusedCell.get()).toEqual({ row, column: 'tags' });
+      expect(inspector(m.table)!.getShown()).toEqual({ column: 'tags', row, rowId: 5 });
+      const title = inspector(m.table)!
+        .getElement()
+        .querySelector('[id$="-value-inspector-title"]');
+      expect(title?.textContent).toContain(`${row + 1}`);
+      // The user's own move to another cell still closes it.
+      m.table.actions.setFocusedCell({ row: 0, column: 'tags' });
+      expect(inspector(m.table)!.getIsOpen()).toBe(false);
+    });
+  }
 });
 
 describe('resolve, then F8, in a sorted annotated view (real DuckDB)', () => {

@@ -149,16 +149,30 @@ describe('TableContainer: annotation navigation', () => {
     );
   });
 
-  it('leaves the keys to the page while there are no annotations', async () => {
+  it('leaves the keys to the page while there is no row to go to', async () => {
     await mount();
     actions.setFocusedCell({ row: 2, column: 'id' });
     expect(press({ key: 'F8' })).toBe(false);
     expect(press({ key: 'ArrowDown', altKey: true })).toBe(false);
-    // Column annotations are annotations, though they single out no row.
+    // A column annotation singles out no row.
     store.add({ scope: 'column', column: 'name', severity: 'info', message: 'about names' });
+    expect(press({ key: 'F8' })).toBe(false);
+    // Rows whose every severity the severity filter hides are not gone to either.
+    store.add({ scope: 'row', rowId: 5, severity: 'warning', message: 'look' });
+    store.setSeverityFilter({ error: false, warning: false, info: false });
+    expect(press({ key: 'F8' })).toBe(false);
+    expect(press({ key: 'ArrowUp', altKey: true })).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(announced()).toBe('');
+    expect(state.focusedCell.get()).toEqual({ row: 2, column: 'id' });
+
+    // A severity shown, of any annotation: the keys go to the rows.
+    store.setSeverityFilter({ info: true });
     expect(press({ key: 'F8' })).toBe(true);
     await vi.waitFor(() => expect(announced()).toBe('No annotations shown'));
-    expect(state.focusedCell.get()).toEqual({ row: 2, column: 'id' });
+    store.setSeverityFilter({ warning: true });
+    expect(press({ key: 'F8' })).toBe(true);
+    await vi.waitFor(() => expect(state.focusedCell.get()).toEqual({ row: 5, column: 'id' }));
   });
 
   it('with annotationNavigation: false, the keys are the page’s and the actions still work', async () => {

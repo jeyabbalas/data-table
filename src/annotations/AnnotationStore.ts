@@ -664,6 +664,15 @@ export class AnnotationStore {
     return this.byId.size;
   }
 
+  /**
+   * Number of annotations of `scope` in the store. O(1).
+   *
+   * @internal
+   */
+  countOfScope(scope: AnnotationScope): number {
+    return this.scopeCount(scope);
+  }
+
   // =========================================
   // Lookups
   // =========================================

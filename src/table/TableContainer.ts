@@ -2833,15 +2833,20 @@ export class TableContainer {
 
   /**
    * `F8` and its siblings: start a navigation when there are annotations to
-   * go to, and say whether the key was taken. A navigation dropped for a
+   * go to, and say whether the key was taken. There are when the store
+   * holds a row or cell annotation (a column annotation singles out no row)
+   * and the severity filter shows a severity, which the keys go to; else
+   * the key is the page's, and nothing is said. A navigation dropped for a
    * newer one, a cursor move or a view change is the user's doing; any
    * other failure goes to the `onError` option.
    */
   private navigateAnnotations(direction: 'next' | 'previous'): boolean {
     const actions = this.actions;
-    if (!actions || !this.resolvedOptions.annotations?.count() || !this.state.tableName.get()) {
-      return false;
-    }
+    const store = this.resolvedOptions.annotations;
+    if (!actions || !store || !this.state.tableName.get()) return false;
+    if (store.countOfScope('row') + store.countOfScope('cell') === 0) return false;
+    const shown = store.getSeverityFilter();
+    if (!shown.error && !shown.warning && !shown.info) return false;
     (direction === 'next' ? actions.nextAnnotation() : actions.previousAnnotation()).catch(
       (error: unknown) => {
         if (!this.destroyed && error instanceof DataTableError && error.code !== 'QUERY_ABORTED') {

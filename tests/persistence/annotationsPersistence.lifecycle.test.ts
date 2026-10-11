@@ -13,7 +13,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDataTable, type DataTable } from '@/index';
-import { LoadError } from '@/core/errors';
+import { DestroyedError, LoadError } from '@/core/errors';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
 import { AutoSave } from '@/persistence/AutoSave';
@@ -549,5 +549,38 @@ describe('clearSession() and destroy() in one task', () => {
     expect(await rawSession('B')).toBeUndefined();
     expect(await rawAnnotations('B')).toBeUndefined();
     expect(await rawChunks('B')).toEqual([]);
+  }, 10_000);
+
+  /** A table whose sort is saved, its store then closed by another tab's delete of dt-annotations. */
+  async function savedThenClosedUnder(name: string): Promise<DataTable> {
+    const table = await mount({
+      container: container(),
+      bridge: makeBridge(),
+      source: new File([''], `${name}.csv`),
+      tableName: name,
+      ...BARE,
+    });
+    table.actions.toggleSort('id');
+    await vi.waitFor(async () => expect((await rawSession(name))?.['sortColumns']).toBeDefined(), {
+      timeout: 3000,
+    });
+    // The store's connection to it closes, as on versionchange: the
+    // session store must open the databases again for its next operation.
+    await deleteDatabase('dt-annotations');
+    return table;
+  }
+
+  it('rejects, the session left, when the close refuses a delete waiting to open the databases', async () => {
+    const table = await savedThenClosedUnder('C');
+    const cleared = table.clearSession();
+    await table.destroy();
+    await expect(cleared).rejects.toBeInstanceOf(DestroyedError);
+    expect((await rawSession('C'))?.['sortColumns']).toEqual([{ column: 'id', direction: 'asc' }]);
+  }, 10_000);
+
+  it('deletes without destroy() when the delete opens the databases again', async () => {
+    const table = await savedThenClosedUnder('D');
+    await table.clearSession();
+    expect(await rawSession('D')).toBeUndefined();
   }, 10_000);
 });

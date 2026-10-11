@@ -1933,16 +1933,28 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       lifecycleChanges++;
       autoSave?.disableWith('drop');
       const key = state.baseTableName.get() ?? state.tableName.get();
-      if (sessionStore && key) await sessionStore.delete(key);
+      // Whether the session went: a store of the app's own, which destroy()
+      // does not close, is taken at its word.
+      let deleted = true;
+      if (sessionStore && key) {
+        const store: Partial<Pick<SessionStore, 'deleteSession'>> = sessionStore;
+        if (typeof store.deleteSession === 'function') {
+          deleted = await store.deleteSession.call(sessionStore, key);
+        } else {
+          await sessionStore.delete(key);
+        }
+      }
       // If destroy() raced ahead while we were awaiting the IDB delete, drop
       // the in-memory reset — the state slices are about to be torn down and
-      // mutating them now would emit on a dying emitter. The session is
-      // deleted (a store destroy() closes lets the delete end), and the
-      // in-memory state goes with the table: done, unless a load in flight
-      // has landed a table of its own, whose session is not.
+      // mutating them now would emit on a dying emitter. When the session
+      // went (a store destroy() closes lets a delete asked for before end),
+      // the in-memory state goes with the table: done. Not when the close
+      // refused the delete, waiting for the databases to open again, nor
+      // when a load in flight landed a table of its own, whose session is
+      // not deleted.
       if (destroyed) {
         const current = state.baseTableName.get() ?? state.tableName.get();
-        if (current === null || current === key) return;
+        if (deleted && (current === null || current === key)) return;
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
       // In its turn, after a derived-column change running now, which then

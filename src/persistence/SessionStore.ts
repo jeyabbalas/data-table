@@ -1647,13 +1647,26 @@ export class SessionStore {
    * more. No-op if db unavailable.
    */
   async delete(tableName: string): Promise<void> {
+    await this.deleteSession(tableName);
+  }
+
+  /**
+   * {@link delete}, resolving whether the session record was deleted:
+   * `false` when the databases could not be opened, when a {@link close}
+   * refused the delete, waiting for them to open again, or when its
+   * transaction failed. `DataTable.clearSession` tells by it whether a
+   * `destroy()` right after let it run.
+   *
+   * @internal
+   */
+  async deleteSession(tableName: string): Promise<boolean> {
     const table = this.table(tableName);
     table.overtakes++;
     const asked = this.connectionsAsked();
     return this.inTurn(tableName, table, async () => {
       const connections = await asked();
       const db = connections === null ? null : usable(connections.db);
-      if (connections === null || db === null) return;
+      if (connections === null || db === null) return false;
       // Nothing a synchronous save makes meanwhile names the records going.
       table.landed = undefined;
       table.embedded = false;
@@ -1666,6 +1679,7 @@ export class SessionStore {
           : deleteAnnotationsRecord(annotationsDb, tableName).catch(() => undefined);
       const [deleted] = await Promise.all([deleteRecord(db, STORE_NAME, tableName), annotations]);
       if (deleted && table.landed === undefined) table.landed = null;
+      return deleted;
     });
   }
 

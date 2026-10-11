@@ -317,13 +317,15 @@ annotation that comes first reads as "Row 1,204 of 9,880,000: error, …".
 (or "above") at the end. Every phrase is a `messages.annotations.navigation`
 string; see [i18n → Annotations](./i18n.md#annotations).
 
-Under the annotated filter (`actions.showAnnotatedRows()`), the view
-follows the annotations a moment behind, and the cursor follows its row.
-When the user resolves the issue under the cursor and its row leaves the
-view, the cursor stays where it was, on the row that slid into its place,
-and `F8` goes to that row next, announced like any landing: the next issue.
-`F8` right after a change waits for the view to catch up, some 0.4–0.7 s at
-a million annotated rows, before it moves.
+Under the annotated filter (`actions.showAnnotatedRows()`), the view follows
+the annotations a moment behind, and the cursor follows its row; an open
+value inspector stays open, its title giving the row's new number. When the
+user resolves the issue under the cursor and its row leaves the view, the
+cursor goes to the gap the row left, on the first kept row after it, and
+`F8` goes to that row next, announced like any landing: the next issue.
+`Shift+F8` goes to the last kept row before the gap. `F8` right after a
+change waits for the view to catch up, some 0.4–0.7 s at a million annotated
+rows, before it moves.
 
 This is how keyboard and screen-reader users reach annotations: the popover
 opens on pointer hover and on DOM focus entering a cell, and the grid's

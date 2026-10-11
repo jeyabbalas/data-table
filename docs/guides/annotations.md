@@ -339,16 +339,18 @@ severity filter's flags. They are kept apart from the rest of the session:
   clone them all again (about 1.2 s in Node). A reload writes nothing back
   until they change.
 - **Annotations first.** A save that has annotations to write puts the new
-  chunks and head in one transaction, so a reader finds a record whole or
-  not at all, and only once that has committed writes the session record
-  naming them, with the record it named before as its fallback, which the
-  write kept until then. A reload at any point, or a write that fails,
-  restores the last annotations that landed, at worst older than the rest of
-  the session. Each chunk is put once the one before it is stored: at a
-  million annotations in Chromium a write took 0.43–0.51 s in 100 chunks,
-  with no task over 16 ms. The chunks also keep each value far below
-  127 MiB, the most Chromium stores in one IndexedDB value, which a million
-  annotations in one value pass.
+  chunks and head in one transaction, so a reader finds a record whole or not
+  at all, and only once that has committed writes the session record naming
+  them, with the record it named before as its fallback, which the write kept
+  until then. A reload at any point, or a write that fails, restores the last
+  annotations that landed, at worst older than the rest of the session. A page
+  hidden, or a table destroyed, while such a save is under way saves a session
+  record naming that write rather than writing the annotations again, and a
+  store that closes lets the saves asked for before it finish. Each chunk is
+  put once the one before it is stored: at a million annotations in Chromium a
+  write took 0.43–0.51 s in 100 chunks, with no task over 16 ms. The chunks
+  also keep each value far below 127 MiB, the most Chromium stores in one
+  IndexedDB value, which a million annotations in one value pass.
 - **Restored apart.** A reload reads the head and the chunks in one
   transaction: in Chromium at a million, 0.37–0.8 s to read and 0.70–0.73 s
   to restore, the reload's longest step. When neither the annotations the
@@ -493,10 +495,12 @@ the severities the [severity filter](#severity-filter-view-layer) shows.
 a moment behind. `F8` first brings it up to date and waits for it to refresh,
 so right after a change it waits for that (0.4–0.7 s at a million annotated
 rows) before it searches. Resolve the issue under the cursor, by removing
-its annotation, and its row leaves the view: the cursor stays on the row
-that slid into its place, and `F8` goes to that row, the next annotated one.
-A view that refreshes again while the search runs is searched again; after
-three, the search gives up with `QUERY_ABORTED`.
+its annotation, and its row leaves the view: the cursor goes to the gap the
+row left, on the first kept row after it, and `F8` and `Shift+F8` go on from
+the row that left. `F8` goes to the first kept row after it, the next
+annotated one, and `Shift+F8` to the last kept row before it. A view that
+refreshes again while the search runs is searched again; after three, the
+search gives up with `QUERY_ABORTED`.
 
 **Landing.** The row scrolls to the middle of the view and the column into
 it, the cursor moves there, the popover and the value inspector close, and
@@ -662,17 +666,21 @@ search alone took:
 | `revealRow` in a sorted view                         | 90–360 ms  |
 | Building the table of annotated rows, the first time | 0.64–0.7 s |
 
-An unsorted SQL search now counts the rows before the row it finds, in the
-view as it is, which adds about 91 ms near row 9,000,000 with a million
-annotated rows, 40 ms with a thousand, and 20 ms under a range filter
-(Node's DuckDB-WASM). A cursor on a row the grid no longer holds costs one
+An unsorted SQL search places the row it finds by counting the rows
+between the cursor's row and it, not every row before it, so a jump deep in
+the table stays cheap. A cursor on a row the grid no longer holds costs one
 query more to find that row: 0.5 s filtered and 1.4 s sorted, at row
-7,000,000. The first navigation in a store with cell annotations builds a
-by-row index of them, 0.2 s and 24 bytes an annotation at a million, which
-the reads of each held row's annotations use from then on. In a sorted
-view the search compares rows as the grid's `ORDER BY` does: NULL last in
-either direction, NaN after every number, `__rowid__` last. The navigation
-code is a chunk of its own (4.47 kB brotli), loaded the first time it runs.
+7,000,000. Under the annotated filter, the gap a resolved row leaves takes
+one query to find once the view's count is in, up to about 90 ms deep in
+ten million rows with a million annotated rows, and `F8` right after the
+change waits for it. The first navigation in a store with cell annotations builds
+a by-row index of them, 0.2 s and 24 bytes an annotation at a million,
+which the reads of each held row's annotations use from then on. In a
+sorted view the search compares rows as the grid's `ORDER BY` does: NULL
+last in either direction, NaN after every number, `__rowid__` last. The
+navigation code is a chunk of its own (4.60 kB brotli), loaded the first
+time it runs, or the first time a refresh of the annotated view looks for
+the cursor's row beyond the rows the grid holds.
 
 ### Showing only the annotated rows
 
@@ -697,14 +705,22 @@ The view follows the annotations. When a change to them changes which rows
 the filter keeps, the view refreshes in place: the scroll position stays,
 the rows show placeholders a moment while they are fetched again, the row
 count and the charts follow, and `filterChange` fires with the same filters
-and the new count. The cursor follows its row to the row's new position,
-without scrolling. When its row leaves the view, as it does when its
-annotation is removed, the cursor stays where it was, on the row that slid
-into its place (on the new last row, when it was the last), and `F8` goes
-to that row next, `Shift+F8` to the row before the gap. A change that keeps
-the same rows, such as an edited message or another severity on a row
-already kept, refreshes nothing. The severity filter changes which tints
-show, not which rows the filter keeps.
+and the new count. The cursor follows its row to its new position,
+wherever that is: in view, off-screen, or past the view's old end, even
+when the user has scrolled far from it. It moves as soon as the rows are
+back when its row is among them; otherwise, once the count is in, one query
+finds the row. Nothing scrolls. When its row leaves the view, as it does
+when its annotation is removed, the cursor goes to the gap the row left: on
+the first kept row after it, or on the last row when the gap is past the
+end. With one change that is where the cursor was; when several rows join
+or leave in one refresh, it can move. `F8` then goes to the first kept row
+after the row that left, and `Shift+F8` to the last kept row before it. An
+open value inspector follows the row too, its title giving the new row
+number; at a gap it keeps showing the value it shows, and an `F2` open
+still waiting on the cell is dropped. A change that keeps the same rows,
+such as an edited message or another severity on a row already kept,
+refreshes nothing. The severity filter changes which tints show, not which
+rows the filter keeps.
 
 Behind it is a DuckDB temporary table of the annotated rows,
 `__dt_annot_<table>__`, one row per annotated `__rowid__` with the bits of
@@ -779,7 +795,8 @@ Limits:
 - **Saving.** The save after a change to the annotations writes them all
   again: 0.43–0.51 s at a million in Chromium, in tasks of at most 16 ms. A
   page hidden with such a save pending writes them in one task, 0.32 s at a
-  million.
+  million; one hidden while it is under way names its write instead, in a
+  millisecond or less.
 
 ## Multi-table
 

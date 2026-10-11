@@ -457,7 +457,10 @@ cell (`src/table/ValueInspector.ts`):
 
 The panel closes on `Escape`, a press outside it, or any filter, sort,
 selection or data change, and focus goes back to the grid with its cursor
-where it was. Its keys and screen-reader behaviour are in the
+where it was. Under an annotated filter, a refresh of the view that moves
+the cursor with its row leaves the panel open, its title giving the row's
+new number; when the row leaves the view, the panel keeps showing its value.
+Its keys and screen-reader behaviour are in the
 [accessibility guide](./accessibility.md#value-inspector-f2-on-a-nested-cell).
 It loads as a chunk of its own the first time a table opens it, so a table
 that never does never downloads it. Call
@@ -468,11 +471,13 @@ opens only on a row the grid has rendered, in or near the view, and returns
 JSON. It opens a microtask later, and the first time once its chunk has
 loaded. An open still waiting is dropped when the user goes on meanwhile: a
 cursor move, another panel, a filter, sort, selection or table change, or,
-when focus was in the table, focus leaving it. So `true` can still open
-nothing, and from code a cursor move in the same task drops the open. `F2`
-on a row still loading waits for the row: when it lands, the panel opens
-only if the cursor is still on the cell, focus on the grid and no other
-panel open, and not at all once the row has left the rows rendered. A chunk
+when focus was in the table, focus leaving it. The cursor following its row
+through a refresh of the annotated view takes the open with it, and drops it
+at the gap a resolved row leaves. So `true` can still open nothing, and
+from code a cursor move in the same task drops the open. `F2` on a row still
+loading waits for the row: when it lands, the panel opens only if the cursor
+is still on the cell, focus on the grid and no other panel open, and not at
+all once the row has left the rows rendered. A chunk
 that fails to download is said in the live region and reported as an
 `error` event coded `CHUNK_LOAD_FAILED`.
 

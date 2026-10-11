@@ -20,21 +20,21 @@
  * Current baseline (brotli, re-measured with annotations at scale, under
  * Vite 8.3.0 / rolldown 1.2.10, which, like rolldown 1.0.1 before it,
  * inlines the shared ModalHost code into each modal consumer):
- *   root entry · ESM               11.78 kB   →  12.1 kB cap (2.7 %)
- *   advanced entry · ESM            2.16 kB   →   2.25 kB cap (4.2 %)
+ *   root entry · ESM               11.80 kB   →  12.1 kB cap (2.5 %)
+ *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     23.52 kB   →  23.7 kB cap (0.8 %)
- *   lazy ExportDialog chunk       114.33 kB   → 117 kB   cap (2.3 %)
+ *   lazy ExportDialog chunk       114.94 kB   → 117 kB   cap (1.8 %)
  *   lazy SQLFilterModal chunk       2.55 kB   →   2.6 kB cap (2.0 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
- *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
- *   lazy FilterPresetPanel          2.69 kB   →   2.7 kB cap (0.4 %)
+ *   lazy DerivedColumnEditPanel     3.21 kB   →   3.3 kB cap (2.8 %)
+ *   lazy FilterPresetPanel          2.68 kB   →   2.7 kB cap (0.7 %)
  *   lazy CodeMirror editor          5.20 kB   →   5.5 kB cap (5.8 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
- *   lazy ValueInspector chunk       8.48 kB   →   8.9 kB cap (5.0 %)
- *   lazy ExtractColumnPanel chunk   4.99 kB   →   5.3 kB cap (6.2 %)
+ *   lazy ValueInspector chunk       8.47 kB   →   8.9 kB cap (5.1 %)
+ *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
- *   lazy AnnotationNavigator chunk  4.60 kB   →   4.7 kB cap (2.2 %)
- *   lazy AnnotatedRowsTable chunk   2.74 kB   →   2.85 kB cap (4.0 %)
+ *   lazy AnnotationNavigator chunk  4.80 kB   →   5.0 kB cap (4.2 %)
+ *   lazy AnnotatedRowsTable chunk   2.73 kB   →   2.85 kB cap (4.4 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -122,7 +122,10 @@
  * annotations that had landed, a load's annotations cleared in its turn)
  * took it to 113.43 kB, and the cap to 117 kB. The fixes of a third review
  * (the cursor following its row out of view and out of the row cache, a
- * closing session store finishing what it was asked) left it at 114.33 kB.
+ * closing session store finishing what it was asked) left it at 114.33 kB,
+ * and those of a fourth (a navigation waiting for the view's new count,
+ * the cursor's row kept or learned through a change of the view, one
+ * queue of a table's operations for every session store) at 114.94 kB.
  *
  * AnnotatedRowsTable chunk history. New with the annotated-rows filter, at
  * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with
@@ -174,7 +177,11 @@
  * (waiting for the refresh, the gap a row left behind, positions counted
  * rather than reckoned) took it to 4.47 kB, and the cap from 4.5 to 4.7 kB.
  * Locating the cursor's row for a refresh, and searching from the row that
- * left a gap, took it to 4.60 kB.
+ * left a gap, took it to 4.60 kB; from then on, an annotated view that
+ * looks for the cursor's row beyond the rows the grid holds loads it too.
+ * Learning the cursor's row after a change of the view, and counting a
+ * gap's place from the nearest row the grid holds, took it to 4.80 kB, and
+ * the cap from 4.7 to 5.0 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown, since 1.0.1,
  * inlines the shared ModalHost helpers into each modal consumer. The
@@ -276,7 +283,7 @@ module.exports = [
   {
     name: 'lazy AnnotationNavigator chunk · ESM',
     path: 'dist/AnnotationNavigator-*.js',
-    limit: '4.7 kB',
+    limit: '5.0 kB',
   },
   {
     name: 'lazy AnnotatedRowsTable chunk · ESM',

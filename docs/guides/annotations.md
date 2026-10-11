@@ -684,7 +684,7 @@ a store with cell annotations builds a by-row index of them, 0.2 s and 24
 bytes an annotation at a million, which the reads of each held row's
 annotations use from then on. In a sorted view the search compares rows as
 the grid's `ORDER BY` does: NULL last in either direction, NaN after every
-number, `__rowid__` last. The navigation code is a chunk of its own (4.60 kB
+number, `__rowid__` last. The navigation code is a chunk of its own (4.80 kB
 brotli), loaded the first time it runs, or the first time the annotated view
 looks for the cursor's row beyond the rows the grid holds: to follow it
 through a refresh, or to learn which row it is on after a sort.

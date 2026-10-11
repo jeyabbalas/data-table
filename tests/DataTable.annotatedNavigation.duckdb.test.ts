@@ -545,6 +545,120 @@ describe('the rows back, the count on its way (real DuckDB)', () => {
     expect(m.table.state.focusedCell.get()).toEqual({ row: 3, column: 'grp' });
     expect(renderedRowId(m.table, 3)).toBe(7);
   });
+
+  /** Rows 8 and 9, after the last row, annotated in one turn. */
+  const addEightAndNine = (m: Mounted): void => {
+    m.table.annotations.addMany([
+      { scope: 'row', rowId: 8, severity: 'error', message: 'row 8' },
+      { scope: 'row', rowId: 9, severity: 'error', message: 'row 9' },
+    ]);
+  };
+
+  it('F8 from the last row, rows added after it: it waits for the count, and goes on to the first of them', async () => {
+    const m = await mount([2, 5, 7]);
+    m.table.actions.setFocusedCell({ row: 2, column: 'grp' }); // row 7, the last
+    m.holdCounts();
+    let pressed: Promise<AnnotationNavigationResult | null> | undefined;
+    try {
+      addEightAndNine(m);
+      // The rows in view are back, the cursor on row 7; the count waits.
+      await vi.waitFor(() => expect(m.held()).toBeGreaterThan(0), { timeout: 5_000 });
+      await m.table.container.getTableBody()!.whenFetched();
+      let done = false;
+      pressed = m.table.actions.nextAnnotation();
+      void pressed.then(() => (done = true));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // The view still has three rows: past row 7 is round to the first.
+      expect(done).toBe(false);
+    } finally {
+      m.release();
+    }
+    const landed = await pressed!;
+    await expectLanded(m, landed, { rowId: 8, row: 3 });
+    expect(landed!.wrapped).toBe(false);
+    expect(said(m.table)).toBe('Row 4 of 5: error, row 8');
+  });
+
+  it('…and pressed at once, nothing held', async () => {
+    const m = await mount([2, 5, 7]);
+    m.table.actions.setFocusedCell({ row: 2, column: 'grp' });
+    addEightAndNine(m);
+    const landed = await m.table.actions.nextAnnotation();
+    await expectLanded(m, landed, { rowId: 8, row: 3 });
+    expect(landed!.wrapped).toBe(false);
+  });
+
+  it('a landing counts the rows the view has now', async () => {
+    const m = await mount([2, 5, 7]);
+    m.table.actions.setFocusedCell({ row: 0, column: 'grp' }); // row 2
+    addEightAndNine(m);
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 5, row: 1 });
+    expect(said(m.table)).toBe('Row 2 of 5: error, row 5');
+  });
+
+  it("the user moves while the cursor's row waits for the count: the user's move stands", async () => {
+    const m = await mount([2, 5, 7, 9]);
+    m.table.actions.setFocusedCell({ row: 2, column: 'grp' }); // row 7
+    m.holdCounts();
+    try {
+      m.table.annotations.remove(m.ids.get(7)!);
+      await vi.waitFor(() => expect(m.held()).toBeGreaterThan(0), { timeout: 5_000 });
+      await m.table.container.getTableBody()!.whenFetched();
+      m.table.actions.setFocusedCell({ row: 0, column: 'grp' }); // row 2
+    } finally {
+      m.release();
+    }
+    await m.settled(3);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 0, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 5, row: 1 });
+  });
+
+  it('a newer refresh while the first waits for the count: the cursor follows the same row', async () => {
+    const m = await mount([2, 5, 7, 9]);
+    m.table.actions.setFocusedCell({ row: 2, column: 'grp' }); // row 7
+    m.holdCounts();
+    try {
+      m.table.annotations.remove(m.ids.get(7)!);
+      await vi.waitFor(() => expect(m.held()).toBeGreaterThan(0), { timeout: 5_000 });
+      const held = m.held();
+      m.table.annotations.remove(m.ids.get(2)!);
+      // The second sync, and its refresh's count, held too.
+      await vi.waitFor(() => expect(m.held()).toBeGreaterThan(held), { timeout: 5_000 });
+    } finally {
+      m.release();
+    }
+    await m.settled(2);
+    expect(await m.order()).toEqual([5, 9]);
+    // Row 7's gap is one row in, where row 9 is.
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 1, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 9, row: 1 });
+  });
+});
+
+describe('the cursor at a gap, through the next refresh (real DuckDB)', () => {
+  it('the row that left comes back: the cursor is on it again, and F8 goes on past it', async () => {
+    const m = await mount([2, 5, 7, 9]);
+    m.table.actions.setFocusedCell({ row: 1, column: 'grp' }); // row 5
+    m.table.annotations.remove(m.ids.get(5)!);
+    await m.settled(3); // [2, 7, 9], the cursor at the gap, where row 7 is
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 1, column: 'grp' });
+    m.table.annotations.add({ scope: 'row', rowId: 5, severity: 'error', message: 'again' });
+    await m.settled(4);
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 1, column: 'grp' });
+    expect(renderedRowId(m.table, 1)).toBe(5);
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 7, row: 2 });
+  });
+
+  it('a row joins between the gap and the row after it: the cursor stays at the gap, and F8 goes to that row', async () => {
+    const m = await mount([2, 5, 7, 9, 11]);
+    m.table.actions.setFocusedCell({ row: 1, column: 'grp' }); // row 5
+    m.table.annotations.remove(m.ids.get(5)!);
+    await m.settled(4); // [2, 7, 9, 11], the cursor at the gap, where row 7 is
+    m.table.annotations.add({ scope: 'row', rowId: 6, severity: 'error', message: 'row 6' });
+    await m.settled(5); // [2, 6, 7, 9, 11]
+    expect(m.table.state.focusedCell.get()).toEqual({ row: 1, column: 'grp' });
+    await expectLanded(m, await m.table.actions.nextAnnotation(), { rowId: 6, row: 1 });
+  });
 });
 
 describe('the value inspector through a refresh in place (real DuckDB)', () => {

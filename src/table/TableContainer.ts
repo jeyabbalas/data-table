@@ -838,7 +838,15 @@ export class TableContainer {
     this.annotatedRefresh = refresh;
     body?.refresh();
     const recounted = this.resolvedOptions.onAnnotatedRowsChange?.();
-    this.annotatedViewSettled = this.followCursorRow(refresh, body, recounted);
+    // Settled once the cursor is placed and the count is in, both of which
+    // a navigation reads, though the cursor may be placed before the count.
+    // The count settles however its cycle ends: superseded, failed, or the
+    // table destroyed.
+    const settled = (): void => undefined;
+    this.annotatedViewSettled = Promise.all([
+      this.followCursorRow(refresh, body, recounted),
+      recounted,
+    ]).then(settled, settled);
   }
 
   /**

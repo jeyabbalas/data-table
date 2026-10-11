@@ -43,6 +43,19 @@ describe('AnnotationStore — indexes & intersection', () => {
     expect(intersection.map((a) => a.message).sort()).toEqual(['cell', 'col', 'row']);
   });
 
+  it('getByCell leaves out the other cells of the row and of the column', () => {
+    store.add({ scope: 'cell', rowId: 7, column: 'fare', severity: 'info', message: 'here' });
+    store.add({ scope: 'cell', rowId: 7, column: 'tip', severity: 'error', message: 'same row' });
+    store.add({ scope: 'cell', rowId: 8, column: 'fare', severity: 'error', message: 'same col' });
+    store.add({ scope: 'row', rowId: 8, severity: 'error', message: 'other row' });
+    store.add({ scope: 'column', column: 'tip', severity: 'error', message: 'other col' });
+    expect(store.getByCell(7, 'fare').map((a) => a.message)).toEqual(['here']);
+    expect(store.getByCell(7, 'zip')).toEqual([]);
+    // getByRow / getByColumn still include their cells.
+    expect(store.getByRow(7).map((a) => a.message)).toEqual(['here', 'same row']);
+    expect(store.getByColumn('fare').map((a) => a.message)).toEqual(['here', 'same col']);
+  });
+
   it('getByCell sorts by severity (error > warning > info) first', () => {
     const a = store.add({ scope: 'row', rowId: 1, severity: 'info', message: 'info' });
     const b = store.add({ scope: 'column', column: 'x', severity: 'error', message: 'error' });
@@ -128,10 +141,10 @@ describe('AnnotationStore — indexes & intersection', () => {
     expect(store.count()).toBe(1000);
     expect(store.getByRow(42)).toHaveLength(10);
     expect(store.getByColumn('c3')).toHaveLength(100);
-    // getByCell unions row + column + cell. Row 42 contributes 10 entries,
-    // column c3 contributes 100, and the single (42, c3) cell is deduped:
-    // 10 + 100 - 1 = 109.
-    expect(store.getByCell(42, 'c3')).toHaveLength(109);
+    // getByCell is the intersection: row 42's row-scope annotations (none),
+    // c3's column-scope annotations (none), and the (42, c3) cell's own —
+    // not every cell annotation in row 42 and in column c3.
+    expect(store.getByCell(42, 'c3').map((a) => a.message)).toEqual(['42,3']);
   });
 
   it('reindexes positions after remove so tiebreaking stays stable', () => {

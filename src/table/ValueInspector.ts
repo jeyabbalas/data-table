@@ -468,6 +468,22 @@ export class ValueInspector {
     void this.load();
   }
 
+  /**
+   * The row of the value shown is at position `row` of the view now, as
+   * after an annotated view refreshed in place and the cursor followed the
+   * row: the title says so, and what is shown says it is there. The value,
+   * read by rowid, and where the panel is stay as they are.
+   *
+   * @internal
+   */
+  moveTo(row: number): void {
+    const target = this.target;
+    if (!target || !this.isOpen || target.row === row) return;
+    this.target = { ...target, row };
+    const m = this.messages.values;
+    this.titleEl.textContent = m.inspectorTitle(target.column.name, m.rowLabel(row + 1));
+  }
+
   /** Close the panel; focus goes back to `returnFocus`. */
   close(): void {
     if (!this.isOpen) return;

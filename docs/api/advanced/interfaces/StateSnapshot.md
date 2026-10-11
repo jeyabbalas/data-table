@@ -6,7 +6,7 @@
 
 # Interface: StateSnapshot
 
-Defined in: [core/UndoManager.ts:27](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L27)
+Defined in: [core/UndoManager.ts:28](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L28)
 
 A lightweight snapshot of user-manipulable table view state.
 
@@ -22,7 +22,7 @@ signal values.
 
 > **columnOrder**: `string`[]
 
-Defined in: [core/UndoManager.ts:31](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L31)
+Defined in: [core/UndoManager.ts:32](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L32)
 
 ***
 
@@ -30,7 +30,7 @@ Defined in: [core/UndoManager.ts:31](https://github.com/jeyabbalas/data-table/bl
 
 > **columnWidths**: `Map`\<`string`, `number`\>
 
-Defined in: [core/UndoManager.ts:32](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L32)
+Defined in: [core/UndoManager.ts:33](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L33)
 
 ***
 
@@ -38,7 +38,7 @@ Defined in: [core/UndoManager.ts:32](https://github.com/jeyabbalas/data-table/bl
 
 > **derivedColumns**: [`DerivedColumnDef`](../../index/type-aliases/DerivedColumnDef.md)[]
 
-Defined in: [core/UndoManager.ts:35](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L35)
+Defined in: [core/UndoManager.ts:36](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L36)
 
 ***
 
@@ -46,7 +46,7 @@ Defined in: [core/UndoManager.ts:35](https://github.com/jeyabbalas/data-table/bl
 
 > **filters**: [`Filter`](../../index/type-aliases/Filter.md)[]
 
-Defined in: [core/UndoManager.ts:28](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L28)
+Defined in: [core/UndoManager.ts:29](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L29)
 
 ***
 
@@ -54,7 +54,7 @@ Defined in: [core/UndoManager.ts:28](https://github.com/jeyabbalas/data-table/bl
 
 > **hiddenColumnInfo**: `Map`\<`string`, [`HiddenColumnInfo`](HiddenColumnInfo.md)\>
 
-Defined in: [core/UndoManager.ts:34](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L34)
+Defined in: [core/UndoManager.ts:35](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L35)
 
 ***
 
@@ -62,7 +62,7 @@ Defined in: [core/UndoManager.ts:34](https://github.com/jeyabbalas/data-table/bl
 
 > **pinnedColumns**: `string`[]
 
-Defined in: [core/UndoManager.ts:33](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L33)
+Defined in: [core/UndoManager.ts:34](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L34)
 
 ***
 
@@ -70,7 +70,7 @@ Defined in: [core/UndoManager.ts:33](https://github.com/jeyabbalas/data-table/bl
 
 > **sortColumns**: [`SortColumn`](../../index/interfaces/SortColumn.md)[]
 
-Defined in: [core/UndoManager.ts:29](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L29)
+Defined in: [core/UndoManager.ts:30](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L30)
 
 ***
 
@@ -78,4 +78,4 @@ Defined in: [core/UndoManager.ts:29](https://github.com/jeyabbalas/data-table/bl
 
 > **visibleColumns**: `string`[]
 
-Defined in: [core/UndoManager.ts:30](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/UndoManager.ts#L30)
+Defined in: [core/UndoManager.ts:31](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/UndoManager.ts#L31)

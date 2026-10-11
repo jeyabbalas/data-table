@@ -6,7 +6,7 @@
 
 # Interface: Strings
 
-Defined in: [core/Strings.ts:39](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L39)
+Defined in: [core/Strings.ts:39](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L39)
 
 Typed shape of every user-facing string the library renders. Pass a
 `messages: DeepPartial<Strings>` override to [createDataTable](../functions/createDataTable.md) to
@@ -21,7 +21,7 @@ directly so locale grammar stays inside the consumer's translation.
 
 > **a11y**: `object`
 
-Defined in: [core/Strings.ts:357](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L357)
+Defined in: [core/Strings.ts:366](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L366)
 
 #### ascending
 
@@ -482,11 +482,208 @@ Column-header aria-label fragments.
 
 ***
 
+### annotations
+
+> **annotations**: `object`
+
+Defined in: [core/Strings.ts:450](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L450)
+
+#### navigation
+
+> **navigation**: `object`
+
+What the live region says when `F8` / `Shift+F8` (`Alt+↓` / `Alt+↑`),
+`actions.nextAnnotation` or `actions.previousAnnotation` move the
+cursor to an annotation, or find none to move to.
+
+##### navigation.hiddenColumn
+
+> **hiddenColumn**: (`column`) => `string`
+
+`landed`'s place for a column the table hides: "age (hidden)".
+
+###### Parameters
+
+###### column
+
+`string`
+
+###### Returns
+
+`string`
+
+##### navigation.landed
+
+> **landed**: (`row`, `total`, `place`, `severity`, `message`, `more`) => `string`
+
+Where the cursor landed: "Row 1,204 of 9,880,000, age: error, value
+200 exceeds maximum 150, and 2 more". `row` counts from 1 in the
+view, of `total`; `place` is the cell's column (or `hiddenColumn`'s
+words), `null` for the row's own annotations; `severity` (a
+`severityNames` entry) and `message` are the first annotation's,
+`null` when there is none; `more` counts the others there.
+
+###### Parameters
+
+###### row
+
+`number`
+
+###### total
+
+`number`
+
+###### place
+
+`string` \| `null`
+
+###### severity
+
+`string` \| `null`
+
+###### message
+
+`string` \| `null`
+
+###### more
+
+`number`
+
+###### Returns
+
+`string`
+
+##### navigation.noMoreAbove
+
+> **noMoreAbove**: `string`
+
+Nothing further up, and the search does not go round.
+
+##### navigation.noMoreBelow
+
+> **noMoreBelow**: `string`
+
+Nothing further down, and the search does not go round.
+
+##### navigation.noneShown
+
+> **noneShown**: `string`
+
+No annotation of the severities sought in the rows the filters show.
+
+##### navigation.wrappedToFirst
+
+> **wrappedToFirst**: (`landed`) => `string`
+
+`landed`, after going round from the last annotation to the first.
+
+###### Parameters
+
+###### landed
+
+`string`
+
+###### Returns
+
+`string`
+
+##### navigation.wrappedToLast
+
+> **wrappedToLast**: (`landed`) => `string`
+
+`landed`, after going round from the first annotation to the last.
+
+###### Parameters
+
+###### landed
+
+`string`
+
+###### Returns
+
+`string`
+
+#### popover
+
+> **popover**: `object`
+
+The popover that lists the annotations of a cell or a column header.
+
+##### popover.cellTitle
+
+> **cellTitle**: `string`
+
+Title of the section listing the cell's own annotations.
+
+##### popover.columnTitle
+
+> **columnTitle**: `string`
+
+Title of the section listing the column's annotations.
+
+##### popover.hiddenBySeverityFilter
+
+> **hiddenBySeverityFilter**: (`count`) => `string`
+
+Counts a section's annotations the severity filter hides, which it leaves out.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
+##### popover.moreEntries
+
+> **moreEntries**: (`count`) => `string`
+
+A section lists five annotations at most; this line counts the rest.
+
+###### Parameters
+
+###### count
+
+`number`
+
+###### Returns
+
+`string`
+
+##### popover.rowTitle
+
+> **rowTitle**: `string`
+
+Title of the section listing the row's annotations.
+
+#### severityNames
+
+> **severityNames**: `object`
+
+A severity's name, wherever one is shown or announced.
+
+##### severityNames.error
+
+> **error**: `string`
+
+##### severityNames.info
+
+> **info**: `string`
+
+##### severityNames.warning
+
+> **warning**: `string`
+
+***
+
 ### common
 
 > **common**: `object`
 
-Defined in: [core/Strings.ts:43](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L43)
+Defined in: [core/Strings.ts:43](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L43)
 
 #### apply
 
@@ -550,7 +747,7 @@ Defined in: [core/Strings.ts:43](https://github.com/jeyabbalas/data-table/blob/a
 
 > **derived**: `object`
 
-Defined in: [core/Strings.ts:284](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L284)
+Defined in: [core/Strings.ts:293](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L293)
 
 #### addButtonLabel
 
@@ -965,7 +1162,7 @@ Modal: "New Derived Column".
 
 > **errors**: `object`
 
-Defined in: [core/Strings.ts:666](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L666)
+Defined in: [core/Strings.ts:735](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L735)
 
 #### stylesheetMissing
 
@@ -977,7 +1174,7 @@ Defined in: [core/Strings.ts:666](https://github.com/jeyabbalas/data-table/blob/
 
 > **export**: `object`
 
-Defined in: [core/Strings.ts:231](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L231)
+Defined in: [core/Strings.ts:240](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L240)
 
 #### cancelButton
 
@@ -1127,7 +1324,7 @@ Label on the "include system columns (e.g. __rowid__)" checkbox.
 
 > **filters**: `object`
 
-Defined in: [core/Strings.ts:63](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L63)
+Defined in: [core/Strings.ts:63](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L63)
 
 #### activeFiltersLabel
 
@@ -1363,6 +1560,18 @@ aria-labels on the filter field controls.
 
 Strings used by `formatFilter()` for chip descriptions.
 
+##### chipDescriptions.annotatedColumn
+
+> **annotatedColumn**: `string`
+
+Column label shown on the annotated-rows chip (`actions.showAnnotatedRows`).
+
+##### chipDescriptions.anySeverity
+
+> **anySeverity**: `string`
+
+The annotated-rows chip's description when it keeps every severity.
+
 ##### chipDescriptions.anyValue
 
 > **anyValue**: `string`
@@ -1438,6 +1647,23 @@ Strings used by `formatFilter()` for chip descriptions.
 ##### chipDescriptions.rangeSeparator
 
 > **rangeSeparator**: `string`
+
+##### chipDescriptions.severityList
+
+> **severityList**: (`names`) => `string`
+
+The annotated-rows chip's description when it keeps some severities:
+their names (`annotations.severityNames`), most severe first.
+
+###### Parameters
+
+###### names
+
+`string`[]
+
+###### Returns
+
+`string`
 
 ##### chipDescriptions.sqlColumn
 
@@ -1771,7 +1997,7 @@ Inline regex/UUID validation messages.
 
 > **presets**: `object`
 
-Defined in: [core/Strings.ts:209](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L209)
+Defined in: [core/Strings.ts:218](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L218)
 
 #### closeLabel
 
@@ -1881,7 +2107,7 @@ Defined in: [core/Strings.ts:209](https://github.com/jeyabbalas/data-table/blob/
 
 > **statistics**: `object`
 
-Defined in: [core/Strings.ts:441](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L441)
+Defined in: [core/Strings.ts:510](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L510)
 
 #### allNull
 
@@ -2219,7 +2445,7 @@ Truncation suffix for a long multi-select value list (total = selected values).
 
 > **values**: `object`
 
-Defined in: [core/Strings.ts:504](https://github.com/jeyabbalas/data-table/blob/ac5bb533331dd55455eabfbe6b04bd3e445a1049/src/core/Strings.ts#L504)
+Defined in: [core/Strings.ts:573](https://github.com/jeyabbalas/data-table/blob/f341ce9574a9180901176a8c58861b6a8be8af5e/src/core/Strings.ts#L573)
 
 #### addAsColumn
 

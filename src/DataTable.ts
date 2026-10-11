@@ -39,6 +39,7 @@
  * ```
  */
 
+import { annotatedRowsTableName } from './annotations/annotatedRowsSource';
 import { AnnotationStore } from './annotations/AnnotationStore';
 import { StateActions, type LoadDataOptions } from './core/Actions';
 import { checkBrowserSupport } from './core/checkBrowserSupport';
@@ -58,11 +59,7 @@ import type { TableEvents } from './core/TableEvents';
 import type { ColumnSchema, Filter, SortColumn } from './core/types';
 import { UndoManager } from './core/UndoManager';
 import type { DataFormat } from './data/DataLoader';
-import {
-  rejectsSourceOptions,
-  validateSourceOptions,
-  type SourceOptions,
-} from './data/sourceOptions';
+import { validateSourceOptions, type SourceOptions } from './data/sourceOptions';
 import { WorkerBridge, type WorkerBridgeOptions } from './data/WorkerBridge';
 import type { ExpressionEditorFactory } from './derived/ExpressionEditorTypes';
 import { ExportDialog } from './export/ExportDialog';
@@ -260,6 +257,15 @@ export interface CreateDataTableOptions {
 
   /** Enable the built-in export dialog (CSV/JSON/Parquet). Default: `true`. */
   exportDialog?: boolean;
+
+  /**
+   * `F8` / `Shift+F8` and `Alt+↓` / `Alt+↑` move the cursor to the next and
+   * previous annotation (of the severities the severity filter shows), and
+   * the live region says what is there. Default: `true`. Pass `false` to
+   * leave those keys to the page; `actions.nextAnnotation`,
+   * `actions.previousAnnotation` and `actions.revealRow` work either way.
+   */
+  annotationNavigation?: boolean;
 
   // ---- Lifecycle ----
 
@@ -547,6 +553,21 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   let sessionStore: SessionStore | null = null;
   let ownsSessionStore = false;
   let autoSave: AutoSave | null = null;
+  // Annotations a saved session had that its restore left out, having
+  // restored the rest: a record the session store could not attach to the
+  // session, or a file `loadJSON` refused.
+  const warnAnnotationsDropped = (
+    tableName: string | null,
+    details: { reason: string; count?: number | undefined },
+  ): void => {
+    if (destroyed) return;
+    emitter.emit('warning', {
+      code: 'PERSISTENCE_ANNOTATIONS_DROPPED',
+      message: `The annotations saved with the session for "${tableName}" were not restored (${details.reason}); the rest of the session was.`,
+      details: { tableName, ...details },
+    });
+  };
+  actions.setOnRestoreIssue((issue) => warnAnnotationsDropped(issue.tableName, issue.details));
   if (opts.persistence !== false) {
     const persistConfig = typeof opts.persistence === 'object' ? opts.persistence : {};
     if (persistConfig.sessionStore) {
@@ -559,6 +580,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // IDB row). Phase 7 deferred this; Phase 9 surfaces it.
       sessionStore = new SessionStore({
         onLoadIssue: (issue) => {
+          // Noted on the snapshot, and reported by its restore, as for a
+          // store of the app's own.
+          if (issue.code === 'PERSISTENCE_ANNOTATIONS_DROPPED') return;
           if (destroyed) return;
           emitter.emit('warning', {
             code: issue.code,
@@ -605,6 +629,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   const annotationPopover = new AnnotationPopover({
     classPrefix: opts.classPrefix ?? 'dt',
     portalTarget: opts.portalTarget,
+    messages,
+    // It leaves out the severities the store's filter hides.
+    severityFilter: () => annotationStore.getSeverityFilter(),
   });
   const columnHeaderTooltipPopover = new ColumnHeaderTooltipPopover({
     classPrefix: opts.classPrefix ?? 'dt',
@@ -634,6 +661,17 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     columnHeaderTooltipPopover,
     // A lazy panel whose chunk did not download (`CHUNK_LOAD_FAILED`).
     onError: (error) => emitError({ error, source: 'unknown' }),
+    annotationNavigation: opts.annotationNavigation !== false,
+    // The rows an annotated filter keeps changed with the annotations, and
+    // the grid fetches them again in place: the count, the charts and the
+    // stats panels follow, as for a filter change. The container puts the
+    // cursor back on its row once the count is in.
+    onAnnotatedRowsChange: () => {
+      const recounted = coordinator.refresh();
+      void statsPanelCoordinator?.syncExistingFilters(state.filters.get());
+      return recounted;
+    },
+    onAnnotatedRowsError: (error) => emitError({ error, source: 'query' }),
   });
 
   // -------- Instance id (multi-instance DOM ID isolation) --------
@@ -709,6 +747,8 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   const coordinator = new CrossfilterCoordinator(state, actions, bridge, undefined, {
     onFilterCycleComplete: (filters) => {
       if (destroyed) return;
+      // Annotation navigation waits for this before it scrolls.
+      tableContainer.filterCycleSettled(filters);
       emitter.emit('filterChange', {
         filters: [...filters],
         filteredRowCount: state.filteredRows.get(),
@@ -1312,6 +1352,22 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     });
     autoSave.enable();
   }
+  // Loads and clears in flight: AutoSave runs again once none is, from the
+  // state the last of them left.
+  let lifecycleChanges = 0;
+
+  // What belongs to the data a load or a clear replaces goes in its turn,
+  // once the state no longer holds that data: a load superseded while it ran
+  // restores nothing into the table that replaces it. Shared
+  // `FilterPresetManager`s (user-supplied) are left untouched so
+  // multi-table dashboards keep their cross-table state. The annotation
+  // store is always per-DataTable, so its clear is unconditional; the
+  // saves under way take the annotations they were asked for first.
+  actions.setOnDataCleared((kind) => {
+    if (kind === 'load') autoSave?.settleAnnotations();
+    if (ownsPresetManager) presetManager?.presets.set([]);
+    annotationStore.clear('all');
+  });
 
   // -------- Export dialog (lazy) --------
   let exportDialog: ExportDialog | null = null;
@@ -1323,6 +1379,9 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
         instanceId,
         colorSchemeSource: tableContainer.getElement(),
         messages,
+        // The filtered rows an annotated filter keeps, as the annotations
+        // in the store say.
+        beforeExport: (signal) => actions.ensureFiltersFresh(signal),
       });
       tableContainer.getPortalTarget().appendChild(exportDialog.getElement());
     }
@@ -1581,6 +1640,10 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
   // a stranded table of the same name is being replaced in place.
   const loadingTableNames: string[] = [];
 
+  /** Drop a base table, and with it the DuckDB table of its annotated rows. */
+  const dropBaseTable = (name: string): Promise<unknown> =>
+    Promise.all([bridge.dropTable(name), bridge.dropTable(annotatedRowsTableName(name))]);
+
   async function loadDataImpl(
     source: File | string | ArrayBuffer | Blob,
     loadOpts?: LoadDataOptions & { sourceFormat?: DataFormat | undefined },
@@ -1589,9 +1652,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     const sourceLabel =
       typeof source === 'string' ? source : source instanceof File ? source.name : 'in-memory';
     emitter.emit('loadStart', { source: sourceLabel });
-    // Disable auto-save while loading so we don't capture the transient
-    // half-initialized state.
-    autoSave?.disable();
     const targetTableName = loadOpts?.tableName;
     if (targetTableName) loadingTableNames.push(targetTableName);
     // `getLoadEpoch()` counts loads and clears: one asked for after this
@@ -1599,31 +1659,24 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
     let loadEpoch: number | null = null;
     const superseded = (): boolean => loadEpoch !== null && actions.getLoadEpoch() !== loadEpoch;
     let failed = false;
-    // The presets and annotations cleared below, to put back if the worker
-    // rejects the load for its source options, as `actions` puts back the
-    // rest: such a load keeps the data it had.
-    let restoreCleared: (() => void) | null = null;
     try {
+      // Disable auto-save while loading so we don't capture the transient
+      // half-initialized state. A save it had pending, of the data this
+      // replaces, is written as any other is, in many short tasks. In the
+      // `try`, so that the `finally` turns it on again whatever happens.
+      lifecycleChanges++;
+      autoSave?.disableWith('save');
       // A bad source option fails the load here, as loadError, and leaves
       // the table as it was: everything below clears it for the new data.
       validateSourceOptions(loadOpts?.sourceOptions);
-      const ownPresets = ownsPresetManager ? presetManager?.presets.get() : undefined;
-      const annotationFile = annotationStore.count() > 0 ? annotationStore.toJSON() : null;
-      restoreCleared = () => {
-        if (ownPresets) presetManager?.presets.set(ownPresets);
-        if (annotationFile) annotationStore.loadJSON(annotationFile, 'replace');
-      };
-      // Clear per-dataset state before loading the new dataset. AutoSave
-      // is disabled here, so these mutations don't fire spurious saves.
-      // `restoreStateFromSnapshot` (run inside `actions.loadData`) will
-      // re-populate presets / annotations from the new dataset's snapshot
-      // if one exists. Shared `FilterPresetManager`s (user-supplied) are
-      // left untouched so multi-table dashboards keep their cross-table
-      // state. The annotation store is always per-DataTable, so its
-      // clear is unconditional. Bridge query cache is invalidated to
-      // avoid stale plans bound to the previous dataset's columns.
-      if (ownsPresetManager) presetManager?.presets.set([]);
-      annotationStore.clear('all');
+      // The presets and annotations of the data this replaces go in the
+      // load's turn (see `setOnDataCleared`), once the worker has loaded the
+      // new data: a load the worker rejects for its source options keeps
+      // them, with the rest of the table, which `actions` puts back.
+      // `restoreStateFromSnapshot` (run inside `actions.loadData`) then
+      // re-populates them from the new dataset's snapshot if one exists.
+      // Bridge query cache is invalidated to avoid stale plans bound to the
+      // previous dataset's columns.
       bridge.clearQueryCache();
       const mergedOpts: LoadDataOptions = {
         ...(loadOpts ?? {}),
@@ -1705,7 +1758,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
             continue;
           }
           try {
-            await bridge.dropTable(name);
+            await dropBaseTable(name);
           } catch (err) {
             console.warn(`[data-table] Failed to drop previous table "${name}":`, err);
           }
@@ -1716,13 +1769,6 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       // The table the load replaced is stranded already (see
       // `strandedTables`): nothing names it after a failed load, unless it
       // was rejected for its source options, and `actions` put it back.
-      if (restoreCleared && rejectsSourceOptions(error) && !destroyed && !superseded()) {
-        try {
-          restoreCleared();
-        } catch (err) {
-          console.warn('[data-table] Could not put back the annotations:', err);
-        }
-      }
       const typed =
         error instanceof DataTableError
           ? error
@@ -1741,10 +1787,14 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       throw typed;
     } finally {
       if (targetTableName) loadingTableNames.splice(loadingTableNames.indexOf(targetTableName), 1);
-      // A failed initial load is followed by destroy(). Enabling AutoSave
-      // first would have it save a restore's undo stacks, and destroy()
-      // flushes that save: the half-restored state over the stored session.
-      if (!destroyed && !(initial && failed)) autoSave?.enable();
+      // AutoSave runs again once no load or clear is in flight: one still
+      // reading its session would have the state this load restored saved
+      // over it. A failed initial load is followed by destroy(). Enabling
+      // AutoSave first would have it save a restore's undo stacks, and
+      // destroy() flushes that save: the half-restored state over the stored
+      // session.
+      lifecycleChanges--;
+      if (!destroyed && lifecycleChanges === 0 && !(initial && failed)) autoSave?.enable();
     }
   }
 
@@ -1856,7 +1906,7 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
       strandedTables.clear();
       for (const name of toDrop) {
         try {
-          await bridge.dropTable(name);
+          await dropBaseTable(name);
         } catch (err) {
           console.warn(`[data-table] Failed to drop base table "${name}" on destroy:`, err);
         }
@@ -1870,39 +1920,58 @@ export async function createDataTable(opts: CreateDataTableOptions): Promise<Dat
 
   // -------- clearSession --------
   // Order matters: disable AutoSave FIRST so the debounced save and the
-  // beforeunload handler can't resurrect the snapshot we're about to delete.
-  // Then delete the IDB row, then reset all in-memory state. Finally re-enable
-  // AutoSave — it short-circuits on a null tableName until new data is loaded.
+  // beforeunload handler can't resurrect the snapshot we're about to delete;
+  // its pending save is dropped, the session going anyway. Then delete the
+  // IDB row, then reset all in-memory state. Finally re-enable AutoSave,
+  // once no load is in flight either — it short-circuits on a null tableName
+  // until new data is loaded.
   // Key matches `snapshotFromState` (src/persistence/serialization.ts) —
   // baseTableName takes precedence so the same snapshot is shared between
   // the base table and any VIEW derived from it.
   async function clearSession(): Promise<void> {
-    autoSave?.disable();
     try {
+      lifecycleChanges++;
+      autoSave?.disableWith('drop');
       const key = state.baseTableName.get() ?? state.tableName.get();
-      if (sessionStore && key) await sessionStore.delete(key);
+      // Whether the session went: a store of the app's own, which destroy()
+      // does not close, is taken at its word.
+      let deleted = true;
+      if (sessionStore && key) {
+        const store: Partial<Pick<SessionStore, 'deleteSession'>> = sessionStore;
+        if (typeof store.deleteSession === 'function') {
+          deleted = await store.deleteSession.call(sessionStore, key);
+        } else {
+          await sessionStore.delete(key);
+        }
+      }
       // If destroy() raced ahead while we were awaiting the IDB delete, drop
       // the in-memory reset — the state slices are about to be torn down and
-      // mutating them now would emit on a dying emitter.
+      // mutating them now would emit on a dying emitter. When the session
+      // went (a store destroy() closes lets a delete asked for before end),
+      // the in-memory state goes with the table: done. Not when the close
+      // refused the delete, waiting for the databases to open again, nor
+      // when a load in flight landed a table of its own, whose session is
+      // not deleted.
       if (destroyed) {
+        const current = state.baseTableName.get() ?? state.tableName.get();
+        if (deleted && (current === null || current === key)) return;
         throw new DestroyedError('DataTable is destroyed; clearSession aborted.');
       }
       // In its turn, after a derived-column change running now, which then
       // writes nothing into the emptied table. A load in flight lands first,
-      // and it is its table that is emptied, whose snapshot goes too.
+      // and it is its table that is emptied, whose snapshot goes too. The
+      // annotations and the presets we own go in the turn (see
+      // `setOnDataCleared`): a user-supplied shared `FilterPresetManager`
+      // (multi-table dashboards) outlives any single table's session.
       const cleared = await actions.clearData();
       if (sessionStore && cleared && cleared !== key) await sessionStore.delete(cleared);
-      // Only clear presets we own. A user-supplied shared
-      // `FilterPresetManager` (multi-table dashboards) outlives any
-      // single table's session — clearing it here would wipe other
-      // tables' presets too.
-      if (ownsPresetManager) presetManager?.presets.set([]);
-      annotationStore.clear('all');
       bridge.clearQueryCache();
       // The emptied table stays queryable until the next load or destroy()
-      // drops it: `actions` reported it as stranded.
+      // drops it, with the table of its annotated rows: `actions` reported
+      // it as stranded.
     } finally {
-      if (!destroyed) autoSave?.enable();
+      lifecycleChanges--;
+      if (!destroyed && lifecycleChanges === 0) autoSave?.enable();
     }
   }
 

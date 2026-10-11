@@ -9,7 +9,8 @@
  * Ctrl variants), PageUp/PageDown, Escape to clear the cursor, Enter to toggle
  * sort (header) or row selection (body), F2 to enter the header cell's
  * buttons or, on a nested or JSON body cell, to open the value inspector,
- * Shift+F2 to enter column layout mode (resize and reorder), and Ctrl+Z/Y/C.
+ * Shift+F2 to enter column layout mode (resize and reorder), F8 / Shift+F8 and
+ * Alt+↓ / Alt+↑ to go to the next and previous annotation, and Ctrl+Z/Y/C.
  *
  * Column layout mode (issue #87) is the answer to the two per-column controls
  * that have no focus stop: the resize separator and the drag handle. It is a
@@ -68,6 +69,19 @@ export const HEADER_ROW_INDEX = -1;
  * small enough to land on a width you meant. `Home` / `End` cover the ends.
  */
 const LAYOUT_RESIZE_STEP = 16;
+
+/**
+ * The annotation a keystroke goes to: `F8` the next and `Shift+F8` the
+ * previous, `Alt+↓` and `Alt+↑` likewise; `null` for any other key.
+ */
+function annotationDirection(e: KeyboardEvent): 'next' | 'previous' | null {
+  if (e.ctrlKey || e.metaKey) return null;
+  if (e.key === 'F8' && !e.altKey) return e.shiftKey ? 'previous' : 'next';
+  if (e.altKey && !e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    return e.key === 'ArrowDown' ? 'next' : 'previous';
+  }
+  return null;
+}
 
 /** Construction options for {@link KeyboardNavigator}. */
 export interface KeyboardNavigatorOptions {
@@ -135,6 +149,16 @@ export interface KeyboardNavigatorOptions {
   announce?: ((message: string) => void) | undefined;
   /** Resolved i18n strings for the live-region announcements. Defaults to English. */
   messages?: Strings | undefined;
+  /**
+   * Go to the next (`'next'`) or previous annotation, for `F8` / `Shift+F8`
+   * and `Alt+↓` / `Alt+↑`. Returns whether there is anything to go to: the
+   * key's default is prevented only then. `TableContainer` passes it unless
+   * its `annotationNavigation` option is off; without it, the keys are left
+   * to the page.
+   *
+   * @internal
+   */
+  navigateAnnotations?: ((direction: 'next' | 'previous') => boolean) | undefined;
 }
 
 /**
@@ -142,7 +166,8 @@ export interface KeyboardNavigatorOptions {
  * keys, Home / End, Ctrl+Home / End, PageUp / PageDown, Enter to sort
  * (header) or select (body), F2 to reach the per-column buttons (header) or
  * open the value inspector (a nested or JSON body cell), Shift+F2 to resize
- * and reorder the column, and Ctrl/Cmd+C to copy the selection.
+ * and reorder the column, F8 / Shift+F8 (or Alt+↓ / Alt+↑) to go to the next
+ * or previous annotation, and Ctrl/Cmd+C to copy the selection.
  * Composed by {@link TableContainer}; reach for it directly only when
  * assembling a custom container shell.
  */
@@ -161,6 +186,7 @@ export class KeyboardNavigator {
   private readonly getBridge: (() => WorkerBridge | undefined) | undefined;
   private readonly announceMessage: ((message: string) => void) | undefined;
   private readonly messages: Strings;
+  private readonly navigateAnnotations: ((direction: 'next' | 'previous') => boolean) | undefined;
 
   private readonly keydownHandler: (e: KeyboardEvent) => void;
   private readonly focusinHandler: (e: FocusEvent) => void;
@@ -194,6 +220,7 @@ export class KeyboardNavigator {
     this.getBridge = opts.getBridge;
     this.announceMessage = opts.announce;
     this.messages = opts.messages ?? defaultStrings;
+    this.navigateAnnotations = opts.navigateAnnotations;
 
     this.keydownHandler = (e: KeyboardEvent) => this.handleKeyDown(e);
     this.rootElement.addEventListener('keydown', this.keydownHandler);
@@ -421,6 +448,18 @@ export class KeyboardNavigator {
       return;
     }
 
+    // F8 / Shift+F8 and Alt+↓ / Alt+↑ → the next / previous annotation, from
+    // the grid, the filter bar or the gutter alike. Not while a column-layout
+    // gesture holds the keyboard. The key is taken only when there is an
+    // annotation to go to; otherwise it stays the page's.
+    const direction = annotationDirection(e);
+    if (direction) {
+      if (!this.layout && !e.defaultPrevented && this.navigateAnnotations?.(direction)) {
+        e.preventDefault();
+      }
+      return;
+    }
+
     // Ctrl+Z / Cmd+Z → undo
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
@@ -615,8 +654,9 @@ export class KeyboardNavigator {
 
     // Up / down leave controls mode and move the cursor instead of falling
     // through to the browser, which would scroll the nearest scrollable
-    // ancestor out from under the user.
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    // ancestor out from under the user. Alt+Up / Alt+Down, which go to an
+    // annotation from the grid, do nothing here.
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey) {
       this.exitControlsMode();
       return false;
     }

@@ -8,7 +8,8 @@
  * and persisted alongside the table state so they survive browser refreshes.
  *
  * @example
- * import { AutoSave, SessionStore } from '@jeyabbalas/data-table';
+ * import { SessionStore } from '@jeyabbalas/data-table';
+ * import { AutoSave } from '@jeyabbalas/data-table/advanced';
  *
  * const store = new SessionStore();
  * await store.open();
@@ -26,8 +27,11 @@ import { PersistenceError } from '../core/errors';
 import type { TableState } from '../core/State';
 import type { UndoManager } from '../core/UndoManager';
 import type { FilterPresetManager } from '../filters/FilterPresets';
+import { AnnotationFileCache, settleSnapshotAnnotations } from './annotationPersistence';
+import { classifyPersistenceFailure, isAnnotationsWriteFailure } from './persistenceErrors';
 import { snapshotFromState } from './serialization';
-import type { SessionStore } from './SessionStore';
+import { SessionStore } from './SessionStore';
+import type { SessionSnapshot } from './types';
 
 const DEFAULT_DEBOUNCE_MS = 1000;
 
@@ -44,6 +48,11 @@ export interface AutoSaveOptions {
    * Invoked when a snapshot save fails (e.g., IndexedDB quota exceeded,
    * transaction aborted). If omitted, save failures are swallowed —
    * the facade wires this to emit an `error` event with `source: 'persistence'`.
+   *
+   * A quota error stops the saves until the next `enable()`. One on the
+   * table's annotations record alone (`details.record: 'annotations'`), or
+   * a second failed write of that record in a row, is reported once and
+   * stops only the annotations: the session keeps saving without them.
    */
   onError?: ((error: PersistenceError) => void) | undefined;
 }
@@ -72,6 +81,29 @@ export class AutoSave {
   // Without this, a constrained tab would emit one PersistenceError per
   // debounce tick for as long as the user kept mutating state.
   private quotaExceeded = false;
+  // The same, for the annotations record alone: a `QuotaExceededError` on
+  // it, or a second failed write of it in a row, holds the annotations
+  // back. It is reported once, and saves then go without annotations — the
+  // session record keeps saving, and `SessionStore` keeps it naming the
+  // annotations that landed before. A million annotations can outgrow a quota
+  // the rest of the session fits in many times over, and a write that fails
+  // for the annotations themselves (a value that cannot be cloned, or one
+  // past a browser's limits) fails again: retrying would serialize them all
+  // at every save to no end. A single failure is retried by the next save,
+  // as a dropped connection's is no fault of the annotations.
+  private annotationsHeldBack = false;
+  /** Failed writes of the annotations record in a row, other than over the quota. */
+  private annotationsFailures = 0;
+  /** Asynchronous saves under way: a flush writes the state they were writing, and newer, at once. */
+  private inFlight = 0;
+  /**
+   * The lazy snapshots of the asynchronous saves under way, which a
+   * `SessionStore` takes the annotations of only when it writes them;
+   * {@link settleAnnotations} makes them take them at once.
+   */
+  private readonly saving = new Set<SessionSnapshot>();
+  /** The annotations' file a custom store is handed, the same while they do not change. */
+  private readonly annotationFiles = new AnnotationFileCache();
 
   constructor(
     private state: TableState,
@@ -95,9 +127,11 @@ export class AutoSave {
     if (this.unsubscribes.length > 0) return;
 
     // A fresh enable() (after disable() or first activation) resets the
-    // quota circuit-breaker. clearSession() runs disable→delete→enable, so
+    // quota circuit-breakers. clearSession() runs disable→delete→enable, so
     // this naturally re-arms saves after the consumer freed up space.
     this.quotaExceeded = false;
+    this.annotationsHeldBack = false;
+    this.annotationsFailures = 0;
 
     const signals = [
       this.state.filters,
@@ -123,9 +157,15 @@ export class AutoSave {
     // Subscribe to annotation-store changes. The store's `on('change', …)`
     // API returns a plain unsubscribe function matching our signal contract.
     // `filterChanged` toggles are visual-only but persisted in the snapshot
-    // (annotationSeverityFilter), so they need to schedule a save too.
+    // (annotationSeverityFilter), so they need to schedule a save too: one
+    // that leaves the annotations record alone, their content unchanged.
     if (this.annotationStore) {
-      this.unsubscribes.push(this.annotationStore.on('change', () => this.scheduleSave()));
+      this.unsubscribes.push(
+        this.annotationStore.on('change', ({ kind }) => {
+          if (kind !== 'filterChanged') this.annotationFiles.drop();
+          this.scheduleSave();
+        }),
+      );
     }
 
     // Subscribe to undo/redo stack changes so stacks are saved even when
@@ -170,39 +210,72 @@ export class AutoSave {
     // registers `window.addEventListener('beforeunload', …)` synchronously
     // at module load — its handler runs before createDataTable's async
     // init reaches enable() and wires up AutoSave's own flush.
-    // Safe in every call site: loadData calls disable() before resetTableState
-    // so the flush captures fully-settled pre-load state; clearSession's
-    // subsequent IDB delete runs after this sync put (same-store
-    // transactions serialise) so the net result is still deleted.
-    this.flushPendingSave();
-
-    for (const unsub of this.unsubscribes) {
-      unsub();
-    }
-    this.unsubscribes = [];
-    this.clearTimer();
-
-    if (this.boundOnVisibilityChange && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
-    }
-    if (this.boundOnBeforeUnload && typeof window !== 'undefined') {
-      window.removeEventListener('beforeunload', this.boundOnBeforeUnload);
-    }
-    this.boundOnVisibilityChange = null;
-    this.boundOnBeforeUnload = null;
+    this.disableWith('saveSync');
   }
 
   /**
-   * If a debounced save is pending, execute it immediately and synchronously.
-   * Uses SessionStore.saveSync() to enqueue the IDB write without yielding
-   * to the microtask queue — critical during beforeunload/visibilitychange
-   * where an async await may be skipped by the browser during page teardown.
+   * {@link disable}, with the debounced save pending, if any, written
+   * through the asynchronous save (`'save'`), whose writes of a million
+   * annotations take many short tasks, through the synchronous one
+   * (`'saveSync'`), as a page being hidden needs, or dropped (`'drop'`).
+   * `'saveSync'` also writes, while enabled, the state of an asynchronous
+   * save under way, which the page could take with it: not once disabled,
+   * as `clearSession` leaves it, whose saves under way are for a session
+   * going. `loadData` saves the data it replaces asynchronously, and
+   * `clearSession`, which deletes the session, drops it.
+   *
+   * @internal
+   */
+  disableWith(pending: 'save' | 'saveSync' | 'drop'): void {
+    const scheduled = this.timer !== null;
+    const enabled = this.unsubscribes.length > 0;
+    this.clearTimer();
+    try {
+      if (pending === 'save' && scheduled) this.save();
+      if (pending === 'saveSync' && (scheduled || (enabled && this.inFlight > 0))) this.saveSync();
+    } finally {
+      for (const unsub of this.unsubscribes) {
+        unsub();
+      }
+      this.unsubscribes = [];
+      this.clearTimer();
+      this.annotationFiles.drop();
+
+      if (this.boundOnVisibilityChange && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
+      }
+      if (this.boundOnBeforeUnload && typeof window !== 'undefined') {
+        window.removeEventListener('beforeunload', this.boundOnBeforeUnload);
+      }
+      this.boundOnVisibilityChange = null;
+      this.boundOnBeforeUnload = null;
+    }
+  }
+
+  /**
+   * If a debounced save is pending, or an asynchronous one is under way,
+   * save now, synchronously: the state they would write, and newer. Uses
+   * SessionStore.saveSync() to enqueue the IDB write without yielding to the
+   * microtask queue — critical during beforeunload/visibilitychange where an
+   * async await may be skipped by the browser during page teardown, and a
+   * save under way may not get to write its session record.
    */
   flushPendingSave(): void {
-    if (this.timer !== null) {
+    if (this.timer !== null || this.inFlight > 0) {
       this.clearTimer();
       this.saveSync();
     }
+  }
+
+  /**
+   * Have the asynchronous saves under way take their annotations now, if
+   * they have not yet: before the annotation store is emptied for other
+   * data, which would leave them none to write.
+   *
+   * @internal
+   */
+  settleAnnotations(): void {
+    settleSnapshotAnnotations(this.saving);
   }
 
   /** Permanently disable auto-save and clean up. */
@@ -231,20 +304,38 @@ export class AutoSave {
     if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(
-      this.state,
-      this.undoManager,
-      this.presetManager,
-      this.annotationStore,
-    );
+    const lazy = this.lazy();
+    let snapshot: SessionSnapshot;
+    try {
+      snapshot = this.snapshot(lazy);
+    } catch (cause) {
+      this.reportError(cause);
+      return;
+    }
+    this.inFlight++;
+    if (lazy) this.saving.add(snapshot);
+    const settle = (): void => {
+      this.inFlight--;
+      this.saving.delete(snapshot);
+    };
     try {
       const result = this.store.save(snapshot) as unknown as Promise<void> | void;
       if (result && typeof result.then === 'function') {
-        result.catch((cause) => {
-          this.reportError(cause);
-        });
+        result.then(
+          () => {
+            settle();
+            this.annotationsFailures = 0;
+          },
+          (cause: unknown) => {
+            settle();
+            this.reportError(cause);
+          },
+        );
+      } else {
+        settle();
       }
     } catch (cause) {
+      settle();
       this.reportError(cause);
     }
   }
@@ -258,24 +349,57 @@ export class AutoSave {
     if (this.quotaExceeded) return;
     if (this.state.tableName.get() == null) return;
 
-    const snapshot = snapshotFromState(
+    try {
+      this.store.saveSync(this.snapshot(this.lazy()));
+    } catch (cause) {
+      this.reportError(cause);
+    }
+  }
+
+  /**
+   * Whether to hand the store lazy snapshots, whose annotations' file it
+   * takes only to write it: a `SessionStore` as this version wrote it. One
+   * whose `save` or `saveSync` is another's (a subclass's, a wrapper) may
+   * copy the snapshot after its annotations changed, which would lose them.
+   */
+  private lazy(): boolean {
+    return (
+      this.store.save === SessionStore.prototype.save &&
+      this.store.saveSync === SessionStore.prototype.saveSync
+    );
+  }
+
+  private snapshot(lazy: boolean): SessionSnapshot {
+    return snapshotFromState(
       this.state,
       this.undoManager,
       this.presetManager,
       this.annotationStore,
+      {
+        annotations: !this.annotationsHeldBack,
+        lazyAnnotations: lazy,
+        // Another store gets the file as it is now, the same object from
+        // save to save while the annotations do not change.
+        ...(lazy ? {} : { annotationFiles: this.annotationFiles }),
+      },
     );
-    try {
-      this.store.saveSync(snapshot);
-    } catch (cause) {
-      this.reportError(cause);
-    }
   }
 
   private reportError(cause: unknown): void {
     const code = cause instanceof PersistenceError ? cause.code : classifyPersistenceFailure(cause);
     // Trip the circuit-breaker BEFORE invoking onError so a synchronous
     // handler that re-enters AutoSave sees the latched flag.
-    if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
+    if (isAnnotationsWriteFailure(cause)) {
+      // Reported already: a save that was in flight when it tripped.
+      if (this.annotationsHeldBack) return;
+      if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
+        this.annotationsHeldBack = true;
+      } else if (++this.annotationsFailures > 1) {
+        // The first was reported; the same failure again is no accident.
+        this.annotationsHeldBack = true;
+        return;
+      }
+    } else if (code === 'PERSISTENCE_QUOTA_EXCEEDED') {
       this.quotaExceeded = true;
     }
     if (!this.onError) return;
@@ -288,23 +412,4 @@ export class AutoSave {
           });
     this.onError(err);
   }
-}
-
-/**
- * Map an arbitrary thrown / rejected value to the most specific
- * `PersistenceError.code`. Today this is binary: quota exhaustion → its
- * own code, everything else → the generic `SAVE_FAILED`.
- */
-function classifyPersistenceFailure(cause: unknown): string {
-  // DOMException doesn't exist in every JS runtime (Node tests ship a polyfill);
-  // duck-type on `name` to cover both real DOMException and fake-indexeddb shims.
-  if (
-    cause &&
-    typeof cause === 'object' &&
-    'name' in cause &&
-    (cause as { name: unknown }).name === 'QuotaExceededError'
-  ) {
-    return 'PERSISTENCE_QUOTA_EXCEEDED';
-  }
-  return 'SAVE_FAILED';
 }

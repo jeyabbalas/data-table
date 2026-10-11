@@ -177,8 +177,8 @@ out of the `F2` cycle.
 The annotation popover and the column-header tooltip popover anchor
 on **different DOM nodes**:
 
-- Annotation popover — anchored on the row, cell, or column-header
-  container element.
+- Annotation popover — anchored on the cell, or the column-header
+  container element, that shows the annotations.
 - Column-header tooltip popover — anchored on the `.dt-col-name` span
   inside the column header.
 

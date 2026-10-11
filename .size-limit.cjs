@@ -17,23 +17,24 @@
  * — the library is browser-only and the worker is itself an ES module that a CJS
  * wrapper cannot load. Only ESM + CSS are measured now.
  *
- * Current baseline (brotli, re-measured after the 0.9.0 "nice to have"
- * fixes, RT-16 – RT-21, under Vite 8.3.0 / rolldown 1.2.10, which, like
- * rolldown 1.0.1 before it, inlines the shared ModalHost code into each
- * modal consumer):
- *   root entry · ESM               11.53 kB   →  12.1 kB cap (4.9 %)
- *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
- *   stylesheet                     22.87 kB   →  23.7 kB cap (3.6 %)
- *   lazy ExportDialog chunk       100.88 kB   → 104 kB   cap (3.1 %)
- *   lazy SQLFilterModal chunk       2.56 kB   →   2.6 kB cap (1.6 %)
+ * Current baseline (brotli, re-measured with annotations at scale, under
+ * Vite 8.3.0 / rolldown 1.2.10, which, like rolldown 1.0.1 before it,
+ * inlines the shared ModalHost code into each modal consumer):
+ *   root entry · ESM               11.84 kB   →  12.1 kB cap (2.2 %)
+ *   advanced entry · ESM            2.14 kB   →   2.25 kB cap (5.1 %)
+ *   stylesheet                     23.52 kB   →  23.7 kB cap (0.8 %)
+ *   lazy ExportDialog chunk       114.89 kB   → 117 kB   cap (1.8 %)
+ *   lazy SQLFilterModal chunk       2.55 kB   →   2.6 kB cap (2.0 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
  *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
- *   lazy FilterPresetPanel          2.69 kB   →   2.7 kB cap (0.4 %)
- *   lazy CodeMirror editor          5.19 kB   →   5.5 kB cap (6.0 %)
- *   lazy extractExpression chunk    2.78 kB   →   2.95 kB cap (6.1 %)
- *   lazy ValueInspector chunk       8.44 kB   →   8.9 kB cap (5.5 %)
- *   lazy ExtractColumnPanel chunk   4.98 kB   →   5.3 kB cap (6.4 %)
+ *   lazy FilterPresetPanel          2.66 kB   →   2.7 kB cap (1.5 %)
+ *   lazy CodeMirror editor          5.21 kB   →   5.5 kB cap (5.6 %)
+ *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
+ *   lazy ValueInspector chunk       8.47 kB   →   8.9 kB cap (5.1 %)
+ *   lazy ExtractColumnPanel chunk   4.99 kB   →   5.3 kB cap (6.2 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
+ *   lazy AnnotationNavigator chunk  4.80 kB   →   5.0 kB cap (4.2 %)
+ *   lazy AnnotatedRowsTable chunk   2.73 kB   →   2.85 kB cap (4.4 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -62,7 +63,9 @@
  * nested-type work left it at 10.93 kB, and the 0.9.0 "nice to have" fixes
  * at 11.05 kB. Resolving self-hosted bundle URLs, with errors naming the
  * option, and the default worker's typed failures (RT-07) took it from
- * 11.05 to 11.53 kB, and the cap to 12.1 kB.
+ * 11.05 to 11.53 kB, and the cap to 12.1 kB. Annotations at scale (the
+ * navigation option, the wiring of the annotated-rows table and the
+ * annotations' own persistence) took it to 11.84 kB.
  *
  * Advanced entry history. Removing the deprecated `VisualizationFactory`
  * took it from 2.50 to 2.32 kB, and the cap from 2.6 to 2.45 kB. The rest of
@@ -101,7 +104,39 @@
  * "nice to have" fixes (RT-16 – RT-21: dates and times exported as ISO text,
  * NaN and infinity left out of charts, sub-second intervals, TIME WITH TIME
  * ZONE charts, extreme dates and more) took it to 100.88 kB, and the cap to
- * 104 kB.
+ * 104 kB. Measured again at 0.10.0, it was 101.98 kB. Annotations at a
+ * million took it to 103.63 kB with the store's per-scope indexes, and to
+ * 105.65 kB with the grid reading them a scope at a time and writing only
+ * what changed, one store subscription for the whole grid, and the popover
+ * capped and refreshed in place. Annotation navigation added 1.22 kB: the
+ * keys, the actions that load its chunk, its live-region strings and the
+ * body's reads of the rows it holds. The annotated-rows filter added 1.22 kB
+ * more: the filter in the SQL, the chips, presets and restores, the read
+ * gate on the relation, and the gate that holds the filter's reads until
+ * the `AnnotatedRowsTable-*` chunk below is in. Keeping a session's
+ * annotations in a database of their own, written only when they change and
+ * in chunks, took it to 110.39 kB, and the cap to 114 kB. The review fixes
+ * that followed (the cursor following its row as an annotated view
+ * refreshes in place, a refresh only when the rows the filter keeps
+ * change, a write order and a per-table queue under which no failure loses
+ * annotations that had landed, a load's annotations cleared in its turn)
+ * took it to 113.43 kB, and the cap to 117 kB. The fixes of a third review
+ * (the cursor following its row out of view and out of the row cache, a
+ * closing session store finishing what it was asked) left it at 114.33 kB,
+ * and those of a fourth (a navigation waiting for the view's new count,
+ * the cursor's row kept or learned through a change of the view, one
+ * queue of a table's operations for every session store), with those of a
+ * fifth, at 114.89 kB.
+ *
+ * AnnotatedRowsTable chunk history. New with the annotated-rows filter, at
+ * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with
+ * the annotation store, loaded the first time an annotated filter comes into
+ * force or something reads that table (navigation, a filtered export,
+ * `getColumnValues`). A sync that compares the new rows with the ones the
+ * table holds, refreshing the view only when the rows the filter keeps
+ * change, that drops only the cached results that read the table, and that
+ * is not retried while it keeps failing took it to 2.73 kB, and the cap
+ * from 2.35 to 2.85 kB.
  *
  * extractExpression chunk history. New with `actions.addNestedFieldColumn`,
  * at 2.79 kB: the SQL that reads one part of a nested or JSON column, loaded
@@ -131,6 +166,23 @@
  * panels' element and close-icon helpers into it, and took the copies the
  * inspector kept of shared rules out: TreeView 2.79 kB, ValueInspector
  * 8.45 kB and ExtractColumnPanel 4.95 kB.
+ *
+ * AnnotationNavigator chunk history. New with annotation navigation
+ * (`F8` / `Shift+F8`, `Alt+↓` / `Alt+↑`, `actions.nextAnnotation`,
+ * `previousAnnotation` and `revealRow`), at 4.31 kB: the search for the next
+ * annotated row (the rows the grid holds, a binary search, the SQL that
+ * compares rows key by key as the grid's `ORDER BY` does), the landing and
+ * its announcements, loaded the first time navigation runs. What stays in
+ * the shared chunk is the keys, the actions that load it and the strings.
+ * Searching from the cursor's row as an annotated view refreshes in place
+ * (waiting for the refresh, the gap a row left behind, positions counted
+ * rather than reckoned) took it to 4.47 kB, and the cap from 4.5 to 4.7 kB.
+ * Locating the cursor's row for a refresh, and searching from the row that
+ * left a gap, took it to 4.60 kB; from then on, an annotated view that
+ * looks for the cursor's row beyond the rows the grid holds loads it too.
+ * Learning the cursor's row after a change of the view, and counting a
+ * gap's place from the nearest row the grid holds, took it to 4.80 kB, and
+ * the cap from 4.7 to 5.0 kB.
  *
  * ModalHost no longer ships as a separate chunk: rolldown, since 1.0.1,
  * inlines the shared ModalHost helpers into each modal consumer. The
@@ -182,7 +234,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '104 kB',
+    limit: '117 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',
@@ -227,6 +279,16 @@ module.exports = [
   {
     name: 'lazy TreeView chunk · ESM',
     path: 'dist/TreeView-*.js',
+    limit: '2.85 kB',
+  },
+  {
+    name: 'lazy AnnotationNavigator chunk · ESM',
+    path: 'dist/AnnotationNavigator-*.js',
+    limit: '5.0 kB',
+  },
+  {
+    name: 'lazy AnnotatedRowsTable chunk · ESM',
+    path: 'dist/AnnotatedRowsTable-*.js',
     limit: '2.85 kB',
   },
 ];

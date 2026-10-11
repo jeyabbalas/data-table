@@ -5,8 +5,10 @@
  * a human-readable description, with a remove button.
  */
 
+import { ALL_SEVERITIES_MASK, severitiesOfMask } from '../annotations/severity';
 import { graphemeSegmenter } from '../core/graphemes';
 import { type Strings, defaultStrings } from '../core/Strings';
+import { annotatedFilterMask } from './annotatedFilters';
 import type { Filter } from './FilterTypes';
 
 /**
@@ -180,6 +182,18 @@ export function formatFilter(
     case 'raw-sql': {
       const display = filter.label || truncateSQL(filter.sql, 40);
       return { column: d.sqlColumn, description: display };
+    }
+    case 'annotated': {
+      // Named in the order of severity, however the filter lists them.
+      const mask = annotatedFilterMask(filter);
+      const names = messages.annotations.severityNames;
+      return {
+        column: d.annotatedColumn,
+        description:
+          mask === ALL_SEVERITIES_MASK
+            ? d.anySeverity
+            : d.severityList(severitiesOfMask(mask).map((severity) => names[severity])),
+      };
     }
   }
 }

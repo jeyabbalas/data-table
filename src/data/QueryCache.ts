@@ -35,6 +35,7 @@ export class QueryCache {
   private cache = new Map<string, CacheEntry>();
   private maxEntries: number;
   private ttlMs: number;
+  private clears = 0;
 
   constructor(options?: Partial<QueryCacheOptions>) {
     const resolved = { ...DEFAULT_OPTIONS, ...options };
@@ -63,10 +64,25 @@ export class QueryCache {
   }
 
   /**
-   * Store a query result with TTL. Evicts LRU entry if at capacity.
+   * How many times the cache has been cleared, in whole or in part (see
+   * {@link invalidate}). A query reads it as it starts, and passes it to
+   * {@link set} with its result.
    */
-  set(key: string, value: unknown[]): void {
+  get generation(): number {
+    return this.clears;
+  }
+
+  /**
+   * Store a query result with TTL. Evicts LRU entry if at capacity.
+   *
+   * With `generation`, the {@link generation} read as the query started,
+   * the result is stored only if the cache has not been cleared, in whole or
+   * in part, since: a clear means what the queries read changed, and a
+   * result in flight across it may have read the data from before.
+   */
+  set(key: string, value: unknown[], generation?: number): void {
     if (this.maxEntries <= 0) return;
+    if (generation !== undefined && generation !== this.clears) return;
 
     // Remove existing entry to update position
     this.cache.delete(key);
@@ -88,6 +104,20 @@ export class QueryCache {
   /** Clear all cached entries */
   clear(): void {
     this.cache.clear();
+    this.clears++;
+  }
+
+  /**
+   * Drop the cached results whose SQL `stale` picks, keeping the others: for
+   * a change to data that only some queries read, such as one table of
+   * several that share a bridge. As after a {@link clear}, no result in
+   * flight is stored, since `stale` cannot see what a query in flight read.
+   */
+  invalidate(stale: (sql: string) => boolean): void {
+    for (const key of this.cache.keys()) {
+      if (stale(key)) this.cache.delete(key);
+    }
+    this.clears++;
   }
 
   /** Current number of entries (including potentially expired ones) */

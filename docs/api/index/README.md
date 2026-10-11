@@ -28,8 +28,11 @@
 
 ## Interfaces
 
+- [AnnotatedFilter](interfaces/AnnotatedFilter.md)
 - [AnnotationChangePayload](interfaces/AnnotationChangePayload.md)
 - [AnnotationFile](interfaces/AnnotationFile.md)
+- [AnnotationNavigationOptions](interfaces/AnnotationNavigationOptions.md)
+- [AnnotationNavigationResult](interfaces/AnnotationNavigationResult.md)
 - [BrowserSupport](interfaces/BrowserSupport.md)
 - [CellAnnotation](interfaces/CellAnnotation.md)
 - [ColumnAnnotation](interfaces/ColumnAnnotation.md)
@@ -64,6 +67,8 @@
 - [QueryOptions](interfaces/QueryOptions.md)
 - [RangeFilter](interfaces/RangeFilter.md)
 - [RawSQLFilter](interfaces/RawSQLFilter.md)
+- [RevealRowOptions](interfaces/RevealRowOptions.md)
+- [RevealRowResult](interfaces/RevealRowResult.md)
 - [RowAnnotation](interfaces/RowAnnotation.md)
 - [SerializedNotSetFilter](interfaces/SerializedNotSetFilter.md)
 - [SerializedPointFilter](interfaces/SerializedPointFilter.md)

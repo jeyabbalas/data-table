@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi } from 'vitest';
+import { defaultStrings, mergeStrings } from '@/core/Strings';
 import {
   CHIP_VALUE_MAX_LENGTH,
   formatFilter,
@@ -310,6 +311,59 @@ describe('formatFilter', () => {
       const filter: Filter = { type: 'pattern', column: 'name', pattern: '^abc$', mode: 'regex' };
       const result = formatFilter(filter);
       expect(result.description).toBe('matches /^abc$/');
+    });
+  });
+
+  describe('annotated filter', () => {
+    const base = { type: 'annotated', column: '__annotated__', table: 't' } as const;
+
+    it('reads "Annotated rows · any severity" when it keeps every severity', () => {
+      expect(formatFilter(base)).toEqual({ column: 'Annotated rows', description: 'any severity' });
+      expect(formatFilter({ ...base, severities: [] }).description).toBe('any severity');
+      expect(formatFilter({ ...base, severities: ['info', 'warning', 'error'] }).description).toBe(
+        'any severity',
+      );
+    });
+
+    it('names the severities it keeps, most severe first', () => {
+      expect(formatFilter({ ...base, severities: ['warning', 'error'] }).description).toBe(
+        'error, warning',
+      );
+      expect(formatFilter({ ...base, severities: ['info'] }).description).toBe('info');
+    });
+
+    it('reads its label, the severities’ names and the list through messages', () => {
+      const messages = mergeStrings(defaultStrings, {
+        filters: {
+          chipDescriptions: {
+            annotatedColumn: 'Lignes annotées',
+            anySeverity: 'toute gravité',
+            severityList: (names: string[]) => names.join(' ou '),
+          },
+        },
+        annotations: { severityNames: { error: 'erreur', warning: 'avertissement' } },
+      });
+      expect(formatFilter(base, messages)).toEqual({
+        column: 'Lignes annotées',
+        description: 'toute gravité',
+      });
+      expect(formatFilter({ ...base, severities: ['error', 'warning'] }, messages)).toEqual({
+        column: 'Lignes annotées',
+        description: 'erreur ou avertissement',
+      });
+    });
+
+    it('renders a chip whose remove button names the label', () => {
+      const onRemove = vi.fn();
+      const chip = new FilterChip({ ...base, severities: ['error'] }, onRemove);
+      const el = chip.getElement();
+      expect(el.querySelector('.dt-filter-chip-column')?.textContent).toBe('Annotated rows');
+      expect(el.querySelector('.dt-filter-chip-detail')?.textContent).toBe(' error');
+      expect(el.title).toBe('Annotated rows error');
+      const remove = el.querySelector<HTMLButtonElement>('.dt-filter-chip-remove')!;
+      expect(remove.getAttribute('aria-label')).toContain('Annotated rows');
+      remove.click();
+      expect(onRemove).toHaveBeenCalledTimes(1);
     });
   });
 });

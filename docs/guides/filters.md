@@ -1,13 +1,13 @@
 # Filters
 
 Every filter in `@jeyabbalas/data-table` is a plain JavaScript object matching
-one of seven discriminated-union shapes. The filter panel uses this shape; so
+one of eight discriminated-union shapes. The filter panel uses this shape; so
 does session persistence, filter presets, and the `actions.addFilter()` API.
 Learn the shapes once and every other surface falls out.
 
 ## You'll learn how to
 
-- Build each of the seven filter types programmatically
+- Build each of the eight filter types programmatically
 - Match list, struct and map values exactly, by their text
 - Apply, update, remove, and clear filters via `table.actions`
 - Attach a raw-SQL `WHERE` fragment
@@ -36,9 +36,10 @@ table.actions.addFilter({
 
 `addFilter` replaces any existing filter for the same column, so the table
 never holds two filters of the same column at once — with one exception for
-raw-SQL filters, which use synthetic column keys (see below).
+raw-SQL filters, which use synthetic column keys (see below). The annotated
+filter has a synthetic key of its own, so there is at most one.
 
-## The seven filter types
+## The eight filter types
 
 Every filter has a `type` discriminator and a `column` field; the rest varies.
 
@@ -138,6 +139,56 @@ if (valid) {
   console.log(`${matchCount} rows would match`);
 }
 ```
+
+### 8. `annotated` — rows with annotations
+
+Use `showAnnotatedRows` rather than constructing this by hand:
+
+```ts
+table.actions.showAnnotatedRows(); // the rows with any annotation
+table.actions.showAnnotatedRows({ severities: ['warning', 'error'] });
+table.state.filters.get();
+// [{ type: 'annotated', column: '__annotated__', severities: ['error', 'warning'], table: 'orders' }]
+table.actions.hideAnnotatedRows();
+```
+
+- Keeps the rows that have a row-scope or cell-scope annotation in
+  [`table.annotations`](./annotations.md) of one of `severities`, or of any
+  severity when `severities` is left out or empty. A column-scope annotation
+  singles out no row, so it keeps none.
+- `column` is always `'__annotated__'`, a synthetic key: a filter on a column
+  never replaces it, and there is at most one. `showAnnotatedRows` writes each
+  severity once, most severe first, and none for all three; asked again for
+  the same rows, it changes nothing. Its chip reads "Annotated rows · any
+  severity" or "Annotated rows · error, warning".
+- `table` is the base table whose annotated rows it keeps: the table the data
+  loaded into, not a derived-column view. `addFilter` sets it, and so do a
+  session restore, its undo and redo entries, and a preset load, to the table
+  they come back to, so a filter written by hand can leave it out. Without
+  one, or with only severities it does not know, the filter keeps no row
+  (`FALSE`).
+- It reads a DuckDB temporary table of the annotated rows, one row per
+  annotated `__rowid__` with its severities' bits (error 1, warning 2,
+  info 4):
+  `"__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_orders__" WHERE ("__mask__" & 3) <> 0)`,
+  without the `WHERE` for every severity. That works on a derived-column view
+  too. The table is built when the filter comes into force, and the grid,
+  the count and the charts wait for it.
+- Like a raw-SQL filter, it applies to every chart's own query: a column's
+  chart counts only the annotated rows.
+- The rows it keeps follow the annotations: a change that adds or removes a
+  kept row refreshes the view in place, keeping the scroll position, with the
+  cursor following its row, and fires `filterChange` again with the same
+  filters and the new count; one that keeps the same rows refreshes nothing.
+  The severity filter (`annotations.setSeverityFilter`) does not change which
+  rows it keeps. See
+  [Annotations → Showing only the annotated rows](./annotations.md#showing-only-the-annotated-rows).
+- For undo, two annotated filters are the same when they keep the same rows
+  of the same table: `['warning', 'error']` is `['error', 'warning']`, and
+  none is all three.
+- 0.9 and earlier drop the filter, as they drop any filter type they do not
+  know: from a restored session with a console warning, from an imported
+  preset as an invalid filter.
 
 ## Matching nested values
 
@@ -338,6 +389,7 @@ if (params.has('country')) {
 - **Regex patterns don't support backreferences or lookarounds.** DuckDB uses RE2-style semantics.
 - **Date matching is exact.** `{ type: 'point', column: 'created_at', value: new Date(...) }` matches the exact timestamp including milliseconds. Use a `range` filter for day-granularity matching.
 - **A `Date` goes into the SQL as ISO text that DuckDB reads.** A year past 9999 loses the `+` that `toISOString()` gives it: `new Date('+012000-01-01T00:00:00Z')` is written `'12000-01-01T00:00:00.000Z'`, where DuckDB rejects `'+012000-…'` in every query. A year before 1 keeps its sign, `'-000043-03-15T00:00:00.000Z'` for 44 BC.
+- **A column named `__annotated__` collides with the annotated filter.** The annotated filter's key is that name, so a filter on such a column and the annotated filter replace each other. Rename the column to filter it alongside the annotated rows.
 - **Raw-SQL filters aren't auto-validated.** The library will happily let you add a syntactically broken fragment; queries will then fail with `QueryError`. Call `validateSQLFilter()` first.
 - **Clearing filters doesn't clear selection.** Selected rows persist across filter changes — they just get hidden when out of the filtered set.
 - **Chips cut long values.** A filter chip shows each value, and a pattern, up to 60 characters, cut between graphemes with `…`; the chip's title holds each value whole. A set filter's chip and title both list its first three values and "N more", and an unlabeled raw-SQL filter's SQL is cut at 40 characters in both (`src/filters/FilterChip.ts`).
@@ -347,5 +399,6 @@ if (params.has('country')) {
 
 - Events: [Events guide — `filterChange`](./events.md)
 - Filter presets: [Filter presets guide](./filter-presets.md) for save/load/export/import of named filter sets
+- Annotations: [Annotations guide](./annotations.md) for the annotations the `annotated` filter keeps rows by
 - API reference: [Filter types](../api-reference.md#filter-types), [State actions](../api-reference.md#actions-methods)
-- Source: `src/filters/FilterTypes.ts:8-204`, `src/core/Actions.ts` (`addFilter` … `getFiltersSQL`), `src/filters/FilterSQL.ts`
+- Source: `src/filters/FilterTypes.ts:10-256`, `src/core/Actions.ts` (`addFilter` … `getFiltersSQL`, `showAnnotatedRows`, `hideAnnotatedRows`), `src/filters/FilterSQL.ts`, `src/filters/annotatedFilters.ts`

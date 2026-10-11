@@ -6,16 +6,32 @@
  */
 
 import type { AnnotationStore } from '../annotations/AnnotationStore';
-import { maxSeverity } from '../annotations/severity';
-import type { Annotation } from '../annotations/types';
 import type { StateActions } from '../core/Actions';
+import { nextTask } from '../core/nextTask';
 import { setOwnProperty } from '../core/ownProperty';
 import type { Signal } from '../core/Signal';
 import type { TableState } from '../core/State';
 import { type Strings, defaultStrings } from '../core/Strings';
 import { ROWID_COLUMN, type ColumnSchema, type SortColumn, type Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import type { AnnotationPopover } from './AnnotationPopover';
+import type { AnnotationPopover, AnnotationSections } from './AnnotationPopover';
+import {
+  type AnnotationClasses,
+  type AnnotationRenderChange,
+  annotationChangeOf,
+  annotationClasses,
+  applyCount,
+  applyScope,
+  cellCellCode,
+  cellColumnCode,
+  cellCount,
+  cellRowCode,
+  cellShowsSeverity,
+  cellState,
+  codeOf,
+  columnScopeState,
+  rowScopeState,
+} from './annotationRender';
 import { CellRenderer, isInspectableColumn } from './Cell';
 import { type ColumnLayout, getColumnLayout } from './ColumnLayout';
 import { HEADER_ROW_INDEX } from './KeyboardNavigator';
@@ -70,9 +86,20 @@ export interface TableBodyOptions {
   /**
    * Shared annotation store. When provided, the body applies
    * `dt-row--annotated` / `dt-cell--annotated` classes at render time and
-   * subscribes to `change` events to keep visible rows in sync.
+   * keeps the rendered rows in step with its `change` events (see
+   * `annotationSync`).
    */
   annotations?: AnnotationStore | undefined;
+  /**
+   * Who keeps the rendered rows in step with `annotations`: the body, through
+   * a `change` subscription of its own (`'self'`, the default), or its owner,
+   * which calls {@link TableBody.syncAnnotations} for each change
+   * (`'owner'`). `TableContainer` passes `'owner'`: its `AnnotationOverlay`
+   * is the grid's one subscriber, for the body and every header.
+   *
+   * @internal
+   */
+  annotationSync?: 'self' | 'owner' | undefined;
   /**
    * Shared popover singleton used to display cell-scope annotations on
    * hover / focus of an annotated cell.
@@ -206,6 +233,17 @@ function sameColumns(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
     if (!b.has(column)) return false;
   }
   return true;
+}
+
+/**
+ * A cached row's `__rowid__` as a number, or `null` when it has none.
+ * DuckDB returns BIGINT as a bigint or a number depending on the driver;
+ * row counts stay well below 2^53.
+ */
+function rowIdOf(data: RowData | undefined): number | null {
+  const raw = data?.[ROWID_COLUMN];
+  const id = typeof raw === 'bigint' ? Number(raw) : typeof raw === 'number' ? raw : Number.NaN;
+  return Number.isFinite(id) ? id : null;
 }
 
 /**
@@ -378,6 +416,21 @@ export class TableBody {
   private readonly container: HTMLElement;
   private readonly annotations: AnnotationStore | null;
   private readonly annotationPopover: AnnotationPopover | null;
+  private readonly annotationSync: 'self' | 'owner';
+  private readonly annotationClasses: AnnotationClasses;
+  // What each rendered row and cell shows of the annotations: the row's code,
+  // and the cell's packed state (see annotationRender.ts). No entry means it
+  // shows nothing, which is why a row going to the pool is cloned clean (see
+  // returnRowToPool). A render or a change writes an element only where the
+  // state it computes differs from this.
+  private readonly annotationStates = new WeakMap<Element, number>();
+  // Each column's packed column-scope state, as of the store's `revision`:
+  // a render reads it for every cell of the column.
+  private columnAnnotationStates = new Map<string, number>();
+  private columnAnnotationRevision = -1;
+  // The rendered data rows' indexes by row id, built the first time a change
+  // needs it after a render pass, which changes the rows rendered.
+  private renderedRowsById: Map<number, number> | null = null;
   private readonly messages: Strings;
   private readonly onInspectCell: ((cell: { row: number; column: string }) => void) | null;
   private unsubAnnotations: (() => void) | null = null;
@@ -388,8 +441,10 @@ export class TableBody {
 
   // Tracks the anchor currently driving the popover so pointer/focus
   // transitions between child elements inside the same cell don't retrigger
-  // show().
+  // show(). Reset when the popover hides, or the anchor's row is recycled.
   private currentAnnotationAnchor: HTMLElement | null = null;
+  // Matches a cell showing an annotation of any scope, by its marker classes.
+  private readonly annotatedCellSelector: string;
 
   constructor(
     container: HTMLElement,
@@ -407,6 +462,15 @@ export class TableBody {
     this.mountedColumns = options.mountedColumns ?? null;
     this.annotations = options.annotations ?? null;
     this.annotationPopover = options.annotationPopover ?? null;
+    this.annotationSync = options.annotationSync ?? 'self';
+    this.annotationClasses = annotationClasses(this.classPrefix);
+    this.annotatedCellSelector = [
+      this.annotationClasses.cell[0],
+      this.annotationClasses.cellColumn[0],
+      this.annotationClasses.cellRow[0],
+    ]
+      .map((name) => `.${name}`)
+      .join(', ');
     this.messages = options.messages ?? defaultStrings;
     this.onInspectCell = options.onInspectCell ?? null;
     this.fetchBlockSize = Math.min(1024, Math.max(16, Math.floor(options.fetchBlockSize ?? 128)));
@@ -637,15 +701,14 @@ export class TableBody {
     });
     this.unsubscribes.push(unsubTableName);
 
-    // Re-apply annotation classes whenever the store mutates. Targeted
-    // DOM walk over visible rows only — no SQL re-fetch, no cache
-    // invalidation. For a typical 50-row viewport this is cheap enough
-    // that we don't bother diffing the payload ids.
-    if (this.annotations) {
-      this.unsubAnnotations = this.annotations.on('change', () => {
-        if (!this.destroyed) {
-          this.reapplyAnnotationsToVisibleRows();
-        }
+    // Bring the rendered rows up to date whenever the store changes: the
+    // rows and columns the change touched, from the cache, with no fetch.
+    // An owner that hears the store for the whole grid does this instead.
+    if (this.annotations && this.annotationSync === 'self') {
+      this.unsubAnnotations = this.annotations.on('change', (payload) => {
+        if (this.destroyed) return;
+        this.syncAnnotations(annotationChangeOf(payload));
+        this.annotationPopover?.requestRefresh();
       });
     }
   }
@@ -716,6 +779,7 @@ export class TableBody {
     // none of them.
     const rows = [...this.rowElementMap.values()];
     this.rowElementMap.clear();
+    this.renderedRowsById = null;
     for (const element of rows) {
       this.moveFocusToGridBeforeRemoval(element);
       element.remove();
@@ -1007,7 +1071,7 @@ export class TableBody {
     if (actions && !actions.isRelationReadable()) {
       this.relationWait ??= actions
         .whenRelationReadable()
-        .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+        .then(nextTask)
         .then(() => {
           this.relationWait = null;
           if (this.destroyed) return;
@@ -1424,6 +1488,9 @@ export class TableBody {
   /** One pass of {@link renderVisibleRows}. */
   private renderPass(): void {
     this.pinnedZBaseCache = null;
+    // The rows rendered change below; the index by row id is built again
+    // when a change next needs it.
+    this.renderedRowsById = null;
 
     const viewport = this.virtualScroller.getViewportContainer();
     const shape = this.rowShape();
@@ -1705,6 +1772,7 @@ export class TableBody {
         continue;
       }
       this.moveFocusToGridBeforeRemoval(child);
+      this.releaseAnnotationAnchor(child);
       child.remove();
       if (this.isSpacer(child)) freeSpacers.push(child);
       else freeCells.push(child);
@@ -1812,6 +1880,10 @@ export class TableBody {
       return;
     }
 
+    // A popover anchored in the row hides with it, before the copy below:
+    // hiding takes the anchor's `aria-describedby` off.
+    this.releaseAnnotationAnchor(rowEl);
+
     // Clone the element to remove all event listeners
     // When reused, new listeners will be attached via attachRowEventListeners
     const cleanEl = rowEl.cloneNode(true) as HTMLElement;
@@ -1834,10 +1906,17 @@ export class TableBody {
       const cell = child as HTMLElement;
       cell.classList.remove(focusClass);
       cell.removeAttribute('id');
+      // Nor does it name a popover that describes another row's cell.
+      cell.removeAttribute('aria-describedby');
       // Nor does a pooled cell promise a dialog: the next render says
       // whether the value it then holds opens one.
       this.cellRenderer.setInspectable(cell, false);
     }
+
+    // The copy shows no annotation: what the row and its cells showed is
+    // known by element, and the copy is a new one, with no state. Taken off
+    // here, it renders as any new row does.
+    this.clearCopiedAnnotations(rowEl, cleanEl);
 
     // Limit pool size to prevent memory bloat
     if (this.rowPool.length < 100) {
@@ -1917,10 +1996,14 @@ export class TableBody {
       rowEl.removeAttribute('data-row-id');
     }
 
-    // Apply row-scope annotation classes. See precedence rules (plan §
-    // "Precedence rules"): the row tint reflects ONLY row-scope
-    // annotations; cell / column annotations stay local.
-    this.applyRowAnnotationClasses(rowEl, rowId);
+    // What the row scope shows here: the row's own markers, and part of each
+    // cell's state below. The row's tint is its row scope alone; column and
+    // cell annotations stay on their cells.
+    const annotations = this.annotations;
+    const annotatedRowId = rowId !== null && Number.isFinite(rowId) ? rowId : null;
+    const rowAnnotationState =
+      annotations && annotatedRowId !== null ? rowScopeState(annotations, annotatedRowId) : 0;
+    if (annotations) this.showRowAnnotation(rowEl, codeOf(rowAnnotationState));
 
     const layout = getColumnLayout(this.state);
 
@@ -1964,13 +2047,12 @@ export class TableBody {
       }
 
       // CellRenderer is intentionally left untouched: it always writes the
-      // formatted value into `cellEl.title`. If the cell has annotations
-      // (any scope) we CLEAR the title — the AnnotationPopover is the
-      // sole tooltip for annotated cells, so the native title would be a
-      // duplicate. When all annotations are later removed, a subsequent
-      // render restores the formatted title without any tracking state.
+      // formatted value into `cellEl.title`, and renderCellAnnotation takes
+      // it off a cell whose popover lists something (see there).
       if (this.renderCellValue(cellEl, data, colName, colSchema, fetched)) pending = true;
-      this.applyCellAnnotationClasses(cellEl, rowId, colName);
+      if (annotations) {
+        this.renderCellAnnotation(cellEl, annotatedRowId, colName, rowAnnotationState);
+      }
     }
     // Hold assistive tech off a row still missing some of its values, as a
     // placeholder row does.
@@ -2019,181 +2101,222 @@ export class TableBody {
     return false;
   }
 
+  // =========================================
+  // Annotations
+  // =========================================
+
   /**
-   * Apply row-scope annotation classes to a row element as DOM/CSS
-   * markers. `.dt-row--annotated` + `.dt-row--annotation-<sev>` exist for
-   * external styling hooks but no longer paint the row themselves — all
-   * tint lives on cell-level classes (see `applyCellAnnotationClasses`),
-   * which keeps row-scope visuals consistent with col-scope and makes the
-   * row hover state immune to `.dt-row:hover`'s bg override. Filters
-   * `getByRow` down to `scope === 'row'` because the byRow index also
-   * holds cell-scope annotations (every cell ann is indexed into byRow /
-   * byColumn / byCell), and a cell-scope ann must not tint its row.
+   * Make a row show row-scope code `next` (see annotationRender.ts):
+   * `.dt-row--annotated` and `.dt-row--annotation-<severity>`, hooks for
+   * external styling that paint nothing themselves. The tint is the cells'
+   * (`.dt-cell--row-annotated`), which keeps a row's look the same as a
+   * column's and immune to `.dt-row:hover`. Written only where it differs
+   * from what the row shows.
    */
-  private applyRowAnnotationClasses(rowEl: HTMLElement, rowId: number | null): void {
-    const p = this.classPrefix;
-    rowEl.classList.remove(
-      `${p}-row--annotated`,
-      `${p}-row--annotation-error`,
-      `${p}-row--annotation-warning`,
-      `${p}-row--annotation-info`,
-    );
-    if (!this.annotations || rowId === null) return;
-    const anns = this.annotations.getByRow(rowId).filter((a) => a.scope === 'row');
-    if (anns.length === 0) return;
-    // Marker class tracks unfiltered presence; severity class falls back
-    // through the hierarchy as the visual filter hides higher tiers.
-    rowEl.classList.add(`${p}-row--annotated`);
-    const filter = this.annotations.getSeverityFilter();
-    const visible = anns.filter((a) => filter[a.severity]);
-    const sev = maxSeverity(visible);
-    if (sev) rowEl.classList.add(`${p}-row--annotation-${sev}`);
+  private showRowAnnotation(rowEl: HTMLElement, next: number): void {
+    const prev = this.annotationStates.get(rowEl) ?? 0;
+    if (prev === next) return;
+    applyScope(rowEl.classList, this.annotationClasses.row, prev, next);
+    if (next === 0) this.annotationStates.delete(rowEl);
+    else this.annotationStates.set(rowEl, next);
   }
 
   /**
-   * Apply three cell-level annotation class families side-by-side, no
-   * union propagation:
-   * - `.dt-cell--row-annotated` + severity — every cell in a row with a
-   *   row-scope annotation. Makes row annotations paint per cell (same
-   *   visual signature as col/cell) so the left-stripe spans every cell
-   *   and hover darkens each cell independently instead of losing to
-   *   `.dt-row:hover`'s bg override.
-   * - `.dt-cell--col-annotated` + severity — every cell in a column with
-   *   a column-scope annotation.
-   * - `.dt-cell--annotated` + severity — only the cell with its own
-   *   cell-scope annotation at this exact `(rowId, colName)`.
+   * Make a cell show the packed state `next`: its three class families side
+   * by side, with no propagation between them, and the count.
    *
-   * Hierarchy (cell > col > row) is enforced in CSS by source order:
-   * row rules come first, col second, cell last — whichever scope
-   * applies last to a given cell wins bg / stripe / hover color. The
-   * same strict filters are mirrored in `resolveAnnotatedCell` so the
-   * popover content matches the visible paint.
+   * - `.dt-cell--row-annotated` + severity: every cell of a row with a
+   *   row-scope annotation, so a row's tint is painted cell by cell, as a
+   *   column's is.
+   * - `.dt-cell--col-annotated` + severity: every cell of a column with a
+   *   column-scope annotation.
+   * - `.dt-cell--annotated` + severity: the cell with cell-scope annotations
+   *   of its own, at exactly its row and column.
+   * - `data-dt-annotation-count`: the three scopes' annotations there.
    *
-   * Native-title handling: `CellRenderer.render` wrote the formatted
-   * value into `cellEl.title` before this call. If ANY scope annotates
-   * this cell, we clear the title — the `AnnotationPopover` is the
-   * single source of truth for annotated-cell tooltips. Unannotated
-   * cells keep the formatted title so hovering still reveals the
-   * underlying value.
+   * The cell > column > row precedence is the stylesheet's source order. The
+   * marker classes and the count follow the annotations whatever the
+   * severity filter shows; a severity class falls back through error,
+   * warning and info as the filter hides them. Only the tokens that differ
+   * from what the cell shows are written.
    *
-   * Render-budget note: this runs once per visible cell on every render
-   * (~5000 calls/render at 100 cols × 50 rows). It calls `getByRow`,
-   * `getByColumn`, and `getByCell` — all O(1) on the AnnotationStore
-   * indexes. If those lookups ever change complexity, scroll perf will
-   * regress quietly; benchmarks live in
-   * `tests/annotations/AnnotationStore.scale.test.ts`.
+   * @returns the state the cell showed before.
    */
-  private applyCellAnnotationClasses(
+  private showCellAnnotation(cellEl: HTMLElement, next: number): number {
+    const prev = this.annotationStates.get(cellEl) ?? 0;
+    if (prev === next) return prev;
+    const classes = this.annotationClasses;
+    const list = cellEl.classList;
+    applyScope(list, classes.cellRow, cellRowCode(prev), cellRowCode(next));
+    applyScope(list, classes.cellColumn, cellColumnCode(prev), cellColumnCode(next));
+    applyScope(list, classes.cell, cellCellCode(prev), cellCellCode(next));
+    applyCount(cellEl, cellCount(prev), cellCount(next));
+    if (next === 0) this.annotationStates.delete(cellEl);
+    else this.annotationStates.set(cellEl, next);
+    return prev;
+  }
+
+  /**
+   * A column's packed column-scope state, cached until the store's
+   * `revision` moves: every cell of the column reads it.
+   */
+  private columnAnnotationState(column: string): number {
+    const store = this.annotations!;
+    if (this.columnAnnotationRevision !== store.revision) {
+      this.columnAnnotationStates.clear();
+      this.columnAnnotationRevision = store.revision;
+    }
+    let state = this.columnAnnotationStates.get(column);
+    if (state === undefined) {
+      state = columnScopeState(store, column);
+      this.columnAnnotationStates.set(column, state);
+    }
+    return state;
+  }
+
+  /** What the cell of `column` in the row with `rowId` shows, packed. */
+  private cellAnnotationState(rowId: number | null, column: string, rowState: number): number {
+    if (rowId === null) return 0;
+    return cellState(
+      this.annotations!,
+      rowId,
+      column,
+      rowState,
+      this.columnAnnotationState(column),
+    );
+  }
+
+  /**
+   * Show the annotations at a cell its render just filled. The render wrote
+   * the formatted value into its `title`; a cell that shows a severity gives
+   * the title up, since its popover is its tooltip and the native one would
+   * be a second. A cell whose every annotation the severity filter hides
+   * opens no popover, and keeps its title.
+   */
+  private renderCellAnnotation(
     cellEl: HTMLElement,
     rowId: number | null,
-    colName: string,
+    column: string,
+    rowState: number,
   ): void {
-    const p = this.classPrefix;
-    cellEl.classList.remove(
-      `${p}-cell--row-annotated`,
-      `${p}-cell--row-annotation-error`,
-      `${p}-cell--row-annotation-warning`,
-      `${p}-cell--row-annotation-info`,
-      `${p}-cell--col-annotated`,
-      `${p}-cell--col-annotation-error`,
-      `${p}-cell--col-annotation-warning`,
-      `${p}-cell--col-annotation-info`,
-      `${p}-cell--annotated`,
-      `${p}-cell--annotation-error`,
-      `${p}-cell--annotation-warning`,
-      `${p}-cell--annotation-info`,
-    );
-    delete cellEl.dataset['dtAnnotationCount'];
-    if (!this.annotations || rowId === null) return;
+    const state = this.cellAnnotationState(rowId, column, rowState);
+    this.showCellAnnotation(cellEl, state);
+    if (cellShowsSeverity(state)) cellEl.removeAttribute('title');
+  }
 
-    // Marker classes (`-annotated`) and the count badge track unfiltered
-    // presence so the popover anchor and a11y signals don't disappear when
-    // the visual filter hides a tier; the severity class is what falls
-    // back through error → warning → info as flags toggle.
-    const filter = this.annotations.getSeverityFilter();
-
-    // Row-scope: `getByRow` also holds cell-scope anns at (rowId, any
-    // col) via the shared index, so filter to scope === 'row' strictly.
-    const rowAnns = this.annotations.getByRow(rowId).filter((a) => a.scope === 'row');
-    if (rowAnns.length > 0) {
-      cellEl.classList.add(`${p}-cell--row-annotated`);
-      const rowSev = maxSeverity(rowAnns.filter((a) => filter[a.severity]));
-      if (rowSev) cellEl.classList.add(`${p}-cell--row-annotation-${rowSev}`);
+  /**
+   * Bring the rendered rows up to date with the annotation store after a
+   * change, from the cache: no fetch, and no render of the values.
+   *
+   * Only the rows and cells `change` can have touched are read again, and
+   * only what differs from what they show is written: a row-scope change
+   * reads the rows with its row ids, a column-scope one the cells of its
+   * columns, a cell-scope one its cells. A row not rendered costs a map
+   * lookup, so a change far from the view costs next to nothing, and a loop
+   * of single `add()` calls stays cheap without batching. `change.all` reads
+   * every rendered row and cell, and still writes only what differs.
+   *
+   * A cell that stops showing a severity renders its value again, to get its
+   * `title` back (see {@link renderCellAnnotation}); no other cell is
+   * rendered.
+   *
+   * Synchronous, so the rows are current once the store's `change` event
+   * has run. The body's own subscription calls it (`annotationSync:
+   * 'self'`), or else its owner does.
+   *
+   * @internal
+   */
+  syncAnnotations(change: AnnotationRenderChange): void {
+    if (this.destroyed || !this.annotations || this.rowElementMap.size === 0) return;
+    const schemaMap = this.schemaMap();
+    if (change.all || change.columns.size > 0) {
+      for (const [index, rowEl] of this.rowElementMap) {
+        this.syncRowAnnotations(index, rowEl, change, schemaMap);
+      }
+      return;
     }
-
-    // Column-scope: same index-leak reasoning — `getByColumn` holds
-    // cell-scope anns at (any row, colName) too.
-    const colAnns = this.annotations.getByColumn(colName).filter((a) => a.scope === 'column');
-    if (colAnns.length > 0) {
-      cellEl.classList.add(`${p}-cell--col-annotated`);
-      const colSev = maxSeverity(colAnns.filter((a) => filter[a.severity]));
-      if (colSev) cellEl.classList.add(`${p}-cell--col-annotation-${colSev}`);
-    }
-
-    // Cell-scope: `getByCell` is a union across byRow ∪ byColumn ∪
-    // byCell, so scope-filtering alone isn't enough — a cell-scope ann
-    // at (rowId, OTHER col) leaks in via byRow[rowId], and one at
-    // (OTHER row, colName) leaks in via byColumn[colName]. Require
-    // exact rowId + column match too.
-    const cellAnns = this.annotations
-      .getByCell(rowId, colName)
-      .filter((a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName);
-    if (cellAnns.length > 0) {
-      cellEl.classList.add(`${p}-cell--annotated`);
-      const cellSev = maxSeverity(cellAnns.filter((a) => filter[a.severity]));
-      if (cellSev) cellEl.classList.add(`${p}-cell--annotation-${cellSev}`);
-    }
-
-    const total = rowAnns.length + colAnns.length + cellAnns.length;
-    if (total > 0) {
-      cellEl.title = '';
-      cellEl.dataset['dtAnnotationCount'] = String(total);
+    const byId = this.renderedRowIndexes();
+    const visit = (rowId: number): void => {
+      const index = byId.get(rowId);
+      const rowEl = index === undefined ? undefined : this.rowElementMap.get(index);
+      if (rowEl) this.syncRowAnnotations(index!, rowEl, change, schemaMap);
+    };
+    for (const rowId of change.rows) visit(rowId);
+    for (const rowId of change.cells.keys()) {
+      if (!change.rows.has(rowId)) visit(rowId);
     }
   }
 
   /**
-   * Reapply annotation classes to every currently-visible row + cell and
-   * every header. Called from the store's `change` event; avoids issuing
-   * fresh SQL by reading straight from `rowDataCache` + the annotation
-   * store. If the popover is currently open against an anchor whose
-   * annotations disappeared, we close it — the list of annotations that
-   * drove the original `show()` is no longer valid.
-   *
-   * Each cell is re-rendered through `renderCellValue` before the
-   * annotation classes are reapplied. The render call restores the
-   * formatted value to `cellEl.title`; `applyCellAnnotationClasses`
-   * re-clears it when annotations remain. Without this re-render, removing
-   * the last annotation from a cell would leave its native tooltip empty
-   * until the next virtualization render swap. A cell whose row was fetched
-   * without its column stays pending, not NULL.
+   * The rendered data rows' indexes by row id, built once per render pass,
+   * when a change first needs it.
    */
-  private reapplyAnnotationsToVisibleRows(): void {
-    if (this.destroyed || !this.annotations) return;
-    const schemaMap = this.schemaMap();
-    for (const [index, rowEl] of this.rowElementMap) {
-      const rowData = this.rowDataCache.get(index);
-      if (!rowData) continue;
-      const rawRowId = rowData[ROWID_COLUMN];
-      const rowId =
-        typeof rawRowId === 'bigint'
-          ? Number(rawRowId)
-          : typeof rawRowId === 'number'
-            ? rawRowId
-            : null;
-      this.applyRowAnnotationClasses(rowEl, rowId);
-      const fetched = this.blockColumns.get(this.blockStartOf(index));
-      for (const cell of rowEl.children) {
-        const colName = cell.getAttribute('data-column');
-        if (colName === null) continue;
-        const cellEl = cell as HTMLElement;
-        this.renderCellValue(cellEl, rowData, colName, schemaMap.get(colName), fetched);
-        this.applyCellAnnotationClasses(cellEl, rowId, colName);
+  private renderedRowIndexes(): Map<number, number> {
+    if (this.renderedRowsById) return this.renderedRowsById;
+    const byId = new Map<number, number>();
+    for (const index of this.rowElementMap.keys()) {
+      const rowId = rowIdOf(this.rowDataCache.get(index));
+      if (rowId !== null) byId.set(rowId, index);
+    }
+    this.renderedRowsById = byId;
+    return byId;
+  }
+
+  /** {@link syncAnnotations} for one rendered row: the parts of it `change` touched. */
+  private syncRowAnnotations(
+    index: number,
+    rowEl: HTMLElement,
+    change: AnnotationRenderChange,
+    schemaMap: Map<string, ColumnSchema>,
+  ): void {
+    const data = this.rowDataCache.get(index);
+    if (!data || this.isPlaceholderRow(rowEl)) return;
+    const rowId = rowIdOf(data);
+    const rowState = rowId === null ? 0 : rowScopeState(this.annotations!, rowId);
+    const wholeRow = change.all || (rowId !== null && change.rows.has(rowId));
+    if (wholeRow) this.showRowAnnotation(rowEl, codeOf(rowState));
+    const cellColumns = rowId === null ? undefined : change.cells.get(rowId);
+    const fetched = this.blockColumns.get(this.blockStartOf(index));
+    for (const child of rowEl.children) {
+      const column = child.getAttribute('data-column');
+      if (column === null) continue;
+      if (!wholeRow && !change.columns.has(column) && !cellColumns?.has(column)) continue;
+      const cellEl = child as HTMLElement;
+      const next = this.cellAnnotationState(rowId, column, rowState);
+      const prev = this.showCellAnnotation(cellEl, next);
+      if (prev === next) continue;
+      const showed = cellShowsSeverity(prev);
+      const shows = cellShowsSeverity(next);
+      // Only a render writes the title, and a pending cell stays pending.
+      if (showed && !shows) {
+        this.renderCellValue(cellEl, data, column, schemaMap.get(column), fetched);
+      } else if (shows && !showed) {
+        cellEl.removeAttribute('title');
       }
     }
-    // Popover auto-dismisses: its anchor may have lost its `dt-cell--annotated`
-    // class, and re-reading via getByCell would be stale.
-    if (this.annotationPopover?.isOpen()) {
-      this.annotationPopover.hide();
+  }
+
+  /**
+   * Take the annotation classes and count off `copy`, a copy of the row
+   * `original` going to the pool, where its row and its cells showed any:
+   * see `returnRowToPool`.
+   */
+  private clearCopiedAnnotations(original: HTMLElement, copy: HTMLElement): void {
+    if (!this.annotations) return;
+    const states = this.annotationStates;
+    const classes = this.annotationClasses;
+    const rowCode = states.get(original);
+    if (rowCode) applyScope(copy.classList, classes.row, rowCode, 0);
+    const from = original.children;
+    const to = copy.children;
+    for (let i = 0; i < from.length; i++) {
+      const state = states.get(from[i]!);
+      const cell = to[i] as HTMLElement | undefined;
+      if (!state || !cell) continue;
+      applyScope(cell.classList, classes.cellRow, cellRowCode(state), 0);
+      applyScope(cell.classList, classes.cellColumn, cellColumnCode(state), 0);
+      applyScope(cell.classList, classes.cell, cellCellCode(state), 0);
+      applyCount(cell, cellCount(state), 0);
     }
   }
 
@@ -2262,58 +2385,77 @@ export class TableBody {
   }
 
   /**
-   * Resolve an annotated cell to its `(rowId, colName, annotations)`
-   * tuple. Accepts any of the three scope-specific classes
-   * (`.dt-cell--row-annotated`, `.dt-cell--col-annotated`,
-   * `.dt-cell--annotated`) so the popover opens on cells tinted by any
-   * scope. The annotation list is composed via three strict per-scope
-   * filters — mirrors `applyCellAnnotationClasses` — to avoid the
-   * `getByCell` index-union leaking anns from cells that don't actually
-   * match this `(rowId, colName)`. Anns are concatenated row → column
-   * → cell so `AnnotationPopover.populate`'s sections render
-   * broadest-to-most-specific top-down.
+   * The annotations at a cell, for its popover: the row scope at its row id,
+   * the column scope at its column, and the cell scope at exactly both, each
+   * sorted by the store (severity, then `createdAt`, then insertion), in
+   * sections the popover lists row, column, cell. `null` once the cell no
+   * longer shows that row and column: its row recycled, or the cell given to
+   * another column.
    */
-  private resolveAnnotatedCell(
-    anchor: HTMLElement,
-  ): { rowId: number; colName: string; anns: Annotation[] } | null {
-    if (!this.annotations) return null;
-    const p = this.classPrefix;
-    const hasAny =
-      anchor.classList.contains(`${p}-cell--annotated`) ||
-      anchor.classList.contains(`${p}-cell--col-annotated`) ||
-      anchor.classList.contains(`${p}-cell--row-annotated`);
-    if (!hasAny) return null;
-    const rowEl = anchor.parentElement;
-    if (!rowEl) return null;
-    const rowIdAttr = rowEl.getAttribute('data-row-id');
-    if (rowIdAttr === null) return null;
-    const rowId = Number(rowIdAttr);
-    if (!Number.isFinite(rowId)) return null;
-    const colName = anchor.getAttribute('data-column');
-    if (!colName) return null;
-
-    const rowAnns = this.annotations.getByRow(rowId).filter((a) => a.scope === 'row');
-    const colAnns = this.annotations.getByColumn(colName).filter((a) => a.scope === 'column');
-    const cellAnns = this.annotations
-      .getByCell(rowId, colName)
-      .filter((a) => a.scope === 'cell' && a.rowId === rowId && a.column === colName);
-    const anns = [...rowAnns, ...colAnns, ...cellAnns];
-    if (anns.length === 0) return null;
-    return { rowId, colName, anns };
+  private annotationSectionsAt(
+    cell: HTMLElement,
+    rowId: number,
+    column: string,
+  ): AnnotationSections | null {
+    const store = this.annotations;
+    if (this.destroyed || !store || !cell.isConnected) return null;
+    if (
+      cell.getAttribute('data-column') !== column ||
+      cell.parentElement?.getAttribute('data-row-id') !== String(rowId)
+    ) {
+      return null;
+    }
+    return {
+      row: store.listRowScope(rowId),
+      column: store.listColumnScope(column),
+      cell: store.listCellScope(rowId, column),
+    };
   }
 
   /**
-   * Find the annotated-cell ancestor of `target`, if any. Matches any of
-   * the three scope-specific class families so row-, column-, and
-   * cell-scope tints all trigger the popover.
+   * Open the popover on an annotated cell, unless it is open on it already:
+   * the pointer moving between the cell's children, or focus following the
+   * pointer. A popover hidden since (Escape, a scroll, a click elsewhere, a
+   * change that left it nothing to list) opens again. A cell whose every
+   * annotation the severity filter hides opens none.
+   */
+  private openAnnotationPopover(cell: HTMLElement): void {
+    const popover = this.annotationPopover;
+    if (!popover || !this.annotationStates.get(cell)) return;
+    if (cell === this.currentAnnotationAnchor && popover.isOpenFor(cell)) {
+      popover.cancelGraceHide();
+      return;
+    }
+    const rowId = Number(cell.parentElement?.getAttribute('data-row-id') ?? Number.NaN);
+    const column = cell.getAttribute('data-column');
+    if (!Number.isFinite(rowId) || column === null) return;
+    popover.showFrom(cell, () => this.annotationSectionsAt(cell, rowId, column));
+    this.currentAnnotationAnchor = popover.isOpenFor(cell) ? cell : null;
+  }
+
+  /**
+   * Hide the popover when it is anchored in `node`, which is about to be
+   * recycled or taken out of its row: over an element gone from the page,
+   * or one showing another row or column, it would describe the wrong cell.
+   */
+  private releaseAnnotationAnchor(node: Node): void {
+    const popover = this.annotationPopover;
+    if (!popover) return;
+    const anchor = popover.getAnchor();
+    if (anchor && node.contains(anchor)) popover.hide();
+    if (this.currentAnnotationAnchor && node.contains(this.currentAnnotationAnchor)) {
+      this.currentAnnotationAnchor = null;
+    }
+  }
+
+  /**
+   * Find the annotated-cell ancestor of `target`, if any: a cell showing an
+   * annotation of any scope (its marker classes), so row-, column-, and
+   * cell-scope tints all open the popover.
    */
   private findAnnotatedCell(target: EventTarget | null): HTMLElement | null {
     if (!(target instanceof Element)) return null;
-    const p = this.classPrefix;
-    const cell = target.closest(
-      `.${p}-cell--annotated, .${p}-cell--col-annotated, .${p}-cell--row-annotated`,
-    );
-    return cell as HTMLElement | null;
+    return target.closest<HTMLElement>(this.annotatedCellSelector);
   }
 
   /**
@@ -2326,12 +2468,7 @@ export class TableBody {
   private handleAnnotationPointerOver = (event: PointerEvent): void => {
     if (this.destroyed || !this.annotationPopover) return;
     const cell = this.findAnnotatedCell(event.target);
-    if (!cell) return;
-    if (cell === this.currentAnnotationAnchor) return;
-    const resolved = this.resolveAnnotatedCell(cell);
-    if (!resolved) return;
-    this.currentAnnotationAnchor = cell;
-    this.annotationPopover.show(cell, resolved.anns);
+    if (cell) this.openAnnotationPopover(cell);
   };
 
   /**
@@ -2354,12 +2491,7 @@ export class TableBody {
   private handleAnnotationFocusIn = (event: FocusEvent): void => {
     if (this.destroyed || !this.annotationPopover) return;
     const cell = this.findAnnotatedCell(event.target);
-    if (!cell) return;
-    if (cell === this.currentAnnotationAnchor) return;
-    const resolved = this.resolveAnnotatedCell(cell);
-    if (!resolved) return;
-    this.currentAnnotationAnchor = cell;
-    this.annotationPopover.show(cell, resolved.anns);
+    if (cell) this.openAnnotationPopover(cell);
   };
 
   /**
@@ -2712,6 +2844,89 @@ export class TableBody {
   }
 
   /**
+   * The `__rowid__` of the row at `position` (0-based, in the table as
+   * sorted and filtered) when the body holds the row, else `null`. Annotation
+   * navigation reads the rows around the cursor this way before it asks
+   * DuckDB. `null` throughout the scroll back to the top that a filter change
+   * animates: the rows held then are the old filters'.
+   *
+   * @internal
+   */
+  cachedRowId(position: number): number | null {
+    return this.isAnimatingScroll ? null : rowIdOf(this.rowDataCache.get(position));
+  }
+
+  /**
+   * The position of the row whose `__rowid__` is `rowId`, when the body holds
+   * it, else `null`; see {@link cachedRowId}.
+   *
+   * @internal
+   */
+  cachedPositionOf(rowId: number): number | null {
+    if (this.isAnimatingScroll) return null;
+    for (const [position, row] of this.rowDataCache) {
+      if (rowIdOf(row) === rowId) return position;
+    }
+    return null;
+  }
+
+  /**
+   * The rows the body holds nearest the row whose `__rowid__` is `rowId`, by
+   * `__rowid__`: the one with the greatest `__rowid__` below it and the one
+   * with the smallest above it, each with its position, or `null` on a side
+   * it holds none of. One pass over the rows held. Where a refresh of the
+   * annotated view puts a row it no longer holds, in a view ordered by
+   * `__rowid__`, is counted from the nearer of them; see
+   * {@link cachedRowId} for the scroll a filter change animates.
+   *
+   * @internal
+   */
+  cachedRowsAround(rowId: number): {
+    below: { rowId: number; position: number } | null;
+    above: { rowId: number; position: number } | null;
+  } {
+    let below: { rowId: number; position: number } | null = null;
+    let above: { rowId: number; position: number } | null = null;
+    if (this.isAnimatingScroll) return { below, above };
+    for (const [position, row] of this.rowDataCache) {
+      const id = rowIdOf(row);
+      if (id === null || id === rowId) continue;
+      if (id < rowId) {
+        if (!below || id > below.rowId) below = { rowId: id, position };
+      } else if (!above || id < above.rowId) {
+        above = { rowId: id, position };
+      }
+    }
+    return { below, above };
+  }
+
+  /**
+   * Whether every row's position is its `__rowid__`: no filter, no sort, and
+   * the dense `__rowid__` the range fast path reads by still holds.
+   *
+   * @internal
+   */
+  rowIdsArePositions(): boolean {
+    return this.useRowidFastPath(this.state.sortColumns.get(), this.state.filters.get());
+  }
+
+  /**
+   * End the scroll back to the top that a filter change animates, now: the
+   * view jumps to the top and the new filters' rows load. For a scroll to
+   * somewhere else, which the animation would undo.
+   *
+   * @internal
+   */
+  cancelScrollAnimation(): void {
+    if (!this.isAnimatingScroll) return;
+    if (this.scrollAnimationId !== null) cancelAnimationFrame(this.scrollAnimationId);
+    this.scrollAnimationId = null;
+    this.isAnimatingScroll = false;
+    this.virtualScroller.scrollToRow(0, 'start');
+    this.invalidateCacheAndRefresh();
+  }
+
+  /**
    * Check if the table body has been destroyed
    */
   isDestroyed(): boolean {
@@ -2773,6 +2988,7 @@ export class TableBody {
       this.unsubAnnotations();
       this.unsubAnnotations = null;
     }
+    this.releaseAnnotationAnchor(this.virtualScroller.getViewportContainer());
     this.currentAnnotationAnchor = null;
 
     // Unsubscribe from all state subscriptions
@@ -2786,6 +3002,7 @@ export class TableBody {
     this.blockColumns.clear();
     this.clearFailedBlocks();
     this.rowElementMap.clear();
+    this.renderedRowsById = null;
     this.rowPool = [];
 
     // Destroy virtual scroller. It detaches the whole row subtree in one go,

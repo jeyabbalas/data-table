@@ -387,6 +387,51 @@ describe('filterToSQL', () => {
     });
   });
 
+  describe('annotated filter', () => {
+    it('keeps the rows of the base table’s annotated rows, of any severity', () => {
+      const filter: Filter = { type: 'annotated', column: '__annotated__', table: 'orders' };
+      expect(filterToSQL(filter)).toBe(
+        '"__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_orders__")',
+      );
+      // Empty is any severity too, and so are all three named.
+      expect(filterToSQL({ ...filter, severities: [] })).toBe(filterToSQL(filter));
+      expect(filterToSQL({ ...filter, severities: ['info', 'error', 'warning'] })).toBe(
+        filterToSQL(filter),
+      );
+    });
+
+    it('tests the severity bits of the severities it names', () => {
+      const base = { type: 'annotated', column: '__annotated__', table: 'orders' } as const;
+      expect(filterToSQL({ ...base, severities: ['error'] })).toBe(
+        '"__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_orders__" WHERE ("__mask__" & 1) <> 0)',
+      );
+      expect(filterToSQL({ ...base, severities: ['warning', 'info'] })).toBe(
+        '"__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_orders__" WHERE ("__mask__" & 6) <> 0)',
+      );
+      // Named twice, or in any order, the same bits.
+      expect(filterToSQL({ ...base, severities: ['error', 'warning', 'error'] })).toContain(
+        '("__mask__" & 3) <> 0',
+      );
+    });
+
+    it('quotes the table it derives the helper table’s name from', () => {
+      const filter: Filter = { type: 'annotated', column: '__annotated__', table: 'my "t"' };
+      expect(filterToSQL(filter)).toBe(
+        '"__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_my ""t""__")',
+      );
+    });
+
+    it('keeps no row without a table to read, or with no severity it knows (fail closed)', () => {
+      const base = { type: 'annotated', column: '__annotated__' } as const;
+      expect(filterToSQL(base)).toBe('FALSE');
+      expect(filterToSQL({ ...base, table: '' })).toBe('FALSE');
+      expect(filterToSQL({ ...base, table: 'a\0b' })).toBe('FALSE');
+      expect(
+        filterToSQL({ ...base, table: 't', severities: ['fatal'] as unknown as ['error'] }),
+      ).toBe('FALSE');
+    });
+  });
+
   describe('unknown filter type', () => {
     it('should return FALSE and log error (fail closed)', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -437,6 +482,18 @@ describe('filtersToWhereClause', () => {
   it('should return empty string when excluding the only filter', () => {
     const filters: Filter[] = [{ type: 'range', column: 'price', min: 10, max: 100 }];
     expect(filtersToWhereClause(filters, 'price')).toBe('');
+  });
+
+  it('never excludes an annotated filter, even for a column of its key’s name', () => {
+    const filters: Filter[] = [
+      { type: 'annotated', column: '__annotated__', table: 't' },
+      { type: 'point', column: 'status', value: 'active' },
+    ];
+    const annotated = '"__rowid__" IN (SELECT "__rowid__" FROM "__dt_annot_t__")';
+    expect(filtersToWhereClause(filters, 'status')).toBe(annotated);
+    expect(filtersToWhereClause(filters, '__annotated__')).toBe(
+      `${annotated} AND "status" = 'active'`,
+    );
   });
 });
 

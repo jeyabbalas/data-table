@@ -11,6 +11,7 @@
  */
 
 import type { DerivedColumnDef, ExpressionColumnDef, VectorColumnDef } from '../derived/types';
+import { annotatedFilterMask } from '../filters/annotatedFilters';
 import { createSignal, batch, type Signal } from './Signal';
 import type { TableState, HiddenColumnInfo } from './State';
 import type { Filter, SortColumn } from './types';
@@ -102,6 +103,12 @@ function filterEqual(a: Filter, b: Filter): boolean {
     case 'raw-sql': {
       const br = b as typeof a;
       return a.sql === br.sql && a.id === br.id && (a.label ?? '') === (br.label ?? '');
+    }
+    case 'annotated': {
+      // The same rows: the same table's, by the same severities, however
+      // they are listed (none and all three are the same).
+      const ba = b as typeof a;
+      return a.table === ba.table && annotatedFilterMask(a) === annotatedFilterMask(ba);
     }
     default:
       return false;

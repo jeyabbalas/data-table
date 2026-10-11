@@ -118,8 +118,12 @@ const QUERY_OPTIONS = { cache: false, priority: 'elevated' } as const;
 
 const ROWID = quoteIdentifier(ROWID_COLUMN);
 
-/** The view's alias in the sorted search, and the one-row relation of the row it compares with. */
-const VIEW = '"__dt_v__"';
+/**
+ * The one-row relation of the row the sorted search compares with. The
+ * view keeps its own name beside it, unaliased: a raw-SQL filter may name
+ * it (`orders.total > 2`), and an alias would hide that name. The anchor's
+ * columns are named `__dt_k0__`, `__dt_k1__`…, which no filter can mean.
+ */
 const ANCHOR = '"__dt_a__"';
 
 /** Where the search starts: a row of the view, or before the first (-1) or after the last. */
@@ -685,14 +689,14 @@ export class AnnotationNavigator implements AnnotationNavigation {
     }
 
     // Sorted: the first row past the anchor's in the grid's order.
-    const v = (i: number): string => `${VIEW}.${keys[i]!.column}`;
+    const v = (i: number): string => `${view}.${keys[i]!.column}`;
     const a = (i: number): string => `${ANCHOR}."__dt_k${i}__"`;
     const [hit] = await this.query<{ r: number }>(
       at === null
         ? `SELECT ${ROWID} AS r FROM ${view} WHERE ${filtered}${annotated(ROWID)}` +
             ` ORDER BY ${orderBySQL(keys, (i) => keys[i]!.column, dir > 0)} LIMIT 1`
-        : `${this.anchorRow(keys, view, at)}SELECT ${VIEW}.${ROWID} AS r FROM ${view} AS ${VIEW}, ${ANCHOR}` +
-            ` WHERE ${filtered}${annotated(`${VIEW}.${ROWID}`)}` +
+        : `${this.anchorRow(keys, view, at)}SELECT ${view}.${ROWID} AS r FROM ${view}, ${ANCHOR}` +
+            ` WHERE ${filtered}${annotated(`${view}.${ROWID}`)}` +
             ` AND ${dir > 0 ? afterSQL(keys, v, a) : afterSQL(keys, a, v)}` +
             ` ORDER BY ${orderBySQL(keys, v, dir > 0)} LIMIT 1`,
       signal,
@@ -728,10 +732,10 @@ export class AnnotationNavigator implements AnnotationNavigation {
     const before = afterSQL(
       keys,
       (i) => `${ANCHOR}."__dt_k${i}__"`,
-      (i) => `${VIEW}.${keys[i]!.column}`,
+      (i) => `${view}.${keys[i]!.column}`,
     );
     const [count] = await this.query<{ n: number }>(
-      `${this.anchorRow(keys, view, rowId)}SELECT count(*) AS n FROM ${view} AS ${VIEW}, ${ANCHOR}` +
+      `${this.anchorRow(keys, view, rowId)}SELECT count(*) AS n FROM ${view}, ${ANCHOR}` +
         ` WHERE ${filtered}${before}`,
       signal,
     );

@@ -177,18 +177,16 @@ describe('AnnotationNavigator: which tier answers', () => {
       'WITH "__dt_a__" AS (SELECT "a" AS "__dt_k0__", "d" AS "__dt_k1__", "__rowid__" AS "__dt_k2__" FROM "t" WHERE "__rowid__" = 1039)',
     );
     expect(find).toContain(
-      'CASE WHEN "__dt_a__"."__dt_k0__" IS NULL THEN FALSE ELSE ("__dt_v__"."a" IS NULL OR "__dt_v__"."a" < "__dt_a__"."__dt_k0__") END',
+      'CASE WHEN "__dt_a__"."__dt_k0__" IS NULL THEN FALSE ELSE ("t"."a" IS NULL OR "t"."a" < "__dt_a__"."__dt_k0__") END',
     );
     expect(find).toContain(
-      `create_sort_key("__dt_v__"."d", 'ASC NULLS LAST') > create_sort_key("__dt_a__"."__dt_k1__", 'ASC NULLS LAST')`,
+      `create_sort_key("t"."d", 'ASC NULLS LAST') > create_sort_key("__dt_a__"."__dt_k1__", 'ASC NULLS LAST')`,
     );
     expect(find).toContain(
-      `ORDER BY "__dt_v__"."a" DESC NULLS LAST, create_sort_key("__dt_v__"."d", 'ASC NULLS LAST') ASC, "__dt_v__"."__rowid__" ASC NULLS LAST LIMIT 1`,
+      `ORDER BY "t"."a" DESC NULLS LAST, create_sort_key("t"."d", 'ASC NULLS LAST') ASC, "t"."__rowid__" ASC NULLS LAST LIMIT 1`,
     );
     expect(count).toContain('WHERE "__rowid__" = 77)');
-    expect(count).toMatch(
-      /^WITH "__dt_a__" AS .* SELECT count\(\*\) AS n FROM "t" AS "__dt_v__", "__dt_a__"/,
-    );
+    expect(count).toMatch(/^WITH "__dt_a__" AS .* SELECT count\(\*\) AS n FROM "t", "__dt_a__"/);
   });
 
   it('(3) a sort column of a type the parser cannot read numbers the view instead', async () => {

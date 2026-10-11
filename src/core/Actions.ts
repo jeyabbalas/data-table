@@ -1399,7 +1399,8 @@ export class StateActions {
    *
    * The view follows the annotations: adding or removing one while the
    * filter is on updates the view in place, keeping its scroll position and
-   * the cursor. A column-scope annotation singles out no row. The severity
+   * the cursor, and fires `filterChange` with the same filters and the new
+   * count. A column-scope annotation singles out no row. The severity
    * filter (`annotations.setSeverityFilter`) changes which tints show, not
    * which rows this shows.
    *

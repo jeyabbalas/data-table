@@ -17,7 +17,8 @@ import { nextTask } from '../core/nextTask';
 import type { TableState } from '../core/State';
 import type { Filter } from '../core/types';
 import type { WorkerBridge } from '../data/WorkerBridge';
-import { quoteIdentifier } from '../filters/FilterSQL';
+import { annotatedFilterMask } from '../filters/annotatedFilters';
+import { filterToSQL, quoteIdentifier } from '../filters/FilterSQL';
 import { annotatedRowsTableName, type AnnotatedRowsSource } from './annotatedRowsSource';
 import type { AnnotationStore } from './AnnotationStore';
 
@@ -33,6 +34,11 @@ const MIN_INTERVAL_MS = 150;
  * rowId that is not an integer in [0, 2^50).
  */
 const ROW_ID_END = 2 ** 50;
+
+/** Whether the table holds `rowId`: an integer in [0, 2^50), as every row's is. */
+function isWritableRowId(rowId: number): boolean {
+  return rowId >= 0 && rowId < ROW_ID_END && Number.isInteger(rowId);
+}
 
 /**
  * The statement that replaces the DuckDB table `table` with the annotated
@@ -74,7 +80,7 @@ export async function annotatedRowsStatement(
     let count = 0;
     for (let i = start; i < end; i++) {
       const rowId = rowIds[i]!;
-      if (!(rowId >= 0 && rowId < ROW_ID_END && Number.isInteger(rowId))) continue;
+      if (!isWritableRowId(rowId)) continue;
       packed[count++] = rowId * 8 + (masks[i]! & 7);
     }
     if (count > 0) chunks.push(packed.subarray(0, count).join(','));
@@ -89,6 +95,75 @@ export async function annotatedRowsStatement(
     `SELECT CAST(v >> 3 AS BIGINT) AS "__rowid__", CAST(v & 7 AS UTINYINT) AS "__mask__" ` +
     `FROM (SELECT CAST(s AS BIGINT) AS v FROM (SELECT unnest(string_split('${chunks.join(',')}', ',')) AS s))`
   );
+}
+
+/**
+ * How the annotated rows `next` differ from `prev`, the rows the table was
+ * last built from, for a view whose annotated filters keep a row whose
+ * severity bits are `mask` when `kept[mask]` is 1 (see `keptMasks`):
+ *
+ * - `'none'`: every rowId the table would hold has the same mask in both;
+ * - `'masks'`: some mask differs, but the view keeps the same rows;
+ * - `'rows'`: the view keeps other rows, or nothing was built before.
+ *
+ * A rowId the table leaves out (see {@link annotatedRowsStatement}) counts
+ * for nothing. One merge of the two ascending lists, O(rows), allocating
+ * nothing.
+ *
+ * @internal
+ */
+export function annotatedRowsChange(
+  prev: { readonly rowIds: Float64Array; readonly masks: Uint8Array } | null,
+  next: { readonly rowIds: Float64Array; readonly masks: Uint8Array },
+  kept: Uint8Array,
+): 'none' | 'masks' | 'rows' {
+  if (prev === null) return 'rows';
+  if (prev === next) return 'none';
+  const { rowIds: a, masks: am } = prev;
+  const { rowIds: b, masks: bm } = next;
+  let change: 'none' | 'masks' = 'none';
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    // A list that has ended reads as Infinity, past every finite rowId.
+    const x = i < a.length ? a[i]! : Infinity;
+    const y = j < b.length ? b[j]! : Infinity;
+    let rowId: number;
+    let before = 0;
+    let after = 0;
+    if (x === y) {
+      rowId = x;
+      before = am[i++]! & 7;
+      after = bm[j++]! & 7;
+    } else if (x < y) {
+      rowId = x;
+      before = am[i++]! & 7;
+    } else {
+      rowId = y;
+      after = bm[j++]! & 7;
+    }
+    if (before === after || !isWritableRowId(rowId)) continue;
+    if (kept[before] !== kept[after]) return 'rows';
+    change = 'masks';
+  }
+  return change;
+}
+
+/**
+ * Which masks the annotated filters of `base` among `filters` keep a row
+ * by: `kept[mask]` is 1 when a row whose annotations have the severity
+ * bits `mask` passes every one of them, as their SQL keeps it. With none,
+ * every row passes.
+ */
+function keptMasks(filters: readonly Filter[], base: string): Uint8Array {
+  const kept = new Uint8Array(8);
+  for (let mask = 0; mask < 8; mask++) {
+    const passes = filters.every(
+      (f) => f.type !== 'annotated' || f.table !== base || (mask & annotatedFilterMask(f)) !== 0,
+    );
+    kept[mask] = passes ? 1 : 0;
+  }
+  return kept;
 }
 
 /** What the table reads of an annotation store. */
@@ -107,10 +182,13 @@ export interface AnnotatedRowsTableOptions {
     Partial<Pick<WorkerBridge, 'invalidateQueries'>>;
   store: AnnotatedRowsStore;
   /**
-   * Called after a sync changed the table while an annotated filter in
-   * force had the view read it: the rows, the row count, the charts and the
-   * stats the view shows are to be fetched again, in place. The bridge's
-   * cached results that read the table are dropped by then.
+   * Called after a sync changed which rows the annotated filters in force
+   * keep, while they had the view read the table: the rows, the row count,
+   * the charts and the stats the view shows are to be fetched again, in
+   * place. The bridge's cached results that read the table are dropped by
+   * then. A sync that changed the rows' severities, not which rows the
+   * filters keep, calls nothing, and keeps the results the view's own
+   * queries cached.
    */
   onRefresh?: (() => void) | undefined;
   /**
@@ -137,6 +215,8 @@ interface Sync {
   readonly revision: number;
   readonly rows: AnnotatedRows;
   readonly filters: readonly Filter[];
+  /** How `rows` differ from what the table holds, for `filters` (see `annotatedRowsChange`). */
+  readonly change: 'none' | 'masks' | 'rows';
   readonly controller: AbortController;
 }
 
@@ -174,12 +254,13 @@ function abortedError(): QueryError {
  * `max(minInterval, the last sync's time)`. Otherwise a caller of
  * {@link ensureFresh} asks for one, which starts at once. One sync runs at
  * a time, and the next one written is the store's latest content, whatever
- * changed in between. A sync sends nothing when the store's annotated rows
- * are the ones the table holds, as after a change to a message or to column
- * scope; and a change to the severity filter changes no content at all. A
- * sync that fails is reported once for the content it wrote, and the view
- * tries no other until the content, the filters or the base table change,
- * as each would fail the same way; a caller of `ensureFresh` still does.
+ * changed in between. A sync sends nothing when the table holds the store's
+ * annotated rows and their masks already, as after a change to a message or
+ * to column scope; and a change to the severity filter changes no content
+ * at all. A sync that fails is reported once for the content it wrote, and
+ * the view tries no other until the content, the filters or the base table
+ * change, as each would fail the same way; a caller of `ensureFresh` still
+ * does.
  *
  * **The read gate.** An annotated filter that comes into force, restored
  * with a session, undone back, loaded with a preset or just added, would
@@ -191,7 +272,18 @@ function abortedError(): QueryError {
  * before the filters' subscribers run. It opens when the sync lands or
  * fails, when the filter goes, and when the table is destroyed. A later
  * sync, for annotations changed while the filter stays in force, holds
- * nothing: once it lands, `onRefresh` updates the view in place.
+ * nothing: once it lands, `onRefresh` updates the view in place, if the
+ * rows the filter keeps changed. One that changed only the severities of
+ * rows the filter keeps either way (a warning added to a row with an error,
+ * under a filter of any severity) rebuilds the table, which navigation
+ * reads every mask of, and leaves the view and its cached results alone.
+ *
+ * **Cost.** A sync after a change to row or cell scope reads the store's
+ * `annotatedRows()`, which rebuilds then, on the main thread: about 0.1 s
+ * at a million annotations. Comparing it with the rows the table holds is
+ * one pass over both; the statement's text is built in chunks, with the
+ * main thread free between them, and DuckDB rebuilds the table in some
+ * 0.4 s at a million rows.
  *
  * The table is named from its base table (see `annotatedRowsTableName`), so
  * two tables on one bridge never share one. The table's owner drops it
@@ -467,17 +559,21 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     if (this.destroyed || this.running || base === null || this.isCurrent()) return;
     if (this.waiters.length === 0 && !this.isLive()) return;
     this.clearTimer();
+    const filters = this.state.filters.get();
+    const rows = this.store.annotatedRows();
     const sync: Sync = {
       base,
       revision: this.store.contentRevision,
-      rows: this.store.annotatedRows(),
-      filters: this.state.filters.get(),
+      rows,
+      filters,
+      change: annotatedRowsChange(this.syncedRows, rows, keptMasks(filters, base)),
       controller: new AbortController(),
     };
-    // The rows the table holds already: a change to a message, or to column
-    // scope, which singles out no row. Nothing to send, nor to refresh.
-    if (sync.rows === this.syncedRows) {
-      this.landed(sync, null, false);
+    // The rows and masks the table holds already: after a change to a
+    // message, or to column scope, which singles out no row, or a change
+    // undone since. Nothing to send, nor to refresh.
+    if (sync.change === 'none') {
+      this.landed(sync);
       return;
     }
     this.running = sync;
@@ -500,14 +596,15 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     this.running = null;
     this.lastEnd = Date.now();
     this.lastDuration = this.lastEnd - started;
-    this.landed(sync, error, true);
+    this.landed(sync, error);
   }
 
   /**
-   * What follows a sync, which `error` says failed, and `rebuilt` whether it
-   * rebuilt the DuckDB table rather than finding it current.
+   * What follows a sync, which `error` says failed. `sync.change` says
+   * whether it rebuilt the DuckDB table, and whether the rows the view
+   * keeps changed.
    */
-  private landed(sync: Sync, error: unknown, rebuilt: boolean): void {
+  private landed(sync: Sync, error: unknown = null): void {
     if (this.destroyed) return;
     // The base table changed under it, and what it built goes with the old one.
     if (sync.controller.signal.aborted || sync.base !== this.base) {
@@ -518,8 +615,12 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
       this.synced = sync.revision;
       this.syncedRows = sync.rows;
       this.failed = null;
-      // Results cached before read the table as it was.
-      if (rebuilt) this.invalidateReads(sync.base);
+      // Results cached before read the table as it was, but for those that
+      // read it through annotated filters that keep the same rows.
+      if (sync.change !== 'none') {
+        const same = sync.change === 'masks' && this.state.filters.get() === sync.filters;
+        this.invalidateReads(sync.base, same ? sync.filters : []);
+      }
     } else {
       // The same content failing again, for a caller of `ensureFresh` or
       // other filters, is the failure already reported.
@@ -541,8 +642,11 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
     if (this.isLive()) {
       const filters = this.state.filters.get();
       if (filters === this.openFor) {
-        // The view read the table as it was: fetch it again, in place.
-        if (error === null && rebuilt) this.onRefresh?.();
+        // The view read the table as it was: fetch it again, in place, when
+        // the rows its filters keep changed.
+        const kept =
+          sync.change === 'rows' || (sync.change === 'masks' && filters !== sync.filters);
+        if (error === null && kept) this.onRefresh?.();
       } else if (error !== null || filters === sync.filters || this.isCurrent()) {
         // A sync landed since these filters came into force: let the view
         // read. One that failed opens the gate too, so nothing waits for
@@ -558,13 +662,24 @@ export class AnnotatedRowsTable implements AnnotatedRowsSource {
 
   /**
    * Drop the bridge's cached results that read `base`'s table, which a sync
-   * just rebuilt: they read it as it was. The other results stay, those of
-   * other tables on a shared bridge among them.
+   * just rebuilt: they read it as it was. A result that reads the table only
+   * through the annotated filters of `same`, which keep the same rows as
+   * before, stays: it would come out the same. So do the results that do
+   * not read the table, those of other tables on a shared bridge among them.
    */
-  private invalidateReads(base: string): void {
+  private invalidateReads(base: string, same: readonly Filter[]): void {
     const table = quoteIdentifier(annotatedRowsTableName(base));
+    const clauses = same
+      .filter((filter) => filter.type === 'annotated' && filter.table === base)
+      .map(filterToSQL);
+    const stale = (sql: string): boolean => {
+      if (!sql.includes(table)) return false;
+      let rest = sql;
+      for (const clause of clauses) rest = rest.split(clause).join('');
+      return rest.includes(table);
+    };
     if (typeof this.bridge.invalidateQueries === 'function') {
-      this.bridge.invalidateQueries((sql) => sql.includes(table));
+      this.bridge.invalidateQueries(stale);
     } else {
       this.bridge.clearQueryCache();
     }

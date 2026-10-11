@@ -21,20 +21,20 @@
  * Vite 8.3.0 / rolldown 1.2.10, which, like rolldown 1.0.1 before it,
  * inlines the shared ModalHost code into each modal consumer):
  *   root entry · ESM               11.80 kB   →  12.1 kB cap (2.5 %)
- *   advanced entry · ESM            2.13 kB   →   2.25 kB cap (5.6 %)
+ *   advanced entry · ESM            2.15 kB   →   2.25 kB cap (4.7 %)
  *   stylesheet                     23.52 kB   →  23.7 kB cap (0.8 %)
- *   lazy ExportDialog chunk       110.39 kB   → 114 kB   cap (3.3 %)
+ *   lazy ExportDialog chunk       113.43 kB   → 117 kB   cap (3.1 %)
  *   lazy SQLFilterModal chunk       2.55 kB   →   2.6 kB cap (2.0 %)
  *   lazy DerivedColumnModal         3.80 kB   →   3.95 kB cap (3.9 %)
  *   lazy DerivedColumnEditPanel     3.22 kB   →   3.3 kB cap (2.5 %)
  *   lazy FilterPresetPanel          2.69 kB   →   2.7 kB cap (0.4 %)
  *   lazy CodeMirror editor          5.21 kB   →   5.5 kB cap (5.6 %)
  *   lazy extractExpression chunk    2.79 kB   →   2.95 kB cap (5.7 %)
- *   lazy ValueInspector chunk       8.46 kB   →   8.9 kB cap (5.2 %)
- *   lazy ExtractColumnPanel chunk   4.97 kB   →   5.3 kB cap (6.6 %)
+ *   lazy ValueInspector chunk       8.43 kB   →   8.9 kB cap (5.6 %)
+ *   lazy ExtractColumnPanel chunk   4.99 kB   →   5.3 kB cap (6.2 %)
  *   lazy TreeView chunk             2.80 kB   →   2.85 kB cap (1.8 %)
  *   lazy AnnotationNavigator chunk  4.47 kB   →   4.7 kB cap (5.1 %)
- *   lazy AnnotatedRowsTable chunk   2.73 kB   →   2.85 kB cap (4.4 %)
+ *   lazy AnnotatedRowsTable chunk   2.74 kB   →   2.85 kB cap (4.0 %)
  *
  * The two derived-column chunks were last measured once their panels
  * showed the errors the stylesheet had hidden, with the name and values
@@ -115,7 +115,12 @@
  * gate on the relation, and the gate that holds the filter's reads until
  * the `AnnotatedRowsTable-*` chunk below is in. Keeping a session's
  * annotations in a database of their own, written only when they change and
- * in chunks, took it to 110.39 kB. The cap moved to 114 kB.
+ * in chunks, took it to 110.39 kB, and the cap to 114 kB. The review fixes
+ * that followed (the cursor following its row as an annotated view
+ * refreshes in place, a refresh only when the rows the filter keeps
+ * change, a write order and a per-table queue under which no failure loses
+ * annotations that had landed, a load's annotations cleared in its turn)
+ * took it to 113.43 kB, and the cap to 117 kB.
  *
  * AnnotatedRowsTable chunk history. New with the annotated-rows filter, at
  * 2.25 kB: the DuckDB table of a table's annotated rows, kept current with
@@ -217,7 +222,7 @@ module.exports = [
   {
     name: 'lazy ExportDialog chunk · ESM',
     path: 'dist/VisualizationRegistry-*.js',
-    limit: '114 kB',
+    limit: '117 kB',
   },
   {
     name: 'lazy SQLFilterModal chunk · ESM',

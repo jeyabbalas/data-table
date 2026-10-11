@@ -865,20 +865,21 @@ export class AnnotationNavigator implements AnnotationNavigation {
     ) {
       if (store.cellScopeMask(stop.rowId, visible[i]!) & selected) column = visible[i]!;
     }
-    // The cell whose annotations are listed, and how the announcement names it.
+    // The cell whose annotations are listed, and how the announcement names
+    // its column: as it is, or as a hidden one.
     let cell: string;
-    let place: string | null = column;
+    let cellName: string;
     if (column !== null) {
-      cell = column;
+      cell = cellName = column;
     } else {
       const cursor = state.focusedCell.get();
       column = cursor && visible.includes(cursor.column) ? cursor.column : (visible[0] ?? '');
-      cell = column;
+      cell = cellName = column;
       if (!(store.rowScopeMask(stop.rowId) & selected)) {
         const hidden = this.hiddenCell(store, stop.rowId, dir, selected);
         if (hidden !== null) {
           cell = hidden;
-          place = n.hiddenColumn(hidden);
+          cellName = n.hiddenColumn(hidden);
         }
       }
     }
@@ -895,7 +896,8 @@ export class AnnotationNavigator implements AnnotationNavigation {
     const landed = n.landed(
       stop.pos + 1,
       effectiveRowCount(state),
-      place,
+      // The column is the place of a cell's annotation; a row's own has none.
+      first?.scope === 'cell' ? cellName : null,
       first ? messages.annotations.severityNames[first.severity] : null,
       first ? first.message : null,
       Math.max(0, annotations.length - 1),

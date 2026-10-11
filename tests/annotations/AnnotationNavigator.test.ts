@@ -521,6 +521,17 @@ describe('AnnotationNavigator: where the cursor lands', () => {
     expect(host.announce).toHaveBeenLastCalledWith('Row 8 of 50, gone (hidden): info, old');
   });
 
+  it("names the column only when the first annotation there is the cell's, not the row's", async () => {
+    const host = annotated(
+      { scope: 'row', rowId: 6, severity: 'error', message: 'whole row' },
+      { scope: 'cell', rowId: 6, column: 'b', severity: 'warning', message: 'in b' },
+    );
+    const landed = await new AnnotationNavigator(host).next();
+    expect(landed).toMatchObject({ row: 6, column: 'b' });
+    expect(landed!.annotations.map((a) => a.message)).toEqual(['whole row', 'in b']);
+    expect(host.announce).toHaveBeenLastCalledWith('Row 7 of 50: error, whole row, and 1 more');
+  });
+
   it("lists the row's and the cell's annotations of the severities sought, as getByCell sorts them", async () => {
     const host = annotated(
       { scope: 'cell', rowId: 4, column: 'b', severity: 'info', message: 'i' },

@@ -457,6 +457,11 @@ and error handlers can see them.
   drops it,** where `0.9` wrote both in one synchronous task. Auto-save stays
   off while a load or a clear runs, and a load that a newer one supersedes
   restores no session.
+- **A custom session store gets the same `annotations` file object** from
+  save to save while the annotations do not change, and a new one once they
+  do, where `0.9` built a new one at each save. Treat it as read-only. A
+  `SessionStore` whose `save` or `saveSync` is overridden or wrapped is
+  handed snapshots the same way.
 - **`WorkerBridge` stores no result of a query that a `clearQueryCache()`
   overtook.** The caller still gets its result; the next identical query runs
   again.

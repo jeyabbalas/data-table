@@ -158,7 +158,7 @@ describe('TableContainer — the value inspector', () => {
     );
     await opened();
     expect(inspectorEl()!.querySelector('[role="treeitem"]')!.getAttribute('aria-label')).toBe(
-      'doc: json, 1 key',
+      'doc: json, 1 key, {k: 4}',
     );
   });
 

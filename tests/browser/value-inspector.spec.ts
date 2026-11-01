@@ -76,13 +76,13 @@ const STRUCT_SELECT = `{'alpha': 1, 'beta': [10, 20, 30],
   'gamma': {'delta': 'x', 'epsilon': true}, 'bravo': 2} AS s`;
 
 const S = {
-  root: 's: struct(4), 4 fields',
+  root: 's: struct(4), 4 fields, {alpha: 1, beta: [10, 20, 30], gamma: {delta: "x", …}, …}',
   alpha: 'alpha: 1',
-  beta: 'beta: [integer], 3 items',
+  beta: 'beta: [integer], 3 items, [10, 20, 30]',
   b1: '1: 10',
   b2: '2: 20',
   b3: '3: 30',
-  gamma: 'gamma: struct(2), 2 fields',
+  gamma: 'gamma: struct(2), 2 fields, {delta: "x", epsilon: true}',
   delta: 'delta: "x"',
   epsilon: 'epsilon: true',
   bravo: 'bravo: 2',
@@ -467,7 +467,7 @@ test(`a list of ${BIG_ITEMS.toLocaleString('en-US')} items comes in buckets of 1
   );
   const items = await treeItems(page);
   expect(items[0]).toMatchObject({
-    label: `big: [integer], ${BIG_ITEMS.toLocaleString('en-US')} items`,
+    label: `big: [integer], ${BIG_ITEMS.toLocaleString('en-US')} items, [3, 10, 17, 24, 31, 38, 45, 52, 59, 66, 73, 80, 87, 94, …]`,
     level: 1,
   });
   expect(items.slice(1).map((i) => i.label)).toEqual(buckets);
@@ -665,7 +665,7 @@ test('Copy JSON puts the whole value on the clipboard as standard JSON, and says
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('End');
     await page.keyboard.press('ArrowLeft');
-    expect(await activeItem(page)).toMatchObject({ label: 'list: [integer], 3 items' });
+    expect(await activeItem(page)).toMatchObject({ label: 'list: [integer], 3 items, [1, 2, 3]' });
     await page.keyboard.press('ControlOrMeta+c');
     await expect(status).toContainText('Copied');
     expect(await readClipboard(page)).toBe(JSON.stringify([1, 2, 3], null, 2));

@@ -34,7 +34,7 @@
   "overrides": {
     "brace-expansion": "^5.0.12",
     "source-map-js": "^1.2.2",
-    "markdown-it": "^14.3.1"
+    "markdown-it": "^14.3.3"
   },
   "publishConfig": {
     "access": "public",

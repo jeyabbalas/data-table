@@ -37,12 +37,13 @@ comes the Content Security Policy the page needs.
         "imports": {
           "@jeyabbalas/data-table": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/data-table.js",
           "@jeyabbalas/data-table/advanced": "https://cdn.jsdelivr.net/npm/@jeyabbalas/data-table@0.10.0/dist/advanced.js",
-          "@codemirror/autocomplete": "https://esm.sh/*@codemirror/autocomplete@6.20.3",
+          "@codemirror/autocomplete": "https://esm.sh/*@codemirror/autocomplete@6.20.4",
           "@codemirror/commands": "https://esm.sh/*@codemirror/commands@6.11.1",
           "@codemirror/lang-sql": "https://esm.sh/*@codemirror/lang-sql@6.10.0",
-          "@codemirror/language": "https://esm.sh/*@codemirror/language@6.12.4",
+          "@codemirror/language": "https://esm.sh/*@codemirror/language@6.13.1",
           "@codemirror/state": "https://esm.sh/*@codemirror/state@6.7.6",
-          "@codemirror/view": "https://esm.sh/*@codemirror/view@6.43.13",
+          "@codemirror/streamparser": "https://esm.sh/*@codemirror/streamparser@6.0.0",
+          "@codemirror/view": "https://esm.sh/*@codemirror/view@6.43.15",
           "@lezer/common": "https://esm.sh/*@lezer/common@1.5.2",
           "@lezer/highlight": "https://esm.sh/*@lezer/highlight@1.2.5",
           "@lezer/lr": "https://esm.sh/*@lezer/lr@1.4.10",
@@ -202,12 +203,13 @@ without the `*` loaded a second, newer `@codemirror/view` and
 `@codemirror/language`, and autocomplete stopped working, with no error. A
 second `@codemirror/state` fails louder: "Unrecognized extension value in
 extension set … multiple instances of @codemirror/state are loaded". That is
-why the map lists thirteen packages rather than the seven the editor
-imports. The `*` builds import six more: `@lezer/common`, `@lezer/lr`,
-`@marijn/find-cluster-break`, `crelt`, `style-mod` and `w3c-keyname`. When
-you upgrade CodeMirror, upgrade all thirteen together: the seven within the
-ranges in the library's `peerDependencies`, and the other six within the
-ranges those seven declare.
+why the map lists fourteen packages rather than the seven the editor
+imports. The `*` builds import seven more: `@codemirror/streamparser`,
+`@lezer/common`, `@lezer/lr`, `@marijn/find-cluster-break`, `crelt`,
+`style-mod` and `w3c-keyname`. When you upgrade CodeMirror, upgrade all
+fourteen together: the seven within the ranges in the library's
+`peerDependencies`, and the other seven within the ranges the first seven
+declare.
 
 A page that needs no editors can leave CodeMirror out. Pass
 `expressionFilter: false` and `derivedColumns: false` to `createDataTable()`
@@ -240,7 +242,7 @@ element at the top of `<head>`; it reaches the page's `blob:` workers too.
 ```http
 Content-Security-Policy: default-src 'self';
   script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://esm.sh
-    'sha256-3YnF++/0zaEQCQp0EbWpbl+zKmkUgJXhijcUFiV9aO8=' 'sha256-<hash of the module script>';
+    'sha256-oxKymWWpbwYvIk8t0FJQBJPP8DOhQ7tY5shwZCtRk9A=' 'sha256-<hash of the module script>';
   worker-src 'self' blob: https://cdn.jsdelivr.net;
   connect-src 'self' https://cdn.jsdelivr.net https://extensions.duckdb.org;
   style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';

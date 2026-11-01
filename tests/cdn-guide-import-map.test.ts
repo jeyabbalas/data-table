@@ -3,7 +3,7 @@
  * CodeMirror the library is built and tested with.
  *
  * The map sends each CodeMirror and Lezer package to an esm.sh `*` build at
- * an exact version: the seven the editor imports, and the six those import.
+ * an exact version: the seven the editor imports, and the seven those import.
  * Each must be package-lock.json's version, the seven must fall inside
  * package.json's peer ranges, and the map must list every package the others
  * depend on, since a `*` build leaves its imports to the map. The guide's

@@ -12,6 +12,7 @@ import { __resetModalHostForTests } from '@/core/ModalHost';
 import { defaultStrings, mergeStrings } from '@/core/Strings';
 import type { ColumnSchema } from '@/core/types';
 import type { WorkerBridge } from '@/data/WorkerBridge';
+import { VALUE_TREE_STRING_CAP } from '@/nested/valueTreeModel';
 import {
   INSPECTOR_COPY_CHARS,
   INSPECTOR_DISPLAY_CHARS,
@@ -160,7 +161,12 @@ describe('ValueInspector', () => {
     const tree = q(inspector, '[role="tree"]');
     expect(tree.classList.contains('dt-value-tree')).toBe(true);
     expect(tree.getAttribute('aria-label')).toBe('Value of tags');
-    expect(labels(inspector)).toEqual(['tags: [varchar], 3 items', '1: "a"', '2: "b"', '3: "c"']);
+    expect(labels(inspector)).toEqual([
+      'tags: [varchar], 3 items, ["a", "b", "c"]',
+      '1: "a"',
+      '2: "b"',
+      '3: "c"',
+    ]);
     // The root row: key, type, count and preview, each in its own span.
     const rootItem = items(inspector)[0]!;
     expect(rootItem.querySelector('.dt-value-tree__key--column')!.textContent).toBe('tags');
@@ -186,7 +192,7 @@ describe('ValueInspector', () => {
     openOn(inspector, POINT);
     await settle();
     expect(labels(inspector)).toEqual([
-      'point: struct(3), 3 fields',
+      'point: struct(3), 3 fields, {x: 1.5, y: null, tier: "gold"}',
       'x: 1.5',
       'y: null',
       'tier: "gold"',
@@ -198,6 +204,48 @@ describe('ValueInspector', () => {
     // End nodes carry no aria-expanded; the root is open.
     expect(items(inspector)[0]!.getAttribute('aria-expanded')).toBe('true');
     expect(x!.hasAttribute('aria-expanded')).toBe(false);
+    inspector.destroy();
+  });
+
+  it('names each row with the words it shows, in their order (WCAG 2.5.3, Label in Name)', async () => {
+    // The words of `text` as axe's label-content-name-mismatch reads them:
+    // parentheticals dropped, split at anything not a letter or a digit.
+    const words = (text: string): string =>
+      ` ${text
+        .replace(/\([^()]*\)/g, '')
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter(Boolean)
+        .join(' ')} `;
+    const s: ColumnSchema = {
+      name: 's',
+      type: 'nested',
+      nullable: true,
+      originalType: 'STRUCT(tags VARCHAR[], p STRUCT(x DOUBLE, y DOUBLE), long VARCHAR)',
+    };
+    const long = 'x'.repeat(VALUE_TREE_STRING_CAP + 50);
+    const { bridge } = makeBridge(() =>
+      jsonRow(JSON.stringify({ tags: ['a', 'b'], p: { x: 1.5, y: -0.5 }, long })),
+    );
+    const inspector = mount(bridge);
+    openOn(inspector, s);
+    await settle();
+    const rows = items(inspector);
+    // A container (the root, tags, p), leaves, and a leaf cut short.
+    expect(rows.map((row) => row.getAttribute('aria-label'))).toEqual([
+      's: struct(3), 3 fields, {tags: ["a", "b"], p: {x: 1.5, y: -0.5}, long: "xxxxxxxxx…"}',
+      'tags: [varchar], 2 items, ["a", "b"]',
+      '1: "a"',
+      '2: "b"',
+      'p: struct(2), 2 fields, {x: 1.5, y: -0.5}',
+      'x: 1.5',
+      'y: -0.5',
+      `long: "${'x'.repeat(VALUE_TREE_STRING_CAP)}…", 50 more characters`,
+    ]);
+    for (const row of rows) {
+      const name = row.getAttribute('aria-label')!;
+      expect(words(name), name).toContain(words(row.textContent!));
+    }
     inspector.destroy();
   });
 
@@ -228,7 +276,7 @@ describe('ValueInspector', () => {
     await settle();
     expect(message(inspector)).toBe('');
     expect(q(inspector, '.dt-value-inspector__body').hasAttribute('aria-busy')).toBe(false);
-    expect(labels(inspector)).toEqual(['tags: [varchar], 1 item', '1: 1']);
+    expect(labels(inspector)).toEqual(['tags: [varchar], 1 item, [1]', '1: 1']);
     inspector.destroy();
   });
 
@@ -293,7 +341,7 @@ describe('ValueInspector', () => {
       'Showing the first 2,097,152 of 3,000,000 characters',
     );
     // What was read, shown as far as it goes.
-    expect(labels(inspector)).toEqual(['tags: [varchar], 2 items', '1: 1', '2: 2']);
+    expect(labels(inspector)).toEqual(['tags: [varchar], 2 items, [1, 2]', '1: 1', '2: 2']);
 
     q<HTMLButtonElement>(inspector, '.dt-value-inspector__button').click();
     await settle(10);
@@ -615,7 +663,7 @@ describe('ValueInspector', () => {
     await settle();
     expect(q(inspector, '.dt-value-inspector__title').textContent).toBe('tags — ligne 4');
     expect(q(inspector, '[role="tree"]').getAttribute('aria-label')).toBe('Valeur de tags');
-    expect(labels(inspector)[0]).toBe('tags: [varchar], 2 éléments');
+    expect(labels(inspector)[0]).toBe('tags: [varchar], 2 éléments, ["a", "b"]');
     const buttons = Array.from(
       panel(inspector).querySelectorAll<HTMLButtonElement>('.dt-value-inspector__button'),
       (b) => b.textContent,
@@ -1092,7 +1140,12 @@ describe('ValueInspector — copying a value shown cut short', () => {
     const inspector = mount(bridge);
     openOn(inspector);
     await settle();
-    expect(labels(inspector)).toEqual(['tags: [varchar], 3 items', '1: "a"', '2: "b"', '3: "c"']);
+    expect(labels(inspector)).toEqual([
+      'tags: [varchar], 3 items, ["a", "b", "c"]',
+      '1: "a"',
+      '2: "b"',
+      '3: "c"',
+    ]);
 
     // The root: every item, the ones the tree never saw included.
     ctrlC(items(inspector)[0]!);
@@ -1147,11 +1200,11 @@ describe('ValueInspector — copying a value shown cut short', () => {
     const inspector = mount(bridge);
     openOn(inspector, matrix);
     await settle();
-    ctrlC(itemLabelled(inspector, '1: [integer], 2 items'));
+    ctrlC(itemLabelled(inspector, '1: [integer], 2 items, [1, 2]'));
     await settle(10);
     expect(calls).toHaveLength(1);
     expect(writeText).toHaveBeenLastCalledWith('[\n  1,\n  2\n]');
-    ctrlC(itemLabelled(inspector, '2: [integer], 2 items'));
+    ctrlC(itemLabelled(inspector, '2: [integer], 2 items, [3, 4]'));
     await settle(10);
     expect(calls).toHaveLength(2);
     expect(writeText).toHaveBeenLastCalledWith('[\n  3,\n  4,\n  5\n]');
@@ -1172,7 +1225,11 @@ describe('ValueInspector — copying a value shown cut short', () => {
     const inspector = mount(bridge);
     openOn(inspector, list);
     await settle();
-    expect(labels(inspector)).toEqual(['n: [integer], 150 items', '[1 … 100]', '[101 … 150]']);
+    expect(labels(inspector)).toEqual([
+      'n: [integer], 150 items, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, …]',
+      '[1 … 100]',
+      '[101 … 150]',
+    ]);
 
     ctrlC(itemLabelled(inspector, '[1 … 100]'));
     await settle(10);

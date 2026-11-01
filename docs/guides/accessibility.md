@@ -183,8 +183,11 @@ with flat items (`src/table/TreeView.ts`). Every visible node is a
 `role="treeitem"` child of the `role="tree"` and states its own place with
 `aria-level`, `aria-setsize`, `aria-posinset` and, when it can expand,
 `aria-expanded`. An item's accessible name is its own row only — `x: 1.25`,
-`point: struct(3), 3 fields` — where items nested in `role="group"` elements
-would fold an expanded struct's every field into its parent's name. The tree is
+`point: struct(3), 3 fields, {x: 1.25, y: 0.5, tier: "gold"}` — where items
+nested in `role="group"` elements would fold an expanded struct's every field
+into its parent's name. The name holds every word the row shows, in the order
+it shows them, preview included, so a speech-input user can say what they see
+(WCAG 2.5.3, Label in Name; axe's `label-content-name-mismatch`). The tree is
 one tab stop: the active item carries `tabindex="0"` and `aria-selected="true"`.
 The root opens expanded, and its children too when they fit in 50 rows.
 

@@ -663,7 +663,9 @@ export class ValueInspector {
   /**
    * One row's content: the key (`x: `, `3: `, `k1 → ` for a map entry),
    * then a leaf's value in its style, or a container's type, count and
-   * preview. A bucket shows its label alone.
+   * preview. A bucket shows its label alone. A space separates the parts in
+   * the text, as the stylesheet does on screen, so the row's text reads as
+   * the words of its accessible name (`node.label`).
    */
   private renderNode(content: HTMLElement, node: ValueTreeNode): void {
     const t = `${this.prefix}-value-tree`;
@@ -678,15 +680,15 @@ export class ValueInspector {
     const value = node.value;
     if (value) {
       content.appendChild(element('span', `${t}__value ${t}__value--${value.style}`, value.text));
-      if (value.more !== undefined) content.appendChild(element('span', `${t}__more`, value.more));
+      if (value.more !== undefined) content.append(' ', element('span', `${t}__more`, value.more));
       return;
     }
     content.appendChild(element('span', `${t}__type`, node.typeLabel));
     if (node.countText !== undefined) {
-      content.appendChild(element('span', `${t}__count`, node.countText));
+      content.append(' ', element('span', `${t}__count`, node.countText));
     }
     if (node.preview !== undefined) {
-      content.appendChild(element('span', `${t}__preview`, node.preview));
+      content.append(' ', element('span', `${t}__preview`, node.preview));
     }
   }
 

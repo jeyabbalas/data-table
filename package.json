@@ -115,7 +115,7 @@
     }
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
+    "@axe-core/playwright": "^4.14.0",
     "@changesets/cli": "^3.0.3",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6.10.3",
@@ -132,7 +132,7 @@
     "@types/node": "^26.6.4",
     "@types/topojson-client": "^3.1.5",
     "@vitest/coverage-v8": "^5.0.3",
-    "axe-core": "^4.11.3",
+    "axe-core": "^4.14.0",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",

@@ -46,6 +46,14 @@ updates:
         patterns:
           - playwright
           - '@playwright/test'
+      # `@axe-core/playwright` tilde-pins `axe-core`, so a PR that bumps
+      # `axe-core` alone nests a second copy under it: the browser suite's
+      # AxeBuilder keeps the old rules while the jsdom suite runs the new.
+      # They must always be bumped together.
+      axe:
+        patterns:
+          - axe-core
+          - '@axe-core/*'
     ignore:
       # `@duckdb/duckdb-wasm` is a pre-release peer whose floor is the version
       # the library's worker is built with. Major bumps need to be reviewed

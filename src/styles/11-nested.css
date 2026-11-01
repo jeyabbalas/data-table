@@ -266,11 +266,17 @@
   font-style: italic;
 }
 
-.dt-value-tree__type,
+.dt-value-tree__type {
+  margin-inline-start: 0.75ch;
+}
+
+/* The inspector puts a space before each of these, so that a row's text has
+   the words of its accessible name. The tree's font is monospace, the space
+   1ch wide: the margin takes the gap back to the type's 0.75ch. */
 .dt-value-tree__count,
 .dt-value-tree__preview,
 .dt-value-tree__more {
-  margin-inline-start: 0.75ch;
+  margin-inline-start: -0.25ch;
 }
 
 .dt-value-tree__value--string {

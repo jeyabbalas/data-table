@@ -153,7 +153,12 @@ describe('the value inspector through createDataTable (real DuckDB, nested fixtu
     const f2 = new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true });
     grid(container).dispatchEvent(f2);
     expect(f2.defaultPrevented).toBe(true);
-    await treeShown(container, ['point: struct(3), 3 fields', 'x: 1.5', 'y: -0.5', 'tier: "gold"']);
+    await treeShown(container, [
+      'point: struct(3), 3 fields, {x: 1.5, y: -0.5, tier: "gold"}',
+      'x: 1.5',
+      'y: -0.5',
+      'tier: "gold"',
+    ]);
     expect(panel(container)!.querySelector('.dt-value-inspector__title')!.textContent).toBe(
       `point · Row ${ROW + 1}`,
     );
@@ -171,7 +176,7 @@ describe('the value inspector through createDataTable (real DuckDB, nested fixtu
     const doc = cell(container, ROW, 'doc');
     doc.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     await treeShown(container, [
-      'doc: json, 7 keys',
+      'doc: json, 7 keys, {k: "alpha", score: 0.92, kind: "demo", my field: "spa…", …}',
       'k: "alpha"',
       'score: 0.92',
       'kind: "demo"',
@@ -205,15 +210,15 @@ describe('the value inspector through createDataTable (real DuckDB, nested fixtu
       new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 140, clientY: 16 }),
     );
     await treeShown(container, [
-      'people: [struct(3)], 2 items',
-      '1: struct(3), 3 fields',
+      'people: [struct(3)], 2 items, [{name: "Ada", age: 36, langs: ["en", "fr"]}, {…}]',
+      '1: struct(3), 3 fields, {name: "Ada", age: 36, langs: ["en", "fr"]}',
       'name: "Ada"',
       'age: 36',
-      'langs: [varchar], 2 items',
-      '2: struct(3), 3 fields',
+      'langs: [varchar], 2 items, ["en", "fr"]',
+      '2: struct(3), 3 fields, {name: "Linus", age: 54, langs: ["fi", "sv", "en"]}',
       'name: "Linus"',
       'age: 54',
-      'langs: [varchar], 3 items',
+      'langs: [varchar], 3 items, ["fi", "sv", "en"]',
     ]);
     expect([...table.state.selectedRows.get()]).toEqual([2]);
     expect(table.state.focusedCell.get()).toEqual({ row: ROW, column: 'people' });

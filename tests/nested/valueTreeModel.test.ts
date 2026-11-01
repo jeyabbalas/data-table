@@ -130,7 +130,7 @@ describe('lists and arrays', () => {
     });
     expect(root.key).toEqual({ text: 'scores', kind: 'column' });
     expect(root.countText).toBe('3 items');
-    expect(root.label).toBe('scores: [integer], 3 items');
+    expect(root.label).toBe('scores: [integer], 3 items, [56, 3, 91]');
     expect(root.path).toEqual([]);
     expect(root.id).toBe('$');
     expect(kids(root).map(summary)).toEqual([
@@ -152,7 +152,7 @@ describe('lists and arrays', () => {
       count: 3,
       preview: '[1, 2, null]',
     });
-    expect(root.label).toBe('integer[3], 3 items');
+    expect(root.label).toBe('integer[3], 3 items, [1, 2, null]');
     expect(summary(kids(root)[2]!)).toEqual({
       key: '3',
       type: 'integer',
@@ -166,14 +166,14 @@ describe('lists and arrays', () => {
     expect(root.preview).toBe('[[1, 2], [], null, [4, null, 17]]');
     const [first, empty, nil, withNull] = kids(root);
     expect(summary(first!)).toEqual({ key: '1', type: '[smallint]', count: 2, preview: '[1, 2]' });
-    expect(first!.label).toBe('1: [smallint], 2 items');
+    expect(first!.label).toBe('1: [smallint], 2 items, [1, 2]');
     expect(kids(first!).map((c) => c.path)).toEqual([
       [1, 1],
       [1, 2],
     ]);
     expect(summary(empty!)).toEqual({ key: '2', type: '[smallint]', count: 0, preview: '[]' });
     expect(empty!.children).toBeUndefined();
-    expect(empty!.label).toBe('2: [smallint], 0 items');
+    expect(empty!.label).toBe('2: [smallint], 0 items, []');
     expect(summary(nil!)).toEqual({ key: '3', type: '[smallint]', value: 'null', style: 'null' });
     expect(nil!.children).toBeUndefined();
     expect(kids(withNull!).map((c) => c.value?.style)).toEqual(['number', 'null', 'number']);
@@ -212,7 +212,7 @@ describe('structs', () => {
       count: 3,
       preview: '{x: 1.25, y: 0.58, tier: "bronze"}',
     });
-    expect(root.label).toBe('point: struct(3), 3 fields');
+    expect(root.label).toBe('point: struct(3), 3 fields, {x: 1.25, y: 0.58, tier: "bronze"}');
     expect(kids(root).map(summary)).toEqual([
       { key: 'x', type: 'double', value: '1.25', style: 'number' },
       { key: 'y', type: 'double', value: '0.58', style: 'number' },
@@ -328,7 +328,7 @@ describe('structs', () => {
     // The second struct has 13 characters left: not enough for its first field.
     expect(people.preview).toBe('[{name: "Ann", age: 30, langs: ["en", "fr"]}, {…}]');
     const bo = kids(people)[1]!;
-    expect(bo.label).toBe('2: struct(3), 3 fields');
+    expect(bo.label).toBe('2: struct(3), 3 fields, {name: "Bo", age: null, langs: ["de"]}');
     const de = kids(child(bo, 'langs'))[0]!;
     expect(de.path).toEqual([2, 'langs', 1]);
     expect(de.label).toBe('1: "de"');
@@ -354,7 +354,7 @@ describe('maps', () => {
       count: 2,
       preview: '{k1 → 1, k2 → 2}',
     });
-    expect(root.label).toBe('attrs: {varchar → integer}, 2 entries');
+    expect(root.label).toBe('attrs: {varchar → integer}, 2 entries, {k1 → 1, k2 → 2}');
     expect(kids(root).map(summary)).toEqual([
       { key: 'k1', type: 'integer', value: '1', style: 'number' },
       { key: 'k2', type: 'integer', value: '2', style: 'number' },
@@ -540,7 +540,9 @@ describe('JSON and VARIANT values', () => {
       count: 4,
       preview: '{k: "v", score: 1.5, a.b: [1, {c: null}], "": true}',
     });
-    expect(root.label).toBe('doc: json, 4 keys');
+    expect(root.label).toBe(
+      'doc: json, 4 keys, {k: "v", score: 1.5, a.b: [1, {c: null}], "": true}',
+    );
     expect(kids(root).map((c) => [c.key, c.typeLabel, c.path])).toEqual([
       [{ text: 'k', kind: 'jsonKey' }, 'string', ['k']],
       [{ text: 'score', kind: 'jsonKey' }, 'number', ['score']],
@@ -1372,6 +1374,6 @@ describe('options and messages', () => {
       text: 'a\\nb',
       kind: 'column',
     });
-    expect(tree('{"k":1}', 'JSON', { rootKey: '' }).label).toBe('"": json, 1 key');
+    expect(tree('{"k":1}', 'JSON', { rootKey: '' }).label).toBe('"": json, 1 key, {k: 1}');
   });
 });

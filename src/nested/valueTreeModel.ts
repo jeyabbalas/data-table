@@ -262,7 +262,8 @@ export interface ValueTreeNode {
   readonly bucket?: ValueTreeBucket;
   /**
    * The accessible name, which also drives type-ahead. It starts with the
-   * key's text: `x: 1.25`, `point: struct(3), 3 fields`,
+   * key's text and holds everything the row shows, in order: `x: 1.25`,
+   * `point: struct(3), 3 fields, {x: 1.25, y: 0.5, tier: "gold"}`,
    * `u: union(2), {num: 42}`, `s: "Lorem…", 18,000 more characters`,
    * `[1 … 100]`.
    */
@@ -1135,7 +1136,13 @@ class TreeNode implements ValueTreeNode {
     }
     return new TreeNode({
       ...common,
-      label: labelOf(key, `${typeLabel}, ${countText ?? preview}`),
+      // Everything the row shows, in its order (WCAG 2.5.3, Label in Name).
+      label: labelOf(
+        key,
+        countText === undefined
+          ? `${typeLabel}, ${preview}`
+          : `${typeLabel}, ${countText}, ${preview}`,
+      ),
       value: undefined,
       count: shape.kind === 'union' ? undefined : total,
       countText,
@@ -1340,7 +1347,7 @@ class TreeNode implements ValueTreeNode {
  * const type = parseDuckDBType('STRUCT(x DOUBLE, tags VARCHAR[])');
  * const { root: json } = parseJsonTree('{"x":1.25,"tags":["a","b"]}');
  * const root = buildValueTree(json, type, messages, { rootKey: 'point' });
- * root.label; // 'point: struct(2), 2 fields'
+ * root.label; // 'point: struct(2), 2 fields, {x: 1.25, tags: ["a", "b"]}'
  * root.preview; // '{x: 1.25, tags: ["a", "b"]}'
  * const [x, tags] = root.children!();
  * x.label; // 'x: 1.25'

@@ -289,18 +289,25 @@ export function valueSummary(
 
 /**
  * Check the open inspector's tree against {@link valueSummary}: the root and
- * its children, which start expanded, by name, level and position.
+ * its children, which start expanded, by name, level and position. A
+ * container's name ends with its count and then the preview its row shows.
  */
 export async function expectTopLevel(
   page: Page,
   column: string,
   expected: ValueSummary,
 ): Promise<void> {
-  const items = await treeItems(page);
+  const previews = await page.$$eval('[role="dialog"] [role="tree"] > [role="treeitem"]', (els) =>
+    els.map((el) => el.querySelector('.dt-value-tree__preview')?.textContent ?? ''),
+  );
+  const items = (await treeItems(page)).map((item, i) => ({ ...item, preview: previews[i]! }));
   const root = items[0]!;
   expect(root.level).toBe(1);
   expect(root.label.startsWith(`${column}: `), `root "${root.label}"`).toBe(true);
-  expect(root.label.endsWith(expected.count), `root "${root.label}"`).toBe(true);
+  expect(root.preview, `root "${root.label}"`).not.toBe('');
+  expect(root.label.endsWith(`${expected.count}, ${root.preview}`), `root "${root.label}"`).toBe(
+    true,
+  );
   expect(root.expanded).toBe(true);
 
   const children = items.filter((i) => i.level === 2);
@@ -312,7 +319,10 @@ export async function expectTopLevel(
       expect(got.label).toBe(`${want.key}: ${want.text}`);
     } else {
       expect(got.label.startsWith(`${want.key}: `), `child "${got.label}"`).toBe(true);
-      expect(got.label.endsWith(want.count!), `child "${got.label}"`).toBe(true);
+      expect(got.preview, `child "${got.label}"`).not.toBe('');
+      expect(got.label.endsWith(`${want.count!}, ${got.preview}`), `child "${got.label}"`).toBe(
+        true,
+      );
     }
   }
 }
